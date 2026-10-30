@@ -93,7 +93,8 @@
       ],
       "id": "66ea39a9-6bde-4b26-833b-716a3ad75ba8",
       "name": "Microsoft 365: marcar leido",
-      "notes": "Pendiente: asignar la credencial Microsoft Outlook OAuth2 de Somos Viajes (permiso Mail.ReadWrite)."
+      "notes": "Pendiente: asignar la credencial Microsoft Outlook OAuth2 de Somos Viajes (permiso Mail.ReadWrite).",
+      "disabled": true
     }
   ],
   "connections": {
