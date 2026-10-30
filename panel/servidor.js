@@ -55,6 +55,16 @@ async function inicializarTablas() {
     motivo TEXT DEFAULT '',
     creado TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE (tipo, valor))`);
+  await client.query(`CREATE TABLE IF NOT EXISTS empresa_datos (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    nombre VARCHAR(120) NOT NULL DEFAULT 'Somos Viajes Punta Cana',
+    rnc VARCHAR(30) NOT NULL DEFAULT '',
+    direccion VARCHAR(300) NOT NULL DEFAULT '',
+    logo TEXT,
+    banner TEXT,
+    banner_enlace TEXT NOT NULL DEFAULT '',
+    actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
+  await client.query('INSERT INTO empresa_datos (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
 }
 
 client.connect()
@@ -86,6 +96,45 @@ function fechaServicioISO(texto, recibido) {
     }
   }
   return null;
+}
+
+function imagenValida(s) {
+  return typeof s === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(s) && s.length <= 3000000;
+}
+
+async function imagenEmpresa(res, campo) {
+  const fila = (await client.query(`SELECT ${campo} AS img FROM empresa_datos WHERE id = 1`)).rows[0];
+  const m = fila && fila.img && fila.img.match(/^data:(image\/[a-z]+);base64,(.*)$/);
+  if (!m) {
+    if (campo === 'logo') return archivo(res, path.join(CARPETA, 'inteligencia-artificial.png'), 'image/png');
+    res.writeHead(404);
+    return res.end('No encontrado');
+  }
+  res.writeHead(200, { 'Content-Type': m[1], 'Cache-Control': 'public, max-age=86400' });
+  res.end(Buffer.from(m[2], 'base64'));
+}
+
+// Cuando todos los servicios de un correo quedan registrados, n8n lo marca como leído en la bandeja.
+async function marcarLeidoSiCompleto(id, u) {
+  const destino = config.n8n && config.n8n.marcarLeido;
+  if (!destino) return;
+  const fila = (await client.query('SELECT message_id, buzon FROM clasificacion WHERE id = $1', [id])).rows[0];
+  if (!fila || !fila.message_id) return;
+  const faltan = (await client.query(
+    "SELECT COUNT(*)::int AS n FROM clasificacion WHERE message_id = $1 AND estado <> 'registrada'", [fila.message_id]
+  )).rows[0].n;
+  if (faltan > 0) return;
+  try {
+    const r = await fetch(destino, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message_id: fila.message_id, buzon: fila.buzon })
+    });
+    if (!r.ok) throw new Error('n8n respondió ' + r.status);
+    await registrar(u, 'marcar_leido', 'correo', fila.message_id, '', '', 'Marcado como leído en ' + fila.buzon);
+  } catch (e) {
+    await registrar(u, 'marcar_leido_fallido', 'correo', fila.message_id, '', '', e.message);
+  }
 }
 
 function filtrarPermisos(p) {
@@ -275,6 +324,18 @@ http.createServer(async (req, res) => {
       return archivo(res, path.join(CARPETA, 'inteligencia-artificial.png'), 'image/png');
     }
 
+    if (req.method === 'GET' && url === '/empresa/logo') return imagenEmpresa(res, 'logo');
+    if (req.method === 'GET' && url === '/empresa/banner') return imagenEmpresa(res, 'banner');
+
+    if (req.method === 'GET' && url === '/api/empresa') {
+      const r = await client.query(
+        `SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS "tieneLogo", banner IS NOT NULL AS "tieneBanner",
+                EXTRACT(EPOCH FROM actualizado)::bigint AS version
+         FROM empresa_datos WHERE id = 1`
+      );
+      return json(res, 200, r.rows[0] || { nombre: 'Somos Viajes Punta Cana', rnc: '', direccion: '', banner_enlace: '' });
+    }
+
     if (req.method === 'POST' && url === '/api/login') {
       const { usuario, password } = await leerCuerpo(req);
       const nombreIntento = String(usuario || 'desconocido').slice(0, 50);
@@ -323,8 +384,10 @@ http.createServer(async (req, res) => {
       });
     }
 
-    if (url.startsWith('/api/') && !u) {
-      return json(res, 401, { error: 'Sesión expirada. Vuelve a entrar.' });
+    if (!u) {
+      if (url.startsWith('/api/')) return json(res, 401, { error: 'Sesión expirada. Vuelve a entrar.' });
+      res.writeHead(404);
+      return res.end('No encontrado');
     }
 
     if (u.debe_cambiar && url !== '/api/cambiar-clave-propia') {
@@ -376,7 +439,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
+        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
       );
       const reservasPorNombre = new Map();
       for (const x of r.rows) {
@@ -404,6 +467,9 @@ http.createServer(async (req, res) => {
       if (!previa) return json(res, 404, { error: 'Reserva no encontrada' });
       await client.query('UPDATE clasificacion SET estado = $1 WHERE id = $2', [estado, Number(id)]);
       await registrar(u, 'cambiar_estado', 'reserva', id, previa.estado, estado, previa.nombre_cliente || '');
+      if (estado === 'registrada' && previa.estado !== 'registrada') {
+        marcarLeidoSiCompleto(Number(id), u).catch(e => console.log('Error marcando como leído:', e.message));
+      }
       return json(res, 200, { ok: true });
     }
 
@@ -544,6 +610,41 @@ http.createServer(async (req, res) => {
       const limite = Math.min(Number(p.get('limit')) || 500, 2000);
       const r = await client.query(`SELECT * FROM auditoria ${where} ORDER BY fecha DESC, id DESC LIMIT ${limite}`, val);
       return json(res, 200, r.rows);
+    }
+
+    if (req.method === 'POST' && url === '/api/empresa') {
+      if (!puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar los datos de la empresa.' });
+      const b = await leerCuerpo(req);
+      const nombre = String(b.nombre || '').trim();
+      if (nombre.length < 2 || nombre.length > 120) return json(res, 400, { error: 'El nombre debe tener entre 2 y 120 caracteres.' });
+      const rnc = String(b.rnc || '').trim().slice(0, 30);
+      const direccion = String(b.direccion || '').trim().slice(0, 300);
+      const enlace = String(b.banner_enlace || '').trim();
+      if (enlace && !/^https?:\/\/\S+$/i.test(enlace)) {
+        return json(res, 400, { error: 'El enlace del banner debe empezar con http:// o https://' });
+      }
+      for (const campo of ['logo', 'banner']) {
+        if (b[campo] && !imagenValida(b[campo])) {
+          return json(res, 400, { error: 'El logo y el banner deben ser PNG, JPG, WEBP o GIF de menos de 2 MB.' });
+        }
+      }
+      const previa = (await client.query(
+        'SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS logo, banner IS NOT NULL AS banner FROM empresa_datos WHERE id = 1'
+      )).rows[0];
+      const valores = [nombre, rnc, direccion, enlace];
+      const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'actualizado = NOW()'];
+      for (const campo of ['logo', 'banner']) {
+        if (b[campo] === undefined) continue;
+        valores.push(b[campo] || null);
+        cambios.push(`${campo} = $${valores.length}`);
+      }
+      await client.query(`UPDATE empresa_datos SET ${cambios.join(', ')} WHERE id = 1`, valores);
+      await registrar(u, 'editar_empresa', 'empresa', 1, previa, {
+        nombre, rnc, direccion, banner_enlace: enlace,
+        logo: b.logo === undefined ? 'sin cambio' : (b.logo ? 'nuevo' : 'quitado'),
+        banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
+      });
+      return json(res, 200, { ok: true });
     }
 
     if (url.startsWith('/api/correo')) {

@@ -14,6 +14,12 @@ module.exports = {
   },
   puerto: 3001,
 
+  // Flujo de n8n que marca el correo como leído cuando todos sus servicios quedan "Registrada".
+  // Debe estar activo (Publish). Si se deja vacío, el panel no marca nada.
+  n8n: {
+    marcarLeido: 'http://localhost:5678/webhook/marcar-leido'
+  },
+
   // Cuentas desde las que el panel responde y envía correos.
   // La clave es la dirección de la cuenta (igual a la columna buzon de la base).
   // "clave" es la contraseña de aplicación de Gmail (16 letras), no la contraseña normal.

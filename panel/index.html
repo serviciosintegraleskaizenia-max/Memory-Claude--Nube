@@ -24,6 +24,11 @@
   .logo-caja img { height: 40px; width: 40px; display: block; }
   .btn-tema { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
   .usuario-activo { font-size: 13px; opacity: 0.9; }
+  .banner { display: none; background: var(--tarjeta); }
+  .banner.visible { display: block; }
+  .banner img { display: block; width: 100%; max-height: 120px; object-fit: cover; }
+  .form-fila .chk input { width: auto; }
+  .vista-previa { max-height: 70px; max-width: 100%; border-radius: 6px; border: 1px solid var(--borde); margin-top: 4px; align-self: flex-start; }
 
   main { padding: 20px 28px; }
 
@@ -158,7 +163,7 @@
 
 <div class="pantalla-login" id="pantallaLogin">
   <form class="caja-login" id="formLogin">
-    <h2>Reservas - Somos Viajes Punta Cana</h2>
+    <h2 id="tituloLogin">Reservas - Somos Viajes Punta Cana</h2>
     <p>Ingresa con tu usuario y contraseña.</p>
     <label for="usuario">Usuario</label>
     <input type="text" id="usuario" autocomplete="username" required>
@@ -186,10 +191,12 @@
 </div>
 
 <div id="app" style="display:none;">
+<a class="banner" id="banner" target="_blank" rel="noopener"><img id="bannerImg" alt="Publicidad"></a>
 <header>
   <div>
-    <h1>Reservas - Somos Viajes Punta Cana</h1>
+    <h1 id="tituloEmpresa">Reservas - Somos Viajes Punta Cana</h1>
     <p id="fecha"></p>
+    <p id="datosEmpresa"></p>
   </div>
   <div class="encabezado-der">
     <span class="usuario-activo" id="usuarioActivo"></span>
@@ -199,7 +206,7 @@
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
     <button class="btn-tema" id="btnTema">Modo oscuro</button>
     <button class="btn-tema" id="btnSalir">Salir</button>
-    <div class="logo-caja"><img src="/inteligencia-artificial.png" alt="Logo"></div>
+    <div class="logo-caja"><img id="logoEmpresa" src="/empresa/logo" alt="Logo"></div>
   </div>
 </header>
 
@@ -366,10 +373,25 @@ let revisiones = new Map();
 let ultimoIdVisto = null;
 let contactoChat = null;
 let vistaActual = 'todas';
+let empresaActual = { nombre: 'Somos Viajes Punta Cana', rnc: '', direccion: '', banner_enlace: '' };
 
 function esc(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function decodificar(texto) {
+  return String(texto)
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
+}
+
+function sinEntidades(fila) {
+  return Object.fromEntries(Object.entries(fila).map(([k, v]) => [k, typeof v === 'string' ? decodificar(v) : v]));
 }
 
 function textoLimpio(texto) {
@@ -547,7 +569,7 @@ async function cargarReservas() {
     ultimoIdVisto = Math.max(ultimoIdVisto ?? 0, ...r.data.map(x => x.id));
   }
 
-  datos = r.data;
+  datos = r.data.map(sinEntidades);
   pintar();
   nuevas.forEach(x => mostrarAlerta(x.categoria === 'MODIFICACION'
     ? `Modificación en la reserva de ${x.nombre_cliente || x.asunto || 'sin nombre'}`
@@ -555,10 +577,30 @@ async function cargarReservas() {
 }
 
 let pendientesAviso = 0;
-const TITULO_BASE = document.title;
+let tituloBase = document.title;
 
 function actualizarTitulo() {
-  document.title = pendientesAviso > 0 ? `(${pendientesAviso}) ${TITULO_BASE}` : TITULO_BASE;
+  document.title = pendientesAviso > 0 ? `(${pendientesAviso}) ${tituloBase}` : tituloBase;
+}
+
+async function cargarEmpresa() {
+  const r = await api('/api/empresa');
+  if (!r.ok) return;
+  empresaActual = r.data;
+  const v = encodeURIComponent(r.data.version || '');
+  const titulo = 'Reservas - ' + r.data.nombre;
+  document.getElementById('tituloEmpresa').textContent = titulo;
+  document.getElementById('tituloLogin').textContent = titulo;
+  document.getElementById('datosEmpresa').textContent =
+    [r.data.rnc && 'RNC ' + r.data.rnc, r.data.direccion].filter(Boolean).join(' · ');
+  document.getElementById('logoEmpresa').src = '/empresa/logo?v=' + v;
+  const banner = document.getElementById('banner');
+  banner.classList.toggle('visible', Boolean(r.data.tieneBanner));
+  if (r.data.tieneBanner) document.getElementById('bannerImg').src = '/empresa/banner?v=' + v;
+  if (r.data.banner_enlace) banner.href = r.data.banner_enlace;
+  else banner.removeAttribute('href');
+  tituloBase = titulo;
+  actualizarTitulo();
 }
 
 function avisoEscritorio(texto) {
@@ -681,7 +723,8 @@ function pintar() {
   document.getElementById('n-reservas').textContent = completos.filter(r => r.categoria === 'RESERVA').length;
   document.getElementById('n-pendientes').textContent = datos.filter(r => r.estado === 'pendiente de transcribir').length;
   document.getElementById('n-registradas').textContent = datos.filter(r => r.estado === 'registrada').length;
-  document.getElementById('n-revisar').textContent = datos.filter(r => r.estado === 'revisar').length;
+  document.getElementById('n-revisar').textContent = datos.filter(r => r.estado === 'revisar'
+    && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.error_ia)).length;
   document.getElementById('n-total').textContent = datos.length;
   actualizarContadores();
 }
@@ -1096,6 +1139,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
     return marco('auditoria', aviso);
   }
   if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
+  if (tab === 'empresa') return marco('empresa', aviso);
 
   const [ru, rg] = await Promise.all([api('/api/usuarios'), api('/api/grupos')]);
   if (!ru.ok) return alert(ru.data.error || 'No se pudo cargar la lista de usuarios.');
@@ -1112,7 +1156,7 @@ function marco(tab, aviso) {
   const boton = (id, texto) =>
     `<button class="${tab === id ? 'btn' : 'btn-sec'}" data-accion="tab-${id}">${texto}</button>`;
 
-  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') : '') +
+  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
@@ -1123,6 +1167,7 @@ function marco(tab, aviso) {
   else if (tab === 'crear') cuerpo = formUsuario(null);
   else if (tab === 'grupos') cuerpo = tablaGrupos();
   else if (tab === 'bloqueos') cuerpo = '<div id="tablaBloqueos"></div>';
+  else if (tab === 'empresa') cuerpo = formEmpresa();
   else cuerpo = formAuditoria();
 
   abrirVentana(`
@@ -1142,6 +1187,69 @@ function vista(titulo, cuerpo, volver) {
     </div>
     ${cuerpo}
     <div class="aviso" id="avisoV"></div>`);
+}
+
+/* ---------- Datos de la empresa ---------- */
+
+function formEmpresa() {
+  const e = empresaActual;
+  const v = encodeURIComponent(e.version || '');
+  return `
+    <div class="form-fila">
+      <label>Nombre de la empresa<input id="eNombre" maxlength="120" value="${esc(e.nombre)}"></label>
+      <label>Registro fiscal (RNC)<input id="eRnc" maxlength="30" value="${esc(e.rnc)}"></label>
+    </div>
+    <label class="etiqueta-sec">Dirección
+      <input id="eDireccion" class="input-ancho" maxlength="300" value="${esc(e.direccion)}">
+    </label>
+    <div class="form-fila">
+      <label>Logo (PNG, JPG, WEBP o GIF, máximo 2 MB)
+        <input id="eLogo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <img class="vista-previa" src="/empresa/logo?v=${v}" alt="Logo actual">
+        ${e.tieneLogo ? '<span class="chk"><input type="checkbox" id="eQuitarLogo"> Quitar logo</span>' : ''}
+      </label>
+      <label>Banner de publicidad (franja arriba del panel)
+        <input id="eBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        ${e.tieneBanner ? `<img class="vista-previa" src="/empresa/banner?v=${v}" alt="Banner actual">
+        <span class="chk"><input type="checkbox" id="eQuitarBanner"> Quitar banner</span>` : ''}
+      </label>
+    </div>
+    <label class="etiqueta-sec">Enlace al hacer clic en el banner (opcional)
+      <input id="eEnlace" class="input-ancho" placeholder="https://" value="${esc(e.banner_enlace)}">
+    </label>
+    <div class="pie-acciones"><button class="btn" data-accion="guardar-empresa">Guardar datos de la empresa</button></div>`;
+}
+
+function leerImagen(input) {
+  const archivo = input.files[0];
+  if (!archivo) return Promise.resolve(undefined);
+  if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(archivo.type)) {
+    return Promise.reject(new Error('El logo y el banner deben ser PNG, JPG, WEBP o GIF.'));
+  }
+  if (archivo.size > 2 * 1024 * 1024) return Promise.reject(new Error('Cada imagen debe pesar menos de 2 MB.'));
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(lector.result);
+    lector.onerror = () => mal(new Error('No se pudo leer la imagen.'));
+    lector.readAsDataURL(archivo);
+  });
+}
+
+async function guardarEmpresa() {
+  let logo, banner;
+  try {
+    logo = document.getElementById('eQuitarLogo')?.checked ? null : await leerImagen(document.getElementById('eLogo'));
+    banner = document.getElementById('eQuitarBanner')?.checked ? null : await leerImagen(document.getElementById('eBanner'));
+  } catch (e) {
+    return mostrarAviso(e.message, false);
+  }
+  const r = await api('/api/empresa', {
+    nombre: val('eNombre').trim(), rnc: val('eRnc').trim(), direccion: val('eDireccion').trim(),
+    banner_enlace: val('eEnlace').trim(), logo, banner
+  });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
+  await cargarEmpresa();
+  marco('empresa', 'Datos de la empresa guardados.');
 }
 
 /* ---------- Bloqueos (solo programador) ---------- */
@@ -1413,6 +1521,8 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-crear') return abrirHerramientas('crear');
   if (a === 'tab-grupos') return abrirHerramientas('grupos');
   if (a === 'tab-auditoria') return abrirHerramientas('auditoria');
+  if (a === 'tab-empresa') return abrirHerramientas('empresa');
+  if (a === 'guardar-empresa') return guardarEmpresa();
   if (a === 'buscar-auditoria') return buscarAuditoria();
   if (a === 'exportar-auditoria') return exportarAuditoria();
   if (a === 'editar-usuario') return vistaEditarUsuario(id);
@@ -1561,6 +1671,7 @@ if (localStorage.getItem('tema') === 'oscuro') {
   document.getElementById('btnTema').textContent = 'Modo claro';
 }
 
+cargarEmpresa();
 comprobarSesion();
 </script>
 </body>
