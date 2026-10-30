@@ -1,0 +1,7 @@
+# Claves y datos locales
+config.js
+config-actualizado.js
+.env
+*.env
+
+node_modules/
