@@ -363,7 +363,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const salida = [];\nconst respuestas = $input.all();\nconst entradas = $('Limpiar texto').all();\n\nfor (let i = 0; i < respuestas.length; i++) {\n  const correo = (entradas[i] && entradas[i].json.correo) || {};\n  const respuesta = respuestas[i].json;\n\n  const texto = respuesta.choices?.[0]?.message?.content || '';\n\n  let datos = {};\n  let error_ia = false;\n  let motivo = '';\n  if (respuesta.error) {\n    error_ia = true;\n    const detalle = typeof respuesta.error === 'string' ? respuesta.error : (respuesta.error.message || JSON.stringify(respuesta.error));\n    motivo = ('Error de la IA: ' + detalle).slice(0, 300);\n  } else {\n    try {\n      const m = texto.match(/\\{[\\s\\S]*\\}/);\n      datos = JSON.parse(m ? m[0] : texto);\n    } catch (e) {\n      error_ia = true;\n      motivo = 'No se pudo leer la respuesta de la IA';\n    }\n  }\n\n  const categoria = String(datos.categoria || 'NO_ENTENDIDO').toUpperCase();\n  const esReserva = ['RESERVA', 'MODIFICACION'].includes(categoria);\n  const pax = datos.pax || {};\n  const clientes = esReserva && Array.isArray(datos.clientes) ? datos.clientes.join(', ') : '';\n  const servicios = esReserva && Array.isArray(datos.servicios) && datos.servicios.length > 0\n    ? datos.servicios\n    : [{}];\n\n  let estado;\n  if (categoria === 'PUBLICIDAD' || categoria === 'OTRO') {\n    estado = 'sin accion';\n  } else if (esReserva) {\n    const primero = servicios[0] || {};\n    estado = (primero.fecha_servicio || primero.hotel) ? 'pendiente de transcribir' : 'revisar';\n  } else {\n    estado = 'revisar';\n  }\n\n  const base = {\n    categoria: categoria,\n    remitente: correo.from || '',\n    asunto: correo.subject || '',\n    estado: estado,\n    fecha: correo.date || '',\n    cuerpo: correo.textPlain || '',\n    message_id: correo.metadata?.['message-id'] || '',\n    buzon: 'serviciosintegraleskaizen.ia@gmail.com',\n    agencia: esReserva ? (datos.agencia || '') : '',\n    nombre_cliente: clientes,\n    telefono: datos.telefono || '',\n    adultos: esReserva ? (Number(pax.adultos) || 0) : 0,\n    ninos: esReserva ? (Number(pax.ninos) || 0) : 0,\n    infantes: esReserva ? (Number(pax.infantes) || 0) : 0,\n    error_ia: error_ia,\n    motivo: motivo\n  };\n\n  servicios.forEach((s, n) => {\n    salida.push({\n      json: {\n        ...base,\n        numero_servicio: n + 1,\n        tipo_servicio: s.tipo_servicio || '',\n        actividad: s.actividad || '',\n        aeropuerto: s.aeropuerto || datos.aeropuerto || '',\n        fecha_servicio: s.fecha_servicio || '',\n        hora_servicio: s.hora_servicio || '',\n        vuelo: s.vuelo || '',\n        hotel: s.hotel || '',\n        punto_partida: s.punto_partida || '',\n        punto_llegada: s.punto_llegada || ''\n      }\n    });\n  });\n}\n\nreturn salida;"
+        "jsCode": "const salida = [];\nconst respuestas = $input.all();\nconst entradas = $('Limpiar texto').all();\n\nfor (let i = 0; i < respuestas.length; i++) {\n  const correo = (entradas[i] && entradas[i].json.correo) || {};\n  const respuesta = respuestas[i].json;\n\n  const texto = respuesta.choices?.[0]?.message?.content || '';\n\n  let datos = {};\n  let error_ia = false;\n  let motivo = '';\n  if (respuesta.error) {\n    error_ia = true;\n    const detalle = typeof respuesta.error === 'string' ? respuesta.error : (respuesta.error.message || JSON.stringify(respuesta.error));\n    motivo = ('Error de la IA: ' + detalle).slice(0, 300);\n  } else {\n    try {\n      const m = texto.match(/\\{[\\s\\S]*\\}/);\n      datos = JSON.parse(m ? m[0] : texto);\n    } catch (e) {\n      error_ia = true;\n      motivo = 'No se pudo leer la respuesta de la IA';\n    }\n  }\n\n  const categoria = String(datos.categoria || 'NO_ENTENDIDO').toUpperCase();\n  const esReserva = ['RESERVA', 'MODIFICACION'].includes(categoria);\n  const pax = datos.pax || {};\n  const clientes = esReserva && Array.isArray(datos.clientes) ? datos.clientes.join(', ') : '';\n  const servicios = esReserva && Array.isArray(datos.servicios) && datos.servicios.length > 0\n    ? datos.servicios\n    : [{}];\n\n  let estado;\n  if (categoria === 'PUBLICIDAD' || categoria === 'OTRO') {\n    estado = 'sin accion';\n  } else if (esReserva) {\n    const primero = servicios[0] || {};\n    estado = (primero.fecha_servicio || primero.hotel) ? 'pendiente de transcribir' : 'revisar';\n  } else {\n    estado = 'revisar';\n  }\n\n  const base = {\n    categoria: categoria,\n    remitente: correo.from || '',\n    asunto: correo.subject || '',\n    estado: estado,\n    fecha: correo.date || '',\n    cuerpo: correo.textPlain || '',\n    message_id: correo.metadata?.['message-id'] || '',\n    buzon: correo.buzon || 'serviciosintegraleskaizen.ia@gmail.com',\n    agencia: esReserva ? (datos.agencia || '') : '',\n    nombre_cliente: clientes,\n    telefono: datos.telefono || '',\n    adultos: esReserva ? (Number(pax.adultos) || 0) : 0,\n    ninos: esReserva ? (Number(pax.ninos) || 0) : 0,\n    infantes: esReserva ? (Number(pax.infantes) || 0) : 0,\n    error_ia: error_ia,\n    motivo: motivo\n  };\n\n  servicios.forEach((s, n) => {\n    salida.push({\n      json: {\n        ...base,\n        numero_servicio: n + 1,\n        tipo_servicio: s.tipo_servicio || '',\n        actividad: s.actividad || '',\n        aeropuerto: s.aeropuerto || datos.aeropuerto || '',\n        fecha_servicio: s.fecha_servicio || '',\n        hora_servicio: s.hora_servicio || '',\n        vuelo: s.vuelo || '',\n        hotel: s.hotel || '',\n        punto_partida: s.punto_partida || '',\n        punto_llegada: s.punto_llegada || ''\n      }\n    });\n  });\n}\n\nreturn salida;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -481,7 +481,7 @@
       "typeVersion": 2.2,
       "position": [
         -224,
-        -96
+        -200
       ],
       "id": "0ebe25ef-4072-46d1-aae5-2a658463a314",
       "name": "Gmail",
@@ -491,16 +491,17 @@
           "id": "GwMqsT0RTyLMJzof",
           "name": "Gmail account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "function decodificar(s) {\n  return String(s || '')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;|&#x27;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&');\n}\n\nfunction textoPlano(parte) {\n  if (!parte) return '';\n  if (parte.mimeType === 'text/plain' && parte.body && parte.body.data) {\n    return Buffer.from(parte.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n  }\n  for (const p of (parte.parts || [])) {\n    const t = textoPlano(p);\n    if (t) return t;\n  }\n  return '';\n}\n\nfunction htmlATexto(html) {\n  return String(html || '')\n    .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/p>|<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n}\n\nreturn $input.all().map(item => {\n  const j = item.json;\n  const cabeceras = (j.payload && j.payload.headers) || [];\n  const leer = (nombre) => {\n    const h = cabeceras.find(x => x.name && x.name.toLowerCase() === nombre.toLowerCase());\n    if (h) return h.value;\n    const directo = j[nombre] || j[nombre.toLowerCase()];\n    if (directo && typeof directo === 'object') return directo.text || '';\n    return directo || '';\n  };\n  const fecha = leer('Date') || (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '');\n  const texto = j.text || textoPlano(j.payload) || htmlATexto(j.html) || j.snippet || '';\n  return {\n    json: {\n      metadata: { 'message-id': j.id },\n      from: decodificar(leer('From')),\n      subject: decodificar(leer('Subject')),\n      date: fecha,\n      textPlain: decodificar(texto)\n    }\n  };\n});"
+        "jsCode": "function decodificar(s) {\n  return String(s || '')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;|&#x27;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&');\n}\n\nfunction textoPlano(parte) {\n  if (!parte) return '';\n  if (parte.mimeType === 'text/plain' && parte.body && parte.body.data) {\n    return Buffer.from(parte.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n  }\n  for (const p of (parte.parts || [])) {\n    const t = textoPlano(p);\n    if (t) return t;\n  }\n  return '';\n}\n\nfunction htmlATexto(html) {\n  return String(html || '')\n    .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/p>|<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n}\n\n// Gmail llega un correo por elemento; Microsoft 365 llega como una lista en \"value\".\nconst BUZON_GMAIL = 'serviciosintegraleskaizen.ia@gmail.com';\nconst BUZON_MICROSOFT = 'operaciones@somosviajepuntacana.com';\nconst entradas = $input.all().flatMap(item => Array.isArray(item.json.value)\n  ? item.json.value.map(m => ({ json: m, buzon: BUZON_MICROSOFT }))\n  : [{ json: item.json, buzon: BUZON_GMAIL }]);\n\nreturn entradas.filter(item => item.json.id).map(item => {\n  const j = item.json;\n  if (j.receivedDateTime) {\n    const de = (j.from && j.from.emailAddress) || {};\n    const cuerpo = (j.body && j.body.content) || '';\n    return {\n      json: {\n        metadata: { 'message-id': j.id },\n        buzon: item.buzon,\n        from: decodificar(de.name ? `${de.name} <${de.address}>` : (de.address || '')),\n        subject: decodificar(j.subject || ''),\n        date: j.receivedDateTime,\n        textPlain: decodificar(j.body && j.body.contentType === 'html' ? htmlATexto(cuerpo) : cuerpo)\n      }\n    };\n  }\n  const cabeceras = (j.payload && j.payload.headers) || [];\n  const leer = (nombre) => {\n    const h = cabeceras.find(x => x.name && x.name.toLowerCase() === nombre.toLowerCase());\n    if (h) return h.value;\n    const directo = j[nombre] || j[nombre.toLowerCase()];\n    if (directo && typeof directo === 'object') return directo.text || '';\n    return directo || '';\n  };\n  const fecha = leer('Date') || (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '');\n  const texto = j.text || textoPlano(j.payload) || htmlATexto(j.html) || j.snippet || '';\n  return {\n    json: {\n      metadata: { 'message-id': j.id },\n      buzon: item.buzon,\n      from: decodificar(leer('From')),\n      subject: decodificar(leer('Subject')),\n      date: fecha,\n      textPlain: decodificar(texto)\n    }\n  };\n});"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -48,
+        32,
         -96
       ],
       "id": "3b023a0d-b437-4f2c-bc6c-403ae3380aa7",
@@ -516,6 +517,65 @@
       ],
       "id": "304b5c8f-2d52-4c79-baac-9873e2ca0f90",
       "name": "Ejecutar a mano"
+    },
+    {
+      "parameters": {
+        "url": "https://graph.microsoft.com/v1.0/users/operaciones@somosviajepuntacana.com/mailFolders/inbox/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$filter",
+              "value": "=isRead eq true and receivedDateTime ge {{ $now.toUTC().minus({ days: 2 }).toFormat(\"yyyy-MM-dd'T'HH:mm:ss'Z'\") }}"
+            },
+            {
+              "name": "$top",
+              "value": "200"
+            },
+            {
+              "name": "$select",
+              "value": "id,subject,from,receivedDateTime,body,isRead"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "outlook.body-content-type=\"text\""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "0295b4b8-76df-4458-9bd6-7373ca662c37",
+      "name": "Microsoft 365: leer correos",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "disabled": true,
+      "notes": "PRUEBA: solo lee correos YA LEIDOS de los ultimos 2 dias. Leer no cambia nada en la bandeja. Para produccion, quitar 'isRead eq true and ' del filtro."
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -100,
+        -96
+      ],
+      "id": "fb8c768d-1c0a-409d-a839-2716bdc8defc",
+      "name": "Juntar correos"
     }
   ],
   "pinData": {},
@@ -590,7 +650,7 @@
       "main": [
         [
           {
-            "node": "Traducir correo",
+            "node": "Juntar correos",
             "type": "main",
             "index": 0
           }
@@ -613,6 +673,33 @@
         [
           {
             "node": "Gmail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Microsoft 365: leer correos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft 365: leer correos": {
+      "main": [
+        [
+          {
+            "node": "Juntar correos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Juntar correos": {
+      "main": [
+        [
+          {
+            "node": "Traducir correo",
             "type": "main",
             "index": 0
           }
