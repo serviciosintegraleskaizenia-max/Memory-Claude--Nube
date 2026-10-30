@@ -531,7 +531,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, message_id, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
+        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
       );
       const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows
         .map(x => [x.remitente, x.agencia]));

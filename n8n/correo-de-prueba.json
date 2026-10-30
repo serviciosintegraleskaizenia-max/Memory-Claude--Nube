@@ -390,7 +390,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT '{{ $json.metadata['message-id'] }}' AS message_id, (SELECT id FROM clasificacion WHERE message_id = '{{ $json.metadata['message-id'] }}' LIMIT 1) AS id;",
+        "query": "WITH borrar AS (DELETE FROM clasificacion WHERE message_id = '{{ $json.metadata['message-id'] }}' AND error_ia = TRUE RETURNING id) SELECT '{{ $json.metadata['message-id'] }}' AS message_id, (SELECT id FROM clasificacion WHERE message_id = '{{ $json.metadata['message-id'] }}' AND error_ia IS NOT TRUE LIMIT 1) AS id;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",

@@ -707,7 +707,7 @@ function pintar() {
         return `
       <tr data-id="${r.id}">
         <td>${fechaCorta(r.fecha)}</td>
-        <td><span class="etq etq-intencion">${esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
+        <td><span class="etq ${r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
         <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
         <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
         <td>${falta(paxDe(r))}</td>
@@ -815,7 +815,7 @@ async function abrirModal(id) {
     <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
     <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
     <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
-    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
+    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.error_ia ? `<tr><td>Error de la IA</td><td>${esc(r.motivo || 'La IA no respondió')}. Se vuelve a intentar en la próxima ejecución del flujo.</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
 
   const puedeEstado = puede('cambiar_estado');
   document.getElementById('mEstado').disabled = !puedeEstado;
