@@ -1,0 +1,608 @@
+{
+  "name": "Correo de Prueba",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        704,
+        -176
+      ],
+      "id": "68960c45-9ce3-4127-9866-330d9c113ebe",
+      "name": "Nvidia/Nemotron-3.5",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "idNWjmnwio1ZdFrU",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "clasificacion",
+          "mode": "list",
+          "cachedResultName": "clasificacion"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "error_ia": false
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "categoria",
+              "displayName": "categoria",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "remitente",
+              "displayName": "remitente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "asunto",
+              "displayName": "asunto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "fecha",
+              "displayName": "fecha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "creado",
+              "displayName": "creado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "buzon",
+              "displayName": "buzon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "agencia",
+              "displayName": "agencia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "tipo_servicio",
+              "displayName": "tipo_servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "nombre_cliente",
+              "displayName": "nombre_cliente",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hora_servicio",
+              "displayName": "hora_servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "vuelo",
+              "displayName": "vuelo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "hotel",
+              "displayName": "hotel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "punto_partida",
+              "displayName": "punto_partida",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "punto_llegada",
+              "displayName": "punto_llegada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fecha_servicio",
+              "displayName": "fecha_servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "adultos",
+              "displayName": "adultos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "ninos",
+              "displayName": "ninos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "infantes",
+              "displayName": "infantes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "numero_servicio",
+              "displayName": "numero_servicio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "error_ia",
+              "displayName": "error_ia",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "motivo",
+              "displayName": "motivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cuerpo",
+              "displayName": "cuerpo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "aeropuerto",
+              "displayName": "aeropuerto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "actividad",
+              "displayName": "actividad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1040,
+        -176
+      ],
+      "id": "3a3f540d-4b5f-482a-909f-4ebcf58d76f7",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "Hl3xWYSboz9pRsXx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const salida = [];\nconst respuestas = $input.all();\n\nfor (let i = 0; i < respuestas.length; i++) {\n  const correo = $('Traducir correo').item.json;\n\n  const texto = respuestas[i].json.choices?.[0]?.message?.content || '';\n\n  let datos = {};\n  let error_ia = false;\n  let motivo = '';\n  try {\n    const m = texto.match(/\\{[\\s\\S]*\\}/);\n    datos = JSON.parse(m ? m[0] : texto);\n  } catch (e) {\n    error_ia = true;\n    motivo = 'No se pudo leer la respuesta de la IA';\n  }\n\n  const categoria = String(datos.categoria || 'NO_ENTENDIDO').toUpperCase();\n  const esReserva = ['RESERVA', 'MODIFICACION'].includes(categoria);\n  const pax = datos.pax || {};\n  const clientes = esReserva && Array.isArray(datos.clientes) ? datos.clientes.join(', ') : '';\n  const servicios = esReserva && Array.isArray(datos.servicios) && datos.servicios.length > 0\n    ? datos.servicios\n    : [{}];\n\n  let estado;\n  if (categoria === 'PUBLICIDAD' || categoria === 'OTRO') {\n    estado = 'sin accion';\n  } else if (esReserva) {\n    const primero = servicios[0] || {};\n    estado = (primero.fecha_servicio || primero.hotel) ? 'pendiente de transcribir' : 'revisar';\n  } else {\n    estado = 'revisar';\n  }\n\n  const base = {\n    categoria: categoria,\n    remitente: correo.from || '',\n    asunto: correo.subject || '',\n    estado: estado,\n    fecha: correo.date || '',\n    cuerpo: correo.textPlain || '',\n    message_id: correo.metadata?.['message-id'] || '',\n    buzon: 'serviciosintegraleskaizen.ia@gmail.com',\n    agencia: esReserva ? (datos.agencia || '') : '',\n    nombre_cliente: clientes,\n    telefono: datos.telefono || '',\n    adultos: esReserva ? (Number(pax.adultos) || 0) : 0,\n    ninos: esReserva ? (Number(pax.ninos) || 0) : 0,\n    infantes: esReserva ? (Number(pax.infantes) || 0) : 0,\n    error_ia: error_ia,\n    motivo: motivo\n  };\n\n  servicios.forEach((s, n) => {\n    salida.push({\n      json: {\n        ...base,\n        numero_servicio: n + 1,\n        tipo_servicio: s.tipo_servicio || '',\n        actividad: s.actividad || '',\n        aeropuerto: s.aeropuerto || datos.aeropuerto || '',\n        fecha_servicio: s.fecha_servicio || '',\n        hora_servicio: s.hora_servicio || '',\n        vuelo: s.vuelo || '',\n        hotel: s.hotel || '',\n        punto_partida: s.punto_partida || '',\n        punto_llegada: s.punto_llegada || ''\n      }\n    });\n  });\n}\n\nreturn salida;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -176
+      ],
+      "id": "70680ea9-acd6-4306-9a39-53fc52f68e93",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, i) => {\n  const correo = $('Traducir correo').all()[i].json;\n  const dominio = ((correo.from || '').match(/@([^>\\s]+)/) || [])[1] || '';\n  const instruccion = `Clasifica este correo en una categoria: RESERVA, MODIFICACION, SEGUIMIENTO, CONSULTA, PUBLICIDAD, FACTURA, OTRO, NO_ENTENDIDO. RESERVA es una solicitud de servicio nueva. MODIFICACION es un cambio a una reserva ya enviada (cambiar fecha, hora, hotel, pasajeros o cancelar). Devuelve solo JSON valido, sin texto extra. Formato: {\"categoria\": \"...\", \"agencia\": \"...\", \"clientes\": [], \"pax\": {\"adultos\": 0, \"ninos\": 0, \"infantes\": 0}, \"aeropuerto\": \"\", \"servicios\": []}. Regla: si la categoria es RESERVA o MODIFICACION, llena agencia, clientes, pax, aeropuerto y servicios con los datos del correo (en MODIFICACION usa los datos nuevos). Para agencia: escribe SOLO el nombre de la empresa de viajes. Nunca pongas el nombre de una persona ni el nombre del remitente. Busca el nombre de la empresa en la firma o el pie de pagina escritos; si el dominio no es gmail, hotmail, yahoo u outlook, puedes usarlo. Si no encuentras el nombre de la empresa, deja agencia vacia. Si la categoria es otra, deja agencia en blanco, clientes vacio, pax en 0 y servicios vacio. Para RESERVA y MODIFICACION llena servicios con tipo_servicio, actividad, aeropuerto (codigo IATA), hora_servicio, fecha_servicio, vuelo, hotel, punto_partida, punto_llegada. Si hay hotel o fechas en el texto, llenalos dentro de servicios aunque el servicio no tenga actividad. Ignora el bloque de Vision general creada por IA y los textos de firma o confidencialidad. Si la informacion de vuelos esta solo en una imagen, deja vuelo vacio. Responde directamente con el JSON, sin razonar en voz alta. Dominio del remitente: ${dominio}. Correo: `;\n  const texto = String(correo.textPlain || '').replace(/\\s+/g, ' ').slice(0, 4000);\n  return {\n    json: {\n      body: {\n        model: \"nvidia/nemotron-3.5-super-vl:free\",\n        max_tokens: 4000,\n        messages: [{ role: \"user\", content: instruccion + texto }]\n      },\n      dominio: dominio\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -176
+      ],
+      "id": "ab229ecd-945d-4e5e-a8cc-2331763a18bc",
+      "name": "Limpiar texto"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT id FROM clasificacion WHERE message_id = '{{ $json.metadata['message-id'] }}' LIMIT 1) AS id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        112,
+        -96
+      ],
+      "id": "3b59f6a3-b2b5-46d4-9c3a-722b5313a77d",
+      "name": "Execute a SQL query",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Hl3xWYSboz9pRsXx",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fabb0a7f-98fb-43ec-8bf3-365f454524f8",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        288,
+        -96
+      ],
+      "id": "d4ba631f-4c83-4966-ba05-e71bc90afb1e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "postProcessAction": "nothing",
+        "downloadAttachments": true,
+        "options": {
+          "trackLastMessageId": false
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.2,
+      "position": [
+        64,
+        -336
+      ],
+      "id": "18151f08-cfde-4a72-9c45-c022b99cfeca",
+      "name": "Lectura correo prueba2",
+      "credentials": {
+        "imap": {
+          "id": "e4ZmmgjeqUbjP2dQ",
+          "name": "IMAP account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {
+          "q": "is:unread"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        -96
+      ],
+      "id": "0ebe25ef-4072-46d1-aae5-2a658463a314",
+      "name": "Gmail",
+      "webhookId": "11072025-a0fd-4091-a6d3-e948be56711f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "GwMqsT0RTyLMJzof",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function textoPlano(parte) {\n  if (!parte) return '';\n  if (parte.mimeType === 'text/plain' && parte.body && parte.body.data) {\n    return Buffer.from(parte.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n  }\n  for (const p of (parte.parts || [])) {\n    const t = textoPlano(p);\n    if (t) return t;\n  }\n  return '';\n}\n\nreturn $input.all().map(item => {\n  const j = item.json;\n  const cabeceras = (j.payload && j.payload.headers) || [];\n  const leer = (nombre) => {\n    const h = cabeceras.find(x => x.name && x.name.toLowerCase() === nombre.toLowerCase());\n    if (h) return h.value;\n    const directo = j[nombre] || j[nombre.toLowerCase()];\n    return directo || '';\n  };\n  const fecha = leer('Date') || (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '');\n  return {\n    json: {\n      metadata: { 'message-id': j.id },\n      from: leer('From'),\n      subject: leer('Subject'),\n      date: fecha,\n      textPlain: textoPlano(j.payload) || j.snippet || ''\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -96
+      ],
+      "id": "3b023a0d-b437-4f2c-bc6c-403ae3380aa7",
+      "name": "Traducir correo"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Nvidia/Nemotron-3.5": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar texto": {
+      "main": [
+        [
+          {
+            "node": "Nvidia/Nemotron-3.5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Limpiar texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Lectura correo prueba2": {
+      "main": [
+        []
+      ]
+    },
+    "Gmail": {
+      "main": [
+        [
+          {
+            "node": "Traducir correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traducir correo": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "0b1ea60c-4647-4da5-b81b-f66ad9d68d0f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6addf873b4dc40fa0236c953119fd94ec70e31b579056709cf473d88929417e7"
+  },
+  "nodeGroups": [],
+  "id": "9uM328eVtIN1ESyi",
+  "tags": []
+}
