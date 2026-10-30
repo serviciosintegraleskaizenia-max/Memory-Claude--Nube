@@ -472,9 +472,10 @@
       "parameters": {
         "operation": "getAll",
         "filters": {
-          "q": "is:unread"
+          "q": "in:inbox newer_than:2d"
         },
-        "simple": false
+        "simple": false,
+        "returnAll": true
       },
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,

@@ -1,6 +1,7 @@
 # Flujo n8n: Correo de Prueba
 
-Lee los correos no leídos de Gmail, descarta los ya guardados, los clasifica con
+Lee los correos de la bandeja de entrada de las últimas 48 horas (leídos o no, sin
+marcarlos), descarta los ya guardados, los clasifica con
 Nemotron (OpenRouter) y guarda el resultado en la tabla `clasificacion` de Postgres.
 
 ```
@@ -23,6 +24,23 @@ En n8n: **⋯ → Import from File** y elegir `correo-de-prueba.json`. Las crede
   que la respuesta de la IA), nunca con `.item`.
 - **Nvidia/Nemotron-3.5** manda un correo cada 4 s (*Options → Batching*) para no
   recibir el error 429 del modelo gratuito.
+
+## Marcar como leído al registrar (`marcar-leido.json`)
+
+El correo solo pasa a "leído" en la bandeja cuando la reserva se marca como
+**Registrada** en el panel. El panel llama al webhook:
+
+```
+POST http://localhost:5678/webhook/marcar-leido
+{ "message_id": "<message_id de la fila>", "buzon": "<buzon de la fila>" }
+```
+
+- Buzón `@gmail.com` → nodo Gmail *Mark as Read*.
+- Otro buzón (Microsoft 365 de Somos Viajes) → `PATCH` a Microsoft Graph con
+  `isRead: true`. Necesita la credencial *Microsoft Outlook OAuth2* con permiso
+  **Mail.ReadWrite** (solo lectura no basta para marcar).
+
+El flujo debe estar **activo** (Publish) para que la URL `/webhook/` responda.
 
 ## Nunca subir a este repositorio
 
