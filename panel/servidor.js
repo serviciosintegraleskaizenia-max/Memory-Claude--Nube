@@ -9,7 +9,8 @@ const config = require('./config');
 
 const client = new Client(config.db);
 
-const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion'];
+const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada'];
+const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
@@ -65,10 +66,24 @@ async function inicializarTablas() {
     banner_enlace TEXT NOT NULL DEFAULT '',
     actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
   await client.query('INSERT INTO empresa_datos (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+  await client.query(`CREATE TABLE IF NOT EXISTS avisos (
+    id SERIAL PRIMARY KEY,
+    para VARCHAR(50) NOT NULL,
+    texto TEXT NOT NULL,
+    reserva_id INTEGER,
+    creado TIMESTAMP NOT NULL DEFAULT NOW(),
+    leido BOOLEAN NOT NULL DEFAULT FALSE)`);
+  // Las filas que ya existían quedan como procesadas; solo las nuevas generan aviso.
+  await client.query('ALTER TABLE clasificacion ADD COLUMN IF NOT EXISTS aviso_procesado BOOLEAN NOT NULL DEFAULT TRUE');
+  await client.query('ALTER TABLE clasificacion ALTER COLUMN aviso_procesado SET DEFAULT FALSE');
 }
 
 client.connect()
   .then(inicializarTablas)
+  .then(() => {
+    procesarModificaciones();
+    setInterval(procesarModificaciones, 30 * 1000);
+  })
   .catch(e => console.log('Error preparando tablas:', e.message));
 
 function sinAcentos(s) {
@@ -134,6 +149,78 @@ async function marcarLeidoSiCompleto(id, u) {
     await registrar(u, 'marcar_leido', 'correo', fila.message_id, '', '', 'Marcado como leído en ' + fila.buzon);
   } catch (e) {
     await registrar(u, 'marcar_leido_fallido', 'correo', fila.message_id, '', '', e.message);
+  }
+}
+
+// La reserva original de una modificación: la última RESERVA anterior del mismo cliente.
+function originalDe(mod, reservas) {
+  const clave = normalizarNombre(mod.nombre_cliente);
+  if (!clave) return null;
+  let original = null;
+  for (const x of reservas) {
+    if (x.id < mod.id && normalizarNombre(x.nombre_cliente) === clave && (!original || x.id > original.id)) original = x;
+  }
+  return original;
+}
+
+async function quienTrabaja(ids) {
+  const abierta = await client.query(
+    'SELECT usuario FROM revisiones WHERE reserva_id = ANY($1::int[]) ORDER BY actualizado DESC LIMIT 1', [ids]
+  );
+  if (abierta.rows[0]) return abierta.rows[0].usuario;
+  const ultima = await client.query(
+    `SELECT usuario FROM auditoria
+     WHERE entidad = 'reserva' AND entidad_id = ANY($1::text[]) AND usuario <> 'sistema'
+       AND accion IN ('abrir_reserva', 'cambiar_estado', 'responder_correo')
+     ORDER BY fecha DESC, id DESC LIMIT 1`,
+    [ids.map(String)]
+  );
+  return ultima.rows[0] ? ultima.rows[0].usuario : null;
+}
+
+// Cuando llega un cambio a una reserva, la original pasa a "actualizada" y se avisa a quien la trabaja.
+let procesandoModificaciones = false;
+async function procesarModificaciones() {
+  if (procesandoModificaciones) return;
+  procesandoModificaciones = true;
+  try {
+    const mods = (await client.query(
+      "SELECT id, nombre_cliente, message_id FROM clasificacion WHERE categoria = 'MODIFICACION' AND aviso_procesado = FALSE ORDER BY id"
+    )).rows;
+    if (!mods.length) return;
+    const reservas = (await client.query(
+      "SELECT id, nombre_cliente, message_id, estado FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 2000"
+    )).rows;
+    const vistos = new Set();
+    for (const mod of mods) {
+      if (mod.message_id && vistos.has(mod.message_id)) continue;
+      if (mod.message_id) vistos.add(mod.message_id);
+      const original = originalDe(mod, reservas);
+      if (original) {
+        const ids = reservas
+          .filter(x => original.message_id ? x.message_id === original.message_id : x.id === original.id)
+          .map(x => x.id);
+        const quien = await quienTrabaja(ids);
+        await client.query("UPDATE clasificacion SET estado = 'actualizada' WHERE id = ANY($1::int[])", [ids]);
+        if (quien) {
+          await client.query('INSERT INTO avisos (para, texto, reserva_id) VALUES ($1, $2, $3)', [
+            quien,
+            `Llegó un cambio para la reserva de ${original.nombre_cliente} (#${original.id}). Revisa el correo #${mod.id} antes de seguir.`,
+            original.id
+          ]);
+        }
+        await registrar(SISTEMA, 'modificacion_recibida', 'reserva', original.id, original.estado, 'actualizada',
+          'Cambio en el correo #' + mod.id + (quien ? '. Aviso a ' + quien : '. Nadie la tenía abierta'));
+      }
+      await client.query(
+        'UPDATE clasificacion SET aviso_procesado = TRUE WHERE id = $1 OR (message_id IS NOT NULL AND message_id = $2)',
+        [mod.id, mod.message_id]
+      );
+    }
+  } catch (e) {
+    console.log('Error procesando modificaciones:', e.message);
+  } finally {
+    procesandoModificaciones = false;
   }
 }
 
@@ -439,24 +526,32 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
+        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, message_id, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
       );
-      const reservasPorNombre = new Map();
+      const reservas = r.rows.filter(x => x.categoria === 'RESERVA');
+      const grupoDe = x => x.message_id || 'id:' + x.id;
+      const originales = new Map();
+      const cambios = new Map();
       for (const x of r.rows) {
-        if (x.categoria !== 'RESERVA') continue;
-        const clave = normalizarNombre(x.nombre_cliente);
-        if (!clave) continue;
-        if (!reservasPorNombre.has(clave)) reservasPorNombre.set(clave, []);
-        reservasPorNombre.get(clave).push(x.id);
+        if (x.categoria !== 'MODIFICACION') continue;
+        const original = originalDe(x, reservas);
+        originales.set(x.id, original ? original.id : null);
+        if (original) cambios.set(grupoDe(original), Math.max(cambios.get(grupoDe(original)) || 0, x.id));
       }
       return json(res, 200, r.rows.map(x => {
         const base = { ...x, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
-        if (x.categoria === 'MODIFICACION') {
-          const anteriores = (reservasPorNombre.get(normalizarNombre(x.nombre_cliente)) || []).filter(id => id < x.id);
-          base.original_id = anteriores.length ? Math.max(...anteriores) : null;
-        }
+        if (x.categoria === 'MODIFICACION') base.original_id = originales.get(x.id);
+        if (x.categoria === 'RESERVA' && cambios.has(grupoDe(x))) base.cambio_id = cambios.get(grupoDe(x));
         return base;
       }));
+    }
+
+    if (req.method === 'GET' && url === '/api/avisos') {
+      const r = await client.query(
+        'UPDATE avisos SET leido = TRUE WHERE para = $1 AND leido = FALSE RETURNING id, texto, reserva_id, creado',
+        [u.usuario]
+      );
+      return json(res, 200, r.rows);
     }
 
     if (req.method === 'POST' && url === '/api/estado') {
