@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reservas - Somos Viajes Punta Cana</title>
+<style>
+  :root {
+    --fondo: #eef2f7; --tarjeta: #ffffff; --texto: #1e293b; --texto-suave: #64748b;
+    --borde: #e2e8f0; --encabezado: #0b4f8a; --encabezado2: #1679c2; --hover: #f8fafc;
+  }
+  body.oscuro {
+    --fondo: #0f172a; --tarjeta: #1e293b; --texto: #e2e8f0; --texto-suave: #94a3b8;
+    --borde: #334155; --encabezado: #0b1f3a; --encabezado2: #134e8a; --hover: #273449;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--fondo); margin: 0; color: var(--texto); transition: background 0.3s, color 0.3s; }
+
+  header { background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: white; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
+  .encabezado-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .logo-caja { background: white; border-radius: 10px; padding: 6px; display: flex; align-items: center; justify-content: center; }
+  .logo-caja img { height: 40px; width: 40px; display: block; }
+  .btn-tema { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .usuario-activo { font-size: 13px; opacity: 0.9; }
+
+  main { padding: 20px 28px; }
+
+  .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 12px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(15,23,42,0.08); border-left: 5px solid; }
+  .tarjeta .etiqueta { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--texto-suave); }
+  .tarjeta .numero { font-size: 26px; font-weight: 700; margin-top: 2px; }
+  .t-reservas { border-color: #1679c2; } .t-reservas .numero { color: #1679c2; }
+  .t-pendientes { border-color: #f59e0b; } .t-pendientes .numero { color: #d97706; }
+  .t-registradas { border-color: #16a34a; } .t-registradas .numero { color: #16a34a; }
+  .t-revisar { border-color: #ef4444; } .t-revisar .numero { color: #dc2626; }
+  .t-total { border-color: #64748b; } .t-total .numero { color: var(--texto); }
+
+  .conectados { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; min-height: 24px; }
+  .chip { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 999px; padding: 4px 11px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+  .punto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .verde { background: #16a34a; }
+  .amarillo { background: #f59e0b; }
+  .gris { background: #94a3b8; }
+
+  .pestanas { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--borde); }
+  .pestana { background: none; border: none; border-bottom: 3px solid transparent; padding: 10px 14px; font-size: 14px; color: var(--texto-suave); cursor: pointer; }
+  .pestana:hover { color: var(--texto); }
+  .pestana.activa { color: var(--texto); border-bottom-color: #1679c2; font-weight: 600; }
+  .contador { background: var(--hover); border: 1px solid var(--borde); border-radius: 999px; padding: 1px 8px; font-size: 12px; margin-left: 4px; }
+
+  .barra { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .barra select, .barra input[type=date] { padding: 8px 10px; border: 1px solid var(--borde); border-radius: 8px; font-size: 13px; background: var(--tarjeta); color: var(--texto); }
+  .barra label { font-size: 13px; color: var(--texto-suave); display: flex; align-items: center; gap: 6px; }
+  .btn { background: #1679c2; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .btn:hover { background: #0b4f8a; }
+  .btn-sec { background: var(--tarjeta); color: var(--texto); border: 1px solid var(--borde); padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+  .btn-sec:hover { background: var(--hover); }
+  .btn-mini { background: var(--hover); color: var(--texto); border: 1px solid var(--borde); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  button:disabled, select:disabled, input:disabled { opacity: 0.5; cursor: not-allowed; }
+  .inactivo { opacity: 0.5; }
+
+  .tabla-wrap { background: var(--tarjeta); border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 3px rgba(15,23,42,0.08); }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; }
+  thead th { background: var(--hover); color: var(--texto-suave); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--borde); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--borde); font-size: 13px; vertical-align: middle; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--hover); }
+  .acciones { display: flex; gap: 6px; flex-wrap: wrap; cursor: default; }
+  .tabla-chica table { min-width: 0; }
+  .tabla-chica td, .tabla-chica th { font-size: 12px; padding: 6px 8px; }
+
+  .etq { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .etq-pendiente { background: #fef3c7; color: #92400e; }
+  .etq-revisar { background: #fee2e2; color: #991b1b; }
+  .etq-registrada { background: #dcfce7; color: #166534; }
+  .etq-sinaccion { background: #e2e8f0; color: #475569; }
+  .etq-intencion { background: #ede9fe; color: #5b21b6; }
+  .falta { background: #fef9c3; color: #854d0e; padding: 2px 6px; border-radius: 5px; font-style: italic; font-size: 12px; }
+  .recortar { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vacio-total { text-align: center; padding: 30px; color: var(--texto-suave); }
+  .revision { background: #e0f2fe; color: #075985; border-radius: 6px; padding: 2px 7px; font-size: 11px; margin-left: 6px; white-space: nowrap; }
+  .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
+
+  .fondo-modal, .overlay, .fondo-chat { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; padding: 16px; }
+  .fondo-modal.abierto, .overlay.abierto, .fondo-chat.abierto { opacity: 1; pointer-events: auto; }
+  .modal { background: var(--tarjeta); color: var(--texto); width: min(680px, 92vw); max-height: 86vh; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateY(20px) scale(0.97); transition: transform 0.25s; }
+  .fondo-modal.abierto .modal { transform: translateY(0) scale(1); }
+  .modal-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; border-bottom: 1px solid var(--borde); }
+  .modal-cabecera h2 { margin: 0; font-size: 17px; }
+  .modal-cabecera .meta { font-size: 12px; color: var(--texto-suave); margin-top: 4px; line-height: 1.5; }
+  .cerrar { background: none; border: none; font-size: 26px; cursor: pointer; color: var(--texto-suave); line-height: 1; padding: 0 4px; }
+  .modal-cuerpo { padding: 14px 20px; overflow-y: auto; flex: 1; }
+  .correo-texto { background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .datos { width: 100%; margin-top: 14px; border-collapse: collapse; min-width: 0; }
+  .datos td { padding: 6px 4px; font-size: 13px; border-bottom: 1px solid var(--borde); }
+  .datos td:first-child { color: var(--texto-suave); width: 42%; }
+  .modal-pie { padding: 12px 20px; border-top: 1px solid var(--borde); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .modal-pie select { flex: 1; min-width: 180px; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; font-size: 13px; background: var(--tarjeta); color: var(--texto); }
+  .mensaje { font-size: 12px; min-height: 16px; width: 100%; }
+  .titulo-seccion { font-size: 13px; color: var(--texto-suave); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+  .chat-modal { width: min(820px, 94vw); height: min(560px, 80vh); }
+  .chat-cuerpo { display: flex; flex: 1; min-height: 0; }
+  .chat-contactos { width: 250px; border-right: 1px solid var(--borde); overflow-y: auto; }
+  .chat-contacto { padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 1px solid var(--borde); }
+  .chat-contacto:hover, .chat-contacto.activo { background: var(--hover); }
+  .chat-conversacion { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .chat-mensajes { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .burbuja { max-width: 75%; padding: 7px 11px; border-radius: 12px; font-size: 13px; word-break: break-word; }
+  .burbuja.mia { align-self: flex-end; background: #1679c2; color: white; }
+  .burbuja.otra { align-self: flex-start; background: var(--hover); border: 1px solid var(--borde); }
+  .burbuja small { display: block; font-size: 10px; opacity: 0.7; margin-top: 3px; }
+  .chat-enviar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borde); }
+  .chat-enviar input { flex: 1; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo); color: var(--texto); font-size: 14px; }
+
+  .chat-flotante { position: fixed; right: 20px; bottom: 20px; z-index: 60; background: #1679c2; color: white; border: none; border-radius: 999px; padding: 12px 20px; font-size: 14px; font-weight: 600; box-shadow: 0 8px 20px rgba(0,0,0,0.25); cursor: pointer; }
+  .chat-flotante:hover { background: #0b4f8a; }
+  .chat-barra-herr { display: flex; gap: 6px; align-items: center; padding: 6px 10px 0; position: relative; }
+  .chat-barra-herr > button { background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 4px 9px; font-size: 16px; cursor: pointer; }
+  .emoji-panel { position: absolute; bottom: 40px; left: 10px; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px; padding: 8px; display: none; grid-template-columns: repeat(8, 1fr); gap: 2px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); z-index: 5; }
+  .emoji-panel.abierto { display: grid; }
+  .emoji-panel button { background: none; border: none; font-size: 20px; cursor: pointer; padding: 2px 4px; }
+  .preview-imagen { padding: 6px 10px 0; display: none; align-items: center; gap: 8px; font-size: 12px; color: var(--texto-suave); }
+  .preview-imagen.abierto { display: flex; }
+  .preview-imagen img { max-height: 60px; border-radius: 6px; border: 1px solid var(--borde); }
+  .burbuja img.adjunta { max-width: 260px; max-height: 200px; border-radius: 8px; display: block; margin-bottom: 4px; cursor: pointer; }
+  .alerta-x { float: right; margin-left: 10px; background: none; border: none; color: white; font-size: 18px; cursor: pointer; line-height: 1; }
+  .alerta-x:hover { opacity: 0.8; }
+  .respuesta-caja { width: 100%; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo); color: var(--texto); font-size: 14px; font-family: inherit; }
+  .avisos { position: fixed; top: 16px; right: 16px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+  .alerta { background: #0b4f8a; color: white; padding: 12px 16px; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); max-width: 360px; font-size: 13px; }
+
+  .caja-ventana { background: var(--tarjeta); color: var(--texto); width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+  .barra-ventana { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .barra-ventana h2 { margin: 0; font-size: 18px; }
+  .form-fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .form-fila label, .etiqueta-sec { font-size: 12px; color: var(--texto-suave); display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .form-fila input, .form-fila select, .input-ancho { padding: 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo); color: var(--texto); font-size: 14px; width: 100%; }
+  .chks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin: 10px 0 16px; }
+  .chk { font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .aviso { font-size: 13px; min-height: 18px; margin-top: 10px; }
+  .pie-acciones { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .pantalla-login, .pantalla-clave { position: fixed; inset: 0; background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .caja-login { background: var(--tarjeta); color: var(--texto); padding: 30px; border-radius: 14px; width: min(360px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+  .caja-login h2 { margin: 0 0 6px; font-size: 18px; }
+  .caja-login p { margin: 0 0 18px; font-size: 13px; color: var(--texto-suave); }
+  .caja-login label { display: block; font-size: 12px; color: var(--texto-suave); margin-top: 12px; margin-bottom: 4px; }
+  .caja-login input { width: 100%; padding: 10px; border: 1px solid var(--borde); border-radius: 8px; font-size: 14px; background: var(--fondo); color: var(--texto); }
+  .caja-login .btn { width: 100%; margin-top: 18px; padding: 11px; font-size: 14px; }
+  .error-login { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 10px; }
+  .btn-cancelar { background: none; border: none; color: var(--texto-suave); cursor: pointer; font-size: 13px; margin-top: 10px; width: 100%; }
+</style>
+</head>
+<body>
+
+<div class="pantalla-login" id="pantallaLogin">
+  <form class="caja-login" id="formLogin">
+    <h2>Reservas - Somos Viajes Punta Cana</h2>
+    <p>Ingresa con tu usuario y contraseña.</p>
+    <label for="usuario">Usuario</label>
+    <input type="text" id="usuario" autocomplete="username" required>
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" autocomplete="current-password" required>
+    <button class="btn" type="submit">Entrar</button>
+    <div class="error-login" id="errorLogin"></div>
+  </form>
+</div>
+
+<div class="pantalla-clave" id="pantallaClave">
+  <form class="caja-login" id="formClave">
+    <h2>Cambia tu contraseña</h2>
+    <p id="textoClave">Por seguridad, debes elegir una contraseña propia antes de continuar.</p>
+    <label for="claveActual">Contraseña actual</label>
+    <input type="password" id="claveActual" autocomplete="current-password" required>
+    <label for="claveNueva">Nueva contraseña (mínimo 8 caracteres)</label>
+    <input type="password" id="claveNueva" autocomplete="new-password" required minlength="8">
+    <label for="claveRepetir">Repite la nueva contraseña</label>
+    <input type="password" id="claveRepetir" autocomplete="new-password" required minlength="8">
+    <button class="btn" type="submit">Guardar contraseña</button>
+    <button class="btn-cancelar" type="button" id="btnCancelarClave">Cancelar</button>
+    <div class="error-login" id="errorClave"></div>
+  </form>
+</div>
+
+<div id="app" style="display:none;">
+<header>
+  <div>
+    <h1>Reservas - Somos Viajes Punta Cana</h1>
+    <p id="fecha"></p>
+  </div>
+  <div class="encabezado-der">
+    <span class="usuario-activo" id="usuarioActivo"></span>
+    <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
+    <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
+    <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
+    <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
+    <button class="btn-tema" id="btnTema">Modo oscuro</button>
+    <button class="btn-tema" id="btnSalir">Salir</button>
+    <div class="logo-caja"><img src="/inteligencia-artificial.png" alt="Logo"></div>
+  </div>
+</header>
+
+<main>
+  <div class="tarjetas">
+    <div class="tarjeta t-reservas"><div class="etiqueta">Reservas</div><div class="numero" id="n-reservas">0</div></div>
+    <div class="tarjeta t-pendientes"><div class="etiqueta">Pendientes de transcribir</div><div class="numero" id="n-pendientes">0</div></div>
+    <div class="tarjeta t-registradas"><div class="etiqueta">Registradas</div><div class="numero" id="n-registradas">0</div></div>
+    <div class="tarjeta t-revisar"><div class="etiqueta">Para revisar</div><div class="numero" id="n-revisar">0</div></div>
+    <div class="tarjeta t-total"><div class="etiqueta">Correos procesados</div><div class="numero" id="n-total">0</div></div>
+  </div>
+
+  <div class="conectados" id="conectados"></div>
+
+  <div class="pestanas" id="pestanas">
+    <button class="pestana activa" data-vista="todas">Todas las reservas <span class="contador" id="cnt-todas">0</span></button>
+    <button class="pestana" data-vista="revision">En revisión ahora <span class="contador" id="cnt-revision">0</span></button>
+    <button class="pestana" data-vista="registradas">Reservas registradas <span class="contador" id="cnt-registradas">0</span></button>
+  </div>
+
+  <div class="barra">
+    <button class="btn-sec" id="btnHoy">Hoy</button>
+    <button class="btn-sec" id="btnAyer">Ayer</button>
+    <input type="date" id="desde" title="Fecha de recibido desde">
+    <input type="date" id="hasta" title="Fecha de recibido hasta">
+    <select id="filtroIntencion">
+      <option value="">Todas las intenciones</option>
+      <option>RESERVA</option><option>SEGUIMIENTO</option><option>CONSULTA</option>
+      <option>PUBLICIDAD</option><option>FACTURA</option><option>OTRO</option><option>NO_ENTENDIDO</option><option>MODIFICACION</option>
+    </select>
+    <select id="filtroEstado">
+      <option value="">Todos los estados</option>
+      <option value="pendiente de transcribir">Pendiente de transcribir</option>
+      <option value="registrada">Registrada</option>
+      <option value="revisar">Para revisar</option>
+      <option value="sin accion">Sin acción</option>
+    </select>
+    <select id="filtroOrden">
+      <option value="servicio">Orden: fecha de servicio (más próxima)</option>
+      <option value="recibido">Orden: fecha de recibido (más reciente)</option>
+    </select>
+    <label><input type="checkbox" id="soloCompletos" checked> Ocultar pruebas sin datos</label>
+    <button class="btn-sec" id="btnCorreoNuevo" style="display:none;">Correo nuevo</button>
+    <button class="btn" id="btnExcel">Exportar a Excel</button>
+  </div>
+
+  <div class="tabla-wrap">
+    <table>
+      <thead><tr>
+        <th>Fecha de recibido</th><th>Intención</th><th>Agencia</th><th>Clientes</th><th>PAX</th>
+        <th>Aeropuerto</th><th>Actividad</th><th>Fecha servicio</th><th>Hora</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
+      </tr></thead>
+      <tbody id="cuerpo"></tbody>
+    </table>
+  </div>
+</main>
+
+<div class="fondo-modal" id="fondoModal">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-cabecera">
+      <div>
+        <h2 id="mAsunto"></h2>
+        <div class="meta" id="mMeta"></div>
+      </div>
+      <button class="cerrar" id="btnCerrar" title="Cerrar">&times;</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div class="correo-texto" id="mCorreo"></div>
+      <table class="datos" id="mDatos"></table>
+      <div id="mHistorial"></div>
+    </div>
+    <div class="modal-cuerpo" id="mRespuesta" style="display:none; border-top:1px solid var(--borde);">
+      <div class="titulo-seccion">Responder a <span id="mDestino"></span></div>
+      <textarea id="mTexto" rows="5" class="respuesta-caja" placeholder="Escribe la respuesta. El correo original se incluye citado debajo."></textarea>
+      <div class="pie-acciones">
+        <button class="btn" id="btnEnviarRespuesta">Enviar respuesta</button>
+        <button class="btn-sec" id="btnCancelarRespuesta">Cancelar</button>
+      </div>
+    </div>
+    <div class="modal-pie">
+      <select id="mEstado"></select>
+      <button class="btn-sec" id="btnResponder" style="display:none;">Responder</button>
+      <button class="btn" id="btnGuardar">Guardar estado</button>
+      <div class="mensaje" id="mMensaje"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<button class="chat-flotante" id="btnChatFlotante" style="display:none;">Chat</button>
+
+<div class="fondo-chat" id="fondoChat">
+  <div class="modal chat-modal" role="dialog" aria-modal="true">
+    <div class="modal-cabecera">
+      <h2>Chat privado</h2>
+      <button class="cerrar" id="btnCerrarChat" title="Cerrar">&times;</button>
+    </div>
+    <div class="chat-cuerpo">
+      <div class="chat-contactos" id="chatContactos"></div>
+      <div class="chat-conversacion">
+        <div class="chat-mensajes" id="chatMensajes"></div>
+        <div class="chat-barra-herr">
+          <button type="button" id="btnEmoji" title="Emojis">😊</button>
+          <button type="button" id="btnAdjuntar" title="Adjuntar imagen o captura">📎</button>
+          <input type="file" id="archivoChat" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
+          <div class="emoji-panel" id="emojiPanel"></div>
+        </div>
+        <div class="preview-imagen" id="previewImagen">
+          <img id="imgPreview" alt="">
+          <span id="nombrePreview"></span>
+          <button type="button" id="btnQuitarImagen" class="btn-mini">Quitar</button>
+        </div>
+        <div class="chat-enviar">
+          <input id="chatTexto" maxlength="1000" placeholder="Escribe un mensaje..." autocomplete="off">
+          <button class="btn" id="btnEnviarChat">Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="avisos" id="avisos"></div>
+
+<div class="overlay" id="overlay">
+  <div class="caja-ventana" id="caja"></div>
+</div>
+
+<script>
+const ESTADOS = [
+  ['pendiente de transcribir', 'Pendiente de transcribir'],
+  ['registrada', 'Registrada'],
+  ['revisar', 'Para revisar'],
+  ['sin accion', 'Sin acción']
+];
+
+const PERMISOS = [
+  ['ver_reservas', 'Ver peticiones y recibir correos'],
+  ['cambiar_estado', 'Cambiar estado'],
+  ['responder_correo', 'Responder correos'],
+  ['enviar_correo', 'Enviar correos nuevos'],
+  ['editar_reservas', 'Editar reservas'],
+  ['ver_todas_empresas', 'Ver todas las empresas'],
+  ['administrar_usuarios', 'Administrar usuarios'],
+  ['ver_auditoria', 'Ver auditoría'],
+  ['usar_chat', 'Usar el chat privado'],
+  ['exportar_datos', 'Exportar a Excel']
+];
+
+const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
+
+let datos = [];
+let seleccionado = null;
+let sesionActual = null;
+let listaUsuarios = [];
+let listaGrupos = [];
+let auditoriaActual = [];
+let ultimaActividad = Date.now();
+let timerLatido = null;
+let timerRefresco = null;
+let timerBadge = null;
+let timerChat = null;
+let timerRevision = null;
+let revisiones = new Map();
+let ultimoIdVisto = null;
+let contactoChat = null;
+let vistaActual = 'todas';
+
+function esc(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function textoLimpio(texto) {
+  return String(texto || '')
+    .replace(/\\n/g, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n\n')
+    .trim();
+}
+
+function falta(valor) {
+  return (valor === null || valor === undefined || valor === '')
+    ? '<span class="falta">Falta</span>' : esc(valor);
+}
+
+function nombreCorto(texto) {
+  return esc((texto || '').replace(/<.*>/, '').trim());
+}
+
+function agenciaDe(r) {
+  return r.agencia || nombreCorto(r.remitente) || '';
+}
+
+function paxDe(r) {
+  const a = Number(r.adultos) || 0;
+  const n = Number(r.ninos) || 0;
+  const i = Number(r.infantes) || 0;
+  const partes = [];
+  if (a) partes.push(a + (a === 1 ? ' adulto' : ' adultos'));
+  if (n) partes.push(n + (n === 1 ? ' niño' : ' niños'));
+  if (i) partes.push(i + (i === 1 ? ' infante' : ' infantes'));
+  return partes.join(', ');
+}
+
+function etiquetaEstado(estado) {
+  const clases = { 'pendiente de transcribir': 'etq-pendiente', 'registrada': 'etq-registrada', 'revisar': 'etq-revisar' };
+  const nombre = (ESTADOS.find(e => e[0] === estado) || [null, estado])[1];
+  return `<span class="etq ${clases[estado] || 'etq-sinaccion'}">${esc(nombre)}</span>`;
+}
+
+function fechaCorta(texto) {
+  if (!texto) return '';
+  const d = new Date(texto);
+  return isNaN(d) ? esc(texto) : d.toLocaleDateString('es-DO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function fechaHora(texto) {
+  if (!texto) return '';
+  const d = new Date(texto);
+  return isNaN(d) ? esc(texto) : d.toLocaleString('es-DO');
+}
+
+function horaCorta(texto) {
+  if (!texto) return '';
+  const d = new Date(texto);
+  return isNaN(d) ? '' : d.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
+}
+
+function fechaMs(texto) {
+  const t = new Date(texto).getTime();
+  return isNaN(t) ? 0 : t;
+}
+
+function diaLocal(texto) {
+  if (!texto) return '';
+  const d = new Date(texto);
+  return isNaN(d) ? '' : d.toLocaleDateString('sv-SE');
+}
+
+function hoyISO() { return diaLocal(new Date().toISOString()); }
+function ayerISO() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return diaLocal(d.toISOString());
+}
+
+function esCompleto(r) {
+  return r.adultos !== null && r.adultos !== undefined;
+}
+
+function puede(permiso) {
+  return Boolean(sesionActual && sesionActual.permisos && sesionActual.permisos[permiso]);
+}
+
+async function api(url, cuerpo) {
+  const opciones = cuerpo === undefined ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cuerpo)
+  };
+  let r;
+  try { r = await fetch(url, opciones); }
+  catch (e) { return { ok: false, status: 0, data: { error: 'No hay conexión con el servidor.' } }; }
+  let data = {};
+  try { data = await r.json(); } catch (e) {}
+  if (r.status === 401) mostrarLogin();
+  if (data.debe_cambiar) mostrarClave(true);
+  return { ok: r.ok, status: r.status, data };
+}
+
+function detenerTemporizadores() {
+  [timerLatido, timerRefresco, timerBadge, timerChat, timerRevision].forEach(t => t && clearInterval(t));
+  timerLatido = timerRefresco = timerBadge = timerChat = timerRevision = null;
+}
+
+function mostrarLogin() {
+  cerrarVentana();
+  cerrarChat();
+  detenerTemporizadores();
+  document.getElementById('conectados').innerHTML = '';
+  ultimoIdVisto = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pantallaClave').style.display = 'none';
+  document.getElementById('pantallaLogin').style.display = 'flex';
+  document.getElementById('password').value = '';
+}
+
+function mostrarClave(forzado) {
+  cerrarVentana();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pantallaLogin').style.display = 'none';
+  document.getElementById('pantallaClave').style.display = 'flex';
+  document.getElementById('btnCancelarClave').style.display = forzado ? 'none' : 'block';
+  document.getElementById('textoClave').textContent = forzado
+    ? 'Por seguridad, debes elegir una contraseña propia antes de continuar.'
+    : 'Escribe tu contraseña actual y la nueva.';
+  document.getElementById('errorClave').textContent = '';
+  document.getElementById('formClave').reset();
+}
+
+function mostrarApp(s) {
+  sesionActual = s;
+  document.getElementById('pantallaLogin').style.display = 'none';
+  document.getElementById('pantallaClave').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('usuarioActivo').textContent = (s.nombre || s.usuario) + ' · ' + s.grupo;
+  document.getElementById('btnHerramientas').style.display =
+    (puede('administrar_usuarios') || puede('ver_auditoria')) ? 'inline-block' : 'none';
+  document.getElementById('btnChat').style.display = puede('usar_chat') ? 'inline-block' : 'none';
+  document.getElementById('btnChatFlotante').style.display = puede('usar_chat') ? 'inline-block' : 'none';
+  document.getElementById('btnExcel').style.display = puede('exportar_datos') ? 'inline-block' : 'none';
+  document.getElementById('btnCorreoNuevo').style.display = puede('enviar_correo') ? 'inline-block' : 'none';
+  document.getElementById('btnAvisos').style.display = ('Notification' in window && Notification.permission === 'default') ? 'inline-block' : 'none';
+  cargarReservas();
+  iniciarLatido();
+  detenerTemporizadores();
+  timerLatido = setInterval(latido, 60 * 1000);
+  timerRefresco = setInterval(cargarReservas, 15 * 1000);
+  timerBadge = setInterval(actualizarBadgeChat, 20 * 1000);
+  actualizarBadgeChat();
+}
+
+async function comprobarSesion() {
+  const r = await api('/api/sesion');
+  if (!r.ok) return;
+  if (r.data.debe_cambiar) return mostrarClave(true);
+  mostrarApp(r.data);
+}
+
+async function cargarReservas() {
+  if (!sesionActual) return;
+  const [r, rv] = await Promise.all([api('/api/reservas'), api('/api/revisiones')]);
+  if (!r.ok) {
+    document.getElementById('cuerpo').innerHTML =
+      `<tr><td colspan="12" class="vacio-total">${esc(r.data.error || 'No se pudieron cargar las reservas.')}</td></tr>`;
+    return;
+  }
+  revisiones = new Map((rv.ok ? rv.data : []).map(x => [x.reserva_id, x]));
+
+  const nuevas = ultimoIdVisto === null
+    ? []
+    : r.data.filter(x => x.id > ultimoIdVisto && (x.categoria === 'RESERVA' || x.categoria === 'MODIFICACION'));
+  if (r.data.length) {
+    ultimoIdVisto = Math.max(ultimoIdVisto ?? 0, ...r.data.map(x => x.id));
+  }
+
+  datos = r.data;
+  pintar();
+  nuevas.forEach(x => mostrarAlerta(x.categoria === 'MODIFICACION'
+    ? `Modificación en la reserva de ${x.nombre_cliente || x.asunto || 'sin nombre'}`
+    : `Nueva reserva: ${x.nombre_cliente || x.asunto || 'sin nombre'}`));
+}
+
+let pendientesAviso = 0;
+const TITULO_BASE = document.title;
+
+function actualizarTitulo() {
+  document.title = pendientesAviso > 0 ? `(${pendientesAviso}) ${TITULO_BASE}` : TITULO_BASE;
+}
+
+function avisoEscritorio(texto) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const n = new Notification('Somos Viajes - Reservas', { body: texto, tag: 'aviso-' + Date.now() });
+  n.onclick = () => { window.focus(); n.close(); };
+}
+
+function sonarAviso() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const ganancia = ctx.createGain();
+    osc.frequency.value = 880;
+    ganancia.gain.value = 0.15;
+    osc.connect(ganancia);
+    ganancia.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (e) {}
+}
+
+window.addEventListener('focus', () => { pendientesAviso = 0; actualizarTitulo(); });
+
+function mostrarAlerta(texto) {
+  const box = document.getElementById('avisos');
+  const div = document.createElement('div');
+  div.className = 'alerta';
+  div.textContent = texto;
+  box.appendChild(div);
+  const cerrar = document.createElement('button');
+  cerrar.className = 'alerta-x';
+  cerrar.textContent = '×';
+  cerrar.onclick = () => div.remove();
+  div.prepend(cerrar);
+  pendientesAviso += 1;
+  actualizarTitulo();
+  avisoEscritorio(texto);
+  sonarAviso();
+}
+
+function ordenar(lista) {
+  const modo = document.getElementById('filtroOrden').value;
+  if (modo === 'recibido') {
+    return lista.sort((a, b) => fechaMs(b.fecha) - fechaMs(a.fecha));
+  }
+  return lista.sort((a, b) => {
+    const x = a.fecha_servicio_iso, y = b.fecha_servicio_iso;
+    if (x && y) return x < y ? -1 : x > y ? 1 : 0;
+    if (x) return -1;
+    if (y) return 1;
+    return fechaMs(b.fecha) - fechaMs(a.fecha);
+  });
+}
+
+function filtrar() {
+  const intencion = document.getElementById('filtroIntencion').value;
+  const estado = document.getElementById('filtroEstado').value;
+  const desde = document.getElementById('desde').value;
+  const hasta = document.getElementById('hasta').value;
+  const soloCompletos = document.getElementById('soloCompletos').checked;
+
+  const lista = datos.filter(r => {
+    const dia = diaLocal(r.fecha);
+    if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
+    if (vistaActual === 'registradas' && !(r.categoria === 'RESERVA' && r.estado === 'registrada')) return false;
+    return (!intencion || r.categoria === intencion)
+      && (!estado || r.estado === estado)
+      && (!desde || dia >= desde)
+      && (!hasta || dia <= hasta)
+      && (!soloCompletos || esCompleto(r));
+  });
+  return ordenar(lista);
+}
+
+function actualizarContadores() {
+  const completos = datos.filter(esCompleto);
+  const enRevision = datos.filter(r => revisiones.has(r.id)).length;
+  const registradas = datos.filter(r => r.categoria === 'RESERVA' && r.estado === 'registrada').length;
+  document.getElementById('cnt-todas').textContent = completos.filter(r => r.categoria === 'RESERVA').length;
+  document.getElementById('cnt-revision').textContent = enRevision;
+  document.getElementById('cnt-registradas').textContent = registradas;
+}
+
+function pintar() {
+  const lista = filtrar();
+  const cuerpo = document.getElementById('cuerpo');
+
+  cuerpo.innerHTML = lista.length
+    ? lista.map(r => {
+        const rev = revisiones.get(r.id);
+        const marca = rev
+          ? `<span class="revision">En revisión: ${esc(rev.nombre || rev.usuario)} desde ${esc(horaCorta(rev.desde))}</span>`
+          : '';
+        return `
+      <tr data-id="${r.id}">
+        <td>${fechaCorta(r.fecha)}</td>
+        <td><span class="etq etq-intencion">${esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}</td>
+        <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
+        <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
+        <td>${falta(paxDe(r))}</td>
+        <td>${falta(r.aeropuerto)}</td>
+        <td>${falta(r.actividad || r.tipo_servicio)}</td>
+        <td>${falta(r.fecha_servicio)}</td>
+        <td>${falta(r.hora_servicio)}</td>
+        <td>${falta(r.vuelo)}</td>
+        <td>${falta(r.hotel)}</td>
+        <td>${etiquetaEstado(r.estado)}${marca}</td>
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="12" class="vacio-total">${
+        vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
+        : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
+        : 'No hay registros con estos filtros.'}</td></tr>`;
+
+  cuerpo.querySelectorAll('tr[data-id]').forEach(tr =>
+    tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id))));
+
+  const completos = datos.filter(esCompleto);
+  document.getElementById('n-reservas').textContent = completos.filter(r => r.categoria === 'RESERVA').length;
+  document.getElementById('n-pendientes').textContent = datos.filter(r => r.estado === 'pendiente de transcribir').length;
+  document.getElementById('n-registradas').textContent = datos.filter(r => r.estado === 'registrada').length;
+  document.getElementById('n-revisar').textContent = datos.filter(r => r.estado === 'revisar').length;
+  document.getElementById('n-total').textContent = datos.length;
+  actualizarContadores();
+}
+
+function cambiarVista(vista) {
+  vistaActual = vista;
+  document.querySelectorAll('#pestanas .pestana').forEach(b =>
+    b.classList.toggle('activa', b.dataset.vista === vista));
+  pintar();
+}
+
+function tablaAuditoria(lista) {
+  if (!lista.length) return '<div class="vacio-total">Sin registros.</div>';
+  const filas = lista.map(r => `
+    <tr>
+      <td>${fechaHora(r.fecha)}</td>
+      <td>${esc(r.nombre || r.usuario)}</td>
+      <td>${esc(r.accion)}</td>
+      <td>${esc(r.entidad)} ${esc(r.entidad_id)}</td>
+      <td>${esc(r.anterior)}</td>
+      <td>${esc(r.nuevo)}</td>
+      <td>${esc(r.detalle)}</td>
+    </tr>`).join('');
+  return `
+    <div class="tabla-wrap tabla-chica">
+      <table>
+        <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Objeto</th><th>Antes</th><th>Después</th><th>Detalle</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+async function cargarHistorial(id) {
+  const box = document.getElementById('mHistorial');
+  box.innerHTML = '';
+  if (!puede('ver_auditoria')) return;
+  const r = await api(`/api/auditoria?reserva_id=${id}&limit=50`);
+  if (!r.ok) return;
+  box.innerHTML = '<div class="titulo-seccion">Historial de esta reserva</div>' + tablaAuditoria(r.data);
+}
+
+async function tomarRevision(id) {
+  const r = await api('/api/revision/tomar', { id });
+  const mensaje = document.getElementById('mMensaje');
+  if (!r.ok) {
+    document.getElementById('btnGuardar').disabled = true;
+    document.getElementById('mEstado').disabled = true;
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = r.data.error || 'No se pudo abrir la reserva.';
+    return false;
+  }
+  return true;
+}
+
+async function abrirModal(id) {
+  const r = datos.find(x => x.id === id);
+  if (!r) return;
+  seleccionado = r;
+
+  document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
+  document.getElementById('mMeta').innerHTML =
+    `De: ${esc(r.remitente)}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
+  document.getElementById('mCorreo').textContent = r.cuerpo
+    ? textoLimpio(r.cuerpo)
+    : 'Este correo se guardó antes de activar la vista del texto. Los correos nuevos sí lo muestran.';
+
+  document.getElementById('mDatos').innerHTML = `
+    <tr><td>Agencia</td><td>${falta(agenciaDe(r))}</td></tr>
+    <tr><td>Clientes</td><td>${falta(r.nombre_cliente)}</td></tr>
+    <tr><td>Teléfono</td><td>${falta(r.telefono)}</td></tr>
+    <tr><td>PAX</td><td>${falta(paxDe(r))}</td></tr>
+    <tr><td>Aeropuerto</td><td>${falta(r.aeropuerto)}</td></tr>
+    <tr><td>Actividad</td><td>${falta(r.actividad || r.tipo_servicio)}</td></tr>
+    <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
+    <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
+    <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
+    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}`;
+
+  const puedeEstado = puede('cambiar_estado');
+  document.getElementById('mEstado').disabled = !puedeEstado;
+  document.getElementById('btnGuardar').disabled = !puedeEstado;
+  document.getElementById('mEstado').innerHTML = ESTADOS.map(([valor, nombre]) =>
+    `<option value="${valor}" ${valor === r.estado ? 'selected' : ''}>${nombre}</option>`).join('');
+
+  document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
+  document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
+  document.getElementById('mRespuesta').style.display = 'none';
+  document.getElementById('fondoModal').classList.add('abierto');
+  cargarHistorial(id);
+
+  if (puedeEstado) {
+    const ok = await tomarRevision(id);
+    if (ok) {
+      clearInterval(timerRevision);
+      timerRevision = setInterval(() => tomarRevision(id), 60 * 1000);
+    }
+  }
+}
+
+async function cerrarModal() {
+  clearInterval(timerRevision);
+  timerRevision = null;
+  const actual = seleccionado;
+  document.getElementById('fondoModal').classList.remove('abierto');
+  document.getElementById('mHistorial').innerHTML = '';
+  seleccionado = null;
+  if (actual && puede('cambiar_estado')) {
+    await api('/api/revision/liberar', { id: actual.id });
+    cargarReservas();
+  }
+}
+
+async function guardarEstado() {
+  if (!seleccionado || !puede('cambiar_estado')) return;
+  const estado = document.getElementById('mEstado').value;
+  const mensaje = document.getElementById('mMensaje');
+  const r = await api('/api/estado', { id: seleccionado.id, estado });
+  if (!r.ok) {
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = r.data.error || 'No se pudo guardar.';
+    return;
+  }
+  seleccionado.estado = estado;
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = 'Estado guardado.';
+  pintar();
+  cargarHistorial(seleccionado.id);
+}
+
+function exportarExcel() {
+  const lista = filtrar();
+  const cabeceras = ['Fecha de recibido', 'Intención', 'Agencia', 'Clientes', 'Teléfono', 'PAX', 'Aeropuerto', 'Actividad', 'Fecha servicio', 'Hora', 'Vuelo', 'Hotel', 'Estado'];
+  const filas = lista.map(r => [
+    fechaCorta(r.fecha), r.categoria, agenciaDe(r), r.nombre_cliente || '', r.telefono || '', paxDe(r),
+    r.aeropuerto || '', r.actividad || r.tipo_servicio || '', r.fecha_servicio || '',
+    r.hora_servicio || '', r.vuelo || '', r.hotel || '', r.estado || ''
+  ]);
+  descargarCsv(cabeceras, filas, 'reservas.csv');
+}
+
+function exportarAuditoria() {
+  const cabeceras = ['Fecha', 'Usuario', 'Nombre', 'Acción', 'Entidad', 'Objeto', 'Antes', 'Después', 'Detalle'];
+  const filas = auditoriaActual.map(r => [
+    fechaHora(r.fecha), r.usuario, r.nombre, r.accion, r.entidad, r.entidad_id, r.anterior, r.nuevo, r.detalle
+  ]);
+  descargarCsv(cabeceras, filas, 'auditoria.csv');
+}
+
+function descargarCsv(cabeceras, filas, nombre) {
+  const csv = [cabeceras, ...filas]
+    .map(fila => fila.map(c => `"${String(c ?? '').replace(/<[^>]*>/g, '').replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(blob);
+  enlace.download = nombre;
+  enlace.click();
+}
+
+function alternarTema() {
+  document.body.classList.toggle('oscuro');
+  const oscuro = document.body.classList.contains('oscuro');
+  document.getElementById('btnTema').textContent = oscuro ? 'Modo claro' : 'Modo oscuro';
+  localStorage.setItem('tema', oscuro ? 'oscuro' : 'claro');
+}
+
+/* ---------- Estado de conexión ---------- */
+
+function pintarConectados(lista) {
+  const el = document.getElementById('conectados');
+  el.innerHTML = lista.length
+    ? lista.map(c => `
+        <span class="chip">
+          <span class="punto ${c.estado === 'en linea' ? 'verde' : 'amarillo'}"></span>
+          ${esc(c.nombre)} · ${esc(c.grupo)} · ${c.estado === 'en linea' ? 'en línea' : 'ausente'}
+        </span>`).join('')
+    : '<span class="chip">Sin usuarios conectados</span>';
+}
+
+async function latido() {
+  if (!sesionActual) return;
+  const activo = Date.now() - ultimaActividad < 5 * 60 * 1000;
+  await api('/api/latido', { activo });
+  const r = await api('/api/conectados');
+  if (r.ok) pintarConectados(r.data);
+}
+
+function iniciarLatido() {
+  latido();
+}
+
+/* ---------- Chat privado ---------- */
+
+function abrirChat() {
+  document.getElementById('fondoChat').classList.add('abierto');
+  cargarContactos();
+  cargarMensajes(true);
+  clearInterval(timerChat);
+  timerChat = setInterval(() => {
+    cargarContactos();
+    if (contactoChat) cargarMensajes(false);
+  }, 2000);
+}
+
+function cerrarChat() {
+  document.getElementById('fondoChat').classList.remove('abierto');
+  clearInterval(timerChat);
+  timerChat = null;
+}
+
+function clasePunto(estado) {
+  if (estado === 'en linea') return 'verde';
+  if (estado === 'ausente') return 'amarillo';
+  return 'gris';
+}
+
+function actualizarBadge(lista) {
+  const total = lista.reduce((s, c) => s + (c.noLeidos || 0), 0);
+  const badge = document.getElementById('badgeChat');
+  badge.textContent = total;
+  badge.style.display = total ? 'inline-block' : 'none';
+  document.getElementById('btnChatFlotante').textContent = total ? `Chat (${total})` : 'Chat';
+}
+
+async function actualizarBadgeChat() {
+  if (!sesionActual) return;
+  const r = await api('/api/chat/contactos');
+  if (r.ok) actualizarBadge(r.data);
+}
+
+async function cargarContactos() {
+  const r = await api('/api/chat/contactos');
+  if (!r.ok) return;
+  actualizarBadge(r.data);
+  const cont = document.getElementById('chatContactos');
+  cont.innerHTML = r.data.length
+    ? r.data.map(c => `
+        <div class="chat-contacto ${contactoChat === c.usuario ? 'activo' : ''}" data-usuario="${esc(c.usuario)}">
+          <span><span class="punto ${clasePunto(c.estado)}"></span> ${esc(c.nombre)}</span>
+          ${c.noLeidos ? `<span class="badge">${c.noLeidos}</span>` : ''}
+        </div>`).join('')
+    : '<div class="vacio-total">No hay otros usuarios.</div>';
+  cont.querySelectorAll('[data-usuario]').forEach(el => el.addEventListener('click', () => {
+    contactoChat = el.dataset.usuario;
+    cargarContactos();
+    cargarMensajes(true);
+  }));
+}
+
+async function cargarMensajes(irAlFinal) {
+  const box = document.getElementById('chatMensajes');
+  if (!contactoChat) {
+    box.innerHTML = '<div class="vacio-total">Elige a alguien de la lista para conversar.</div>';
+    return;
+  }
+  const r = await api('/api/chat/mensajes?con=' + encodeURIComponent(contactoChat));
+  if (!r.ok) return;
+  const cercaDelFinal = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  box.innerHTML = r.data.length
+    ? r.data.map(m => `
+        <div class="burbuja ${m.de === sesionActual.usuario ? 'mia' : 'otra'}">
+          ${m.tieneImagen ? `<img class='adjunta' src='/api/chat/imagen?id=${m.id}' alt='Imagen' onclick='window.open(this.src)'>` : ''}
+          ${esc(m.texto)}
+          <small>${fechaHora(m.fecha)}</small>
+        </div>`).join('')
+    : '<div class="vacio-total">Sin mensajes todavía.</div>';
+  if (irAlFinal || cercaDelFinal) box.scrollTop = box.scrollHeight;
+}
+
+async function enviarChat() {
+  const input = document.getElementById('chatTexto');
+  const texto = input.value.trim();
+  if (!contactoChat || (!texto && !imagenPendiente)) return;
+  const r = await api('/api/chat/enviar', { para: contactoChat, texto, imagen: imagenPendiente });
+  if (!r.ok) return alert(r.data.error || 'No se pudo enviar el mensaje.');
+  input.value = '';
+  quitarImagenPendiente();
+  cargarMensajes(true);
+  cargarContactos();
+}
+
+const EMOJIS = ['😀','😃','😄','😁','😊','😉','😍','🥰','😎','🤔','😅','😂','🤣','😢','😭','😡','👍','👎','👏','🙏','🙌','💪','🎉','✅','❌','⚠️','📌','📅','✈️','🏨','🚐','🏖️','🌴','📞','📧','📷','🕐','💬','❤️','🔥','🙂','👌'];
+let imagenPendiente = null;
+
+function insertarEnChat(texto) {
+  const input = document.getElementById('chatTexto');
+  const ini = input.selectionStart ?? input.value.length;
+  const fin = input.selectionEnd ?? ini;
+  input.value = input.value.slice(0, ini) + texto + input.value.slice(fin);
+  input.focus();
+  input.selectionStart = input.selectionEnd = ini + texto.length;
+}
+
+function quitarImagenPendiente() {
+  imagenPendiente = null;
+  document.getElementById('previewImagen').classList.remove('abierto');
+  document.getElementById('imgPreview').src = '';
+  document.getElementById('archivoChat').value = '';
+}
+
+function cargarImagenDe(archivo) {
+  if (!archivo) return;
+  const tipos = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!tipos.includes(archivo.type)) return alert('Solo se pueden enviar imágenes PNG, JPG, WEBP o GIF.');
+  if (archivo.size > 2 * 1024 * 1024) return alert('La imagen es muy grande (máximo 2 MB).');
+  const lector = new FileReader();
+  lector.onload = () => {
+    imagenPendiente = lector.result;
+    document.getElementById('imgPreview').src = imagenPendiente;
+    document.getElementById('nombrePreview').textContent = archivo.name || 'Captura';
+    document.getElementById('previewImagen').classList.add('abierto');
+  };
+  lector.readAsDataURL(archivo);
+}
+
+/* ---------- Correos: responder y correo nuevo ---------- */
+
+function mostrarRespuesta() {
+  if (!seleccionado) return;
+  document.getElementById('mDestino').textContent = seleccionado.remitente || '';
+  document.getElementById('mRespuesta').style.display = 'block';
+  document.getElementById('mTexto').focus();
+}
+
+function ocultarRespuesta() {
+  document.getElementById('mRespuesta').style.display = 'none';
+  document.getElementById('mTexto').value = '';
+}
+
+async function enviarRespuesta() {
+  if (!seleccionado) return;
+  const texto = document.getElementById('mTexto').value.trim();
+  if (!texto) return alert('Escribe el mensaje antes de enviar.');
+  const r = await api('/api/correo/responder', { id: seleccionado.id, texto });
+  if (!r.ok) return alert(r.data.error || 'No se pudo enviar la respuesta.');
+  ocultarRespuesta();
+  const mensaje = document.getElementById('mMensaje');
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = 'Respuesta enviada.';
+  cargarHistorial(seleccionado.id);
+}
+
+async function abrirCorreoNuevo() {
+  const r = await api('/api/correo/buzones');
+  if (!r.ok) return alert(r.data.error || 'No se pudieron cargar las cuentas de correo.');
+  const opciones = r.data.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  abrirVentana(`
+    <div class="barra-ventana">
+      <h2>Correo nuevo</h2>
+      <div><button class="btn-sec" data-accion="cerrar">Cerrar</button></div>
+    </div>
+    <div class="form-fila">
+      <label>Enviar desde<select id="cnBuzon">${opciones}</select></label>
+      <label>Para (correo)<input id="cnPara" type="email"></label>
+      <label>Asunto<input id="cnAsunto"></label>
+    </div>
+    <label class="etiqueta-sec">Mensaje
+      <textarea id="cnTexto" rows="6" class="respuesta-caja"></textarea>
+    </label>
+    <div class="pie-acciones"><button class="btn" data-accion="enviar-correo-nuevo">Enviar correo</button></div>
+    <div class="aviso" id="avisoV"></div>`);
+}
+
+async function enviarCorreoNuevo() {
+  const r = await api('/api/correo/nuevo', {
+    buzon: val('cnBuzon'), para: val('cnPara'), asunto: val('cnAsunto'), texto: val('cnTexto')
+  });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo enviar el correo.', false);
+  cerrarVentana();
+  alert('Correo enviado.');
+}
+
+/* ---------- Ventana de herramientas ---------- */
+
+function abrirVentana(html) {
+  document.getElementById('caja').innerHTML = html;
+  document.getElementById('overlay').classList.add('abierto');
+}
+
+function cerrarVentana() {
+  document.getElementById('overlay').classList.remove('abierto');
+  document.getElementById('caja').innerHTML = '';
+}
+
+function mostrarAviso(texto, ok) {
+  const el = document.getElementById('avisoV');
+  if (!el) return alert(texto);
+  el.textContent = texto;
+  el.style.color = ok ? '#16a34a' : '#dc2626';
+}
+
+function val(id) {
+  return document.getElementById(id).value;
+}
+
+function checks(marcados, bloqueado) {
+  return PERMISOS.map(([k, etiqueta]) =>
+    `<label class="chk"><input type="checkbox" data-permiso="${k}" ${marcados && marcados[k] ? 'checked' : ''} ${bloqueado ? 'disabled' : ''}> ${etiqueta}</label>`
+  ).join('');
+}
+
+function leerChecks(contenedor) {
+  const resultado = {};
+  contenedor.querySelectorAll('input[data-permiso]').forEach(i => resultado[i.dataset.permiso] = i.checked);
+  return resultado;
+}
+
+async function abrirHerramientas(tab = 'usuarios', aviso = '') {
+  if (tab === 'auditoria') {
+    listaUsuarios = [];
+    listaGrupos = [];
+    return marco('auditoria', aviso);
+  }
+  if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
+
+  const [ru, rg] = await Promise.all([api('/api/usuarios'), api('/api/grupos')]);
+  if (!ru.ok) return alert(ru.data.error || 'No se pudo cargar la lista de usuarios.');
+  if (!rg.ok) return alert(rg.data.error || 'No se pudo cargar la lista de grupos.');
+  listaUsuarios = ru.data;
+  listaGrupos = rg.data;
+  marco(tab, aviso);
+}
+
+function marco(tab, aviso) {
+  const esProg = sesionActual.grupo === 'Programador';
+  const admin = puede('administrar_usuarios');
+  const audit = puede('ver_auditoria');
+  const boton = (id, texto) =>
+    `<button class="${tab === id ? 'btn' : 'btn-sec'}" data-accion="tab-${id}">${texto}</button>`;
+
+  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') : '') +
+    (admin && esProg ? boton('grupos', 'Grupos') : '') +
+    (esProg ? boton('bloqueos', 'Bloqueos') : '') +
+    (audit ? boton('auditoria', 'Auditoría') : '') +
+    `<button class="btn-sec" data-accion="cerrar">Cerrar</button>`;
+
+  let cuerpo;
+  if (tab === 'usuarios') cuerpo = tablaUsuarios();
+  else if (tab === 'crear') cuerpo = formUsuario(null);
+  else if (tab === 'grupos') cuerpo = tablaGrupos();
+  else if (tab === 'bloqueos') cuerpo = '<div id="tablaBloqueos"></div>';
+  else cuerpo = formAuditoria();
+
+  abrirVentana(`
+    <div class="barra-ventana"><h2>Herramientas</h2><div>${tabs}</div></div>
+    ${cuerpo}
+    <div class="aviso" id="avisoV" style="color:#16a34a">${esc(aviso)}</div>`);
+
+  if (tab === 'auditoria') buscarAuditoria();
+  if (tab === 'bloqueos') cargarBloqueos();
+}
+
+function vista(titulo, cuerpo, volver) {
+  abrirVentana(`
+    <div class="barra-ventana">
+      <h2>${esc(titulo)}</h2>
+      <div><button class="btn-sec" data-accion="${volver}">Volver</button></div>
+    </div>
+    ${cuerpo}
+    <div class="aviso" id="avisoV"></div>`);
+}
+
+/* ---------- Bloqueos (solo programador) ---------- */
+
+async function cargarBloqueos() {
+  const r = await api('/api/bloqueos');
+  const box = document.getElementById('tablaBloqueos');
+  if (!box) return;
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudieron cargar los bloqueos.')}</div>`;
+    return;
+  }
+  box.innerHTML = r.data.length
+    ? `<div class="tabla-wrap"><table>
+        <thead><tr><th>Tipo</th><th>Valor</th><th>Motivo</th><th>Hasta</th><th>Acción</th></tr></thead>
+        <tbody>${r.data.map(b => `<tr>
+          <td>${esc(b.tipo === 'ip' ? 'Dirección IP' : 'Usuario')}</td>
+          <td>${esc(b.valor)}</td>
+          <td>${esc(b.motivo)}</td>
+          <td>${fechaHora(b.hasta)}</td>
+          <td><button class="btn-mini" data-accion="quitar-bloqueo" data-id="${b.id}">Quitar bloqueo</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>`
+    : '<div class="vacio-total">No hay bloqueos activos.</div>';
+}
+
+async function quitarBloqueo(id) {
+  await api('/api/bloqueos/quitar', { id });
+  cargarBloqueos();
+}
+
+/* ---------- Auditoría ---------- */
+
+function formAuditoria() {
+  return `
+    <div class="form-fila">
+      <label>Usuario o nombre<input id="aUsuario"></label>
+      <label>Número de reserva (ID)<input id="aReserva" type="number"></label>
+      <label>Desde<input id="aDesde" type="date"></label>
+      <label>Hasta<input id="aHasta" type="date"></label>
+    </div>
+    <div class="pie-acciones">
+      <button class="btn" data-accion="buscar-auditoria">Buscar</button>
+      ${puede('exportar_datos') ? '<button class="btn-sec" data-accion="exportar-auditoria">Exportar a Excel</button>' : ''}
+    </div>
+    <div id="tablaAuditoria" style="margin-top:12px"></div>`;
+}
+
+async function buscarAuditoria() {
+  const qs = new URLSearchParams();
+  const usuario = document.getElementById('aUsuario')?.value.trim();
+  const reserva = document.getElementById('aReserva')?.value.trim();
+  const desde = document.getElementById('aDesde')?.value;
+  const hasta = document.getElementById('aHasta')?.value;
+  if (usuario) qs.set('usuario', usuario);
+  if (reserva) qs.set('reserva_id', reserva);
+  if (desde) qs.set('desde', desde);
+  if (hasta) qs.set('hasta', hasta);
+  qs.set('limit', '500');
+  const r = await api('/api/auditoria?' + qs.toString());
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo cargar la auditoría.', false);
+  auditoriaActual = r.data;
+  document.getElementById('tablaAuditoria').innerHTML = tablaAuditoria(r.data);
+}
+
+/* ---------- Usuarios ---------- */
+
+function tablaUsuarios() {
+  const filas = listaUsuarios.map(x => {
+    const esProg = x.grupo === 'Programador';
+    const soyYo = x.usuario === sesionActual.usuario;
+    const bloqueoClave = esProg && !soyYo;
+    return `
+    <tr class="${x.activo ? '' : 'inactivo'}">
+      <td>${esc(x.nombre)}${soyYo ? ' (tú)' : ''}</td>
+      <td>${esc(x.usuario)}</td>
+      <td>${esc(x.grupo)}</td>
+      <td>${esc(x.empresa)}</td>
+      <td>${x.activo ? 'Activo' : 'Desactivado'}${x.debe_cambiar ? ' · cambio pendiente' : ''}</td>
+      <td class="acciones">
+        <button class="btn-mini" data-accion="editar-usuario" data-id="${x.id}">Editar</button>
+        ${bloqueoClave ? '' : `<button class="btn-mini" data-accion="clave" data-id="${x.id}">Restablecer clave</button>`}
+        ${esProg ? '' : `<button class="btn-mini" data-accion="activo" data-id="${x.id}" data-activo="${x.activo}">${x.activo ? 'Desactivar' : 'Activar'}</button>`}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="tabla-wrap">
+      <table>
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Grupo</th><th>Empresa</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+function marcadosFormulario(u) {
+  if (u) {
+    const g = listaGrupos.find(x => x.nombre === u.grupo);
+    return { ...(g ? g.permisos : {}), ...(u.permisos || {}) };
+  }
+  const g = listaGrupos.find(x => x.nombre === 'Agentes') || listaGrupos[0];
+  return g ? g.permisos : {};
+}
+
+function formUsuario(u) {
+  const esProg = sesionActual.grupo === 'Programador';
+  const opcionesGrupo = listaGrupos
+    .filter(g => g.nombre !== 'Programador' || esProg)
+    .map(g => `<option value="${esc(g.nombre)}" ${u && u.grupo === g.nombre ? 'selected' : ''}>${esc(g.nombre)}</option>`)
+    .join('');
+  const opcionesEmpresa = EMPRESAS
+    .map(e => `<option value="${esc(e)}" ${u && u.empresa === e ? 'selected' : ''}>${esc(e)}</option>`)
+    .join('');
+  const grupoBloqueado = u && u.grupo === 'Programador';
+
+  return `
+    <div class="form-fila">
+      <label>Nombre<input id="fNombre" value="${esc(u ? u.nombre : '')}"></label>
+      ${u
+        ? `<label>Usuario (no se puede cambiar)<input value="${esc(u.usuario)}" disabled></label>`
+        : `<label>Usuario (para entrar)<input id="fUsuario"></label>`}
+      <label>Grupo<select id="fGrupo" ${grupoBloqueado ? 'disabled' : ''}>${opcionesGrupo}</select></label>
+      <label>Empresa<select id="fEmpresa">${opcionesEmpresa}</select></label>
+    </div>
+    <p class="etiqueta-sec">Qué puede hacer esta persona</p>
+    <div class="chks" id="uChecks">${checks(marcadosFormulario(u), grupoBloqueado)}</div>
+    <div class="form-fila">
+      ${u ? '' : `<label>Contraseña temporal (mínimo 8)<input id="fClave" type="password"></label>`}
+    </div>
+    <div class="pie-acciones">
+      ${u
+        ? `<button class="btn" data-accion="guardar-usuario" data-id="${u.id}">Guardar cambios</button>`
+        : `<button class="btn" data-accion="crear-usuario">Crear usuario</button>`}
+    </div>`;
+}
+
+function vistaEditarUsuario(id) {
+  const u = listaUsuarios.find(x => x.id === id);
+  if (!u) return;
+  vista('Editar usuario', formUsuario(u), 'tab-usuarios');
+}
+
+function vistaReset(id) {
+  const u = listaUsuarios.find(x => x.id === id);
+  if (!u) return;
+  vista(`Restablecer contraseña de ${u.nombre}`, `
+    <label class="etiqueta-sec">Nueva contraseña temporal (mínimo 8)
+      <input id="rClave" type="password" class="input-ancho">
+    </label>
+    <p class="etiqueta-sec">Al entrar, la persona deberá cambiarla por una propia.</p>
+    <div class="pie-acciones">
+      <button class="btn" data-accion="guardar-clave" data-id="${id}">Restablecer</button>
+    </div>`, 'tab-usuarios');
+}
+
+async function crearUsuario() {
+  const r = await api('/api/usuarios', {
+    usuario: val('fUsuario').trim().toLowerCase(),
+    nombre: val('fNombre').trim(),
+    grupo: val('fGrupo'),
+    empresa: val('fEmpresa'),
+    clave: val('fClave'),
+    permisos: leerChecks(document.getElementById('uChecks'))
+  });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear el usuario.', false);
+  await abrirHerramientas('usuarios', 'Usuario creado. Deberá cambiar la contraseña temporal al entrar.');
+}
+
+async function guardarUsuario(id) {
+  const r = await api('/api/usuarios/editar', {
+    id,
+    nombre: val('fNombre'),
+    grupo: val('fGrupo'),
+    empresa: val('fEmpresa'),
+    permisos: leerChecks(document.getElementById('uChecks'))
+  });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los cambios.', false);
+  await abrirHerramientas('usuarios', 'Usuario actualizado.');
+}
+
+async function guardarReset(id) {
+  const r = await api('/api/usuarios/clave', { id, clave: val('rClave') });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo restablecer.', false);
+  await abrirHerramientas('usuarios', 'Contraseña restablecida. El usuario deberá cambiarla al entrar.');
+}
+
+async function cambiarActivo(id, estabaActivo) {
+  const r = await api('/api/usuarios/activo', { id, activo: !estabaActivo });
+  if (!r.ok) return alert(r.data.error || 'No se pudo cambiar el estado del usuario.');
+  await abrirHerramientas('usuarios', estabaActivo ? 'Usuario desactivado.' : 'Usuario activado.');
+}
+
+/* ---------- Grupos (solo programador) ---------- */
+
+function tablaGrupos() {
+  const filas = listaGrupos.map(g => `
+    <tr>
+      <td>${esc(g.nombre)}${g.protegido ? ' <span class="falta">protegido</span>' : ''}</td>
+      <td>${g.usuarios}</td>
+      <td>${Object.values(g.permisos || {}).filter(Boolean).length} de ${PERMISOS.length}</td>
+      <td class="acciones">
+        <button class="btn-mini" data-accion="editar-grupo" data-id="${g.id}">Editar</button>
+        ${g.protegido ? '' : `<button class="btn-mini" data-accion="eliminar-grupo" data-id="${g.id}">Eliminar</button>`}
+      </td>
+    </tr>`).join('');
+
+  return `
+    <div style="margin-bottom:10px"><button class="btn" data-accion="nuevo-grupo">Nuevo grupo</button></div>
+    <div class="tabla-wrap">
+      <table>
+        <thead><tr><th>Grupo</th><th>Usuarios</th><th>Permisos</th><th>Acciones</th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+}
+
+function formGrupo(g) {
+  const bloqueado = Boolean(g && g.protegido);
+  const permisos = g ? g.permisos : {};
+  return `
+    <label class="etiqueta-sec">Nombre del grupo
+      <input id="gNombre" class="input-ancho" value="${esc(g ? g.nombre : '')}" ${bloqueado ? 'disabled' : ''}>
+    </label>
+    <p class="etiqueta-sec">Permisos (aplican a todos los usuarios del grupo)</p>
+    <div class="chks">${checks(permisos, bloqueado)}</div>
+    <div class="pie-acciones">
+      ${g
+        ? `<button class="btn" data-accion="guardar-grupo" data-id="${g.id}" ${bloqueado ? 'disabled' : ''}>Guardar grupo</button>`
+        : `<button class="btn" data-accion="crear-grupo">Crear grupo</button>`}
+    </div>`;
+}
+
+function vistaGrupo(id) {
+  const g = id ? listaGrupos.find(x => x.id === id) : null;
+  if (id && !g) return;
+  vista(g ? `Editar grupo: ${g.nombre}` : 'Nuevo grupo', formGrupo(g), 'tab-grupos');
+}
+
+async function guardarGrupo(id) {
+  const caja = document.getElementById('caja');
+  const r = await api('/api/grupos/editar', { id, nombre: val('gNombre'), permisos: leerChecks(caja) });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo guardar el grupo.', false);
+  await abrirHerramientas('grupos', 'Grupo guardado. Los cambios se aplican a todos sus usuarios.');
+}
+
+async function crearGrupo() {
+  const caja = document.getElementById('caja');
+  const r = await api('/api/grupos', { nombre: val('gNombre'), permisos: leerChecks(caja) });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear el grupo.', false);
+  await abrirHerramientas('grupos', 'Grupo creado.');
+}
+
+async function eliminarGrupo(id) {
+  if (!confirm('¿Eliminar este grupo? Solo se puede si no tiene usuarios.')) return;
+  const r = await api('/api/grupos/eliminar', { id });
+  if (!r.ok) return alert(r.data.error || 'No se pudo eliminar el grupo.');
+  await abrirHerramientas('grupos', 'Grupo eliminado.');
+}
+
+document.getElementById('caja').addEventListener('click', e => {
+  const b = e.target.closest('[data-accion]');
+  if (!b || b.disabled) return;
+  const a = b.dataset.accion;
+  const id = Number(b.dataset.id);
+
+  if (a === 'cerrar') return cerrarVentana();
+  if (a === 'tab-usuarios') return abrirHerramientas('usuarios');
+  if (a === 'tab-crear') return abrirHerramientas('crear');
+  if (a === 'tab-grupos') return abrirHerramientas('grupos');
+  if (a === 'tab-auditoria') return abrirHerramientas('auditoria');
+  if (a === 'buscar-auditoria') return buscarAuditoria();
+  if (a === 'exportar-auditoria') return exportarAuditoria();
+  if (a === 'editar-usuario') return vistaEditarUsuario(id);
+  if (a === 'clave') return vistaReset(id);
+  if (a === 'activo') return cambiarActivo(id, b.dataset.activo === 'true');
+  if (a === 'crear-usuario') return crearUsuario();
+  if (a === 'guardar-usuario') return guardarUsuario(id);
+  if (a === 'guardar-clave') return guardarReset(id);
+  if (a === 'nuevo-grupo') return vistaGrupo(null);
+  if (a === 'editar-grupo') return vistaGrupo(id);
+  if (a === 'crear-grupo') return crearGrupo();
+  if (a === 'guardar-grupo') return guardarGrupo(id);
+  if (a === 'enviar-correo-nuevo') return enviarCorreoNuevo();
+  if (a === 'quitar-bloqueo') return quitarBloqueo(id);
+  if (a === 'eliminar-grupo') return eliminarGrupo(id);
+});
+
+document.getElementById('caja').addEventListener('change', e => {
+  if (e.target.id !== 'fGrupo') return;
+  const g = listaGrupos.find(x => x.nombre === e.target.value);
+  document.getElementById('uChecks').innerHTML = checks(g ? g.permisos : {}, false);
+});
+
+document.getElementById('caja').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'aUsuario') buscarAuditoria();
+});
+
+/* ---------- Inicio de sesión y cambio de contraseña ---------- */
+
+async function iniciarLogin(e) {
+  e.preventDefault();
+  const error = document.getElementById('errorLogin');
+  error.textContent = '';
+  const r = await api('/api/login', {
+    usuario: document.getElementById('usuario').value.trim(),
+    password: document.getElementById('password').value
+  });
+  if (!r.ok) {
+    error.textContent = r.data.error || 'No se pudo entrar.';
+    return;
+  }
+  await comprobarSesion();
+}
+
+async function enviarClave(e) {
+  e.preventDefault();
+  const error = document.getElementById('errorClave');
+  error.textContent = '';
+  const nueva = document.getElementById('claveNueva').value;
+  if (nueva !== document.getElementById('claveRepetir').value) {
+    error.textContent = 'Las contraseñas nuevas no coinciden.';
+    return;
+  }
+  const r = await api('/api/cambiar-clave-propia', {
+    actual: document.getElementById('claveActual').value,
+    nueva
+  });
+  if (!r.ok) {
+    error.textContent = r.data.error || 'No se pudo cambiar la contraseña.';
+    return;
+  }
+  await comprobarSesion();
+}
+
+function cancelarClave() {
+  document.getElementById('pantallaClave').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+async function cerrarSesion() {
+  await api('/api/logout', {});
+  sesionActual = null;
+  datos = [];
+  mostrarLogin();
+}
+
+/* ---------- Eventos ---------- */
+
+['mousemove', 'keydown', 'click', 'scroll'].forEach(ev =>
+  document.addEventListener(ev, () => { ultimaActividad = Date.now(); }, { passive: true }));
+
+document.getElementById('fecha').textContent = 'Hoy: ' +
+  new Date().toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+document.getElementById('formLogin').addEventListener('submit', iniciarLogin);
+document.getElementById('formClave').addEventListener('submit', enviarClave);
+document.getElementById('btnCancelarClave').addEventListener('click', cancelarClave);
+document.getElementById('btnSalir').addEventListener('click', cerrarSesion);
+document.getElementById('btnMiClave').addEventListener('click', () => mostrarClave(false));
+document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas());
+document.getElementById('btnChat').addEventListener('click', abrirChat);
+document.getElementById('btnChatFlotante').addEventListener('click', abrirChat);
+document.getElementById('btnAvisos').addEventListener('click', async () => {
+  await Notification.requestPermission();
+  document.getElementById('btnAvisos').style.display = 'none';
+});
+document.getElementById('btnCerrarChat').addEventListener('click', cerrarChat);
+document.getElementById('btnEnviarChat').addEventListener('click', enviarChat);
+document.getElementById('chatTexto').addEventListener('keydown', e => { if (e.key === 'Enter') enviarChat(); });
+document.getElementById('chatTexto').addEventListener('paste', e => {
+  const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  e.preventDefault();
+  cargarImagenDe(item.getAsFile());
+});
+document.getElementById('btnEmoji').addEventListener('click', () => document.getElementById('emojiPanel').classList.toggle('abierto'));
+document.getElementById('emojiPanel').addEventListener('click', e => {
+  const b = e.target.closest('[data-emoji]');
+  if (b) insertarEnChat(b.dataset.emoji);
+});
+document.getElementById('emojiPanel').innerHTML = EMOJIS.map(e => `<button type="button" data-emoji="${e}">${e}</button>`).join('');
+document.getElementById('btnAdjuntar').addEventListener('click', () => document.getElementById('archivoChat').click());
+document.getElementById('archivoChat').addEventListener('change', e => cargarImagenDe(e.target.files[0]));
+document.getElementById('btnQuitarImagen').addEventListener('click', quitarImagenPendiente);
+document.getElementById('fondoChat').addEventListener('click', e => { if (e.target.id === 'fondoChat') cerrarChat(); });
+document.getElementById('btnCerrar').addEventListener('click', cerrarModal);
+document.getElementById('fondoModal').addEventListener('click', e => { if (e.target.id === 'fondoModal') cerrarModal(); });
+document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') cerrarVentana(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModal(); cerrarVentana(); cerrarChat(); } });
+document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
+document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
+document.getElementById('btnCancelarRespuesta').addEventListener('click', ocultarRespuesta);
+document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
+document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
+document.getElementById('btnExcel').addEventListener('click', exportarExcel);
+document.getElementById('btnTema').addEventListener('click', alternarTema);
+
+document.querySelectorAll('#pestanas .pestana').forEach(b =>
+  b.addEventListener('click', () => cambiarVista(b.dataset.vista)));
+
+document.getElementById('btnHoy').addEventListener('click', () => {
+  document.getElementById('desde').value = hoyISO();
+  document.getElementById('hasta').value = hoyISO();
+  pintar();
+});
+document.getElementById('btnAyer').addEventListener('click', () => {
+  document.getElementById('desde').value = ayerISO();
+  document.getElementById('hasta').value = ayerISO();
+  pintar();
+});
+
+['desde', 'hasta', 'filtroIntencion', 'filtroEstado', 'filtroOrden', 'soloCompletos'].forEach(id =>
+  document.getElementById(id).addEventListener('change', pintar));
+
+if (localStorage.getItem('tema') === 'oscuro') {
+  document.body.classList.add('oscuro');
+  document.getElementById('btnTema').textContent = 'Modo claro';
+}
+
+comprobarSesion();
+</script>
+</body>
+</html>
