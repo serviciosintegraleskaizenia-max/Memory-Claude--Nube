@@ -73,6 +73,11 @@ async function inicializarTablas() {
     reserva_id INTEGER,
     creado TIMESTAMP NOT NULL DEFAULT NOW(),
     leido BOOLEAN NOT NULL DEFAULT FALSE)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS agencias_conocidas (
+    remitente VARCHAR(200) PRIMARY KEY,
+    agencia VARCHAR(150) NOT NULL,
+    usuario VARCHAR(50) NOT NULL,
+    actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
   // Las filas que ya existían quedan como procesadas; solo las nuevas generan aviso.
   await client.query('ALTER TABLE clasificacion ADD COLUMN IF NOT EXISTS aviso_procesado BOOLEAN NOT NULL DEFAULT TRUE');
   await client.query('ALTER TABLE clasificacion ALTER COLUMN aviso_procesado SET DEFAULT FALSE');
@@ -528,6 +533,13 @@ http.createServer(async (req, res) => {
       const r = await client.query(
         "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, message_id, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
       );
+      const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows
+        .map(x => [x.remitente, x.agencia]));
+      for (const x of r.rows) {
+        if (x.agencia) continue;
+        const correo = (emailDeRemitente(x.remitente) || '').toLowerCase();
+        if (conocidas.has(correo)) x.agencia = conocidas.get(correo);
+      }
       const reservas = r.rows.filter(x => x.categoria === 'RESERVA');
       const grupoDe = x => x.message_id || 'id:' + x.id;
       const originales = new Map();
@@ -565,6 +577,31 @@ http.createServer(async (req, res) => {
       if (estado === 'registrada' && previa.estado !== 'registrada') {
         marcarLeidoSiCompleto(Number(id), u).catch(e => console.log('Error marcando como leído:', e.message));
       }
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && url === '/api/reserva/agencia') {
+      if (!puede('editar_reservas')) return json(res, 403, { error: 'No tienes permiso para editar reservas.' });
+      const { id, agencia, recordar } = await leerCuerpo(req);
+      const nueva = String(agencia || '').trim();
+      if (nueva.length > 150) return json(res, 400, { error: 'El nombre de la agencia es muy largo (máximo 150 caracteres).' });
+      const fila = (await client.query('SELECT id, agencia, remitente, message_id FROM clasificacion WHERE id = $1', [Number(id)])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      // Todos los servicios del mismo correo llevan la misma agencia.
+      await client.query(
+        'UPDATE clasificacion SET agencia = $1 WHERE id = $2 OR (message_id IS NOT NULL AND message_id = $3)',
+        [nueva, fila.id, fila.message_id]
+      );
+      const correo = (emailDeRemitente(fila.remitente) || '').toLowerCase();
+      if (recordar && correo && nueva) {
+        await client.query(
+          `INSERT INTO agencias_conocidas (remitente, agencia, usuario) VALUES ($1, $2, $3)
+           ON CONFLICT (remitente) DO UPDATE SET agencia = EXCLUDED.agencia, usuario = EXCLUDED.usuario, actualizado = NOW()`,
+          [correo, nueva, u.usuario]
+        );
+      }
+      await registrar(u, 'editar_agencia', 'reserva', fila.id, fila.agencia || '', nueva,
+        recordar && correo && nueva ? 'Recordada para ' + correo : '');
       return json(res, 200, { ok: true });
     }
 

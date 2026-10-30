@@ -800,8 +800,13 @@ async function abrirModal(id) {
     ? textoLimpio(r.cuerpo)
     : 'Este correo se guardó antes de activar la vista del texto. Los correos nuevos sí lo muestran.';
 
+  const celdaAgencia = puede('editar_reservas')
+    ? `<input id="mAgencia" class="input-ancho" maxlength="150" value="${esc(r.agencia || '')}" placeholder="${esc(agenciaDe(r) || 'Nombre de la agencia')}">
+       <label class="chk" style="margin-top:6px"><input type="checkbox" id="mRecordar" checked> Recordar para los próximos correos de este remitente</label>
+       <button class="btn-mini" id="btnAgencia" style="margin-top:6px">Guardar agencia</button>`
+    : falta(agenciaDe(r));
   document.getElementById('mDatos').innerHTML = `
-    <tr><td>Agencia</td><td>${falta(agenciaDe(r))}</td></tr>
+    <tr><td>Agencia</td><td>${celdaAgencia}</td></tr>
     <tr><td>Clientes</td><td>${falta(r.nombre_cliente)}</td></tr>
     <tr><td>Teléfono</td><td>${falta(r.telefono)}</td></tr>
     <tr><td>PAX</td><td>${falta(paxDe(r))}</td></tr>
@@ -860,6 +865,25 @@ async function guardarEstado() {
   mensaje.style.color = '#16a34a';
   mensaje.textContent = 'Estado guardado.';
   pintar();
+  cargarHistorial(seleccionado.id);
+}
+
+async function guardarAgencia() {
+  if (!seleccionado) return;
+  const agencia = document.getElementById('mAgencia').value.trim();
+  const mensaje = document.getElementById('mMensaje');
+  const r = await api('/api/reserva/agencia', {
+    id: seleccionado.id, agencia, recordar: document.getElementById('mRecordar').checked
+  });
+  if (!r.ok) {
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = r.data.error || 'No se pudo guardar la agencia.';
+    return;
+  }
+  seleccionado.agencia = agencia;
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = 'Agencia guardada.';
+  cargarReservas();
   cargarHistorial(seleccionado.id);
 }
 
@@ -1651,6 +1675,7 @@ document.getElementById('fondoModal').addEventListener('click', e => { if (e.tar
 document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') cerrarVentana(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModal(); cerrarVentana(); cerrarChat(); } });
 document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
+document.getElementById('mDatos').addEventListener('click', e => { if (e.target.id === 'btnAgencia') guardarAgencia(); });
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
 document.getElementById('btnCancelarRespuesta').addEventListener('click', ocultarRespuesta);
 document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
