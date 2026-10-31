@@ -935,15 +935,72 @@ async function guardarAgencia() {
   cargarHistorial(seleccionado.id);
 }
 
-function exportarExcel() {
-  const lista = filtrar();
+const NOMBRES_ACCION = { cambiar_estado: 'Cambió estado', editar_agencia: 'Corrigió agencia', responder_correo: 'Respondió correo' };
+
+function diaMenos(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() - dias);
+  return diaLocal(d.toISOString());
+}
+
+async function abrirExportar() {
+  const r = await api('/api/exportar/usuarios');
+  if (!r.ok) return alert(r.data.error || 'No se pudo abrir la exportación.');
+  const usuarios = r.data.map(x => `<option value="${esc(x.usuario)}">${esc(x.nombre || x.usuario)}</option>`).join('');
+  const intenciones = Array.from(document.getElementById('filtroIntencion').options)
+    .map(o => `<option value="${esc(o.value)}" ${o.selected ? 'selected' : ''}>${esc(o.textContent)}</option>`).join('');
+  const desde = document.getElementById('desde').value || hoyISO();
+  const hasta = document.getElementById('hasta').value || hoyISO();
+  abrirVentana(`
+    <div class="barra-ventana">
+      <h2>Exportar a Excel</h2>
+      <div><button class="btn-sec" data-accion="cerrar">Cerrar</button></div>
+    </div>
+    <div class="pie-acciones">
+      <button class="btn-sec" data-accion="exp-rango" data-desde="0" data-hasta="0">Hoy</button>
+      <button class="btn-sec" data-accion="exp-rango" data-desde="1" data-hasta="1">Ayer</button>
+      <button class="btn-sec" data-accion="exp-rango" data-desde="1" data-hasta="0">Últimos 2 días</button>
+      <button class="btn-sec" data-accion="exp-rango" data-desde="6" data-hasta="0">Última semana</button>
+      <button class="btn-sec" data-accion="exp-rango" data-desde="29" data-hasta="0">Últimos 30 días</button>
+    </div>
+    <div class="form-fila">
+      <label>Desde<input id="exDesde" type="date" value="${esc(desde)}"></label>
+      <label>Hasta<input id="exHasta" type="date" value="${esc(hasta)}"></label>
+      <label>Usuario<select id="exUsuario"><option value="">Todos los correos recibidos</option>${usuarios}</select></label>
+      <label>Intención<select id="exIntencion">${intenciones}</select></label>
+    </div>
+    <p class="etiqueta-sec">Con "Todos" se exportan los correos recibidos en esas fechas. Con un usuario se exporta lo que hizo en esas fechas: cambios de estado, agencias corregidas y respuestas enviadas, con la hora de cada acción.</p>
+    <div class="pie-acciones"><button class="btn" data-accion="exp-descargar">Descargar Excel</button></div>
+    <div class="aviso" id="avisoV"></div>`);
+}
+
+function filaExportar(x) {
+  return [
+    fechaCorta(x.fecha), x.categoria, agenciaDe(x), x.nombre_cliente || '', x.telefono || '', paxDe(x),
+    x.aeropuerto || '', x.actividad || x.tipo_servicio || '', x.fecha_servicio || '',
+    x.hora_servicio || '', x.vuelo || '', x.hotel || '', x.estado || ''
+  ];
+}
+
+async function descargarExportacion() {
+  const desde = val('exDesde');
+  const hasta = val('exHasta');
+  const usuario = val('exUsuario');
+  const intencion = val('exIntencion');
+  if (!desde || !hasta || desde > hasta) return mostrarAviso('Elige un rango de fechas válido: "Desde" no puede ser después de "Hasta".', false);
+  const qs = new URLSearchParams({ desde, hasta });
+  if (usuario) qs.set('usuario', usuario);
+  const r = await api('/api/exportar?' + qs.toString());
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo exportar.', false);
+  const lista = r.data.map(sinEntidades).filter(x => !intencion || x.categoria === intencion);
+  if (!lista.length) return mostrarAviso('No hay registros con esos filtros.', false);
   const cabeceras = ['Fecha de recibido', 'Intención', 'Agencia', 'Clientes', 'Teléfono', 'PAX', 'Aeropuerto', 'Actividad', 'Fecha servicio', 'Hora', 'Vuelo', 'Hotel', 'Estado'];
-  const filas = lista.map(r => [
-    fechaCorta(r.fecha), r.categoria, agenciaDe(r), r.nombre_cliente || '', r.telefono || '', paxDe(r),
-    r.aeropuerto || '', r.actividad || r.tipo_servicio || '', r.fecha_servicio || '',
-    r.hora_servicio || '', r.vuelo || '', r.hotel || '', r.estado || ''
-  ]);
-  descargarCsv(cabeceras, filas, 'reservas.csv');
+  const filas = usuario
+    ? lista.map(x => [x.accion_nombre || x.accion_usuario, NOMBRES_ACCION[x.accion] || x.accion, x.accion_fecha, x.anterior || '', x.nuevo || '', ...filaExportar(x)])
+    : lista.map(filaExportar);
+  descargarCsv(usuario ? ['Usuario', 'Acción', 'Fecha y hora de la acción', 'Antes', 'Después', ...cabeceras] : cabeceras,
+    filas, `reservas_${usuario || 'todos'}_${desde}_a_${hasta}.csv`);
+  mostrarAviso(`Listo: se exportaron ${filas.length} filas.`, true);
 }
 
 function exportarAuditoria() {
@@ -1617,6 +1674,12 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'crear-grupo') return crearGrupo();
   if (a === 'guardar-grupo') return guardarGrupo(id);
   if (a === 'enviar-correo-nuevo') return enviarCorreoNuevo();
+  if (a === 'exp-descargar') return descargarExportacion();
+  if (a === 'exp-rango') {
+    document.getElementById('exDesde').value = diaMenos(Number(b.dataset.desde));
+    document.getElementById('exHasta').value = diaMenos(Number(b.dataset.hasta));
+    return;
+  }
   if (a === 'quitar-bloqueo') return quitarBloqueo(id);
   if (a === 'eliminar-grupo') return eliminarGrupo(id);
 });
@@ -1728,7 +1791,7 @@ document.getElementById('btnResponder').addEventListener('click', mostrarRespues
 document.getElementById('btnCancelarRespuesta').addEventListener('click', ocultarRespuesta);
 document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
-document.getElementById('btnExcel').addEventListener('click', exportarExcel);
+document.getElementById('btnExcel').addEventListener('click', abrirExportar);
 document.getElementById('btnTema').addEventListener('click', alternarTema);
 
 document.querySelectorAll('#pestanas .pestana').forEach(b =>

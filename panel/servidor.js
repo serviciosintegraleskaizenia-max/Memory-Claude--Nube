@@ -11,6 +11,7 @@ const client = new Client(config.db);
 
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
+const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
@@ -227,6 +228,12 @@ async function procesarModificaciones() {
   } finally {
     procesandoModificaciones = false;
   }
+}
+
+// Día (AAAA-MM-DD) en hora de República Dominicana de un texto de fecha; vacío si no se entiende.
+function diaLocal(texto) {
+  const d = new Date(texto);
+  return isNaN(d) ? '' : d.toLocaleDateString('sv-SE', { timeZone: ZONA_HORARIA });
 }
 
 function filtrarPermisos(p) {
@@ -777,6 +784,55 @@ http.createServer(async (req, res) => {
         banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
       });
       return json(res, 200, { ok: true });
+    }
+
+    if (url.startsWith('/api/exportar')) {
+      if (!puede('exportar_datos')) return json(res, 403, { error: 'No tienes permiso para exportar.' });
+
+      if (req.method === 'GET' && url === '/api/exportar/usuarios') {
+        const r = await client.query('SELECT usuario, nombre FROM usuarios ORDER BY nombre');
+        return json(res, 200, r.rows);
+      }
+
+      if (req.method === 'GET' && url === '/api/exportar') {
+        const p = new URL(req.url, 'http://localhost').searchParams;
+        const desde = p.get('desde') || '';
+        const hasta = p.get('hasta') || '';
+        const usuario = p.get('usuario') || '';
+        const fechaValida = f => /^\d{4}-\d{2}-\d{2}$/.test(f);
+        if (!fechaValida(desde) || !fechaValida(hasta) || desde > hasta) {
+          return json(res, 400, { error: 'Elige un rango de fechas válido.' });
+        }
+        const columnas = `c.id, c.categoria, c.agencia, c.remitente, c.asunto, c.fecha, c.estado, c.aeropuerto, c.actividad,
+          c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel, c.adultos, c.ninos, c.infantes`;
+        if (!usuario) {
+          // Todos: correos recibidos en esas fechas.
+          const r = await client.query(`SELECT ${columnas} FROM clasificacion c ORDER BY c.id`);
+          const filas = r.rows.filter(x => {
+            const dia = diaLocal(x.fecha);
+            return dia && dia >= desde && dia <= hasta;
+          });
+          await registrar(u, 'exportar', 'reservas', '', '', '', `Todos, ${desde} a ${hasta}, ${filas.length} filas`);
+          return json(res, 200, filas);
+        }
+        // Un usuario: lo que ese usuario hizo en esas fechas (hora de República Dominicana).
+        const diaAccion = `TO_CHAR((a.fecha AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${ZONA_HORARIA}', 'YYYY-MM-DD')`;
+        const r = await client.query(
+          `SELECT ${columnas}, a.usuario AS accion_usuario, a.nombre AS accion_nombre, a.accion, a.anterior, a.nuevo,
+                  TO_CHAR((a.fecha AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${ZONA_HORARIA}', 'YYYY-MM-DD HH24:MI') AS accion_fecha
+           FROM auditoria a
+           JOIN clasificacion c ON a.entidad = 'reserva' AND a.entidad_id = c.id::text
+           WHERE a.usuario = $1
+             AND a.accion IN ('cambiar_estado', 'editar_agencia', 'responder_correo')
+             AND ${diaAccion} BETWEEN $2 AND $3
+           ORDER BY a.fecha, a.id`,
+          [usuario, desde, hasta]
+        );
+        await registrar(u, 'exportar', 'reservas', '', '', '', `${usuario}, ${desde} a ${hasta}, ${r.rowCount} filas`);
+        return json(res, 200, r.rows);
+      }
+
+      return json(res, 404, { error: 'Ruta no encontrada' });
     }
 
     if (url.startsWith('/api/correo')) {
