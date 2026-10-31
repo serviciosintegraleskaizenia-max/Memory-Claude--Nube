@@ -412,13 +412,61 @@ function falta(valor) {
     ? '<span class="falta">Falta</span>' : esc(valor);
 }
 
-function nombreCorto(texto) {
-  return esc((texto || '').replace(/<.*>/, '').trim());
+// Marcas conocidas por dominio, para mostrar "Facebook" en vez de "Leopoldo en Facebook <notification@facebookmail.com>".
+const MARCAS = {
+  facebookmail: 'Facebook', facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn',
+  youtube: 'YouTube', tiktok: 'TikTok', google: 'Google', whatsapp: 'WhatsApp', microsoft: 'Microsoft',
+  github: 'GitHub', workana: 'Workana', discord: 'Discord', heygen: 'HeyGen', grammarly: 'Grammarly',
+  ollama: 'Ollama', openrouter: 'OpenRouter'
+};
+const CORREO_PERSONAL = /^(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|me|aol|msn|protonmail|proton)$/;
+const SUFIJOS = /^(com|co|org|net|gob|gov|edu|ac)$/;
+
+// Quita iconos, comillas, barras, correos y "via ..." del nombre que se muestra. No cambia lo guardado.
+function limpiarNombre(texto) {
+  return String(texto || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\S+@\S+/g, ' ')
+    .replace(/\s+via\s+.*$/i, '')
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '')
+    .replace(/["'`´“”‘’«»|\\/*_~^#=+<>\[\]{}()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—.,:;!?]+|[\s\-–—.,:;!?]+$/g, '')
+    .trim();
 }
 
-function agenciaDe(r) {
-  return r.agencia || nombreCorto(r.remitente) || '';
+// Parte principal del dominio del remitente ("sensationaltrips" en reservas1.uio@sensationaltrips.com).
+// Vacío si es un correo personal (gmail, hotmail...).
+function baseDominio(remitente) {
+  const m = String(remitente || '').match(/<([^>]+)>/);
+  const correo = (m ? m[1] : String(remitente || '')).trim();
+  const partes = (correo.split('@')[1] || '').toLowerCase().replace(/[^a-z0-9.\-]/g, '').split('.').filter(Boolean);
+  if (partes.length < 2) return '';
+  const base = partes.length >= 3 && SUFIJOS.test(partes[partes.length - 2])
+    ? partes[partes.length - 3] : partes[partes.length - 2];
+  return base && !CORREO_PERSONAL.test(base) ? base : '';
 }
+
+// Busca en el nombre del remitente la palabra que coincide con el dominio, con sus mayúsculas: "SensationalTrips".
+function nombreDeDominio(remitente, base) {
+  const palabras = limpiarNombre(String(remitente || '').replace(/\s+via\s+/i, ' ')).split(' ');
+  for (let n = 1; n <= 3; n++) {
+    for (let i = 0; i + n <= palabras.length; i++) {
+      const trozo = palabras.slice(i, i + n).join(' ');
+      if (trozo.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '') === base) return trozo;
+    }
+  }
+  return '';
+}
+
+// Orden: agencia de la IA o del asesor > marca conocida > nombre de empresa del remitente > dominio > nombre limpio.
+function agenciaDe(r) {
+  if (r.agencia) return limpiarNombre(r.agencia);
+  const base = baseDominio(r.remitente);
+  if (!base) return limpiarNombre(r.remitente);
+  return MARCAS[base] || nombreDeDominio(r.remitente, base) || base.charAt(0).toUpperCase() + base.slice(1);
+}
+
 
 function paxDe(r) {
   const a = Number(r.adultos) || 0;
