@@ -461,7 +461,13 @@ function nombreDeDominio(remitente, base) {
 
 // Orden: agencia de la IA o del asesor > marca conocida > nombre de empresa del remitente > dominio > nombre limpio.
 function agenciaDe(r) {
-  if (r.agencia) return limpiarNombre(r.agencia);
+  // Si la IA puso un dominio como agencia (discovermayorista.com), se muestra como nombre.
+  const esDominio = r.agencia && /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(r.agencia.trim());
+  if (esDominio) {
+    const base = baseDominio('x@' + r.agencia.trim());
+    if (base) return MARCAS[base] || base.charAt(0).toUpperCase() + base.slice(1);
+  }
+  if (r.agencia && !esDominio) return limpiarNombre(r.agencia);
   const base = baseDominio(r.remitente);
   if (!base) return limpiarNombre(r.remitente);
   return MARCAS[base] || nombreDeDominio(r.remitente, base) || base.charAt(0).toUpperCase() + base.slice(1);
