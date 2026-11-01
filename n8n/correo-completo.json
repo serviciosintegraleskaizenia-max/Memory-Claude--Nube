@@ -1,0 +1,94 @@
+{
+  "name": "Correo completo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "correo-completo",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f9765b32-6e5d-4d5d-920e-8d75ebeea8a7",
+      "name": "Pedido del panel",
+      "webhookId": "8506ec76-6154-4f7c-9d24-d4c232cb5e2c"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + $json.body.buzon + '/messages/' + encodeURIComponent($json.body.message_id) + ($json.body.accion === 'adjunto' ? '/attachments/' + encodeURIComponent($json.body.adjunto_id) : '?$expand=attachments') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "outlook.body-content-type=\"html\""
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        0
+      ],
+      "id": "163b2e77-4a68-43de-9488-e23292ae67a3",
+      "name": "Microsoft 365: leer correo",
+      "onError": "continueRegularOutput",
+      "notes": "Solo lee. Usa la credencial de Microsoft 365 (OAuth2) de Somos Viajes."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma la respuesta para el panel: el correo completo o un adjunto.\nconst pedido = $('Pedido del panel').first().json.body || {};\nconst m = $input.first().json;\n\nif (m.error) {\n  const detalle = typeof m.error === 'string' ? m.error : (m.error.message || JSON.stringify(m.error));\n  return [{ json: { ok: false, error: 'No se pudo leer el correo en Microsoft 365: ' + detalle } }];\n}\n\nif (pedido.accion === 'adjunto') {\n  return [{ json: { ok: true, nombre: m.name || 'adjunto', tipo: m.contentType || '', tamano: m.size || 0, datos: m.contentBytes || '' } }];\n}\n\nconst persona = p => (p && p.emailAddress) ? { nombre: p.emailAddress.name || '', correo: p.emailAddress.address || '' } : null;\nconst escapar = t => String(t || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));\nconst cuerpo = m.body || {};\n\n// Solo archivos (no correos adjuntos). Los bytes van para las imágenes del cuerpo y, si se pide copia, para todos.\nconst adjuntos = (m.attachments || [])\n  .filter(a => a['@odata.type'] === '#microsoft.graph.fileAttachment')\n  .map(a => ({\n    id: a.id,\n    nombre: a.name || 'adjunto',\n    tipo: a.contentType || '',\n    tamano: a.size || 0,\n    inline: Boolean(a.isInline),\n    contentId: a.contentId || '',\n    datos: (a.isInline || pedido.incluir_adjuntos) ? (a.contentBytes || '') : ''\n  }));\n\nreturn [{\n  json: {\n    ok: true,\n    asunto: m.subject || '',\n    de: persona(m.from),\n    para: (m.toRecipients || []).map(persona).filter(Boolean),\n    cc: (m.ccRecipients || []).map(persona).filter(Boolean),\n    fecha: m.receivedDateTime || '',\n    html: cuerpo.contentType === 'html' ? (cuerpo.content || '') : '<pre style=\"white-space:pre-wrap\">' + escapar(cuerpo.content) + '</pre>',\n    adjuntos\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "e7353dee-84eb-45f6-95fb-6d8a6f76b2d2",
+      "name": "Respuesta al panel"
+    }
+  ],
+  "connections": {
+    "Pedido del panel": {
+      "main": [
+        [
+          {
+            "node": "Microsoft 365: leer correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft 365: leer correo": {
+      "main": [
+        [
+          {
+            "node": "Respuesta al panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

@@ -12,13 +12,25 @@ const client = new Client(config.db);
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
 const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
 const sesiones = new Map();
 const presencia = new Map();
 const CARPETA = __dirname;
+// Caché de correos completos: se puede vaciar en cualquier momento; si falta una copia, el correo se trae en vivo.
+const CACHE = path.join(CARPETA, 'cache-correos');
+const CACHE_ARCHIVOS = path.join(CACHE, 'archivos');
+// Adjuntos que se pueden abrir o descargar. Los demás (.exe, .js, .html...) se bloquean.
+const TIPOS_ADJUNTO = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  txt: 'text/plain', csv: 'text/csv'
+};
+const SE_ABREN = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
 
 const MINUTOS_SIN_LATIDO = 2;
 const MINUTOS_AUSENTE = 5;
@@ -67,6 +79,30 @@ async function inicializarTablas() {
     banner_enlace TEXT NOT NULL DEFAULT '',
     actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
   await client.query('INSERT INTO empresa_datos (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+  await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS cache_dias INTEGER NOT NULL DEFAULT 30');
+  await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS copia_automatica BOOLEAN NOT NULL DEFAULT TRUE');
+  await client.query(`CREATE TABLE IF NOT EXISTS correo_copia (
+    message_id TEXT PRIMARY KEY,
+    buzon TEXT NOT NULL,
+    asunto TEXT NOT NULL DEFAULT '',
+    de TEXT NOT NULL DEFAULT '',
+    para TEXT NOT NULL DEFAULT '',
+    cc TEXT NOT NULL DEFAULT '',
+    fecha TEXT NOT NULL DEFAULT '',
+    html TEXT NOT NULL DEFAULT '',
+    automatica BOOLEAN NOT NULL DEFAULT FALSE,
+    usuario VARCHAR(50) NOT NULL DEFAULT '',
+    guardado TIMESTAMP NOT NULL DEFAULT NOW())`);
+  await client.query(`CREATE TABLE IF NOT EXISTS correo_adjunto (
+    message_id TEXT NOT NULL,
+    adjunto_id TEXT NOT NULL,
+    nombre TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT '',
+    tamano BIGINT NOT NULL DEFAULT 0,
+    en_linea BOOLEAN NOT NULL DEFAULT FALSE,
+    content_id TEXT NOT NULL DEFAULT '',
+    hash VARCHAR(64),
+    PRIMARY KEY (message_id, adjunto_id))`);
   await client.query(`CREATE TABLE IF NOT EXISTS avisos (
     id SERIAL PRIMARY KEY,
     para VARCHAR(50) NOT NULL,
@@ -89,6 +125,8 @@ client.connect()
   .then(() => {
     procesarModificaciones();
     setInterval(procesarModificaciones, 30 * 1000);
+    setTimeout(mantenerCache, 60 * 1000);
+    setInterval(mantenerCache, 10 * 60 * 1000);
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
 
@@ -117,6 +155,225 @@ function fechaServicioISO(texto, recibido) {
     }
   }
   return null;
+}
+
+/* ---------- Correo completo (Microsoft 365) y caché ---------- */
+
+function esMicrosoft(buzon) {
+  return Boolean(buzon) && !/@gmail\.com$/i.test(buzon);
+}
+
+function extension(nombre) {
+  const m = String(nombre || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : '';
+}
+
+// Pide a n8n el correo (o un adjunto) en vivo desde Microsoft 365.
+async function pedirCorreoEnVivo(datos) {
+  const destino = config.n8n && config.n8n.correoCompleto;
+  if (!destino) throw new Error('Falta configurar n8n.correoCompleto en config.js.');
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), 60 * 1000);
+  try {
+    const r = await fetch(destino, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
+      signal: control.signal
+    });
+    if (!r.ok) throw new Error('n8n respondió ' + r.status + '. ¿Está activo el flujo "Correo completo"?');
+    const respuesta = await r.json();
+    if (!respuesta || respuesta.ok !== true) throw new Error((respuesta && respuesta.error) || 'n8n no devolvió el correo.');
+    return respuesta;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Microsoft 365 tardó demasiado en responder.');
+    if (e.cause && e.cause.code === 'ECONNREFUSED') throw new Error('No se pudo conectar con n8n. ¿Está encendido?');
+    throw e;
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+function rutaArchivo(hash) {
+  if (!/^[a-f0-9]{64}$/.test(hash || '')) return null;
+  return path.join(CACHE_ARCHIVOS, hash);
+}
+
+// Guarda los bytes una sola vez por contenido (las firmas repetidas no ocupan más espacio).
+function guardarArchivo(base64) {
+  const datos = Buffer.from(base64, 'base64');
+  const hash = crypto.createHash('sha256').update(datos).digest('hex');
+  const ruta = rutaArchivo(hash);
+  if (!fs.existsSync(ruta)) {
+    fs.mkdirSync(CACHE_ARCHIVOS, { recursive: true });
+    const avisoCache = path.join(CACHE, 'LEEME.txt');
+    if (!fs.existsSync(avisoCache)) {
+      fs.writeFileSync(avisoCache, 'Esta carpeta es CACHÉ del panel: copias de correos y adjuntos.\r\n' +
+        'Se puede vaciar desde Herramientas > Caché de correos. Si se borra, el panel trae los correos en vivo de Microsoft 365.\r\n');
+    }
+    fs.writeFileSync(ruta, datos);
+  }
+  return hash;
+}
+
+async function guardarCopia(fila, correo, automatica, usuario) {
+  const adjuntos = (correo.adjuntos || []).map(a => ({ ...a, hash: a.datos ? guardarArchivo(a.datos) : null }));
+  await client.query('BEGIN');
+  try {
+    await client.query('DELETE FROM correo_adjunto WHERE message_id = $1', [fila.message_id]);
+    await client.query(
+      `INSERT INTO correo_copia (message_id, buzon, asunto, de, para, cc, fecha, html, automatica, usuario, guardado)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+       ON CONFLICT (message_id) DO UPDATE SET asunto = EXCLUDED.asunto, de = EXCLUDED.de, para = EXCLUDED.para, cc = EXCLUDED.cc,
+         fecha = EXCLUDED.fecha, html = EXCLUDED.html, automatica = EXCLUDED.automatica, usuario = EXCLUDED.usuario, guardado = NOW()`,
+      [fila.message_id, fila.buzon, correo.asunto || '', JSON.stringify(correo.de || null), JSON.stringify(correo.para || []),
+        JSON.stringify(correo.cc || []), correo.fecha || '', correo.html || '', automatica, usuario]
+    );
+    for (const a of adjuntos) {
+      await client.query(
+        `INSERT INTO correo_adjunto (message_id, adjunto_id, nombre, tipo, tamano, en_linea, content_id, hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [fila.message_id, a.id, a.nombre || '', a.tipo || '', Number(a.tamano) || 0, Boolean(a.inline), a.contentId || '', a.hash]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  }
+}
+
+// Lee la copia guardada. Si falta algún archivo (la caché se vació a mano), devuelve null y se trae en vivo.
+async function leerCopia(messageId) {
+  const copia = (await client.query('SELECT * FROM correo_copia WHERE message_id = $1', [messageId])).rows[0];
+  if (!copia) return null;
+  const filas = (await client.query('SELECT * FROM correo_adjunto WHERE message_id = $1 ORDER BY nombre', [messageId])).rows;
+  const adjuntos = [];
+  for (const a of filas) {
+    const ruta = a.hash ? rutaArchivo(a.hash) : null;
+    if (a.en_linea && (!ruta || !fs.existsSync(ruta))) return null;
+    adjuntos.push({
+      id: a.adjunto_id, nombre: a.nombre, tipo: a.tipo, tamano: Number(a.tamano), inline: a.en_linea, contentId: a.content_id,
+      datos: a.en_linea ? fs.readFileSync(ruta).toString('base64') : ''
+    });
+  }
+  const leer = t => { try { return JSON.parse(t); } catch (e) { return null; } };
+  return {
+    asunto: copia.asunto, de: leer(copia.de), para: leer(copia.para) || [], cc: leer(copia.cc) || [], fecha: copia.fecha,
+    html: copia.html, adjuntos, guardado: copia.guardado, automatica: copia.automatica
+  };
+}
+
+// Prepara el correo para el navegador: imágenes del cuerpo como datos, sin scripts ni redirecciones.
+function correoParaPanel(correo, origen) {
+  const enLinea = new Map();
+  for (const a of correo.adjuntos || []) {
+    if (a.inline && a.contentId && a.datos) {
+      const tipo = /^image\/[a-z0-9.+-]+$/i.test(a.tipo) ? a.tipo : 'image/png';
+      enLinea.set(a.contentId.replace(/^<|>$/g, '').toLowerCase(), `data:${tipo};base64,${a.datos}`);
+    }
+  }
+  const html = String(correo.html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh[^>]*>/gi, '')
+    .replace(/(["'(])cid:([^"')\s>]+)/gi, (todo, antes, cid) => antes + (enLinea.get(cid.toLowerCase()) || ''));
+  return {
+    origen,
+    guardado: correo.guardado || null,
+    asunto: correo.asunto || '',
+    de: correo.de || null,
+    para: correo.para || [],
+    cc: correo.cc || [],
+    fecha: correo.fecha || '',
+    html,
+    imagenesExternas: /\b(?:src|background)\s*=\s*["']?\s*https?:|url\(\s*["']?https?:/i.test(html),
+    adjuntos: (correo.adjuntos || []).filter(a => !a.inline).map(a => ({
+      id: a.id, nombre: a.nombre, tamano: a.tamano,
+      permitido: Boolean(TIPOS_ADJUNTO[extension(a.nombre)]),
+      seAbre: SE_ABREN.includes(extension(a.nombre))
+    }))
+  };
+}
+
+function tamanoCarpeta(carpeta) {
+  if (!fs.existsSync(carpeta)) return { archivos: 0, bytes: 0 };
+  let archivos = 0, bytes = 0;
+  for (const nombre of fs.readdirSync(carpeta)) {
+    const st = fs.statSync(path.join(carpeta, nombre));
+    if (st.isFile()) { archivos += 1; bytes += st.size; }
+  }
+  return { archivos, bytes };
+}
+
+// Borra los archivos que ya no usa ninguna copia.
+async function limpiarArchivosSueltos() {
+  if (!fs.existsSync(CACHE_ARCHIVOS)) return;
+  const usados = new Set((await client.query('SELECT DISTINCT hash FROM correo_adjunto WHERE hash IS NOT NULL')).rows.map(x => x.hash));
+  for (const nombre of fs.readdirSync(CACHE_ARCHIVOS)) {
+    if (/^[a-f0-9]{64}$/.test(nombre) && !usados.has(nombre)) fs.unlinkSync(path.join(CACHE_ARCHIVOS, nombre));
+  }
+}
+
+async function borrarCopias(dias) {
+  const r = dias === null
+    ? await client.query('DELETE FROM correo_copia RETURNING message_id')
+    : await client.query(`DELETE FROM correo_copia WHERE guardado < NOW() - ($1 || ' days')::interval RETURNING message_id`, [String(dias)]);
+  const ids = r.rows.map(x => x.message_id);
+  if (ids.length) await client.query('DELETE FROM correo_adjunto WHERE message_id = ANY($1::text[])', [ids]);
+  await limpiarArchivosSueltos();
+  return ids.length;
+}
+
+// Cada 10 minutos: borra copias vencidas y guarda copia de reservas y cambios recientes de Microsoft 365.
+const fallosCopia = new Map();
+let manteniendoCache = false;
+async function mantenerCache() {
+  if (manteniendoCache) return;
+  manteniendoCache = true;
+  try {
+    const ajustes = (await client.query('SELECT cache_dias, copia_automatica FROM empresa_datos WHERE id = 1')).rows[0];
+    if (!ajustes) return;
+    await borrarCopias(ajustes.cache_dias);
+    if (!ajustes.copia_automatica || !config.n8n || !config.n8n.correoCompleto) return;
+    const pendientes = (await client.query(
+      `SELECT DISTINCT ON (c.message_id) c.message_id, c.buzon FROM clasificacion c
+       WHERE c.categoria IN ('RESERVA', 'MODIFICACION') AND c.error_ia IS NOT TRUE
+         AND COALESCE(c.message_id, '') <> '' AND c.buzon NOT ILIKE '%@gmail.com'
+         AND c.creado > NOW() - ($1 || ' days')::interval
+         AND NOT EXISTS (SELECT 1 FROM correo_copia k WHERE k.message_id = c.message_id)
+       ORDER BY c.message_id`, [String(ajustes.cache_dias)]
+    )).rows.filter(f => (fallosCopia.get(f.message_id) || 0) < 3).slice(0, 10);
+    for (const fila of pendientes) {
+      try {
+        const correo = await pedirCorreoEnVivo({ accion: 'correo', message_id: fila.message_id, buzon: fila.buzon, incluir_adjuntos: true });
+        await guardarCopia(fila, correo, true, 'sistema');
+      } catch (e) {
+        fallosCopia.set(fila.message_id, (fallosCopia.get(fila.message_id) || 0) + 1);
+        console.log('No se pudo guardar copia automática:', e.message);
+      }
+    }
+  } catch (e) {
+    console.log('Error manteniendo la caché de correos:', e.message);
+  } finally {
+    manteniendoCache = false;
+  }
+}
+
+function enviarArchivo(res, datos, nombre, abrir) {
+  const ext = extension(nombre);
+  const tipo = abrir && SE_ABREN.includes(ext) ? TIPOS_ADJUNTO[ext] : 'application/octet-stream';
+  const seguro = String(nombre || 'adjunto').replace(/[\r\n"\\]/g, '_');
+  const cabeceras = {
+    'Content-Type': tipo,
+    'Content-Length': datos.length,
+    'Content-Disposition': `${abrir ? 'inline' : 'attachment'}; filename="${seguro.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(seguro)}`,
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'private, no-store'
+  };
+  // El visor de PDF del navegador necesita su propia política; a las imágenes se les cierra todo.
+  if (ext !== 'pdf') cabeceras['Content-Security-Policy'] = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'";
+  res.writeHead(200, cabeceras);
+  res.end(datos);
 }
 
 function imagenValida(s) {
@@ -538,7 +795,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 5000"
+        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, buzon, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 5000"
       );
       const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows
         .map(x => [x.remitente, x.agencia]));
@@ -812,6 +1069,123 @@ http.createServer(async (req, res) => {
         banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
       });
       return json(res, 200, { ok: true });
+    }
+
+    if (url.startsWith('/api/correo-completo')) {
+      const p = new URL(req.url, 'http://localhost').searchParams;
+      const idReserva = Number(p.get('id') || 0);
+
+      const filaDe = async id => {
+        const fila = (await client.query('SELECT id, message_id, buzon, asunto FROM clasificacion WHERE id = $1', [Number(id)])).rows[0];
+        if (!fila) return { error: [404, 'Reserva no encontrada'] };
+        if (!fila.message_id) return { error: [400, 'Este correo no tiene identificador en el buzón.'] };
+        if (!esMicrosoft(fila.buzon)) return { error: [400, 'El correo completo solo está disponible para el buzón de Microsoft 365.'] };
+        return { fila };
+      };
+
+      if (req.method === 'GET' && url === '/api/correo-completo') {
+        if (!puede('ver_correo_completo')) return json(res, 403, { error: 'No tienes permiso para ver el correo completo.' });
+        const { fila, error } = await filaDe(idReserva);
+        if (error) return json(res, error[0], { error: error[1] });
+        const copia = await leerCopia(fila.message_id);
+        if (copia) return json(res, 200, correoParaPanel(copia, 'copia'));
+        try {
+          const correo = await pedirCorreoEnVivo({ accion: 'correo', message_id: fila.message_id, buzon: fila.buzon });
+          return json(res, 200, correoParaPanel(correo, 'vivo'));
+        } catch (e) {
+          return json(res, 502, { error: e.message });
+        }
+      }
+
+      if (req.method === 'POST' && url === '/api/correo-completo/guardar') {
+        if (!puede('guardar_copia')) return json(res, 403, { error: 'No tienes permiso para guardar copias.' });
+        const { id } = await leerCuerpo(req);
+        const { fila, error } = await filaDe(id);
+        if (error) return json(res, error[0], { error: error[1] });
+        try {
+          const correo = await pedirCorreoEnVivo({ accion: 'correo', message_id: fila.message_id, buzon: fila.buzon, incluir_adjuntos: true });
+          await guardarCopia(fila, correo, false, u.usuario);
+        } catch (e) {
+          return json(res, 502, { error: e.message });
+        }
+        await registrar(u, 'guardar_copia', 'reserva', fila.id, '', '', fila.asunto || '');
+        return json(res, 200, { ok: true });
+      }
+
+      if (req.method === 'GET' && url === '/api/correo-completo/adjunto') {
+        if (!puede('descargar_adjuntos')) return json(res, 403, { error: 'No tienes permiso para abrir o descargar adjuntos.' });
+        const { fila, error } = await filaDe(idReserva);
+        if (error) return json(res, error[0], { error: error[1] });
+        const adjuntoId = p.get('adjunto') || '';
+        const abrir = p.get('modo') === 'ver';
+        let guardado = (await client.query('SELECT * FROM correo_adjunto WHERE message_id = $1 AND adjunto_id = $2',
+          [fila.message_id, adjuntoId])).rows[0];
+        let nombre = guardado ? guardado.nombre : '';
+        let datos = null;
+        const ruta = guardado && guardado.hash ? rutaArchivo(guardado.hash) : null;
+        if (ruta && fs.existsSync(ruta)) {
+          datos = fs.readFileSync(ruta);
+        } else {
+          try {
+            const adjunto = await pedirCorreoEnVivo({ accion: 'adjunto', message_id: fila.message_id, buzon: fila.buzon, adjunto_id: adjuntoId });
+            nombre = adjunto.nombre;
+            if (!TIPOS_ADJUNTO[extension(nombre)]) return json(res, 403, { error: 'Este tipo de archivo está bloqueado por seguridad.' });
+            datos = Buffer.from(adjunto.datos || '', 'base64');
+            if (guardado) {
+              await client.query('UPDATE correo_adjunto SET hash = $3 WHERE message_id = $1 AND adjunto_id = $2',
+                [fila.message_id, adjuntoId, guardarArchivo(adjunto.datos || '')]);
+            }
+          } catch (e) {
+            return json(res, 502, { error: e.message });
+          }
+        }
+        if (!TIPOS_ADJUNTO[extension(nombre)]) return json(res, 403, { error: 'Este tipo de archivo está bloqueado por seguridad.' });
+        await registrar(u, abrir ? 'abrir_adjunto' : 'descargar_adjunto', 'reserva', fila.id, '', '', nombre);
+        return enviarArchivo(res, datos, nombre, abrir);
+      }
+
+      return json(res, 404, { error: 'Ruta no encontrada' });
+    }
+
+    if (url.startsWith('/api/cache')) {
+      if (u.grupo !== 'Programador' && !puede('administrar_usuarios')) {
+        return json(res, 403, { error: 'No tienes permiso para administrar la caché.' });
+      }
+
+      if (req.method === 'GET' && url === '/api/cache') {
+        const ajustes = (await client.query('SELECT cache_dias, copia_automatica FROM empresa_datos WHERE id = 1')).rows[0] || {};
+        const copias = (await client.query(
+          'SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE automatica)::int AS automaticas, MIN(guardado) AS primera FROM correo_copia'
+        )).rows[0];
+        const html = (await client.query('SELECT COALESCE(SUM(LENGTH(html)), 0)::bigint AS b FROM correo_copia')).rows[0];
+        const disco = tamanoCarpeta(CACHE_ARCHIVOS);
+        const bytes = disco.bytes + Number(html.b);
+        return json(res, 200, {
+          dias: ajustes.cache_dias, copiaAutomatica: ajustes.copia_automatica,
+          correos: copias.n, automaticas: copias.automaticas, primera: copias.primera,
+          archivos: disco.archivos, bytes, promedio: copias.n ? Math.round(bytes / copias.n) : 0,
+          carpeta: CACHE
+        });
+      }
+
+      if (req.method === 'POST' && url === '/api/cache/ajustes') {
+        const { dias, copiaAutomatica } = await leerCuerpo(req);
+        const n = Number(dias);
+        if (!Number.isInteger(n) || n < 1 || n > 3650) return json(res, 400, { error: 'Escribe un número de días entre 1 y 3650.' });
+        await client.query('UPDATE empresa_datos SET cache_dias = $1, copia_automatica = $2 WHERE id = 1', [n, Boolean(copiaAutomatica)]);
+        await registrar(u, 'ajustar_cache', 'cache', '', '', { dias: n, copiaAutomatica: Boolean(copiaAutomatica) });
+        return json(res, 200, { ok: true });
+      }
+
+      if (req.method === 'POST' && url === '/api/cache/borrar') {
+        const { todo } = await leerCuerpo(req);
+        const dias = (await client.query('SELECT cache_dias FROM empresa_datos WHERE id = 1')).rows[0].cache_dias;
+        const borradas = await borrarCopias(todo ? null : dias);
+        await registrar(u, 'borrar_cache', 'cache', '', '', '', todo ? `Toda la caché (${borradas} correos)` : `Copias de más de ${dias} días (${borradas} correos)`);
+        return json(res, 200, { ok: true, borradas });
+      }
+
+      return json(res, 404, { error: 'Ruta no encontrada' });
     }
 
     if (url.startsWith('/api/exportar')) {

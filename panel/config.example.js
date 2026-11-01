@@ -17,7 +17,9 @@ module.exports = {
   // Flujo de n8n que marca el correo como leído cuando todos sus servicios quedan "Registrada".
   // Debe estar activo (Publish). Si se deja vacío, el panel no marca nada.
   n8n: {
-    marcarLeido: 'http://localhost:5678/webhook/marcar-leido'
+    marcarLeido: 'http://localhost:5678/webhook/marcar-leido',
+    // Flujo "Correo completo": trae el correo de Microsoft 365 con imágenes y adjuntos.
+    correoCompleto: 'http://localhost:5678/webhook/correo-completo'
   },
 
   // Cuentas desde las que el panel responde y envía correos.

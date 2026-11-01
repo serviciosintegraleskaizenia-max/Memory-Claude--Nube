@@ -91,7 +91,7 @@
 
   .fondo-modal, .overlay, .fondo-chat { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; padding: 16px; }
   .fondo-modal.abierto, .overlay.abierto, .fondo-chat.abierto { opacity: 1; pointer-events: auto; }
-  .modal { background: var(--tarjeta); color: var(--texto); width: min(680px, 92vw); max-height: 86vh; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateY(20px) scale(0.97); transition: transform 0.25s; }
+  .modal { background: var(--tarjeta); color: var(--texto); width: min(980px, 95vw); max-height: 90vh; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateY(20px) scale(0.97); transition: transform 0.25s; }
   .fondo-modal.abierto .modal { transform: translateY(0) scale(1); }
   .modal-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; border-bottom: 1px solid var(--borde); }
   .modal-cabecera h2 { margin: 0; font-size: 17px; }
@@ -108,6 +108,11 @@
   .titulo-seccion { font-size: 13px; color: var(--texto-suave); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.4px; }
 
   .chat-modal { width: min(820px, 94vw); height: min(560px, 80vh); }
+  .correo-barra { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px; color: var(--texto-suave); }
+  .correo-marco { width: 100%; height: 60vh; border: 1px solid var(--borde); border-radius: 8px; background: #fff; }
+  .adjuntos { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .adjunto { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 6px 8px; border: 1px solid var(--borde); border-radius: 8px; }
+  .adjunto .nombre { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chat-cuerpo { display: flex; flex: 1; min-height: 0; }
   .chat-contactos { width: 250px; border-right: 1px solid var(--borde); overflow-y: auto; }
   .chat-contacto { padding: 10px 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; border-bottom: 1px solid var(--borde); }
@@ -276,6 +281,16 @@
       <button class="cerrar" id="btnCerrar" title="Cerrar">&times;</button>
     </div>
     <div class="modal-cuerpo">
+      <div id="mCompleto" style="display:none;">
+        <div class="correo-barra">
+          <span id="mOrigen"></span>
+          <button class="btn-mini" id="btnImagenes" style="display:none;">Mostrar imágenes</button>
+          <button class="btn-mini" id="btnCopia" style="display:none;">Guardar copia</button>
+          <button class="btn-mini" id="btnSoloTexto">Ver solo texto</button>
+        </div>
+        <iframe class="correo-marco" id="mMarco" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Correo completo"></iframe>
+        <div class="adjuntos" id="mAdjuntos"></div>
+      </div>
       <div class="correo-texto" id="mCorreo"></div>
       <table class="datos" id="mDatos"></table>
       <div id="mHistorial"></div>
@@ -356,7 +371,11 @@ const PERMISOS = [
   ['administrar_usuarios', 'Administrar usuarios'],
   ['ver_auditoria', 'Ver auditoría'],
   ['usar_chat', 'Usar el chat privado'],
-  ['exportar_datos', 'Exportar a Excel']
+  ['exportar_datos', 'Exportar a Excel'],
+  ['ver_correo_completo', 'Ver correo completo (Microsoft 365)'],
+  ['mostrar_imagenes', 'Mostrar imágenes de internet en los correos'],
+  ['descargar_adjuntos', 'Abrir y descargar adjuntos'],
+  ['guardar_copia', 'Guardar copia de correos']
 ];
 
 const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
@@ -895,6 +914,7 @@ async function abrirModal(id) {
   document.getElementById('mRespuesta').style.display = 'none';
   document.getElementById('fondoModal').classList.add('abierto');
   cargarHistorial(id);
+  cargarCorreoCompleto(r);
 
   if (puedeEstado) {
     const ok = await tomarRevision(id);
@@ -905,7 +925,119 @@ async function abrirModal(id) {
   }
 }
 
+/* ---------- Correo completo (Microsoft 365) ---------- */
+
+let correoActual = null;
+
+function tamano(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+// El correo se muestra en una caja aislada: sin scripts y, salvo que se pida, sin imágenes de internet.
+function documentoCorreo(html, conImagenes) {
+  const csp = `default-src 'none'; img-src data:${conImagenes ? ' https: http:' : ''}; style-src 'unsafe-inline'; font-src data:`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank">` +
+    `<style>body{font-family:'Segoe UI',Arial,sans-serif;font-size:14px;color:#1e293b;background:#fff;margin:12px}img{max-width:100%;height:auto}</style>` +
+    `</head><body>${html}</body></html>`;
+}
+
+function verSoloTexto(soloTexto) {
+  document.getElementById('mMarco').style.display = soloTexto ? 'none' : 'block';
+  document.getElementById('mAdjuntos').style.display = soloTexto ? 'none' : 'flex';
+  document.getElementById('mCorreo').style.display = soloTexto ? 'block' : 'none';
+  document.getElementById('btnSoloTexto').textContent = soloTexto ? 'Ver correo completo' : 'Ver solo texto';
+}
+
+function pintarAdjuntos(r, c) {
+  const permitidoBajar = puede('descargar_adjuntos');
+  const url = (a, modo) => `/api/correo-completo/adjunto?id=${r.id}&adjunto=${encodeURIComponent(a.id)}&modo=${modo}`;
+  document.getElementById('mAdjuntos').innerHTML = c.adjuntos.map(a => `
+    <div class="adjunto">
+      <span>📎</span>
+      <span class="nombre" title="${esc(a.nombre)}">${esc(a.nombre)}</span>
+      <span class="etiqueta-sec" style="margin:0">${tamano(a.tamano)}</span>
+      ${!a.permitido ? '<span class="falta">Bloqueado por seguridad</span>'
+        : !permitidoBajar ? '<span class="etiqueta-sec" style="margin:0">Sin permiso para abrir</span>'
+        : `${a.seAbre ? `<a class="btn-mini" href="${url(a, 'ver')}" target="_blank" rel="noopener">Abrir</a>` : ''}
+           <a class="btn-mini" href="${url(a, 'descargar')}">Descargar</a>`}
+    </div>`).join('');
+}
+
+async function cargarCorreoCompleto(r) {
+  const caja = document.getElementById('mCompleto');
+  const marco = document.getElementById('mMarco');
+  correoActual = null;
+  marco.srcdoc = '';
+  document.getElementById('mAdjuntos').innerHTML = '';
+  document.getElementById('btnImagenes').style.display = 'none';
+  document.getElementById('btnCopia').style.display = 'none';
+  caja.style.display = 'none';
+  document.getElementById('mCorreo').style.display = 'block';
+  if (!puede('ver_correo_completo') || !r.message_id || !r.buzon || /@gmail\.com$/i.test(r.buzon)) return;
+
+  const origen = document.getElementById('mOrigen');
+  caja.style.display = 'block';
+  origen.style.color = '';
+  origen.textContent = 'Cargando el correo completo…';
+  verSoloTexto(true);
+  document.getElementById('btnSoloTexto').style.display = 'none';
+
+  const res = await api('/api/correo-completo?id=' + r.id);
+  if (seleccionado !== r) return;
+  if (!res.ok) {
+    origen.style.color = '#dc2626';
+    origen.textContent = (res.data.error || 'No se pudo cargar el correo completo.') + ' Se muestra solo el texto.';
+    return;
+  }
+  const c = res.data;
+  correoActual = c;
+  origen.textContent = c.origen === 'copia'
+    ? `Copia guardada el ${fechaHora(c.guardado)}${c.automatica ? ' (automática)' : ''}`
+    : 'En vivo desde Microsoft 365';
+  marco.srcdoc = documentoCorreo(c.html, false);
+  document.getElementById('btnImagenes').style.display = c.imagenesExternas && puede('mostrar_imagenes') ? 'inline-block' : 'none';
+  const btnCopia = document.getElementById('btnCopia');
+  btnCopia.style.display = puede('guardar_copia') ? 'inline-block' : 'none';
+  btnCopia.textContent = c.origen === 'copia' ? 'Actualizar copia' : 'Guardar copia';
+  document.getElementById('btnSoloTexto').style.display = 'inline-block';
+  pintarAdjuntos(r, c);
+  verSoloTexto(false);
+}
+
+function mostrarImagenes() {
+  if (!correoActual || !puede('mostrar_imagenes')) return;
+  document.getElementById('mMarco').srcdoc = documentoCorreo(correoActual.html, true);
+  document.getElementById('btnImagenes').style.display = 'none';
+}
+
+async function guardarCopiaCorreo() {
+  if (!seleccionado) return;
+  const r = seleccionado;
+  const boton = document.getElementById('btnCopia');
+  boton.disabled = true;
+  boton.textContent = 'Guardando…';
+  const res = await api('/api/correo-completo/guardar', { id: r.id });
+  boton.disabled = false;
+  const mensaje = document.getElementById('mMensaje');
+  if (!res.ok) {
+    boton.textContent = 'Guardar copia';
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = res.data.error || 'No se pudo guardar la copia.';
+    return;
+  }
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = 'Copia guardada.';
+  cargarCorreoCompleto(r);
+  cargarHistorial(r.id);
+}
+
 async function cerrarModal() {
+  document.getElementById('mMarco').srcdoc = '';
+  correoActual = null;
   clearInterval(timerRevision);
   timerRevision = null;
   const actual = seleccionado;
@@ -1313,6 +1445,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
   }
   if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
   if (tab === 'empresa') return marco('empresa', aviso);
+  if (tab === 'cache') return marco('cache', aviso);
 
   const [ru, rg] = await Promise.all([api('/api/usuarios'), api('/api/grupos')]);
   if (!ru.ok) return alert(ru.data.error || 'No se pudo cargar la lista de usuarios.');
@@ -1329,7 +1462,7 @@ function marco(tab, aviso) {
   const boton = (id, texto) =>
     `<button class="${tab === id ? 'btn' : 'btn-sec'}" data-accion="tab-${id}">${texto}</button>`;
 
-  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') : '') +
+  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
@@ -1341,6 +1474,7 @@ function marco(tab, aviso) {
   else if (tab === 'grupos') cuerpo = tablaGrupos();
   else if (tab === 'bloqueos') cuerpo = '<div id="tablaBloqueos"></div>';
   else if (tab === 'empresa') cuerpo = formEmpresa();
+  else if (tab === 'cache') cuerpo = '<div id="panelCache">Cargando…</div>';
   else cuerpo = formAuditoria();
 
   abrirVentana(`
@@ -1350,6 +1484,7 @@ function marco(tab, aviso) {
 
   if (tab === 'auditoria') buscarAuditoria();
   if (tab === 'bloqueos') cargarBloqueos();
+  if (tab === 'cache') cargarCache();
 }
 
 function vista(titulo, cuerpo, volver) {
@@ -1423,6 +1558,54 @@ async function guardarEmpresa() {
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
   await cargarEmpresa();
   marco('empresa', 'Datos de la empresa guardados.');
+}
+
+/* ---------- Caché de correos ---------- */
+
+async function cargarCache() {
+  const r = await api('/api/cache');
+  const box = document.getElementById('panelCache');
+  if (!box) return;
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar la caché.')}</div>`;
+    return;
+  }
+  const c = r.data;
+  box.innerHTML = `
+    <div class="tarjetas">
+      <div class="tarjeta t-total"><div class="etiqueta">Correos guardados</div><div class="numero">${c.correos}</div></div>
+      <div class="tarjeta t-reservas"><div class="etiqueta">Espacio usado</div><div class="numero">${tamano(c.bytes)}</div></div>
+      <div class="tarjeta t-pendientes"><div class="etiqueta">Promedio por correo</div><div class="numero">${tamano(c.promedio)}</div></div>
+      <div class="tarjeta t-registradas"><div class="etiqueta">Archivos</div><div class="numero">${c.archivos}</div></div>
+    </div>
+    <p class="etiqueta-sec">Carpeta: ${esc(c.carpeta)}. Es caché: si se borra, los correos se traen en vivo de Microsoft 365.</p>
+    <div class="form-fila">
+      <label>Borrado automático de caché: copias de más de estos días<input id="cDias" type="number" min="1" max="3650" step="1" value="${esc(c.dias)}"></label>
+    </div>
+    <label class="chk"><input type="checkbox" id="cAuto" ${c.copiaAutomatica ? 'checked' : ''}> Copia automática de reservas y cambios (Microsoft 365)</label>
+    <div class="pie-acciones">
+      <button class="btn" data-accion="cache-guardar">Guardar ajustes</button>
+      <button class="btn-sec" data-accion="cache-borrar-viejas">Borrar ahora las de más de ${esc(c.dias)} días</button>
+      <button class="btn-sec" data-accion="cache-borrar-todo">Borrar toda la caché</button>
+    </div>`;
+}
+
+async function guardarAjustesCache() {
+  const r = await api('/api/cache/ajustes', { dias: Number(val('cDias')), copiaAutomatica: document.getElementById('cAuto').checked });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los ajustes.', false);
+  await cargarCache();
+  mostrarAviso('Ajustes de la caché guardados.', true);
+}
+
+async function borrarCache(todo) {
+  const texto = todo
+    ? 'Se borrarán TODAS las copias guardadas de correos.\n\nLos correos se seguirán viendo en vivo desde Microsoft 365. Si la copia automática está activa, las reservas recientes se vuelven a copiar solas.\n\n¿Continuar?'
+    : 'Se borrarán las copias que tengan más días de los indicados.\n\n¿Continuar?';
+  if (!confirm(texto)) return;
+  const r = await api('/api/cache/borrar', { todo });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo borrar la caché.', false);
+  await cargarCache();
+  mostrarAviso(`Listo: se borraron ${r.data.borradas} copias.`, true);
 }
 
 /* ---------- Bloqueos (solo programador) ---------- */
@@ -1695,6 +1878,10 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-grupos') return abrirHerramientas('grupos');
   if (a === 'tab-auditoria') return abrirHerramientas('auditoria');
   if (a === 'tab-empresa') return abrirHerramientas('empresa');
+  if (a === 'tab-cache') return abrirHerramientas('cache');
+  if (a === 'cache-guardar') return guardarAjustesCache();
+  if (a === 'cache-borrar-viejas') return borrarCache(false);
+  if (a === 'cache-borrar-todo') return borrarCache(true);
   if (a === 'guardar-empresa') return guardarEmpresa();
   if (a === 'buscar-auditoria') return buscarAuditoria();
   if (a === 'exportar-auditoria') return exportarAuditoria();
@@ -1824,6 +2011,10 @@ document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
 document.getElementById('mDatos').addEventListener('click', e => { if (e.target.id === 'btnAgencia') guardarAgencia(); });
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
 document.getElementById('btnReanalizar').addEventListener('click', reanalizar);
+document.getElementById('btnImagenes').addEventListener('click', mostrarImagenes);
+document.getElementById('btnCopia').addEventListener('click', guardarCopiaCorreo);
+document.getElementById('btnSoloTexto').addEventListener('click', () =>
+  verSoloTexto(document.getElementById('mCorreo').style.display === 'none'));
 document.getElementById('btnCancelarRespuesta').addEventListener('click', ocultarRespuesta);
 document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
