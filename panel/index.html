@@ -1034,7 +1034,7 @@ function alCambiarFechas() {
 }
 
 function porAnalizar(r) {
-  return Boolean(r.error_ia) && String(r.motivo || '').startsWith('Histórico');
+  return String(r.motivo || '').startsWith('Histórico');
 }
 
 function marcaAsignado(r) {
@@ -2048,8 +2048,10 @@ async function cargarHistorico() {
       <div class="tarjeta t-reservas"><div class="etiqueta">Reservas y cambios encontrados</div><div class="numero">${h.reservas}</div></div>
     </div>
     <p><strong>Estado:</strong> ${estado}${imp && imp.ultimo_error ? `<br><span style="color:#dc2626">Último error: ${esc(imp.ultimo_error)}</span>` : ''}</p>
-    <p class="etiqueta-sec">La IA analiza unos 25 correos del historial cada 10 minutos (los correos nuevos siempre van primero).
-      Costo aproximado de lo que falta: US$ ${costo} en OpenRouter.</p>
+    <p><strong>Análisis con IA:</strong> ${imp && imp.analizar
+      ? 'activo. La IA analiza unos 25 correos del historial cada 10 minutos; los correos nuevos siempre van primero.'
+      : 'en pausa. Leer el historial es gratis; analizarlo con la IA cuesta. Revisa el costo y tu saldo de OpenRouter antes de activarlo.'}<br>
+      Costo aproximado de lo que falta: <strong>US$ ${costo}</strong> en OpenRouter (unos ${Math.ceil(h.por_analizar / 3600)} día(s) a 25 correos cada 10 minutos).</p>
     <div class="form-fila">
       <label>Buzón<select id="hBuzon">${buzones}</select></label>
       <label>Meses hacia atrás<input id="hMeses" type="number" min="1" max="24" step="1" value="3"></label>
@@ -2059,12 +2061,22 @@ async function cargarHistorico() {
       ${imp && !imp.terminado ? (imp.activo
         ? '<button class="btn-sec" data-accion="historico-pausar">Pausar</button>'
         : '<button class="btn-sec" data-accion="historico-reanudar">Reanudar</button>') : ''}
+      ${imp && imp.analizar
+        ? '<button class="btn-sec" data-accion="historico-analisis-off">Pausar el análisis con IA</button>'
+        : `<button class="btn-sec" data-accion="historico-analisis-on" ${h.por_analizar ? '' : 'disabled'}>Empezar el análisis con IA</button>`}
       <button class="btn-sec" data-accion="historico-actualizar">Actualizar</button>
     </div>`;
   if (imp && imp.activo) timerHistorico = setTimeout(() => { if (document.getElementById('panelHistorico')) cargarHistorico(); }, 10000);
 }
 
 async function accionHistorico(accion) {
+  if (accion === 'analisis-on' || accion === 'analisis-off') {
+    const encender = accion === 'analisis-on';
+    if (encender && !confirm('La IA empezará a analizar los correos del historial (unos 25 cada 10 minutos). Esto usa saldo de OpenRouter.\n\n¿Continuar?')) return;
+    const r = await api('/api/historico/analizar', { activo: encender });
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo cambiar.', false);
+    return cargarHistorico();
+  }
   if (accion === 'iniciar') {
     const meses = Number(val('hMeses'));
     if (!confirm(`Se leerán los correos de los últimos ${meses} meses de ${val('hBuzon')} (sin marcarlos como leídos) y la IA los analizará poco a poco.\n\n¿Continuar?`)) return;
@@ -2477,6 +2489,8 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'historico-pausar') return accionHistorico('pausar');
   if (a === 'historico-reanudar') return accionHistorico('reanudar');
   if (a === 'historico-actualizar') return cargarHistorico();
+  if (a === 'historico-analisis-on') return accionHistorico('analisis-on');
+  if (a === 'historico-analisis-off') return accionHistorico('analisis-off');
   if (a === 'cache-borrar-viejas') return borrarCache(false);
   if (a === 'cache-borrar-todo') return borrarCache(true);
   if (a === 'guardar-empresa') return guardarEmpresa();

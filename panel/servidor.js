@@ -161,6 +161,8 @@ async function inicializarTablas() {
     usuario VARCHAR(50) NOT NULL DEFAULT '',
     iniciado TIMESTAMPTZ,
     actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  // El análisis con IA del historial cuesta dinero: empieza en pausa hasta que el programador lo active.
+  await client.query('ALTER TABLE historico_importacion ADD COLUMN IF NOT EXISTS analizar BOOLEAN NOT NULL DEFAULT FALSE');
   await client.query(`CREATE OR REPLACE FUNCTION clasificacion_historico() RETURNS trigger AS $$
     BEGIN
       IF COALESCE(NEW.message_id, '') <> '' AND EXISTS (SELECT 1 FROM correo_historico h WHERE h.message_id = NEW.message_id) THEN
@@ -1089,10 +1091,10 @@ async function importarHistorico() {
              ON CONFLICT DO NOTHING RETURNING message_id)
            INSERT INTO clasificacion (categoria, remitente, asunto, estado, fecha, message_id, buzon, cuerpo, error_ia, motivo,
              numero_servicio, aviso_procesado, adultos, ninos, infantes)
-           SELECT 'NO_ENTENDIDO', $1, $2, 'historico', $3, message_id, $5, $6, TRUE, 'Histórico: pendiente de análisis', 1, TRUE, 0, 0, 0
+           SELECT 'NO_ENTENDIDO', $1, $2, 'historico', $3, message_id, $5, $6, $7, 'Histórico: pendiente de análisis', 1, TRUE, 0, 0, 0
            FROM marca RETURNING id`,
           [arreglarTexto(m.de).slice(0, 500), arreglarTexto(m.asunto).slice(0, 1000), m.fecha, m.id, est.buzon,
-            arreglarTexto(m.texto).slice(0, 60000)]
+            arreglarTexto(m.texto).slice(0, 60000), est.analizar]
         );
         nuevos += r.rowCount;
       }
@@ -1121,8 +1123,8 @@ async function importarHistorico() {
 async function estadoHistorico() {
   const est = (await client.query('SELECT * FROM historico_importacion WHERE id = 1')).rows[0] || null;
   const c = (await client.query(
-    `SELECT COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia)::int AS por_analizar,
-            COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia IS NOT TRUE)::int AS analizados,
+    `SELECT COUNT(DISTINCT c.message_id) FILTER (WHERE c.motivo LIKE 'Histórico: pendiente%')::int AS por_analizar,
+            COUNT(DISTINCT c.message_id) FILTER (WHERE COALESCE(c.motivo, '') NOT LIKE 'Histórico: pendiente%')::int AS analizados,
             COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia IS NOT TRUE AND c.categoria IN ('RESERVA', 'MODIFICACION'))::int AS reservas
      FROM clasificacion c JOIN correo_historico h ON h.message_id = c.message_id`
   )).rows[0];
@@ -1720,6 +1722,19 @@ http.createServer(async (req, res) => {
         );
         await registrar(u, 'historico_iniciar', 'historico', elegido, '', n + ' meses', `Desde ${isoSinMs(desde)} hasta ${isoSinMs(hasta)}`);
         setTimeout(importarHistorico, 500);
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && url === '/api/historico/analizar') {
+        // Encender o apagar el análisis con IA: n8n solo toma los correos marcados con error_ia.
+        const { activo } = await leerCuerpo(req);
+        const encender = Boolean(activo);
+        await client.query(`INSERT INTO historico_importacion (id, analizar) VALUES (1, $1)
+          ON CONFLICT (id) DO UPDATE SET analizar = $1, actualizado = NOW()`, [encender]);
+        const r = await client.query(
+          "UPDATE clasificacion SET error_ia = $1 WHERE estado = 'historico' AND motivo LIKE 'Histórico: pendiente%' AND error_ia IS DISTINCT FROM $1",
+          [encender]
+        );
+        await registrar(u, encender ? 'historico_analizar' : 'historico_pausar_analisis', 'historico', '', '', '', r.rowCount + ' correos');
         return json(res, 200, { ok: true });
       }
       if (req.method === 'POST' && (url === '/api/historico/pausar' || url === '/api/historico/reanudar')) {
