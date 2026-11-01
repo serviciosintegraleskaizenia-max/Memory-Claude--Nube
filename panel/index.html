@@ -855,9 +855,16 @@ async function abrirModal(id) {
   document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
   document.getElementById('mMeta').innerHTML =
     `De: ${esc(r.remitente)}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
-  document.getElementById('mCorreo').textContent = r.cuerpo
-    ? textoLimpio(r.cuerpo)
-    : 'Este correo se guardó antes de activar la vista del texto. Los correos nuevos sí lo muestran.';
+  const cajaCorreo = document.getElementById('mCorreo');
+  cajaCorreo.textContent = 'Cargando el correo...';
+  api('/api/reserva/cuerpo?id=' + id).then(rc => {
+    if (seleccionado !== r) return;
+    cajaCorreo.textContent = !rc.ok
+      ? (rc.data.error || 'No se pudo cargar el texto del correo.')
+      : rc.data.cuerpo
+        ? textoLimpio(decodificar(rc.data.cuerpo))
+        : 'Este correo se guardó antes de activar la vista del texto. Los correos nuevos sí lo muestran.';
+  });
 
   const celdaAgencia = puede('editar_reservas')
     ? `<input id="mAgencia" class="input-ancho" maxlength="150" value="${esc(r.agencia || '')}" placeholder="${esc(agenciaDe(r) || 'Nombre de la agencia')}">

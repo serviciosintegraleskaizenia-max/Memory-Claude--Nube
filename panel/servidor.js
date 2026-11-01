@@ -538,7 +538,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, cuerpo, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 500"
+        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 5000"
       );
       const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows
         .map(x => [x.remitente, x.agencia]));
@@ -585,6 +585,15 @@ http.createServer(async (req, res) => {
         marcarLeidoSiCompleto(Number(id), u).catch(e => console.log('Error marcando como leído:', e.message));
       }
       return json(res, 200, { ok: true });
+    }
+
+    // El texto del correo se pide al abrir la reserva, no en la lista que se recarga cada 15 segundos.
+    if (req.method === 'GET' && url === '/api/reserva/cuerpo') {
+      if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
+      const id = Number(new URL(req.url, 'http://localhost').searchParams.get('id'));
+      const fila = (await client.query('SELECT cuerpo FROM clasificacion WHERE id = $1', [id])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      return json(res, 200, { cuerpo: fila.cuerpo || '' });
     }
 
     if (req.method === 'POST' && url === '/api/reserva/agencia') {
