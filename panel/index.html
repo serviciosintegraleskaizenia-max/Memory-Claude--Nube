@@ -1101,9 +1101,12 @@ function pintarCronometro() {
   const seg = cronometro.base + (cronometro.corriendo ? (Date.now() - cronometro.desde) / 1000 : 0);
   const tarde = seg > cronometro.limite;
   const minutos = Math.round(cronometro.limite / 60);
+  // Pasado el máximo: solo el contador en rojo con la advertencia.
+  const icono = tarde ? '⚠' : '⏱';
   el.textContent = cronometro.final
-    ? `⏱ Tiempo total: ${duracion(seg)}${tarde ? ` · pasó de ${minutos} min` : ''}`
-    : `⏱ ${duracion(seg)}${cronometro.corriendo ? '' : ' · en pausa'}${tarde ? ` · ⚠ pasó de ${minutos} min` : ` de ${minutos}:00`}`;
+    ? `${icono} Tiempo total: ${duracion(seg)}`
+    : `${icono} ${duracion(seg)}${cronometro.corriendo ? '' : ' · en pausa'}${tarde ? '' : ` de ${minutos}:00`}`;
+  el.title = tarde ? `Pasó el máximo de ${minutos} minutos` : 'Tiempo trabajando esta reserva';
   el.classList.toggle('tarde', tarde);
   el.classList.toggle('parado', !tarde && (!cronometro.corriendo || cronometro.final));
 }

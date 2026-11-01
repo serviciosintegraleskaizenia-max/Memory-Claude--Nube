@@ -56,6 +56,17 @@
   .tooltip.visible { opacity: 1; }
   .hit { fill: transparent; cursor: default; }
   .hit:hover { fill: var(--hover); }
+  .podio { list-style: none; margin: 0; padding: 0; }
+  .podio li { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--borde); }
+  .podio li:last-child { border-bottom: none; }
+  .podio .medalla { font-size: 24px; width: 32px; text-align: center; }
+  .podio .quien { flex: 1; min-width: 0; }
+  .podio .quien strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .podio .quien small { color: var(--texto-suave); font-size: 12px; }
+  .podio .cuanto { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .podio .cuanto small { font-size: 11px; font-weight: 400; color: var(--texto-suave); display: block; text-align: right; }
+  .podio li.primero { background: var(--hover); border-radius: 8px; }
+  tr.mejor td { font-weight: 700; }
   .mensaje { color: var(--tarde); padding: 30px; text-align: center; }
   details summary { cursor: pointer; font-size: 12px; color: var(--texto-suave); margin-top: 8px; }
   @media (max-width: 600px) {
@@ -85,6 +96,8 @@
 const ZONA = 'America/Santo_Domingo';
 let datos = null;
 let periodoSerie = 7;
+let mesElegido = '';
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -128,7 +141,7 @@ async function api(url) {
 async function cargar() {
   const desde = document.getElementById('desde') ? document.getElementById('desde').value : hoy();
   const hasta = document.getElementById('hasta') ? document.getElementById('hasta').value : hoy();
-  const r = await api(`/api/control?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`);
+  const r = await api(`/api/control?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}${mesElegido ? '&mes=' + encodeURIComponent(mesElegido) : ''}`);
   if (r.status === 401) {
     document.getElementById('contenido').innerHTML = '<div class="mensaje">Tu sesión terminó. Entra de nuevo en el panel y vuelve a abrir Control.</div>';
     return;
@@ -174,6 +187,8 @@ function pintar(desde, hasta) {
       <div class="tarjeta"><div class="etiqueta">Promedio por reserva</div><div class="numero">${promedioGeneral === null ? '—' : duracion(promedioGeneral)}</div></div>
       <div class="tarjeta"><div class="etiqueta">Pasadas de ${limiteMin} min</div><div class="numero">${t.pasadas ? `<span class="tarde">⚠ ${t.pasadas}</span>` : '0'}</div></div>
     </div>
+
+    ${seccionMejores(d)}
 
     <div class="seccion">
       <h2>Trabajando ahora</h2>
@@ -226,6 +241,8 @@ function pintar(desde, hasta) {
       </div>
     </div>
 
+    ${seccionAnio(d)}
+
     <div class="seccion">
       <h2>Reservas registradas y su tiempo</h2>
       <p class="sub">De la más lenta a la más rápida (hasta 300).</p>
@@ -249,6 +266,72 @@ function pintar(desde, hasta) {
     .map(u => ({ nombre: u.nombre, valor: u.registradas })), {
     formato: v => String(v), vacio: 'Nadie registró reservas en este período.'
   });
+}
+
+function nombreMes(mes) {
+  const [a, m] = mes.split('-');
+  const largo = new Date(Date.UTC(Number(a), Number(m) - 1, 15)).toLocaleDateString('es-DO', { month: 'long', timeZone: 'UTC' });
+  return largo.charAt(0).toUpperCase() + largo.slice(1) + ' ' + a;
+}
+
+function podio(lista, vacio) {
+  if (!lista.length) return `<div class="vacio">${esc(vacio)}</div>`;
+  const medallas = ['🥇', '🥈', '🥉'];
+  return `<ol class="podio">${lista.map((u, i) => `
+    <li class="${i === 0 ? 'primero' : ''}">
+      <span class="medalla" aria-label="Puesto ${i + 1}">${medallas[i]}</span>
+      <span class="quien"><strong>${esc(u.nombre)}</strong><small>${i === 0 ? 'Mejor asesor · ' : ''}promedio ${u.promedio === null ? 'sin medir' : duracion(u.promedio)}</small></span>
+      <span class="cuanto">${u.registradas}<small>${u.registradas === 1 ? 'reserva' : 'reservas'}</small></span>
+    </li>`).join('')}</ol>`;
+}
+
+function seccionMejores(d) {
+  const k = d.ranking;
+  const opciones = k.meses.map(m => `<option value="${esc(m)}" ${m === k.mes ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
+  return `
+    <div class="rejilla">
+      <div class="seccion">
+        <h2>🏆 Mejores asesores del día</h2>
+        <p class="sub">${esc(diaLargo(k.dia))} · más reservas registradas (si empatan, el de menor tiempo promedio).</p>
+        ${podio(k.topDia, 'Nadie ha registrado reservas este día.')}
+      </div>
+      <div class="seccion">
+        <div class="cabeza">
+          <div><h2>🏆 Mejores asesores del mes</h2><p class="sub">Cada mes empieza en cero; los meses anteriores quedan guardados.</p></div>
+          <select id="mesSel" title="Mes">${opciones}</select>
+        </div>
+        ${podio(k.topMes, 'Nadie ha registrado reservas en este mes.')}
+      </div>
+    </div>
+    <div class="seccion">
+      <h2>Reservas registradas por asesor en ${esc(nombreMes(k.mes))}</h2>
+      <p class="sub">Total del mes de cada usuario.</p>
+      ${k.totalesMes.length ? `<div class="tabla-wrap"><table>
+        <thead><tr><th>#</th><th>Asesor</th><th class="num">Reservas del mes</th><th class="num">Promedio por reserva</th></tr></thead>
+        <tbody>${k.totalesMes.map((u, i) => `<tr class="${i === 0 ? 'mejor' : ''}"><td>${i + 1}</td><td>${esc(u.nombre)}</td>
+          <td class="num">${u.registradas}</td>
+          <td class="num">${u.promedio !== null && u.promedio > d.limite ? `<span class="tarde">⚠ ${duracion(u.promedio)}</span>` : duracion(u.promedio)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<div class="vacio">Sin reservas registradas en este mes.</div>'}
+    </div>`;
+}
+
+function seccionAnio(d) {
+  const k = d.ranking;
+  if (!k.resumenAnio.length) {
+    return `<div class="seccion"><h2>Resumen del año ${esc(k.anio)}</h2><div class="vacio">Sin reservas registradas en ${esc(k.anio)}.</div></div>`;
+  }
+  const totalMes = MESES.map((_, i) => k.resumenAnio.reduce((a, u) => a + u.meses[i], 0));
+  const mejor = k.resumenAnio[0];
+  return `<div class="seccion">
+    <h2>Resumen del año ${esc(k.anio)}</h2>
+    <p class="sub">Reservas registradas por cada asesor, mes por mes. 🏆 Mejor asesor del año: <strong>${esc(mejor.nombre)}</strong> con ${mejor.total} reservas.</p>
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Asesor</th>${MESES.map(m => `<th class="num">${m}</th>`).join('')}<th class="num">Total</th></tr></thead>
+      <tbody>${k.resumenAnio.map((u, i) => `<tr class="${i === 0 ? 'mejor' : ''}"><td>${i === 0 ? '🏆 ' : ''}${esc(u.nombre)}</td>${u.meses.map(n => `<td class="num">${n || '—'}</td>`).join('')}<td class="num"><strong>${u.total}</strong></td></tr>`).join('')}
+        <tr><td><strong>Total</strong></td>${totalMes.map(n => `<td class="num"><strong>${n || '—'}</strong></td>`).join('')}<td class="num"><strong>${totalMes.reduce((a, b) => a + b, 0)}</strong></td></tr>
+      </tbody>
+    </table></div>
+  </div>`;
 }
 
 function tablaEnCurso(d) {
@@ -419,6 +502,12 @@ document.addEventListener('click', e => {
   if (e.target.id === 'btnVer') return cargar();
 });
 document.getElementById('btnActualizar').addEventListener('click', cargar);
+document.addEventListener('change', e => {
+  if (e.target.id === 'mesSel') {
+    mesElegido = e.target.value;
+    cargar();
+  }
+});
 let timerTamano = null;
 window.addEventListener('resize', () => {
   clearTimeout(timerTamano);

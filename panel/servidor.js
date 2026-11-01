@@ -1855,7 +1855,7 @@ http.createServer(async (req, res) => {
         promedio: f.tiempos.length ? Math.round(f.tiempos.reduce((a, b) => a + b, 0) / f.tiempos.length) : null,
         maximo: f.tiempos.length ? Math.round(Math.max(...f.tiempos)) : null,
         dentro: f.tiempos.length ? Math.round(100 * f.tiempos.filter(x => x <= limite).length / f.tiempos.length) : null
-      })).sort((a, b) => b.registradas - a.registradas || b.segundos - a.segundos);
+      })).filter(x => x.grupo !== 'Programador').sort((a, b) => b.registradas - a.registradas || b.segundos - a.segundos);
 
       // Lo que se está trabajando ahora mismo.
       const enCurso = (await client.query(
@@ -1871,7 +1871,65 @@ http.createServer(async (req, res) => {
           segundos: Math.round(x.segundos), usuarios: x.usuarios };
       });
       const enRango = dias.filter(d => d >= desde).map(d => porDia.get(d));
+
+      // Mejores asesores: del día ("hasta"), del mes elegido y resumen del año. Cada mes empieza en cero;
+      // los meses pasados quedan guardados en la auditoría y se consultan con el selector.
+      const mesSel = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoy.slice(0, 7);
+      const anio = mesSel.slice(0, 4);
+      const regAnio = (await client.query(
+        `SELECT DISTINCT ON (a.entidad_id) a.entidad_id::int AS reserva_id, a.usuario, ${diaAuditoria} AS dia
+         FROM auditoria a
+         WHERE a.accion = 'cambiar_estado' AND a.nuevo = 'registrada' AND a.entidad = 'reserva'
+           AND a.entidad_id ~ '^[0-9]+$' AND ${diaAuditoria} BETWEEN $1 AND $2
+         ORDER BY a.entidad_id, a.fecha DESC`, [anio + '-01-01', anio + '-12-31']
+      )).rows.filter(r => (nombres.get(r.usuario) || {}).grupo !== 'Programador');
+      // El programador no compite en los rankings.
+      const regDia = registros.filter(r => r.dia === hasta && (nombres.get(r.usuario) || {}).grupo !== 'Programador');
+      const idsRanking = [...new Set([...regAnio, ...regDia].map(r => r.reserva_id))];
+      const tiempoRanking = new Map((await client.query(
+        `SELECT reserva_id, usuario, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS segundos
+         FROM tiempo_reserva WHERE reserva_id = ANY($1::int[]) GROUP BY reserva_id, usuario`, [idsRanking]
+      )).rows.map(x => [x.reserva_id + '|' + x.usuario, x.segundos]));
+      const nombreDe = usuario => (nombres.get(usuario) || {}).nombre || usuario;
+      // Gana quien registró más; si empatan, quien tardó menos en promedio.
+      const clasificar = lista => {
+        const m = new Map();
+        for (const r of lista) {
+          const f = m.get(r.usuario) || { usuario: r.usuario, nombre: nombreDe(r.usuario), registradas: 0, tiempos: [] };
+          f.registradas++;
+          const t = tiempoRanking.get(r.reserva_id + '|' + r.usuario);
+          if (t !== undefined) f.tiempos.push(t);
+          m.set(r.usuario, f);
+        }
+        return Array.from(m.values()).map(f => ({
+          usuario: f.usuario, nombre: f.nombre, registradas: f.registradas,
+          promedio: f.tiempos.length ? Math.round(f.tiempos.reduce((a, b) => a + b, 0) / f.tiempos.length) : null
+        })).sort((a, b) => b.registradas - a.registradas
+          || (a.promedio === null ? 1 : 0) - (b.promedio === null ? 1 : 0)
+          || (a.promedio || 0) - (b.promedio || 0)
+          || a.nombre.localeCompare(b.nombre));
+      };
+      const delMes = clasificar(regAnio.filter(r => r.dia.slice(0, 7) === mesSel));
+      const porMes = new Map();
+      for (const r of regAnio) {
+        const f = porMes.get(r.usuario) || { usuario: r.usuario, nombre: nombreDe(r.usuario), meses: Array(12).fill(0), total: 0 };
+        f.meses[Number(r.dia.slice(5, 7)) - 1]++;
+        f.total++;
+        porMes.set(r.usuario, f);
+      }
+      const resumenAnio = Array.from(porMes.values()).sort((a, b) => b.total - a.total || a.nombre.localeCompare(b.nombre));
+      const meses = (await client.query(
+        `SELECT DISTINCT ${diaAuditoria.replace("'YYYY-MM-DD'", "'YYYY-MM'")} AS mes FROM auditoria a
+         WHERE a.accion = 'cambiar_estado' AND a.nuevo = 'registrada' AND a.entidad = 'reserva'`
+      )).rows.map(x => x.mes);
+      const listaMeses = [...new Set([hoy.slice(0, 7), mesSel, ...meses])].sort().reverse();
+
       return json(res, 200, {
+        ranking: {
+          dia: hasta, topDia: clasificar(regDia).slice(0, 3),
+          mes: mesSel, topMes: delMes.slice(0, 3), totalesMes: delMes,
+          anio, resumenAnio, meses: listaMeses
+        },
         desde, hasta, limite,
         totales: {
           correos: enRango.reduce((a, x) => a + x.correos.size, 0),
