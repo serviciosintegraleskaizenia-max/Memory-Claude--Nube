@@ -93,6 +93,24 @@
   .fondo-modal.abierto, .overlay.abierto, .fondo-chat.abierto { opacity: 1; pointer-events: auto; }
   .modal { background: var(--tarjeta); color: var(--texto); width: min(980px, 95vw); max-height: 90vh; border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); display: flex; flex-direction: column; transform: translateY(20px) scale(0.97); transition: transform 0.25s; }
   .fondo-modal.abierto .modal { transform: translateY(0) scale(1); }
+  /* Ventana de la reserva: se mueve desde la cabecera, se estira desde la esquina, se minimiza y se maximiza. */
+  #fondoModal .modal { resize: both; overflow: hidden; min-width: 420px; min-height: 260px; }
+  #fondoModal .modal-cabecera { cursor: move; user-select: none; }
+  .ventana-botones { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+  .ventana-botones .cerrar { font-size: 20px; width: 34px; height: 30px; border-radius: 6px; }
+  .ventana-botones .cerrar:hover { background: var(--hover); }
+  #fondoModal .modal.arrastrando iframe { pointer-events: none; }
+  #fondoModal .modal.maximizada { position: fixed; left: 0 !important; top: 0 !important; width: 100vw !important; height: 100vh !important; max-height: 100vh; border-radius: 0; resize: none; }
+  #fondoModal .modal.maximizada .correo-marco { height: 62vh; }
+  #fondoModal.minimizado { background: transparent; pointer-events: none; }
+  #fondoModal.minimizado .modal { pointer-events: auto; position: fixed; left: auto !important; top: auto !important; right: 16px; bottom: 80px; width: 380px !important; height: auto !important; min-width: 0; min-height: 0; resize: none; }
+  #fondoModal.minimizado .modal > :not(.modal-cabecera) { display: none !important; }
+  #fondoModal.minimizado .modal-cabecera { border-bottom: none; padding-bottom: 14px; }
+  #fondoModal.minimizado .meta { display: none; }
+  #fondoModal.minimizado .modal-cabecera h2 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  #mRespuesta { flex: 0 0 auto; }
+  #mRespuesta .respuesta-caja { min-height: 170px; resize: vertical; }
+  #fondoModal .modal.respondiendo .correo-marco { height: 28vh; }
   .modal-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; border-bottom: 1px solid var(--borde); }
   .modal-cabecera h2 { margin: 0; font-size: 17px; }
   .modal-cabecera .meta { font-size: 12px; color: var(--texto-suave); margin-top: 4px; line-height: 1.5; }
@@ -278,7 +296,11 @@
         <h2 id="mAsunto"></h2>
         <div class="meta" id="mMeta"></div>
       </div>
-      <button class="cerrar" id="btnCerrar" title="Cerrar">&times;</button>
+      <div class="ventana-botones">
+        <button class="cerrar" id="btnMinimizar" title="Minimizar">&#8211;</button>
+        <button class="cerrar" id="btnMaximizar" title="Maximizar">&#9633;</button>
+        <button class="cerrar" id="btnCerrar" title="Cerrar">&times;</button>
+      </div>
     </div>
     <div class="modal-cuerpo">
       <div id="mCompleto" style="display:none;">
@@ -297,7 +319,7 @@
     </div>
     <div class="modal-cuerpo" id="mRespuesta" style="display:none; border-top:1px solid var(--borde);">
       <div class="titulo-seccion">Responder a <span id="mDestino"></span></div>
-      <textarea id="mTexto" rows="5" class="respuesta-caja" placeholder="Escribe la respuesta. El correo original se incluye citado debajo."></textarea>
+      <textarea id="mTexto" rows="8" class="respuesta-caja" placeholder="Escribe la respuesta. El correo original se incluye citado debajo."></textarea>
       <div class="pie-acciones">
         <button class="btn" id="btnEnviarRespuesta">Enviar respuesta</button>
         <button class="btn-sec" id="btnCancelarRespuesta">Cancelar</button>
@@ -870,6 +892,7 @@ async function abrirModal(id) {
   const r = datos.find(x => x.id === id);
   if (!r) return;
   seleccionado = r;
+  restaurarVentana();
 
   document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
   document.getElementById('mMeta').innerHTML =
@@ -1036,6 +1059,8 @@ async function guardarCopiaCorreo() {
 }
 
 async function cerrarModal() {
+  if (!seleccionado) return;
+  restaurarVentana();
   document.getElementById('mMarco').srcdoc = '';
   correoActual = null;
   clearInterval(timerRevision);
@@ -1351,12 +1376,77 @@ function mostrarRespuesta() {
   if (!seleccionado) return;
   document.getElementById('mDestino').textContent = seleccionado.remitente || '';
   document.getElementById('mRespuesta').style.display = 'block';
-  document.getElementById('mTexto').focus();
+  ventanaReserva().classList.add('respondiendo');
+  const caja = document.getElementById('mTexto');
+  caja.scrollIntoView({ block: 'nearest' });
+  caja.focus();
 }
 
 function ocultarRespuesta() {
   document.getElementById('mRespuesta').style.display = 'none';
   document.getElementById('mTexto').value = '';
+  ventanaReserva().classList.remove('respondiendo');
+}
+
+/* ---------- Ventana de la reserva: mover, estirar, minimizar y maximizar ---------- */
+
+function ventanaReserva() {
+  return document.querySelector('#fondoModal .modal');
+}
+
+// Al abrir otra reserva la ventana vuelve al centro y a su tamaño normal.
+function restaurarVentana() {
+  const v = ventanaReserva();
+  v.classList.remove('maximizada', 'respondiendo', 'arrastrando');
+  ['position', 'left', 'top', 'width', 'height', 'margin'].forEach(k => v.style.removeProperty(k));
+  document.getElementById('fondoModal').classList.remove('minimizado');
+  document.getElementById('btnMinimizar').title = 'Minimizar';
+  document.getElementById('btnMaximizar').innerHTML = '&#9633;';
+  document.getElementById('btnMaximizar').title = 'Maximizar';
+}
+
+function alternarMinimizar() {
+  const fondo = document.getElementById('fondoModal');
+  const minimizar = !fondo.classList.contains('minimizado');
+  fondo.classList.toggle('minimizado', minimizar);
+  document.getElementById('btnMinimizar').title = minimizar ? 'Restaurar' : 'Minimizar';
+}
+
+function alternarMaximizar() {
+  const fondo = document.getElementById('fondoModal');
+  if (fondo.classList.contains('minimizado')) fondo.classList.remove('minimizado');
+  const v = ventanaReserva();
+  const maximizar = !v.classList.contains('maximizada');
+  v.classList.toggle('maximizada', maximizar);
+  document.getElementById('btnMaximizar').innerHTML = maximizar ? '&#10064;' : '&#9633;';
+  document.getElementById('btnMaximizar').title = maximizar ? 'Restaurar tamaño' : 'Maximizar';
+}
+
+function iniciarArrastre(e) {
+  if (e.button !== 0 || e.target.closest('button')) return;
+  const v = ventanaReserva();
+  if (v.classList.contains('maximizada')) return;
+  if (document.getElementById('fondoModal').classList.contains('minimizado')) return alternarMinimizar();
+  const caja = v.getBoundingClientRect();
+  v.style.position = 'fixed';
+  v.style.margin = '0';
+  v.style.left = caja.left + 'px';
+  v.style.top = caja.top + 'px';
+  const dx = e.clientX - caja.left;
+  const dy = e.clientY - caja.top;
+  v.classList.add('arrastrando');
+  const mover = ev => {
+    v.style.left = Math.max(0, Math.min(window.innerWidth - 120, ev.clientX - dx)) + 'px';
+    v.style.top = Math.max(0, Math.min(window.innerHeight - 60, ev.clientY - dy)) + 'px';
+  };
+  const soltar = () => {
+    v.classList.remove('arrastrando');
+    document.removeEventListener('mousemove', mover);
+    document.removeEventListener('mouseup', soltar);
+  };
+  document.addEventListener('mousemove', mover);
+  document.addEventListener('mouseup', soltar);
+  e.preventDefault();
 }
 
 async function enviarRespuesta() {
@@ -2004,7 +2094,16 @@ document.getElementById('archivoChat').addEventListener('change', e => cargarIma
 document.getElementById('btnQuitarImagen').addEventListener('click', quitarImagenPendiente);
 document.getElementById('fondoChat').addEventListener('click', e => { if (e.target.id === 'fondoChat') cerrarChat(); });
 document.getElementById('btnCerrar').addEventListener('click', cerrarModal);
-document.getElementById('fondoModal').addEventListener('click', e => { if (e.target.id === 'fondoModal') cerrarModal(); });
+let clicEmpezoEnFondo = false;
+document.getElementById('fondoModal').addEventListener('mousedown', e => { clicEmpezoEnFondo = e.target.id === 'fondoModal'; });
+document.getElementById('fondoModal').addEventListener('click', e => {
+  if (e.target.id === 'fondoModal' && clicEmpezoEnFondo) cerrarModal();
+  clicEmpezoEnFondo = false;
+});
+document.querySelector('#fondoModal .modal-cabecera').addEventListener('mousedown', iniciarArrastre);
+document.querySelector('#fondoModal .modal-cabecera').addEventListener('dblclick', e => { if (!e.target.closest('button')) alternarMaximizar(); });
+document.getElementById('btnMinimizar').addEventListener('click', alternarMinimizar);
+document.getElementById('btnMaximizar').addEventListener('click', alternarMaximizar);
 document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') cerrarVentana(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModal(); cerrarVentana(); cerrarChat(); } });
 document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
