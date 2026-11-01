@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de asesores</title>
+<style>
+  :root {
+    --fondo: #eef2f7; --tarjeta: #ffffff; --texto: #1e293b; --texto-suave: #64748b;
+    --borde: #e2e8f0; --encabezado: #0b4f8a; --encabezado2: #1679c2; --hover: #f8fafc;
+    --serie-1: #2a78d6; --serie-2: #eb6834; --rejilla: #e5e7eb; --tarde: #dc2626; --tarde-fondo: #fee2e2; --tarde-texto: #991b1b;
+  }
+  body.oscuro {
+    --fondo: #0f172a; --tarjeta: #1e293b; --texto: #e2e8f0; --texto-suave: #94a3b8;
+    --borde: #334155; --encabezado: #0b1f3a; --encabezado2: #134e8a; --hover: #273449;
+    --serie-1: #3987e5; --serie-2: #d95926; --rejilla: #334155; --tarde: #f87171; --tarde-fondo: #450a0a; --tarde-texto: #fecaca;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--fondo); margin: 0; color: var(--texto); }
+  header { background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
+  .btn-tema { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  main { padding: 18px 24px 40px; max-width: 1400px; margin: 0 auto; }
+  .barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .barra input, .barra select { padding: 7px 9px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); font-size: 13px; }
+  .btn, .btn-sec { padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; border: 1px solid var(--borde); }
+  .btn { background: #1679c2; color: white; border-color: #1679c2; }
+  .btn-sec { background: var(--tarjeta); color: var(--texto); }
+  .btn-sec.activo { border-color: #1679c2; color: #1679c2; font-weight: 600; }
+  .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 12px; padding: 12px 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.08); }
+  .tarjeta .etiqueta { font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--texto-suave); }
+  .tarjeta .numero { font-size: 26px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tarjeta .nota { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+  .seccion { background: var(--tarjeta); border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.08); margin-bottom: 16px; }
+  .seccion h2 { font-size: 15px; margin: 0 0 4px; }
+  .seccion .sub { font-size: 12px; color: var(--texto-suave); margin: 0 0 10px; }
+  .cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+  .tabla-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
+  th { font-size: 12px; color: var(--texto-suave); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tarde { background: var(--tarde-fondo); color: var(--tarde-texto); border-radius: 6px; padding: 1px 7px; font-weight: 700; display: inline-block; }
+  .vacio { text-align: center; color: var(--texto-suave); padding: 24px; }
+  .leyenda { display: flex; gap: 14px; font-size: 12px; color: var(--texto-suave); flex-wrap: wrap; }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .muestra { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .grafica { position: relative; }
+  .grafica svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .grafica text { fill: var(--texto-suave); font-size: 11px; }
+  .grafica .valor { fill: var(--texto); font-size: 11px; font-weight: 600; }
+  .tooltip { position: absolute; pointer-events: none; background: var(--texto); color: var(--tarjeta); font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; transition: opacity 0.1s; z-index: 5; }
+  .tooltip.visible { opacity: 1; }
+  .hit { fill: transparent; cursor: default; }
+  .hit:hover { fill: var(--hover); }
+  .mensaje { color: var(--tarde); padding: 30px; text-align: center; }
+  details summary { cursor: pointer; font-size: 12px; color: var(--texto-suave); margin-top: 8px; }
+  @media (max-width: 600px) {
+    main { padding: 12px 16px 30px; }
+    header { padding: 12px 16px; }
+    .rejilla { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Control de asesores</h1>
+    <p id="subtitulo">Tiempo por reserva, reservas registradas y entradas de correo</p>
+  </div>
+  <div>
+    <button class="btn-tema" id="btnActualizar">Actualizar</button>
+    <button class="btn-tema" id="btnPanel">Volver al panel</button>
+  </div>
+</header>
+<main>
+  <div id="contenido"><div class="vacio">Cargando…</div></div>
+</main>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const ZONA = 'America/Santo_Domingo';
+let datos = null;
+let periodoSerie = 7;
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function hoy() { return new Date().toLocaleDateString('sv-SE', { timeZone: ZONA }); }
+function diaMenos(n) {
+  const d = new Date(hoy() + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+function duracion(seg) {
+  if (seg === null || seg === undefined) return '—';
+  const s = Math.max(0, Math.round(seg));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h) return `${h} h ${String(m).padStart(2, '0')} min`;
+  return `${m} min ${String(s % 60).padStart(2, '0')} s`;
+}
+function horas(seg) {
+  return (seg / 3600).toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' h';
+}
+function diaCorto(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+function diaLargo(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+async function api(url) {
+  try {
+    const r = await fetch(url);
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: 'No hay conexión con el servidor.' } };
+  }
+}
+
+async function cargar() {
+  const desde = document.getElementById('desde') ? document.getElementById('desde').value : hoy();
+  const hasta = document.getElementById('hasta') ? document.getElementById('hasta').value : hoy();
+  const r = await api(`/api/control?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`);
+  if (r.status === 401) {
+    document.getElementById('contenido').innerHTML = '<div class="mensaje">Tu sesión terminó. Entra de nuevo en el panel y vuelve a abrir Control.</div>';
+    return;
+  }
+  if (!r.ok) {
+    document.getElementById('contenido').innerHTML = `<div class="mensaje">${esc(r.data.error || 'No se pudo cargar la pantalla de control.')}</div>`;
+    return;
+  }
+  datos = r.data;
+  pintar(desde, hasta);
+}
+
+function barraFechas(desde, hasta) {
+  const rango = (d, h, texto) => {
+    const activo = desde === diaMenos(d) && hasta === diaMenos(h);
+    return `<button class="btn-sec ${activo ? 'activo' : ''}" data-rango="${d},${h}">${texto}</button>`;
+  };
+  return `<div class="barra">
+    ${rango(0, 0, 'Hoy')}${rango(1, 1, 'Ayer')}${rango(6, 0, 'Últimos 7 días')}${rango(29, 0, 'Últimos 30 días')}
+    <input type="date" id="desde" value="${esc(desde)}" title="Desde">
+    <input type="date" id="hasta" value="${esc(hasta)}" title="Hasta">
+    <button class="btn" id="btnVer">Ver</button>
+  </div>`;
+}
+
+function pintar(desde, hasta) {
+  const d = datos;
+  const t = d.totales;
+  const limiteMin = Math.round(d.limite / 60);
+  const registradasConTiempo = d.usuarios.reduce((a, u) => a + u.medidas, 0);
+  const promedioGeneral = registradasConTiempo
+    ? d.usuarios.reduce((a, u) => a + (u.promedio || 0) * u.medidas, 0) / registradasConTiempo : null;
+  const textoRango = desde === hasta ? diaLargo(desde) : `${diaLargo(desde)} al ${diaLargo(hasta)}`;
+  document.getElementById('subtitulo').textContent = `Período: ${textoRango} · tiempo máximo por reserva: ${limiteMin} min`;
+
+  document.getElementById('contenido').innerHTML = `
+    ${barraFechas(desde, hasta)}
+    <div class="tarjetas">
+      <div class="tarjeta"><div class="etiqueta">Correos que entraron</div><div class="numero">${t.correos}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Reservas y cambios que entraron</div><div class="numero">${t.reservas}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Reservas registradas</div><div class="numero">${t.registradas}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Tiempo trabajado en reservas</div><div class="numero">${horas(t.segundos)}</div><div class="nota">suma de todos los asesores</div></div>
+      <div class="tarjeta"><div class="etiqueta">Promedio por reserva</div><div class="numero">${promedioGeneral === null ? '—' : duracion(promedioGeneral)}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Pasadas de ${limiteMin} min</div><div class="numero">${t.pasadas ? `<span class="tarde">⚠ ${t.pasadas}</span>` : '0'}</div></div>
+    </div>
+
+    <div class="seccion">
+      <h2>Trabajando ahora</h2>
+      <p class="sub">Reservas abiertas en este momento. En rojo las que pasan de ${limiteMin} minutos.</p>
+      ${tablaEnCurso(d)}
+    </div>
+
+    <div class="seccion">
+      <h2>Por asesor</h2>
+      <p class="sub">Tiempo = solo el tiempo con reservas abiertas. Promedio y máximo se calculan sobre las reservas que el asesor registró en el período.</p>
+      ${tablaUsuarios(d)}
+    </div>
+
+    <div class="seccion">
+      <div class="cabeza">
+        <div><h2>Reservas por día</h2><p class="sub">Reservas y cambios que entraron a la bandeja contra las que se registraron.</p></div>
+        <div class="barra" style="margin:0">
+          <button class="btn-sec ${periodoSerie === 7 ? 'activo' : ''}" data-periodo="7">Semana</button>
+          <button class="btn-sec ${periodoSerie === 30 ? 'activo' : ''}" data-periodo="30">Mes</button>
+        </div>
+      </div>
+      <div class="leyenda"><span><i class="muestra" style="background:var(--serie-1)"></i>Entraron</span><span><i class="muestra" style="background:var(--serie-2)"></i>Registradas</span></div>
+      <div class="grafica" id="gReservas"></div>
+      ${tablaSerie(d, 'reservas')}
+    </div>
+
+    <div class="rejilla">
+      <div class="seccion">
+        <h2>Correos que entraron por día</h2>
+        <p class="sub">Todos los correos de la bandeja (${periodoSerie === 7 ? 'última semana' : 'último mes'}).</p>
+        <div class="grafica" id="gCorreos"></div>
+      </div>
+      <div class="seccion">
+        <h2>Horas trabajadas por día</h2>
+        <p class="sub">Suma del tiempo con reservas abiertas de todos los asesores.</p>
+        <div class="grafica" id="gHoras"></div>
+      </div>
+    </div>
+
+    <div class="rejilla">
+      <div class="seccion">
+        <h2>Promedio por reserva y asesor</h2>
+        <p class="sub">La línea marca el máximo de ${limiteMin} minutos.</p>
+        <div class="grafica" id="gPromedio"></div>
+      </div>
+      <div class="seccion">
+        <h2>Reservas registradas por asesor</h2>
+        <p class="sub">En el período elegido.</p>
+        <div class="grafica" id="gRegistradas"></div>
+      </div>
+    </div>
+
+    <div class="seccion">
+      <h2>Reservas registradas y su tiempo</h2>
+      <p class="sub">De la más lenta a la más rápida (hasta 300).</p>
+      ${tablaDetalle(d)}
+    </div>`;
+
+  const serie = d.serie.slice(-periodoSerie);
+  columnasAgrupadas('gReservas', serie, [
+    { clave: 'reservas', nombre: 'Entraron', color: 'var(--serie-1)' },
+    { clave: 'registradas', nombre: 'Registradas', color: 'var(--serie-2)' }
+  ]);
+  columnasAgrupadas('gCorreos', serie, [{ clave: 'correos', nombre: 'Correos', color: 'var(--serie-1)' }]);
+  columnasAgrupadas('gHoras', serie.map(x => ({ ...x, horas: Math.round(x.segundos / 360) / 10 })),
+    [{ clave: 'horas', nombre: 'Horas', color: 'var(--serie-1)', formato: v => v.toLocaleString('es-DO') + ' h' }]);
+  barrasHorizontales('gPromedio', d.usuarios.filter(u => u.promedio !== null)
+    .map(u => ({ nombre: u.nombre, valor: u.promedio / 60, tarde: u.promedio > d.limite })), {
+    formato: v => v.toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' min', referencia: limiteMin,
+    vacio: 'Todavía no hay reservas registradas con tiempo medido.'
+  });
+  barrasHorizontales('gRegistradas', d.usuarios.filter(u => u.registradas)
+    .map(u => ({ nombre: u.nombre, valor: u.registradas })), {
+    formato: v => String(v), vacio: 'Nadie registró reservas en este período.'
+  });
+}
+
+function tablaEnCurso(d) {
+  if (!d.enCurso.length) return '<div class="vacio">Nadie tiene una reserva abierta ahora.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Asesor</th><th>Reserva</th><th>Cliente</th><th class="num">Tiempo</th></tr></thead>
+    <tbody>${d.enCurso.map(x => `<tr>
+      <td>${esc(x.nombre)}</td><td>#${x.reserva_id}</td><td>${esc(x.nombre_cliente || x.asunto || '')}</td>
+      <td class="num">${x.segundos > d.limite ? `<span class="tarde">⚠ ${duracion(x.segundos)}</span>` : duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function tablaUsuarios(d) {
+  if (!d.usuarios.length) return '<div class="vacio">No hay actividad de asesores en este período.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Asesor</th><th>Grupo</th><th class="num">Registradas</th><th class="num">Tiempo trabajado</th>
+      <th class="num">Promedio por reserva</th><th class="num">Máximo</th><th class="num">Dentro de ${Math.round(d.limite / 60)} min</th>
+      <th class="num">Pasadas</th><th class="num">Abiertas ahora</th></tr></thead>
+    <tbody>${d.usuarios.map(u => `<tr>
+      <td>${esc(u.nombre)}</td><td>${esc(u.grupo)}</td>
+      <td class="num">${u.registradas}</td>
+      <td class="num">${duracion(u.segundos)}</td>
+      <td class="num">${u.promedio !== null && u.promedio > d.limite ? `<span class="tarde">⚠ ${duracion(u.promedio)}</span>` : duracion(u.promedio)}</td>
+      <td class="num">${u.maximo !== null && u.maximo > d.limite ? `<span class="tarde">⚠ ${duracion(u.maximo)}</span>` : duracion(u.maximo)}</td>
+      <td class="num">${u.dentro === null ? '—' : u.dentro + ' %'}</td>
+      <td class="num">${u.pasadas ? `<span class="tarde">⚠ ${u.pasadas}</span>` : '0'}</td>
+      <td class="num">${u.abiertas}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function tablaSerie(d, clave) {
+  const serie = d.serie.slice(-periodoSerie);
+  return `<details><summary>Ver como tabla</summary><div class="tabla-wrap"><table>
+    <thead><tr><th>Día</th><th class="num">Correos</th><th class="num">Reservas que entraron</th><th class="num">Registradas</th><th class="num">Tiempo trabajado</th></tr></thead>
+    <tbody>${serie.map(x => `<tr><td>${esc(diaLargo(x.dia))}</td><td class="num">${x.correos}</td><td class="num">${x.reservas}</td><td class="num">${x.registradas}</td><td class="num">${duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div></details>`;
+}
+
+function tablaDetalle(d) {
+  if (!d.detalle.length) return '<div class="vacio">No hay reservas registradas en este período.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Reserva</th><th>Cliente</th><th>Asesor</th><th>Día</th><th class="num">Tiempo</th></tr></thead>
+    <tbody>${d.detalle.map(x => `<tr>
+      <td>#${x.reserva_id}</td><td>${esc(x.cliente)}</td><td>${esc(x.nombre)}</td><td>${esc(diaCorto(x.dia))}</td>
+      <td class="num">${x.segundos === null ? 'sin medir' : x.segundos > d.limite ? `<span class="tarde">⚠ ${duracion(x.segundos)}</span>` : duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+/* ---------- Gráficas (SVG, sin librerías) ---------- */
+
+function escalaBonita(maximo) {
+  if (maximo <= 0) return { tope: 4, paso: 1 };
+  const bruto = maximo / 4;
+  const pot = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const paso = [1, 2, 2.5, 5, 10].map(m => m * pot).find(p => p >= bruto);
+  return { tope: Math.ceil(maximo / paso) * paso, paso };
+}
+
+// Columna con la punta redondeada (4px) y la base recta.
+function columna(x, y, ancho, alto, color) {
+  if (alto <= 0) return '';
+  const r = Math.min(4, ancho / 2, alto);
+  return `<path d="M${x},${y + alto} V${y + r} Q${x},${y} ${x + r},${y} H${x + ancho - r} Q${x + ancho},${y} ${x + ancho},${y + r} V${y + alto} Z" fill="${color}"/>`;
+}
+
+function columnasAgrupadas(id, serie, series) {
+  const caja = document.getElementById(id);
+  // El dibujo usa el ancho real de la caja para que las letras no crezcan en pantallas grandes.
+  const W = Math.max(300, caja.clientWidth || 720), H = 240, izq = 40, der = 8, arriba = 18, abajo = 30;
+  const max = Math.max(0, ...serie.flatMap(x => series.map(s => x[s.clave] || 0)));
+  const { tope, paso } = escalaBonita(max);
+  const ancho = (W - izq - der) / serie.length;
+  const grosor = Math.min(24, (ancho * 0.7 - (series.length - 1) * 2) / series.length);
+  const yDe = v => arriba + (H - arriba - abajo) * (1 - v / tope);
+  const formato = series[0].formato || (v => v.toLocaleString('es-DO'));
+  let svg = '';
+  for (let v = 0; v <= tope + 1e-9; v += paso) {
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(v)}" y2="${yDe(v)}" stroke="var(--rejilla)" stroke-width="1"/>`;
+    svg += `<text x="${izq - 6}" y="${yDe(v) + 4}" text-anchor="end">${Number(v.toFixed(2)).toLocaleString('es-DO')}</text>`;
+  }
+  const cadaCuanto = serie.length > 14 ? Math.ceil(serie.length / 10) : 1;
+  serie.forEach((x, i) => {
+    const centro = izq + ancho * i + ancho / 2;
+    const total = series.length * grosor + (series.length - 1) * 2;
+    series.forEach((s, j) => {
+      const v = x[s.clave] || 0;
+      const xs = centro - total / 2 + j * (grosor + 2);
+      svg += columna(xs, yDe(v), grosor, yDe(0) - yDe(v), s.color);
+    });
+    if (i % cadaCuanto === 0 || i === serie.length - 1) {
+      svg += `<text x="${centro}" y="${H - abajo + 16}" text-anchor="middle">${esc(serie.length > 7 ? x.dia.slice(8) : diaCorto(x.dia))}</text>`;
+    }
+    const detalle = `<strong>${esc(diaLargo(x.dia))}</strong><br>` + series.map(s => `${esc(s.nombre)}: ${esc((s.formato || formato)(x[s.clave] || 0))}`).join('<br>');
+    svg += `<rect class="hit" x="${izq + ancho * i}" y="${arriba}" width="${ancho}" height="${H - arriba - abajo}" data-tip="${esc(detalle)}"/>`;
+  });
+  // Etiqueta solo en el valor más alto de la primera serie.
+  const iMax = serie.reduce((m, x, i) => (x[series[0].clave] || 0) > (serie[m][series[0].clave] || 0) ? i : m, 0);
+  const vMax = serie.length ? serie[iMax][series[0].clave] || 0 : 0;
+  if (vMax > 0) {
+    const centro = izq + ancho * iMax + ancho / 2;
+    const total = series.length * grosor + (series.length - 1) * 2;
+    svg += `<text class="valor" x="${centro - total / 2 + grosor / 2}" y="${yDe(vMax) - 5}" text-anchor="middle">${esc(formato(vMax))}</text>`;
+  }
+  svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(0)}" y2="${yDe(0)}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.nombre).join(' y '))} por día">${svg}</svg>`;
+}
+
+function barrasHorizontales(id, filas, op) {
+  const caja = document.getElementById(id);
+  if (!filas.length) {
+    caja.innerHTML = `<div class="vacio">${esc(op.vacio)}</div>`;
+    return;
+  }
+  const alto = 30, izq = 130, der = 80, arriba = 8;
+  const W = Math.max(300, caja.clientWidth || 520), H = arriba + filas.length * alto + 22;
+  const max = Math.max(op.referencia || 0, ...filas.map(f => f.valor));
+  const { tope } = escalaBonita(max);
+  const xDe = v => izq + (W - izq - der) * (v / tope);
+  let svg = '';
+  filas.forEach((f, i) => {
+    const y = arriba + i * alto + (alto - 18) / 2;
+    const largo = Math.max(0, xDe(f.valor) - izq);
+    const r = Math.min(4, largo / 2);
+    const color = f.tarde ? 'var(--tarde)' : 'var(--serie-1)';
+    if (largo > 0) svg += `<path d="M${izq},${y} H${izq + largo - r} Q${izq + largo},${y} ${izq + largo},${y + r} V${y + 18 - r} Q${izq + largo},${y + 18} ${izq + largo - r},${y + 18} H${izq} Z" fill="${color}"/>`;
+    const nombre = f.nombre.length > 18 ? f.nombre.slice(0, 17) + '…' : f.nombre;
+    svg += `<text x="${izq - 8}" y="${y + 13}" text-anchor="end">${esc(nombre)}</text>`;
+    svg += `<text class="valor" x="${izq + largo + 6}" y="${y + 13}">${f.tarde ? '⚠ ' : ''}${esc(op.formato(f.valor))}</text>`;
+    svg += `<rect class="hit" x="0" y="${arriba + i * alto}" width="${W}" height="${alto}" data-tip="${esc(`<strong>${esc(f.nombre)}</strong><br>${esc(op.formato(f.valor))}${f.tarde ? ' · pasa del máximo' : ''}`)}"/>`;
+  });
+  if (op.referencia) {
+    const x = xDe(op.referencia);
+    svg += `<line x1="${x}" x2="${x}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--tarde)" stroke-width="1"/>`;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">máx. ${op.referencia} min</text>`;
+  }
+  svg += `<line x1="${izq}" x2="${izq}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${svg}</svg>`;
+}
+
+/* ---------- Tooltip y eventos ---------- */
+
+const tip = document.getElementById('tooltip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.classList.add('visible');
+});
+document.addEventListener('mousemove', e => {
+  if (!tip.classList.contains('visible')) return;
+  const x = Math.min(e.pageX + 14, window.scrollX + document.documentElement.clientWidth - tip.offsetWidth - 8);
+  tip.style.left = x + 'px';
+  tip.style.top = (e.pageY + 14) + 'px';
+});
+document.addEventListener('click', e => {
+  const r = e.target.closest('[data-rango]');
+  if (r) {
+    const [d, h] = r.dataset.rango.split(',').map(Number);
+    document.getElementById('desde').value = diaMenos(d);
+    document.getElementById('hasta').value = diaMenos(h);
+    return cargar();
+  }
+  const p = e.target.closest('[data-periodo]');
+  if (p) {
+    periodoSerie = Number(p.dataset.periodo);
+    return pintar(document.getElementById('desde').value, document.getElementById('hasta').value);
+  }
+  if (e.target.id === 'btnVer') return cargar();
+});
+document.getElementById('btnActualizar').addEventListener('click', cargar);
+let timerTamano = null;
+window.addEventListener('resize', () => {
+  clearTimeout(timerTamano);
+  timerTamano = setTimeout(() => { if (datos) pintar(document.getElementById('desde').value, document.getElementById('hasta').value); }, 200);
+});
+document.getElementById('btnPanel').addEventListener('click', () => { window.location.href = '/'; });
+
+try { if (localStorage.getItem('tema') === 'oscuro') document.body.classList.add('oscuro'); } catch (e) {}
+cargar();
+// "Trabajando ahora" se refresca solo cada minuto.
+setInterval(() => { if (!document.hidden) cargar(); }, 60 * 1000);
+</script>
+</body>
+</html>

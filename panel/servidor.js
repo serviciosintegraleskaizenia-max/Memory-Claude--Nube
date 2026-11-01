@@ -9,10 +9,12 @@ const config = require('./config');
 
 const client = new Client(config.db);
 
-const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada'];
+const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada', 'historico'];
+// Estados en los que una reserva todavía necesita trabajo (se reparte y cuenta tiempo).
+const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
 const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
@@ -42,6 +44,15 @@ const MINUTOS_SIN_LATIDO = 2;
 const MINUTOS_AUSENTE = 5;
 const MINUTOS_DESCONECTADO = 20;
 const MINUTOS_REVISION = 15;
+// Tiempo máximo por reserva: al pasarlo, el contador se pone rojo y se avisa a quienes tienen el permiso de control.
+const MINUTOS_LIMITE_RESERVA = 25;
+// Un tramo de trabajo sin señal del navegador por más de estos minutos se cierra en el último momento visto.
+const MINUTOS_TRAMO_SIN_SENAL = 3;
+// Historial: correos por página que se piden a Microsoft 365 y páginas por vuelta.
+const HISTORICO_POR_PAGINA = 25;
+const HISTORICO_PAGINAS_POR_VUELTA = 8;
+// El flujo principal lee los últimos 2 días: el historial empieza justo antes.
+const HISTORICO_DIAS_RECIENTES = 2;
 const MAX_FALLOS_USUARIO = 5;
 const MAX_FALLOS_IP = 20;
 const MINUTOS_BLOQUEO = 15;
@@ -131,6 +142,62 @@ async function inicializarTablas() {
   } catch (e) {
     console.log('Aviso: no se pudo crear la protección contra duplicados (¿hay correos repetidos?):', e.message);
   }
+
+  // Hito 3: historial. Los correos importados quedan marcados aquí; cuando n8n los analiza y los vuelve
+  // a guardar, la base de datos los deja como 'historico' y sin aviso (no se reparten ni suenan).
+  await client.query(`CREATE TABLE IF NOT EXISTS correo_historico (
+    message_id TEXT PRIMARY KEY,
+    importado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await client.query(`CREATE TABLE IF NOT EXISTS historico_importacion (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    buzon TEXT NOT NULL DEFAULT '',
+    desde TEXT NOT NULL DEFAULT '',
+    cursor TEXT NOT NULL DEFAULT '',
+    activo BOOLEAN NOT NULL DEFAULT FALSE,
+    terminado BOOLEAN NOT NULL DEFAULT FALSE,
+    importados INTEGER NOT NULL DEFAULT 0,
+    paginas INTEGER NOT NULL DEFAULT 0,
+    ultimo_error TEXT NOT NULL DEFAULT '',
+    usuario VARCHAR(50) NOT NULL DEFAULT '',
+    iniciado TIMESTAMPTZ,
+    actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await client.query(`CREATE OR REPLACE FUNCTION clasificacion_historico() RETURNS trigger AS $$
+    BEGIN
+      IF COALESCE(NEW.message_id, '') <> '' AND EXISTS (SELECT 1 FROM correo_historico h WHERE h.message_id = NEW.message_id) THEN
+        NEW.estado := 'historico';
+        NEW.aviso_procesado := TRUE;
+      END IF;
+      RETURN NEW;
+    END $$ LANGUAGE plpgsql`);
+  await client.query('DROP TRIGGER IF EXISTS clasificacion_historico ON clasificacion');
+  await client.query(`CREATE TRIGGER clasificacion_historico BEFORE INSERT ON clasificacion
+    FOR EACH ROW EXECUTE PROCEDURE clasificacion_historico()`);
+  await client.query('CREATE INDEX IF NOT EXISTS clasificacion_estado ON clasificacion (estado)');
+  await client.query("CREATE INDEX IF NOT EXISTS clasificacion_clave ON clasificacion ((COALESCE(NULLIF(message_id, ''), 'id:' || id)))");
+
+  // Hito 4: reparto. Se asigna el correo completo (todos sus servicios) a un asesor.
+  await client.query(`CREATE TABLE IF NOT EXISTS asignaciones (
+    clave TEXT PRIMARY KEY,
+    usuario VARCHAR(50) NOT NULL,
+    por VARCHAR(50) NOT NULL DEFAULT 'sistema',
+    asignado_en TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await client.query('CREATE INDEX IF NOT EXISTS asignaciones_usuario ON asignaciones (usuario)');
+  await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS reparto_activo BOOLEAN NOT NULL DEFAULT TRUE');
+  await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS reparto_desde TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+
+  // Hito 5: tiempo por reserva. Cada vez que alguien la tiene abierta es un tramo (inicio a fin).
+  await client.query(`CREATE TABLE IF NOT EXISTS tiempo_reserva (
+    id SERIAL PRIMARY KEY,
+    reserva_id INTEGER NOT NULL,
+    usuario VARCHAR(50) NOT NULL,
+    inicio TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    visto TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    fin TIMESTAMPTZ)`);
+  await client.query('CREATE INDEX IF NOT EXISTS tiempo_reserva_reserva ON tiempo_reserva (reserva_id)');
+  await client.query('CREATE INDEX IF NOT EXISTS tiempo_reserva_usuario ON tiempo_reserva (usuario, inicio)');
+  await client.query(`CREATE TABLE IF NOT EXISTS tiempo_aviso (
+    reserva_id INTEGER PRIMARY KEY,
+    creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
 }
 
 client.connect()
@@ -140,6 +207,9 @@ client.connect()
     setInterval(procesarModificaciones, 30 * 1000);
     setTimeout(mantenerCache, 60 * 1000);
     setInterval(mantenerCache, 10 * 60 * 1000);
+    setInterval(revisarTiempos, 30 * 1000);
+    setInterval(repartir, 10 * 1000);
+    setInterval(importarHistorico, 20 * 1000);
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
 
@@ -382,7 +452,7 @@ async function mantenerCache() {
       `SELECT DISTINCT ON (c.message_id) c.message_id, c.buzon FROM clasificacion c
        WHERE c.categoria IN ('RESERVA', 'MODIFICACION') AND c.error_ia IS NOT TRUE
          AND COALESCE(c.message_id, '') <> '' AND c.buzon NOT ILIKE '%@gmail.com'
-         AND c.creado > NOW() - ($1 || ' days')::interval
+         AND c.creado > NOW() - ($1 || ' days')::interval AND c.estado <> 'historico'
          AND NOT EXISTS (SELECT 1 FROM correo_copia k WHERE k.message_id = c.message_id)
        ORDER BY c.message_id`, [String(ajustes.cache_dias)]
     )).rows.filter(f => (fallosCopia.get(f.message_id) || 0) < 3).slice(0, 10);
@@ -477,13 +547,39 @@ async function marcarLeidoSiCompleto(id, u) {
   }
 }
 
-// La reserva original de una modificación: la última RESERVA anterior del mismo cliente.
-function originalDe(mod, reservas) {
-  const clave = normalizarNombre(mod.nombre_cliente);
-  if (!clave) return null;
-  let original = null;
+function fechaOrden(x) {
+  const t = Date.parse(x.fecha);
+  return isNaN(t) ? 0 : t;
+}
+
+// Reservas agrupadas por nombre de cliente, para encontrar rápido la original de un cambio.
+function indiceReservas(reservas) {
+  const indice = new Map();
   for (const x of reservas) {
-    if (x.id < mod.id && normalizarNombre(x.nombre_cliente) === clave && (!original || x.id > original.id)) original = x;
+    const clave = normalizarNombre(x.nombre_cliente);
+    if (!clave) continue;
+    if (!indice.has(clave)) indice.set(clave, []);
+    indice.get(clave).push(x);
+  }
+  return indice;
+}
+
+// La reserva original de una modificación: la última RESERVA del mismo cliente recibida antes.
+// Se ordena por fecha de recibido (no por número), porque el historial importado tiene números más altos.
+function originalDe(mod, indice) {
+  const lista = indice.get(normalizarNombre(mod.nombre_cliente));
+  if (!lista) return null;
+  const fm = fechaOrden(mod);
+  let original = null;
+  let fo = 0;
+  for (const x of lista) {
+    if (x.id === mod.id || (mod.message_id && x.message_id === mod.message_id)) continue;
+    const fx = fechaOrden(x);
+    if (!(fx < fm || (fx === fm && x.id < mod.id))) continue;
+    if (!original || fx > fo || (fx === fo && x.id > original.id)) {
+      original = x;
+      fo = fx;
+    }
   }
   return original;
 }
@@ -510,17 +606,18 @@ async function procesarModificaciones() {
   procesandoModificaciones = true;
   try {
     const mods = (await client.query(
-      "SELECT id, nombre_cliente, message_id FROM clasificacion WHERE categoria = 'MODIFICACION' AND aviso_procesado = FALSE ORDER BY id"
+      "SELECT id, nombre_cliente, message_id, fecha FROM clasificacion WHERE categoria = 'MODIFICACION' AND aviso_procesado = FALSE ORDER BY id"
     )).rows;
     if (!mods.length) return;
     const reservas = (await client.query(
-      "SELECT id, nombre_cliente, message_id, estado FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 2000"
+      "SELECT id, nombre_cliente, message_id, estado, fecha FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
     )).rows;
+    const indice = indiceReservas(reservas);
     const vistos = new Set();
     for (const mod of mods) {
       if (mod.message_id && vistos.has(mod.message_id)) continue;
       if (mod.message_id) vistos.add(mod.message_id);
-      const original = originalDe(mod, reservas);
+      const original = originalDe(mod, indice);
       if (original) {
         const ids = reservas
           .filter(x => original.message_id ? x.message_id === original.message_id : x.id === original.id)
@@ -713,6 +810,336 @@ function estadosConectados() {
   return mapa;
 }
 
+/* ---------- Usuarios por permiso ---------- */
+
+async function usuariosConPermiso(permiso) {
+  const mapa = await mapaGrupos();
+  const r = await client.query('SELECT usuario, nombre, grupo, permisos FROM usuarios WHERE activo = TRUE');
+  return r.rows.filter(x => permisosDe(x, mapa)[permiso]);
+}
+
+// Clave de un correo: todos sus servicios (filas) comparten la asignación.
+const CLAVE_SQL = "COALESCE(NULLIF(c.message_id, ''), 'id:' || c.id)";
+function claveDe(x) {
+  return x.message_id ? x.message_id : 'id:' + x.id;
+}
+
+async function avisar(usuarios, texto, reservaId) {
+  for (const para of new Set(usuarios)) {
+    await client.query('INSERT INTO avisos (para, texto, reserva_id) VALUES ($1, $2, $3)', [para, texto, reservaId || null]);
+  }
+}
+
+/* ---------- Hito 5: tiempo por reserva ---------- */
+
+function cuentaTiempo(fila) {
+  return Boolean(fila) && ['RESERVA', 'MODIFICACION'].includes(fila.categoria) && ESTADOS_ABIERTOS.includes(fila.estado);
+}
+
+async function tiempoReserva(reservaId, usuario) {
+  const r = (await client.query(
+    `SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio))), 0)::float AS segundos,
+            COALESCE(BOOL_OR(fin IS NULL AND usuario = $2), FALSE) AS corriendo
+     FROM tiempo_reserva WHERE reserva_id = $1`, [reservaId, usuario || '']
+  )).rows[0];
+  return { segundos: Math.max(0, Math.round(r.segundos)), corriendo: r.corriendo, limite: MINUTOS_LIMITE_RESERVA * 60 };
+}
+
+// Abre o mantiene el tramo de trabajo de este usuario. Si está inactivo, el tramo se deja cerrar solo.
+async function marcarTramo(reservaId, usuario, activo) {
+  const abierto = (await client.query(
+    'SELECT id FROM tiempo_reserva WHERE reserva_id = $1 AND usuario = $2 AND fin IS NULL ORDER BY id DESC LIMIT 1',
+    [reservaId, usuario]
+  )).rows[0];
+  if (!activo) return;
+  if (abierto) await client.query('UPDATE tiempo_reserva SET visto = NOW() WHERE id = $1', [abierto.id]);
+  else await client.query('INSERT INTO tiempo_reserva (reserva_id, usuario) VALUES ($1, $2)', [reservaId, usuario]);
+}
+
+async function cerrarTramos(reservaId, usuario) {
+  if (usuario) {
+    await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE reserva_id = $1 AND usuario = $2 AND fin IS NULL', [reservaId, usuario]);
+  } else {
+    await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE reserva_id = $1 AND fin IS NULL', [reservaId]);
+  }
+}
+
+// Cada 30 segundos: cierra tramos sin señal y avisa de las reservas que pasan de 25 minutos.
+let revisandoTiempos = false;
+async function revisarTiempos() {
+  if (revisandoTiempos) return;
+  revisandoTiempos = true;
+  try {
+    await client.query(
+      `UPDATE tiempo_reserva SET fin = visto WHERE fin IS NULL AND visto < NOW() - ($1 || ' minutes')::interval`,
+      [String(MINUTOS_TRAMO_SIN_SENAL)]
+    );
+    // Si la reserva ya no está abierta (registrada, borrada al reanalizar...), su tramo termina.
+    await client.query(
+      `UPDATE tiempo_reserva t SET fin = NOW(), visto = NOW() WHERE t.fin IS NULL AND NOT EXISTS (
+         SELECT 1 FROM clasificacion c WHERE c.id = t.reserva_id AND c.estado = ANY($1::text[]))`,
+      [ESTADOS_ABIERTOS]
+    );
+    const pasadas = (await client.query(
+      `SELECT t.reserva_id, SUM(EXTRACT(EPOCH FROM (COALESCE(t.fin, t.visto) - t.inicio)))::float AS segundos
+       FROM tiempo_reserva t JOIN clasificacion c ON c.id = t.reserva_id
+       WHERE c.estado = ANY($1::text[]) AND NOT EXISTS (SELECT 1 FROM tiempo_aviso a WHERE a.reserva_id = t.reserva_id)
+       GROUP BY t.reserva_id HAVING SUM(EXTRACT(EPOCH FROM (COALESCE(t.fin, t.visto) - t.inicio))) > $2`,
+      [ESTADOS_ABIERTOS, MINUTOS_LIMITE_RESERVA * 60]
+    )).rows;
+    if (!pasadas.length) return;
+    const jefes = (await usuariosConPermiso('ver_control')).map(x => x.usuario);
+    for (const p of pasadas) {
+      const nueva = await client.query('INSERT INTO tiempo_aviso (reserva_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING reserva_id', [p.reserva_id]);
+      if (!nueva.rowCount) continue;
+      const info = (await client.query(
+        `SELECT c.nombre_cliente, c.asunto, t.usuario, COALESCE(u.nombre, t.usuario) AS nombre
+         FROM clasificacion c
+         LEFT JOIN LATERAL (SELECT usuario FROM tiempo_reserva WHERE reserva_id = c.id ORDER BY visto DESC LIMIT 1) t ON TRUE
+         LEFT JOIN usuarios u ON u.usuario = t.usuario
+         WHERE c.id = $1`, [p.reserva_id]
+      )).rows[0] || {};
+      const cliente = info.nombre_cliente || info.asunto || 'sin nombre';
+      await avisar(jefes,
+        `⏱ ${info.nombre || 'Un asesor'} lleva más de ${MINUTOS_LIMITE_RESERVA} minutos con la reserva de ${cliente} (#${p.reserva_id}).`,
+        p.reserva_id);
+      await registrar(SISTEMA, 'reserva_pasada_de_tiempo', 'reserva', p.reserva_id, '', Math.round(p.segundos / 60) + ' min',
+        (info.nombre || '') + ' · ' + cliente);
+    }
+  } catch (e) {
+    console.log('Error revisando tiempos:', e.message);
+  } finally {
+    revisandoTiempos = false;
+  }
+}
+
+/* ---------- Hito 4: reparto automático entre asesores conectados ---------- */
+
+async function ajustesReparto() {
+  return (await client.query('SELECT reparto_activo, reparto_desde FROM empresa_datos WHERE id = 1')).rows[0]
+    || { reparto_activo: false, reparto_desde: new Date() };
+}
+
+// Quienes reciben reservas: permiso "Recibir reservas" (el programador no entra en el reparto).
+async function receptores() {
+  return (await usuariosConPermiso('recibir_reservas')).filter(x => x.grupo !== 'Programador');
+}
+
+// Reservas abiertas que tiene cada asesor ahora mismo.
+async function cargaDeAsesores() {
+  const r = await client.query(
+    `SELECT a.usuario, COUNT(DISTINCT a.clave)::int AS carga, MAX(a.asignado_en) AS ultima
+     FROM asignaciones a
+     WHERE EXISTS (SELECT 1 FROM clasificacion c WHERE ${CLAVE_SQL} = a.clave AND c.estado = ANY($1::text[]))
+     GROUP BY a.usuario`, [ESTADOS_ABIERTOS]
+  );
+  return new Map(r.rows.map(x => [x.usuario, { carga: x.carga, ultima: x.ultima ? new Date(x.ultima).getTime() : 0 }]));
+}
+
+let repartiendo = false;
+async function repartir() {
+  if (repartiendo) return;
+  repartiendo = true;
+  try {
+    const ajustes = await ajustesReparto();
+    if (!ajustes.reparto_activo) return;
+    const lista = await receptores();
+    if (!lista.length) return;
+    const conectados = estadosConectados();
+    const nombres = new Map(lista.map(x => [x.usuario, x.nombre || x.usuario]));
+
+    // 1) Lo que el sistema asignó a alguien que ya se desconectó y que nunca se abrió vuelve a repartirse.
+    const devueltas = await client.query(
+      `DELETE FROM asignaciones a
+       WHERE a.por = 'sistema' AND NOT (a.usuario = ANY($1::text[]))
+         AND EXISTS (SELECT 1 FROM clasificacion c WHERE ${CLAVE_SQL} = a.clave AND c.estado = ANY($2::text[]))
+         AND NOT EXISTS (SELECT 1 FROM clasificacion c JOIN tiempo_reserva t ON t.reserva_id = c.id WHERE ${CLAVE_SQL} = a.clave)
+       RETURNING a.clave, a.usuario`,
+      [Array.from(conectados.keys()), ESTADOS_ABIERTOS]
+    );
+    for (const d of devueltas.rows) {
+      await registrar(SISTEMA, 'reparto_devuelta', 'correo', d.clave, d.usuario, '', 'El asesor se desconectó sin abrirla');
+    }
+
+    // 2) Reservas y cambios nuevos sin asignar, entre los asesores en línea.
+    const listos = lista.filter(x => (conectados.get(x.usuario) || {}).estado === 'en linea').map(x => x.usuario);
+    if (!listos.length) return;
+    const pendientes = (await client.query(
+      `SELECT c.id, c.categoria, c.nombre_cliente, c.asunto, c.message_id, c.fecha, c.estado FROM clasificacion c
+       WHERE c.categoria IN ('RESERVA', 'MODIFICACION') AND c.estado = ANY($1::text[]) AND c.error_ia IS NOT TRUE
+         AND c.creado >= $2
+         AND NOT EXISTS (SELECT 1 FROM asignaciones a WHERE a.clave = ${CLAVE_SQL})
+       ORDER BY c.id`, [ESTADOS_ABIERTOS, ajustes.reparto_desde]
+    )).rows;
+    if (!pendientes.length) return;
+
+    const grupos = new Map();
+    for (const f of pendientes) {
+      const k = claveDe(f);
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push(f);
+    }
+    // Los cambios primero: así su reserva original queda con el mismo asesor.
+    const orden = Array.from(grupos.entries()).sort((a, b) =>
+      (b[1][0].categoria === 'MODIFICACION') - (a[1][0].categoria === 'MODIFICACION') || a[1][0].id - b[1][0].id);
+
+    const carga = await cargaDeAsesores();
+    let indice = null;
+    const asignar = async (clave, usuario, filas) => {
+      const hecho = await client.query(
+        "INSERT INTO asignaciones (clave, usuario, por) VALUES ($1, $2, 'sistema') ON CONFLICT (clave) DO NOTHING RETURNING clave",
+        [clave, usuario]
+      );
+      if (!hecho.rowCount) return false;
+      const c = carga.get(usuario) || { carga: 0, ultima: 0 };
+      carga.set(usuario, { carga: c.carga + 1, ultima: Date.now() });
+      const primera = filas[0];
+      const cliente = primera.nombre_cliente || primera.asunto || 'sin nombre';
+      await avisar([usuario],
+        `${primera.categoria === 'MODIFICACION' ? 'Te llegó un cambio' : 'Te llegó una reserva nueva'}: ${cliente} (#${primera.id}).`,
+        primera.id);
+      await registrar(SISTEMA, 'reparto_asignada', 'reserva', primera.id, '', usuario, cliente);
+      return true;
+    };
+    const elegir = () => listos.slice().sort((a, b) => {
+      const x = carga.get(a) || { carga: 0, ultima: 0 };
+      const y = carga.get(b) || { carga: 0, ultima: 0 };
+      return x.carga - y.carga || x.ultima - y.ultima || a.localeCompare(b);
+    })[0];
+
+    for (const [clave, filas] of orden) {
+      let destino = null;
+      if (filas[0].categoria === 'MODIFICACION') {
+        if (!indice) {
+          indice = indiceReservas((await client.query(
+            "SELECT id, nombre_cliente, message_id, fecha, estado FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
+          )).rows);
+        }
+        const original = originalDe(filas[0], indice);
+        if (original) {
+          const claveOriginal = claveDe(original);
+          const previa = (await client.query('SELECT usuario FROM asignaciones WHERE clave = $1', [claveOriginal])).rows[0];
+          if (previa && conectados.has(previa.usuario) && nombres.has(previa.usuario)) destino = previa.usuario;
+          if (!destino) destino = elegir();
+          if (!previa && ESTADOS_ABIERTOS.includes(original.estado)) {
+            await client.query(
+              "INSERT INTO asignaciones (clave, usuario, por) VALUES ($1, $2, 'sistema') ON CONFLICT (clave) DO NOTHING",
+              [claveOriginal, destino]
+            );
+          }
+        }
+      }
+      await asignar(clave, destino || elegir(), filas);
+    }
+  } catch (e) {
+    console.log('Error en el reparto:', e.message);
+  } finally {
+    repartiendo = false;
+  }
+}
+
+/* ---------- Hito 3: importar el historial de Microsoft 365 ---------- */
+
+const MALAS = { 'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ãº': 'ú', 'Ã±': 'ñ', 'Ã‘': 'Ñ', 'Ã‰': 'É', 'Ã“': 'Ó', 'Ãš': 'Ú', 'Ã¼': 'ü', 'â€¢': '•', 'â€“': '–', 'â€œ': '"', 'â€\x9d': '"' };
+function arreglarTexto(s) {
+  return String(s || '')
+    .replace(/Ã[¡©­³º±‘‰“š¼]|â€[¢“œ\x9d]/g, m => MALAS[m] || m)
+    .replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
+}
+
+function isoSinMs(fecha) {
+  return new Date(fecha).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+let importando = false;
+async function importarHistorico() {
+  if (importando) return;
+  importando = true;
+  try {
+    for (let pagina = 0; pagina < HISTORICO_PAGINAS_POR_VUELTA; pagina++) {
+      const est = (await client.query('SELECT * FROM historico_importacion WHERE id = 1')).rows[0];
+      if (!est || !est.activo || est.terminado) return;
+      let respuesta;
+      try {
+        respuesta = await llamarN8n('correoCompleto', {
+          accion: 'listar', buzon: est.buzon, desde: est.desde, hasta: est.cursor, top: HISTORICO_POR_PAGINA
+        }, 'Correo completo');
+      } catch (e) {
+        await client.query('UPDATE historico_importacion SET ultimo_error = $1, actualizado = NOW() WHERE id = 1', [e.message.slice(0, 300)]);
+        return;
+      }
+      const correos = Array.isArray(respuesta.correos) ? respuesta.correos : null;
+      if (!correos) {
+        await client.query('UPDATE historico_importacion SET ultimo_error = $1, actualizado = NOW() WHERE id = 1',
+          ['El flujo "Correo completo" todavía no sabe listar correos. Actualiza sus dos nodos (paso del Hito 3).']);
+        return;
+      }
+      let nuevos = 0;
+      let menor = null;
+      for (const m of correos) {
+        if (!m || !m.id || !m.fecha) continue;
+        const t = Date.parse(m.fecha);
+        if (!isNaN(t) && (menor === null || t < menor)) menor = t;
+        // Una sola instrucción: si el correo ya está en el panel, no se toca.
+        const r = await client.query(
+          `WITH marca AS (
+             INSERT INTO correo_historico (message_id)
+             SELECT $4 WHERE NOT EXISTS (SELECT 1 FROM clasificacion WHERE message_id = $4)
+             ON CONFLICT DO NOTHING RETURNING message_id)
+           INSERT INTO clasificacion (categoria, remitente, asunto, estado, fecha, message_id, buzon, cuerpo, error_ia, motivo,
+             numero_servicio, aviso_procesado, adultos, ninos, infantes)
+           SELECT 'NO_ENTENDIDO', $1, $2, 'historico', $3, message_id, $5, $6, TRUE, 'Histórico: pendiente de análisis', 1, TRUE, 0, 0, 0
+           FROM marca RETURNING id`,
+          [arreglarTexto(m.de).slice(0, 500), arreglarTexto(m.asunto).slice(0, 1000), m.fecha, m.id, est.buzon,
+            arreglarTexto(m.texto).slice(0, 60000)]
+        );
+        nuevos += r.rowCount;
+      }
+      // Se sigue hacia atrás desde el correo más viejo de esta página.
+      let siguiente = menor === null ? null : isoSinMs(menor);
+      if (siguiente && siguiente === est.cursor) siguiente = isoSinMs(menor - 1000);
+      const terminado = correos.length < HISTORICO_POR_PAGINA || !siguiente || siguiente < est.desde;
+      await client.query(
+        `UPDATE historico_importacion SET cursor = COALESCE($1, cursor), importados = importados + $2, paginas = paginas + 1,
+           terminado = $3, activo = NOT $3, ultimo_error = '', actualizado = NOW() WHERE id = 1`,
+        [siguiente, nuevos, terminado]
+      );
+      if (terminado) {
+        await registrar(SISTEMA, 'historico_terminado', 'historico', est.buzon, '', '', 'Importación del historial terminada');
+        return;
+      }
+    }
+  } catch (e) {
+    console.log('Error importando el historial:', e.message);
+    await client.query('UPDATE historico_importacion SET ultimo_error = $1, actualizado = NOW() WHERE id = 1', [e.message.slice(0, 300)]).catch(() => {});
+  } finally {
+    importando = false;
+  }
+}
+
+async function estadoHistorico() {
+  const est = (await client.query('SELECT * FROM historico_importacion WHERE id = 1')).rows[0] || null;
+  const c = (await client.query(
+    `SELECT COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia)::int AS por_analizar,
+            COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia IS NOT TRUE)::int AS analizados,
+            COUNT(DISTINCT c.message_id) FILTER (WHERE c.error_ia IS NOT TRUE AND c.categoria IN ('RESERVA', 'MODIFICACION'))::int AS reservas
+     FROM clasificacion c JOIN correo_historico h ON h.message_id = c.message_id`
+  )).rows[0];
+  return { importacion: est, ...c };
+}
+
+// Para quien recibe reservas sin supervisar: devuelve el nombre de otro asesor si la reserva es de él.
+async function asignadaAOtro(reservaId, u, puede) {
+  if (!puede('recibir_reservas') || puede('supervisar')) return null;
+  const r = (await client.query(
+    `SELECT a.usuario, COALESCE(us.nombre, a.usuario) AS nombre FROM clasificacion c
+     JOIN asignaciones a ON a.clave = ${CLAVE_SQL} LEFT JOIN usuarios us ON us.usuario = a.usuario
+     WHERE c.id = $1`, [reservaId]
+  )).rows[0];
+  return r && r.usuario !== u.usuario ? r.nombre : null;
+}
+
 async function limpiarRevisiones() {
   await client.query(`DELETE FROM revisiones WHERE actualizado < NOW() - INTERVAL '${MINUTOS_REVISION} minutes'`);
 }
@@ -745,6 +1172,9 @@ http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
       return archivo(res, path.join(CARPETA, 'index.html'), 'text/html; charset=utf-8');
+    }
+    if (req.method === 'GET' && url === '/control') {
+      return archivo(res, path.join(CARPETA, 'control.html'), 'text/html; charset=utf-8');
     }
     if (req.method === 'GET' && url === '/inteligencia-artificial.png') {
       return archivo(res, path.join(CARPETA, 'inteligencia-artificial.png'), 'image/png');
@@ -794,6 +1224,7 @@ http.createServer(async (req, res) => {
       if (actual) {
         presencia.delete(actual.usuario);
         await client.query('DELETE FROM revisiones WHERE usuario = $1', [actual.usuario]);
+        await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE usuario = $1 AND fin IS NULL', [actual.usuario]);
         await registrar(actual, 'logout', 'sesion', actual.usuario, '', '', 'Cierre de sesión');
       }
       return json(res, 200, { ok: true }, { 'Set-Cookie': 'sesion=; HttpOnly; Path=/; Max-Age=0' });
@@ -864,30 +1295,78 @@ http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url === '/api/reservas') {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
-      const r = await client.query(
-        "SELECT id, categoria, agencia, remitente, asunto, fecha, estado, error_ia, motivo, message_id, buzon, aeropuerto, actividad, nombre_cliente, telefono, tipo_servicio, fecha_servicio, hora_servicio, vuelo, hotel, punto_partida, punto_llegada, adultos, ninos, infantes, numero_servicio FROM clasificacion ORDER BY id DESC LIMIT 5000"
-      );
+      const p = new URL(req.url, 'http://localhost').searchParams;
+      const historico = p.get('historico') === '1';
+      const columnas = `c.id, c.categoria, c.agencia, c.remitente, c.asunto, c.fecha, c.estado, c.error_ia, c.motivo, c.message_id, c.buzon,
+        c.aeropuerto, c.actividad, c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel,
+        c.punto_partida, c.punto_llegada, c.adultos, c.ninos, c.infantes, c.numero_servicio,
+        c.creado >= (SELECT reparto_desde FROM empresa_datos WHERE id = 1) AS tras_reparto,
+        a.usuario AS asignado_a, COALESCE(us.nombre, a.usuario) AS asignado_nombre`;
+      const uniones = `LEFT JOIN asignaciones a ON a.clave = ${CLAVE_SQL} LEFT JOIN usuarios us ON us.usuario = a.usuario`;
+      let filas;
+      if (historico) {
+        // Historial: se busca en el servidor (pueden ser miles) y se devuelven los 2000 más recientes que coinciden.
+        const q = String(p.get('q') || '').trim().slice(0, 100);
+        const desde = /^\d{4}-\d{2}-\d{2}$/.test(p.get('desde') || '') ? p.get('desde') : '';
+        const hasta = /^\d{4}-\d{2}-\d{2}$/.test(p.get('hasta') || '') ? p.get('hasta') : '';
+        const r = await client.query(
+          `SELECT ${columnas} FROM clasificacion c ${uniones}
+           WHERE c.estado = 'historico' ${q ? `AND (c.asunto ILIKE $1 OR c.remitente ILIKE $1 OR c.nombre_cliente ILIKE $1 OR c.agencia ILIKE $1
+             OR c.hotel ILIKE $1 OR c.vuelo ILIKE $1 OR c.telefono ILIKE $1 OR c.cuerpo ILIKE $1)` : ''}`,
+          q ? ['%' + q.replace(/[\\%_]/g, m => '\\' + m) + '%'] : []
+        );
+        filas = r.rows
+          .filter(x => {
+            const dia = diaLocal(x.fecha);
+            return (!desde || dia >= desde) && (!hasta || dia <= hasta);
+          })
+          .sort((x, y) => fechaOrden(y) - fechaOrden(x))
+          .slice(0, 2000);
+      } else {
+        filas = (await client.query(
+          `SELECT ${columnas} FROM clasificacion c ${uniones} WHERE c.estado <> 'historico' ORDER BY c.id DESC LIMIT 5000`
+        )).rows;
+        // Quien recibe reservas del reparto (y no supervisa) ve solo las suyas y lo que no se reparte.
+        if (puede('recibir_reservas') && !puede('supervisar')) {
+          const ajustes = await ajustesReparto();
+          filas = filas.filter(x => {
+            if (x.asignado_a) return x.asignado_a === u.usuario;
+            const enReparto = ajustes.reparto_activo && ['RESERVA', 'MODIFICACION'].includes(x.categoria)
+              && ESTADOS_ABIERTOS.includes(x.estado) && !x.error_ia && x.tras_reparto;
+            return !enReparto;
+          });
+        }
+      }
       const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows
         .map(x => [x.remitente, x.agencia]));
-      for (const x of r.rows) {
+      for (const x of filas) {
+        delete x.tras_reparto;
         if (x.agencia) continue;
         const correo = (emailDeRemitente(x.remitente) || '').toLowerCase();
         if (conocidas.has(correo)) x.agencia = conocidas.get(correo);
       }
-      const reservas = r.rows.filter(x => x.categoria === 'RESERVA');
-      const grupoDe = x => x.message_id || 'id:' + x.id;
+      // La reserva original de un cambio puede estar en el historial.
+      const reservas = filas.filter(x => x.categoria === 'RESERVA');
+      const historicas = historico ? [] : (await client.query(
+        "SELECT id, nombre_cliente, message_id, fecha, TRUE AS historica FROM clasificacion WHERE categoria = 'RESERVA' AND estado = 'historico'"
+      )).rows;
+      const indice = indiceReservas([...reservas, ...historicas]);
       const originales = new Map();
       const cambios = new Map();
-      for (const x of r.rows) {
+      for (const x of filas) {
         if (x.categoria !== 'MODIFICACION') continue;
-        const original = originalDe(x, reservas);
-        originales.set(x.id, original ? original.id : null);
-        if (original) cambios.set(grupoDe(original), Math.max(cambios.get(grupoDe(original)) || 0, x.id));
+        const original = originalDe(x, indice);
+        originales.set(x.id, original);
+        if (original) cambios.set(claveDe(original), Math.max(cambios.get(claveDe(original)) || 0, x.id));
       }
-      return json(res, 200, r.rows.map(x => {
+      return json(res, 200, filas.map(x => {
         const base = { ...x, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
-        if (x.categoria === 'MODIFICACION') base.original_id = originales.get(x.id);
-        if (x.categoria === 'RESERVA' && cambios.has(grupoDe(x))) base.cambio_id = cambios.get(grupoDe(x));
+        if (x.categoria === 'MODIFICACION') {
+          const o = originales.get(x.id);
+          base.original_id = o ? o.id : null;
+          if (o && o.historica) base.original_historico = true;
+        }
+        if (x.categoria === 'RESERVA' && cambios.has(claveDe(x))) base.cambio_id = cambios.get(claveDe(x));
         return base;
       }));
     }
@@ -906,7 +1385,11 @@ http.createServer(async (req, res) => {
       if (!ESTADOS.includes(estado)) return json(res, 400, { error: 'Estado no válido' });
       const previa = (await client.query('SELECT estado, nombre_cliente FROM clasificacion WHERE id = $1', [Number(id)])).rows[0];
       if (!previa) return json(res, 404, { error: 'Reserva no encontrada' });
+      const ajena = await asignadaAOtro(Number(id), u, puede);
+      if (ajena) return json(res, 409, { error: `Esta reserva está asignada a ${ajena}.` });
       await client.query('UPDATE clasificacion SET estado = $1 WHERE id = $2', [estado, Number(id)]);
+      // El contador se detiene al registrarla (o al sacarla de los estados abiertos).
+      if (!ESTADOS_ABIERTOS.includes(estado)) await cerrarTramos(Number(id));
       await registrar(u, 'cambiar_estado', 'reserva', id, previa.estado, estado, previa.nombre_cliente || '');
       if (estado === 'registrada' && previa.estado !== 'registrada') {
         marcarLeidoSiCompleto(Number(id), u).catch(e => console.log('Error marcando como leído:', e.message));
@@ -969,17 +1452,22 @@ http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url === '/api/revisiones') {
       await limpiarRevisiones();
-      const r = await client.query('SELECT reserva_id, usuario, nombre, desde FROM revisiones');
-      return json(res, 200, r.rows);
+      const r = await client.query(
+        `SELECT v.reserva_id, v.usuario, v.nombre, v.desde,
+                COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(t.fin, NOW()) - t.inicio))) FROM tiempo_reserva t
+                          WHERE t.reserva_id = v.reserva_id), 0)::int AS segundos
+         FROM revisiones v`);
+      return json(res, 200, r.rows.map(x => ({ ...x, limite: MINUTOS_LIMITE_RESERVA * 60 })));
     }
 
     if (req.method === 'POST' && url === '/api/revision/tomar') {
       if (!puede('cambiar_estado')) return json(res, 403, { error: 'No tienes permiso para atender reservas.' });
-      const { id } = await leerCuerpo(req);
+      const { id, activo } = await leerCuerpo(req);
       const reservaId = Number(id);
-      if (!(await client.query('SELECT 1 FROM clasificacion WHERE id = $1', [reservaId])).rowCount) {
-        return json(res, 404, { error: 'Reserva no encontrada' });
-      }
+      const fila = (await client.query('SELECT id, categoria, estado FROM clasificacion WHERE id = $1', [reservaId])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      const ajena = await asignadaAOtro(reservaId, u, puede);
+      if (ajena) return json(res, 409, { error: `Esta reserva está asignada a ${ajena}.` });
       await limpiarRevisiones();
       const ex = (await client.query('SELECT * FROM revisiones WHERE reserva_id = $1', [reservaId])).rows[0];
       if (ex && ex.usuario !== u.usuario) {
@@ -997,7 +1485,10 @@ http.createServer(async (req, res) => {
         }
         await registrar(u, 'abrir_reserva', 'reserva', reservaId, '', '', '');
       }
-      return json(res, 200, { ok: true });
+      // Contador: corre mientras la ventana está abierta y la persona está activa.
+      // El programador no cuenta en las estadísticas de los asesores (sus pruebas no ensucian el control).
+      if (cuentaTiempo(fila) && u.grupo !== 'Programador') await marcarTramo(reservaId, u.usuario, activo !== false);
+      return json(res, 200, { ok: true, tiempo: { ...(await tiempoReserva(reservaId, u.usuario)), cuenta: cuentaTiempo(fila) } });
     }
 
     if (req.method === 'POST' && url === '/api/revision/liberar') {
@@ -1008,6 +1499,7 @@ http.createServer(async (req, res) => {
         [reservaId, u.usuario]
       );
       if (borrado.rowCount) await registrar(u, 'cerrar_reserva', 'reserva', reservaId, '', '', '');
+      await cerrarTramos(reservaId, u.usuario);
       return json(res, 200, { ok: true });
     }
 
@@ -1139,6 +1631,243 @@ http.createServer(async (req, res) => {
         banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
       });
       return json(res, 200, { ok: true });
+    }
+
+    /* ---------- Hito 4: asesores y reasignación ---------- */
+
+    if (req.method === 'GET' && url === '/api/asesores') {
+      if (!puede('supervisar') && !puede('ver_control') && !puede('administrar_usuarios')) {
+        return json(res, 403, { error: 'No tienes permiso para ver los asesores.' });
+      }
+      const conectados = estadosConectados();
+      const carga = await cargaDeAsesores();
+      const ajustes = await ajustesReparto();
+      const lista = (await receptores()).map(x => ({
+        usuario: x.usuario, nombre: x.nombre || x.usuario, grupo: x.grupo,
+        estado: (conectados.get(x.usuario) || {}).estado || 'desconectado',
+        carga: (carga.get(x.usuario) || {}).carga || 0
+      })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      return json(res, 200, { activo: ajustes.reparto_activo, asesores: lista });
+    }
+
+    if (req.method === 'POST' && url === '/api/reserva/asignar') {
+      if (!puede('supervisar')) return json(res, 403, { error: 'Solo quien supervisa puede reasignar reservas.' });
+      const { id, usuario } = await leerCuerpo(req);
+      const fila = (await client.query('SELECT id, message_id, nombre_cliente, asunto FROM clasificacion WHERE id = $1', [Number(id)])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      const clave = claveDe(fila);
+      const previa = (await client.query('SELECT usuario FROM asignaciones WHERE clave = $1', [clave])).rows[0];
+      const cliente = fila.nombre_cliente || fila.asunto || 'sin nombre';
+      if (!usuario) {
+        // Sin asignar: si el reparto está activo, se vuelve a repartir entre los conectados.
+        await client.query('DELETE FROM asignaciones WHERE clave = $1', [clave]);
+        if (previa) await avisar([previa.usuario], `${u.nombre || u.usuario} te quitó la reserva de ${cliente} (#${fila.id}).`, fila.id);
+        await registrar(u, 'reasignar_reserva', 'reserva', fila.id, previa ? previa.usuario : '', '', cliente);
+        return json(res, 200, { ok: true });
+      }
+      const destino = (await receptores()).find(x => x.usuario === usuario);
+      if (!destino) return json(res, 400, { error: 'Ese usuario no tiene el permiso "Recibir reservas" o está desactivado.' });
+      await client.query(
+        `INSERT INTO asignaciones (clave, usuario, por) VALUES ($1, $2, $3)
+         ON CONFLICT (clave) DO UPDATE SET usuario = EXCLUDED.usuario, por = EXCLUDED.por, asignado_en = NOW()`,
+        [clave, destino.usuario, u.usuario]
+      );
+      if (!previa || previa.usuario !== destino.usuario) {
+        await avisar([destino.usuario], `${u.nombre || u.usuario} te asignó la reserva de ${cliente} (#${fila.id}).`, fila.id);
+        if (previa) await avisar([previa.usuario], `La reserva de ${cliente} (#${fila.id}) pasó a ${destino.nombre || destino.usuario}.`, fila.id);
+      }
+      await registrar(u, 'reasignar_reserva', 'reserva', fila.id, previa ? previa.usuario : '', destino.usuario, cliente);
+      return json(res, 200, { ok: true });
+    }
+
+    if (url === '/api/reparto') {
+      if (!puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar el reparto.' });
+      if (req.method === 'POST') {
+        const { activo } = await leerCuerpo(req);
+        // Al volver a activarlo se reparte solo lo que llegue desde ahora (no lo acumulado mientras estuvo apagado).
+        await client.query(
+          'UPDATE empresa_datos SET reparto_desde = CASE WHEN reparto_activo THEN reparto_desde ELSE NOW() END, reparto_activo = $1 WHERE id = 1',
+          [Boolean(activo)]);
+        await registrar(u, 'cambiar_reparto', 'empresa', 1, '', activo ? 'activado' : 'desactivado', '');
+        return json(res, 200, { ok: true });
+      }
+    }
+
+    /* ---------- Hito 3: historial (solo el programador) ---------- */
+
+    if (url.startsWith('/api/historico')) {
+      if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede importar el historial.' });
+      if (req.method === 'GET' && url === '/api/historico') {
+        return json(res, 200, { ...(await estadoHistorico()), buzones: buzonesMicrosoftEnvio(), costoPorCorreo: 0.001 });
+      }
+      if (req.method === 'POST' && url === '/api/historico/iniciar') {
+        const { meses, buzon } = await leerCuerpo(req);
+        const n = Math.round(Number(meses));
+        if (!(n >= 1 && n <= 24)) return json(res, 400, { error: 'Elige de 1 a 24 meses.' });
+        const buzones = buzonesMicrosoftEnvio();
+        const elegido = String(buzon || buzones[0] || '').toLowerCase();
+        if (!buzones.includes(elegido)) return json(res, 400, { error: 'Ese buzón no está en n8n.buzonesMicrosoft de config.js.' });
+        if (!config.n8n || !config.n8n.correoCompleto) return json(res, 400, { error: 'Falta n8n.correoCompleto en config.js.' });
+        const desde = new Date();
+        desde.setMonth(desde.getMonth() - n);
+        const hasta = new Date(Date.now() - HISTORICO_DIAS_RECIENTES * 24 * 60 * 60 * 1000);
+        await client.query(
+          `INSERT INTO historico_importacion (id, buzon, desde, cursor, activo, terminado, importados, paginas, ultimo_error, usuario, iniciado, actualizado)
+           VALUES (1, $1, $2, $3, TRUE, FALSE, 0, 0, '', $4, NOW(), NOW())
+           ON CONFLICT (id) DO UPDATE SET buzon = $1, desde = $2, cursor = $3, activo = TRUE, terminado = FALSE, importados = 0,
+             paginas = 0, ultimo_error = '', usuario = $4, iniciado = NOW(), actualizado = NOW()`,
+          [elegido, isoSinMs(desde), isoSinMs(hasta), u.usuario]
+        );
+        await registrar(u, 'historico_iniciar', 'historico', elegido, '', n + ' meses', `Desde ${isoSinMs(desde)} hasta ${isoSinMs(hasta)}`);
+        setTimeout(importarHistorico, 500);
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && (url === '/api/historico/pausar' || url === '/api/historico/reanudar')) {
+        const activar = url.endsWith('reanudar');
+        await client.query('UPDATE historico_importacion SET activo = $1, actualizado = NOW() WHERE id = 1 AND terminado = FALSE', [activar]);
+        await registrar(u, activar ? 'historico_reanudar' : 'historico_pausar', 'historico', '', '', '', '');
+        if (activar) setTimeout(importarHistorico, 500);
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 404, { error: 'Ruta no encontrada' });
+    }
+
+    /* ---------- Hito 5: pantalla de control ---------- */
+
+    if (req.method === 'GET' && url === '/api/control') {
+      if (!puede('ver_control')) return json(res, 403, { error: 'No tienes permiso para ver la pantalla de control.' });
+      const p = new URL(req.url, 'http://localhost').searchParams;
+      const fechaValida = f => /^\d{4}-\d{2}-\d{2}$/.test(f || '');
+      const hoy = diaLocal(new Date().toISOString());
+      const hasta = fechaValida(p.get('hasta')) ? p.get('hasta') : hoy;
+      const desde = fechaValida(p.get('desde')) ? p.get('desde') : hasta;
+      if (desde > hasta) return json(res, 400, { error: 'La fecha "desde" es posterior a "hasta".' });
+      // Las gráficas muestran siempre los 30 días que terminan en "hasta".
+      const d30 = new Date(hasta + 'T12:00:00Z');
+      d30.setUTCDate(d30.getUTCDate() - 29);
+      const desdeSerie = d30.toISOString().slice(0, 10);
+      const inicio = desde < desdeSerie ? desde : desdeSerie;
+      const zona = ZONA_HORARIA;
+      const limite = MINUTOS_LIMITE_RESERVA * 60;
+
+      const nombres = new Map((await client.query('SELECT usuario, nombre, grupo FROM usuarios')).rows.map(x => [x.usuario, x]));
+      const tramos = (await client.query(
+        `SELECT t.reserva_id, t.usuario, TO_CHAR(t.inicio AT TIME ZONE '${zona}', 'YYYY-MM-DD') AS dia,
+                EXTRACT(EPOCH FROM (COALESCE(t.fin, NOW()) - t.inicio))::float AS segundos, t.fin IS NULL AS abierto
+         FROM tiempo_reserva t
+         WHERE TO_CHAR(t.inicio AT TIME ZONE '${zona}', 'YYYY-MM-DD') BETWEEN $1 AND $2`, [inicio, hasta]
+      )).rows;
+      const diaAuditoria = `TO_CHAR((a.fecha AT TIME ZONE current_setting('TimeZone')) AT TIME ZONE '${zona}', 'YYYY-MM-DD')`;
+      const registros = (await client.query(
+        `SELECT DISTINCT ON (a.entidad_id) a.entidad_id::int AS reserva_id, a.usuario, ${diaAuditoria} AS dia
+         FROM auditoria a
+         WHERE a.accion = 'cambiar_estado' AND a.nuevo = 'registrada' AND a.entidad = 'reserva'
+           AND a.entidad_id ~ '^[0-9]+$' AND ${diaAuditoria} BETWEEN $1 AND $2
+         ORDER BY a.entidad_id, a.fecha DESC`, [inicio, hasta]
+      )).rows;
+      // Tiempo total de cada reserva registrada (todos sus tramos, aunque empezaran antes del rango).
+      const idsRegistradas = registros.map(x => x.reserva_id);
+      const tiempoTotal = new Map((await client.query(
+        `SELECT reserva_id, usuario, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS segundos
+         FROM tiempo_reserva WHERE reserva_id = ANY($1::int[]) GROUP BY reserva_id, usuario`, [idsRegistradas]
+      )).rows.map(x => [x.reserva_id + '|' + x.usuario, x.segundos]));
+      const datosReserva = new Map((await client.query(
+        'SELECT id, nombre_cliente, asunto, categoria FROM clasificacion WHERE id = ANY($1::int[])', [idsRegistradas]
+      )).rows.map(x => [x.id, x]));
+      const correos = (await client.query('SELECT id, fecha, message_id, categoria FROM clasificacion')).rows;
+
+      // Por día: correos y reservas que entraron, reservas registradas y tiempo trabajado.
+      const dias = [];
+      for (const d = new Date(inicio + 'T12:00:00Z'); d.toISOString().slice(0, 10) <= hasta; d.setUTCDate(d.getUTCDate() + 1)) {
+        dias.push(d.toISOString().slice(0, 10));
+      }
+      const porDia = new Map(dias.map(d => [d, { dia: d, correos: new Set(), reservas: new Set(), registradas: 0, segundos: 0, usuarios: {} }]));
+      for (const c of correos) {
+        const dia = diaLocal(c.fecha);
+        const x = porDia.get(dia);
+        if (!x) continue;
+        const clave = claveDe(c);
+        x.correos.add(clave);
+        if (c.categoria === 'RESERVA' || c.categoria === 'MODIFICACION') x.reservas.add(clave);
+      }
+      const usuarioDia = (x, usuario) => x.usuarios[usuario] || (x.usuarios[usuario] = { registradas: 0, segundos: 0 });
+      for (const r of registros) {
+        const x = porDia.get(r.dia);
+        if (!x) continue;
+        x.registradas++;
+        usuarioDia(x, r.usuario).registradas++;
+      }
+      for (const t of tramos) {
+        const x = porDia.get(t.dia);
+        if (!x) continue;
+        x.segundos += t.segundos;
+        usuarioDia(x, t.usuario).segundos += t.segundos;
+      }
+
+      // Por usuario dentro del rango elegido.
+      const porUsuario = new Map();
+      const filaUsuario = usuario => porUsuario.get(usuario) || porUsuario.set(usuario, {
+        usuario, nombre: (nombres.get(usuario) || {}).nombre || usuario, grupo: (nombres.get(usuario) || {}).grupo || '',
+        segundos: 0, registradas: 0, tiempos: [], pasadas: 0, abiertas: 0
+      }).get(usuario);
+      for (const t of tramos) {
+        if (t.dia < desde || t.dia > hasta) continue;
+        const f = filaUsuario(t.usuario);
+        f.segundos += t.segundos;
+        if (t.abierto) f.abiertas++;
+      }
+      const detalle = [];
+      for (const r of registros) {
+        if (r.dia < desde || r.dia > hasta) continue;
+        const f = filaUsuario(r.usuario);
+        f.registradas++;
+        const segundos = tiempoTotal.get(r.reserva_id + '|' + r.usuario);
+        if (segundos !== undefined) {
+          f.tiempos.push(segundos);
+          if (segundos > limite) f.pasadas++;
+        }
+        const info = datosReserva.get(r.reserva_id) || {};
+        detalle.push({
+          reserva_id: r.reserva_id, usuario: r.usuario, nombre: f.nombre, dia: r.dia,
+          cliente: info.nombre_cliente || info.asunto || '', categoria: info.categoria || '',
+          segundos: segundos === undefined ? null : Math.round(segundos)
+        });
+      }
+      const usuarios = Array.from(porUsuario.values()).map(f => ({
+        usuario: f.usuario, nombre: f.nombre, grupo: f.grupo,
+        segundos: Math.round(f.segundos), registradas: f.registradas, abiertas: f.abiertas, pasadas: f.pasadas,
+        medidas: f.tiempos.length,
+        promedio: f.tiempos.length ? Math.round(f.tiempos.reduce((a, b) => a + b, 0) / f.tiempos.length) : null,
+        maximo: f.tiempos.length ? Math.round(Math.max(...f.tiempos)) : null,
+        dentro: f.tiempos.length ? Math.round(100 * f.tiempos.filter(x => x <= limite).length / f.tiempos.length) : null
+      })).sort((a, b) => b.registradas - a.registradas || b.segundos - a.segundos);
+
+      // Lo que se está trabajando ahora mismo.
+      const enCurso = (await client.query(
+        `SELECT t.reserva_id, t.usuario, c.nombre_cliente, c.asunto,
+                (SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(x.fin, NOW()) - x.inicio))) FROM tiempo_reserva x WHERE x.reserva_id = t.reserva_id)::int AS segundos
+         FROM tiempo_reserva t JOIN clasificacion c ON c.id = t.reserva_id
+         WHERE t.fin IS NULL ORDER BY t.inicio`
+      )).rows.map(x => ({ ...x, nombre: (nombres.get(x.usuario) || {}).nombre || x.usuario }));
+
+      const serie = dias.filter(d => d >= desdeSerie).map(d => {
+        const x = porDia.get(d);
+        return { dia: d, correos: x.correos.size, reservas: x.reservas.size, registradas: x.registradas,
+          segundos: Math.round(x.segundos), usuarios: x.usuarios };
+      });
+      const enRango = dias.filter(d => d >= desde).map(d => porDia.get(d));
+      return json(res, 200, {
+        desde, hasta, limite,
+        totales: {
+          correos: enRango.reduce((a, x) => a + x.correos.size, 0),
+          reservas: enRango.reduce((a, x) => a + x.reservas.size, 0),
+          registradas: enRango.reduce((a, x) => a + x.registradas, 0),
+          segundos: Math.round(enRango.reduce((a, x) => a + x.segundos, 0)),
+          pasadas: usuarios.reduce((a, x) => a + x.pasadas, 0)
+        },
+        usuarios, serie, enCurso,
+        detalle: detalle.sort((a, b) => (b.segundos || 0) - (a.segundos || 0)).slice(0, 300)
+      });
     }
 
     if (url.startsWith('/api/correo-completo')) {

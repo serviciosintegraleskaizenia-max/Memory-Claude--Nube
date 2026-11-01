@@ -87,6 +87,12 @@
   .recortar { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vacio-total { text-align: center; padding: 30px; color: var(--texto-suave); }
   .revision { background: #e0f2fe; color: #075985; border-radius: 6px; padding: 2px 7px; font-size: 11px; margin-left: 6px; white-space: nowrap; }
+  .etq-historico { background: #e2e8f0; color: #334155; }
+  .asignado { background: #f1f5f9; color: #334155; border: 1px solid var(--borde); border-radius: 6px; padding: 1px 7px; font-size: 11px; margin-left: 6px; white-space: nowrap; }
+  .revision.tarde, .cronometro.tarde { background: #fee2e2; color: #991b1b; font-weight: 700; }
+  .cronometro { display: inline-block; font-variant-numeric: tabular-nums; background: #dcfce7; color: #166534; border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; margin-top: 6px; }
+  .cronometro.parado { background: #e2e8f0; color: #475569; }
+  .buscar-historico { min-width: 220px; }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
   .fondo-modal, .overlay, .fondo-chat { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; padding: 16px; }
@@ -242,6 +248,7 @@
     <button class="btn-tema campana" id="btnCampana" title="Notificaciones">🔔<span class="badge" id="badgeCampana" style="display:none;"></span></button>
     <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
     <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
+    <button class="btn-tema" id="btnControl" style="display:none;" title="Tiempos y gráficas de los asesores">Control</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
     <button class="btn-tema" id="btnTema">Modo oscuro</button>
@@ -265,6 +272,7 @@
     <button class="pestana activa" data-vista="todas">Todas las reservas <span class="contador" id="cnt-todas">0</span></button>
     <button class="pestana" data-vista="revision">En revisión ahora <span class="contador" id="cnt-revision">0</span></button>
     <button class="pestana" data-vista="registradas">Reservas registradas <span class="contador" id="cnt-registradas">0</span></button>
+    <button class="pestana" data-vista="historico" title="Correos viejos importados de Microsoft 365">Histórico</button>
   </div>
 
   <div class="barra">
@@ -284,7 +292,10 @@
       <option value="revisar">Para revisar</option>
       <option value="actualizada">Actualizada – revisar</option>
       <option value="sin accion">Sin acción</option>
+      <option value="historico">Histórico</option>
     </select>
+    <select id="filtroAsesor" style="display:none;" title="Asesor asignado"></select>
+    <input type="search" id="buscarHistorico" class="buscar-historico" style="display:none;" placeholder="Buscar en el histórico (cliente, asunto, hotel, vuelo...)">
     <select id="filtroOrden">
       <option value="servicio">Orden: fecha de servicio (más próxima)</option>
       <option value="recibido">Orden: fecha de recibido (más reciente)</option>
@@ -311,6 +322,7 @@
       <div>
         <h2 id="mAsunto"></h2>
         <div class="meta" id="mMeta"></div>
+        <div id="mTiempo" class="cronometro" style="display:none;" title="Tiempo trabajando esta reserva"></div>
       </div>
       <div class="ventana-botones">
         <button class="cerrar" id="btnMinimizar" title="Minimizar">&#8211;</button>
@@ -408,8 +420,11 @@ const ESTADOS = [
   ['registrada', 'Registrada'],
   ['revisar', 'Para revisar'],
   ['actualizada', 'Actualizada – revisar'],
-  ['sin accion', 'Sin acción']
+  ['sin accion', 'Sin acción'],
+  ['historico', 'Histórico']
 ];
+// Estados en los que la reserva sigue abierta (se reparte y cuenta tiempo).
+const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 
 const PERMISOS = [
   ['ver_reservas', 'Ver peticiones y recibir correos'],
@@ -425,7 +440,10 @@ const PERMISOS = [
   ['ver_correo_completo', 'Ver correo completo (Microsoft 365)'],
   ['mostrar_imagenes', 'Mostrar imágenes de internet en los correos'],
   ['descargar_adjuntos', 'Abrir y descargar adjuntos'],
-  ['guardar_copia', 'Guardar copia de correos']
+  ['guardar_copia', 'Guardar copia de correos'],
+  ['recibir_reservas', 'Recibir reservas del reparto automático (ve solo las suyas)'],
+  ['supervisar', 'Supervisar: ver todas las reservas y reasignarlas'],
+  ['ver_control', 'Pantalla de Control: tiempos, reservas por asesor y gráficas']
 ];
 
 const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
@@ -446,6 +464,9 @@ let revisiones = new Map();
 let ultimoIdVisto = null;
 let contactoChat = null;
 let vistaActual = 'todas';
+let cronometro = { base: 0, desde: 0, corriendo: false, limite: 1500, timer: null };
+let asesoresCache = { hora: 0, lista: [] };
+let timerBusqueda = null;
 let empresaActual = { nombre: 'Somos Viajes Punta Cana', rnc: '', direccion: '', banner_enlace: '' };
 
 function esc(valor) {
@@ -560,7 +581,7 @@ function paxDe(r) {
 }
 
 function etiquetaEstado(estado) {
-  const clases = { 'pendiente de transcribir': 'etq-pendiente', 'registrada': 'etq-registrada', 'revisar': 'etq-revisar', 'actualizada': 'etq-actualizada' };
+  const clases = { 'pendiente de transcribir': 'etq-pendiente', 'registrada': 'etq-registrada', 'revisar': 'etq-revisar', 'actualizada': 'etq-actualizada', 'historico': 'etq-historico' };
   const nombre = (ESTADOS.find(e => e[0] === estado) || [null, estado])[1];
   return `<span class="etq ${clases[estado] || 'etq-sinaccion'}">${esc(nombre)}</span>`;
 }
@@ -660,6 +681,8 @@ function mostrarApp(s) {
   document.getElementById('pantallaClave').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('usuarioActivo').textContent = (s.nombre || s.usuario) + ' · ' + s.grupo;
+  document.getElementById('btnControl').style.display = puede('ver_control') ? 'inline-block' : 'none';
+  document.getElementById('filtroAsesor').style.display = puede('supervisar') ? 'inline-block' : 'none';
   document.getElementById('btnHerramientas').style.display =
     (puede('administrar_usuarios') || puede('ver_auditoria')) ? 'inline-block' : 'none';
   document.getElementById('btnChat').style.display = puede('usar_chat') ? 'inline-block' : 'none';
@@ -684,9 +707,30 @@ async function comprobarSesion() {
   mostrarApp(r.data);
 }
 
-async function cargarReservas() {
+function recibeReparto() {
+  return puede('recibir_reservas') && !puede('supervisar');
+}
+
+function urlReservas() {
+  if (vistaActual !== 'historico') return '/api/reservas';
+  const p = new URLSearchParams({ historico: '1', q: document.getElementById('buscarHistorico').value.trim(),
+    desde: document.getElementById('desde').value, hasta: document.getElementById('hasta').value });
+  return '/api/reservas?' + p.toString();
+}
+
+// En el histórico la lista solo se pide al buscar o cambiar fechas; cada 15 segundos solo se revisan los avisos.
+async function cargarReservas(forzar) {
   if (!sesionActual) return;
-  const [r, rv, av] = await Promise.all([api('/api/reservas'), api('/api/revisiones'), api('/api/avisos')]);
+  const enHistorico = vistaActual === 'historico';
+  if (enHistorico && forzar !== true) {
+    const av = await api('/api/avisos');
+    if (av.ok) notificar(av.data.map(a => ({ texto: decodificar(a.texto), reservaId: a.reserva_id })));
+    return;
+  }
+  if (enHistorico) document.getElementById('cuerpo').innerHTML = '<tr><td colspan="12" class="vacio-total">Buscando en el histórico…</td></tr>';
+  const [r, rv, av] = await Promise.all([api(urlReservas()), api('/api/revisiones'), api('/api/avisos')]);
+  // Si se cambió de pestaña mientras llegaba la respuesta, se descarta.
+  if ((vistaActual === 'historico') !== enHistorico) return;
   if (!r.ok) {
     document.getElementById('cuerpo').innerHTML =
       `<tr><td colspan="12" class="vacio-total">${esc(r.data.error || 'No se pudieron cargar las reservas.')}</td></tr>`;
@@ -694,14 +738,19 @@ async function cargarReservas() {
   }
   revisiones = new Map((rv.ok ? rv.data : []).map(x => [x.reserva_id, x]));
 
-  const nuevas = ultimoIdVisto === null
+  // Lo que el reparto te asigna llega como aviso del servidor; aquí se avisa del resto.
+  const nuevas = ultimoIdVisto === null || enHistorico
     ? []
-    : r.data.filter(x => x.id > ultimoIdVisto && (x.categoria === 'RESERVA' || x.categoria === 'MODIFICACION'));
-  if (r.data.length) {
-    ultimoIdVisto = Math.max(ultimoIdVisto ?? 0, ...r.data.map(x => x.id));
+    : r.data.filter(x => x.id > ultimoIdVisto && (x.categoria === 'RESERVA' || x.categoria === 'MODIFICACION')
+        && x.asignado_a !== sesionActual.usuario);
+  if (r.data.length && !enHistorico) {
+    ultimoIdVisto = r.data.reduce((m, x) => Math.max(m, x.id), ultimoIdVisto ?? 0);
+  } else if (!enHistorico && ultimoIdVisto === null) {
+    ultimoIdVisto = 0;
   }
 
   datos = r.data.map(sinEntidades);
+  pintarFiltroAsesor();
   pintar();
   // Un aviso por correo, no por cada servicio (llegada, salida...) del mismo correo.
   const correosVistos = new Set();
@@ -890,9 +939,12 @@ function filtrar() {
   const estado = document.getElementById('filtroEstado').value;
   const desde = document.getElementById('desde').value;
   const hasta = document.getElementById('hasta').value;
-  const soloCompletos = document.getElementById('soloCompletos').checked;
+  const soloCompletos = document.getElementById('soloCompletos').checked && vistaActual !== 'historico';
+  const asesor = puede('supervisar') ? document.getElementById('filtroAsesor').value : '';
 
   const lista = datos.filter(r => {
+    if (asesor === '-' && r.asignado_a) return false;
+    if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
     if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
     if (vistaActual === 'registradas' && !(r.categoria === 'RESERVA' && r.estado === 'registrada')) return false;
@@ -921,13 +973,14 @@ function pintar() {
   cuerpo.innerHTML = lista.length
     ? lista.map(r => {
         const rev = revisiones.get(r.id);
-        const marca = rev
-          ? `<span class="revision">En revisión: ${esc(rev.nombre || rev.usuario)} desde ${esc(horaCorta(rev.desde))}</span>`
-          : '';
+        const tarde = rev && rev.segundos > rev.limite;
+        const marca = (rev
+          ? `<span class="revision ${tarde ? 'tarde' : ''}" title="${tarde ? 'Pasó el tiempo máximo por reserva' : ''}">En revisión: ${esc(rev.nombre || rev.usuario)} desde ${esc(horaCorta(rev.desde))}${rev.segundos ? ' · ⏱ ' + Math.floor(rev.segundos / 60) + ' min' : ''}${tarde ? ' ⚠' : ''}</span>`
+          : '') + marcaAsignado(r);
         return `
       <tr data-id="${r.id}">
         <td>${fechaCorta(r.fecha)}</td>
-        <td><span class="etq ${r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
+        <td><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
         <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
         <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
         <td>${falta(paxDe(r))}</td>
@@ -943,6 +996,7 @@ function pintar() {
     : `<tr><td colspan="12" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
+        : vistaActual === 'historico' ? 'No hay correos del histórico con esta búsqueda. Escribe un nombre, asunto, hotel o vuelo, o cambia las fechas.'
         : 'No hay registros con estos filtros.'}</td></tr>`;
 
   cuerpo.querySelectorAll('tr[data-id]').forEach(tr =>
@@ -959,10 +1013,47 @@ function pintar() {
 }
 
 function cambiarVista(vista) {
+  const antes = vistaActual;
   vistaActual = vista;
   document.querySelectorAll('#pestanas .pestana').forEach(b =>
     b.classList.toggle('activa', b.dataset.vista === vista));
+  document.getElementById('buscarHistorico').style.display = vista === 'historico' ? 'inline-block' : 'none';
+  // El histórico trae otra lista del servidor; al salir se vuelve a la lista normal.
+  if (vista === 'historico' || antes === 'historico') {
+    datos = [];
+    pintar();
+    cargarReservas(true);
+    return;
+  }
   pintar();
+}
+
+function alCambiarFechas() {
+  if (vistaActual === 'historico') cargarReservas(true);
+  else pintar();
+}
+
+function porAnalizar(r) {
+  return Boolean(r.error_ia) && String(r.motivo || '').startsWith('Histórico');
+}
+
+function marcaAsignado(r) {
+  if (!r.asignado_a) return '';
+  const tuya = r.asignado_a === sesionActual.usuario;
+  if (tuya && !puede('supervisar')) return '';
+  return `<span class="asignado" title="Asignada por el reparto o por un supervisor">👤 ${tuya ? 'Tú' : esc(r.asignado_nombre || r.asignado_a)}</span>`;
+}
+
+function pintarFiltroAsesor() {
+  const sel = document.getElementById('filtroAsesor');
+  if (!puede('supervisar')) return;
+  const actual = sel.value;
+  const nombres = new Map();
+  datos.forEach(r => { if (r.asignado_a) nombres.set(r.asignado_a, r.asignado_nombre || r.asignado_a); });
+  const opciones = [['', 'Todos los asesores'], ['-', 'Sin asignar'],
+    ...Array.from(nombres.entries()).sort((a, b) => a[1].localeCompare(b[1]))];
+  if (actual && actual !== '-' && !nombres.has(actual)) opciones.push([actual, actual]);
+  sel.innerHTML = opciones.map(([v, t]) => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(t)}</option>`).join('');
 }
 
 function tablaAuditoria(lista) {
@@ -995,17 +1086,112 @@ async function cargarHistorial(id) {
   box.innerHTML = '<div class="titulo-seccion">Historial de esta reserva</div>' + tablaAuditoria(r.data);
 }
 
+/* ---------- Contador de tiempo por reserva ---------- */
+
+function duracion(segundos) {
+  const s = Math.max(0, Math.floor(segundos));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const x = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+}
+
+function pintarCronometro() {
+  const el = document.getElementById('mTiempo');
+  const seg = cronometro.base + (cronometro.corriendo ? (Date.now() - cronometro.desde) / 1000 : 0);
+  const tarde = seg > cronometro.limite;
+  const minutos = Math.round(cronometro.limite / 60);
+  el.textContent = cronometro.final
+    ? `⏱ Tiempo total: ${duracion(seg)}${tarde ? ` · pasó de ${minutos} min` : ''}`
+    : `⏱ ${duracion(seg)}${cronometro.corriendo ? '' : ' · en pausa'}${tarde ? ` · ⚠ pasó de ${minutos} min` : ` de ${minutos}:00`}`;
+  el.classList.toggle('tarde', tarde);
+  el.classList.toggle('parado', !tarde && (!cronometro.corriendo || cronometro.final));
+}
+
+function iniciarCronometro(t) {
+  clearInterval(cronometro.timer);
+  cronometro.timer = null;
+  const el = document.getElementById('mTiempo');
+  if (!t || (!t.cuenta && !t.segundos)) {
+    el.style.display = 'none';
+    return;
+  }
+  const activo = Date.now() - ultimaActividad < 5 * 60 * 1000;
+  cronometro = { base: t.segundos, desde: Date.now(), corriendo: Boolean(t.cuenta && t.corriendo && activo), limite: t.limite || 1500, final: !t.cuenta, timer: null };
+  el.style.display = 'inline-block';
+  pintarCronometro();
+  if (cronometro.corriendo) cronometro.timer = setInterval(pintarCronometro, 1000);
+}
+
+function detenerCronometro() {
+  clearInterval(cronometro.timer);
+  cronometro.timer = null;
+  document.getElementById('mTiempo').style.display = 'none';
+}
+
 async function tomarRevision(id) {
-  const r = await api('/api/revision/tomar', { id });
+  const activo = Date.now() - ultimaActividad < 5 * 60 * 1000;
+  const r = await api('/api/revision/tomar', { id, activo });
   const mensaje = document.getElementById('mMensaje');
   if (!r.ok) {
     document.getElementById('btnGuardar').disabled = true;
     document.getElementById('mEstado').disabled = true;
     mensaje.style.color = '#dc2626';
     mensaje.textContent = r.data.error || 'No se pudo abrir la reserva.';
+    detenerCronometro();
     return false;
   }
+  if (seleccionado && seleccionado.id === id) iniciarCronometro(r.data.tiempo);
   return true;
+}
+
+/* ---------- Reparto: asignar o reasignar desde la reserva ---------- */
+
+async function asesores() {
+  if (Date.now() - asesoresCache.hora < 30000) return asesoresCache.lista;
+  const r = await api('/api/asesores');
+  asesoresCache = { hora: Date.now(), lista: r.ok ? r.data.asesores : [] };
+  return asesoresCache.lista;
+}
+
+async function pintarAsignacion(r) {
+  const celda = document.getElementById('mAsignacion');
+  if (!celda) return;
+  if (!puede('supervisar')) {
+    celda.innerHTML = r.asignado_a ? esc(r.asignado_a === sesionActual.usuario ? 'A ti' : (r.asignado_nombre || r.asignado_a)) : 'Sin asignar';
+    return;
+  }
+  const lista = await asesores();
+  if (seleccionado !== r) return;
+  const estado = { 'en linea': 'en línea', ausente: 'ausente', desconectado: 'desconectado' };
+  const opciones = [['', 'Sin asignar (se reparte sola)'], ...lista.map(a => [a.usuario, `${a.nombre} · ${estado[a.estado] || a.estado} · ${a.carga} abiertas`])];
+  if (r.asignado_a && !lista.some(a => a.usuario === r.asignado_a)) opciones.push([r.asignado_a, (r.asignado_nombre || r.asignado_a) + ' (ya no recibe reservas)']);
+  celda.innerHTML = `<select id="mAsignado">${opciones.map(([v, t]) =>
+      `<option value="${esc(v)}" ${v === (r.asignado_a || '') ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+    <button class="btn-mini" id="btnAsignar">Reasignar</button>
+    ${lista.length ? '' : '<div class="etiqueta-sec">Nadie tiene el permiso "Recibir reservas" todavía.</div>'}`;
+}
+
+async function asignarReserva() {
+  if (!seleccionado) return;
+  const usuario = document.getElementById('mAsignado').value;
+  const mensaje = document.getElementById('mMensaje');
+  const r = await api('/api/reserva/asignar', { id: seleccionado.id, usuario });
+  if (!r.ok) {
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = r.data.error || 'No se pudo reasignar.';
+    return;
+  }
+  const a = (asesoresCache.lista || []).find(x => x.usuario === usuario);
+  datos.filter(x => (x.message_id || 'id:' + x.id) === (seleccionado.message_id || 'id:' + seleccionado.id)).forEach(x => {
+    x.asignado_a = usuario || null;
+    x.asignado_nombre = a ? a.nombre : null;
+  });
+  asesoresCache.hora = 0;
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = usuario ? 'Reserva reasignada.' : 'Reserva sin asignar: el reparto la entrega a un asesor conectado.';
+  pintar();
+  cargarHistorial(seleccionado.id);
 }
 
 async function abrirModal(id) {
@@ -1043,7 +1229,7 @@ async function abrirModal(id) {
     <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
     <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
     <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
-    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.error_ia ? `<tr><td>${enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${esc(r.motivo || 'La IA no respondió')}. Se analiza de nuevo en la próxima ejecución del flujo.</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
+    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
 
   const puedeEstado = puede('cambiar_estado');
   document.getElementById('mEstado').disabled = !puedeEstado;
@@ -1056,6 +1242,8 @@ async function abrirModal(id) {
   document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
   // Una respuesta a medias (texto y adjuntos) nunca pasa de una reserva a otra.
   ocultarRespuesta();
+  detenerCronometro();
+  pintarAsignacion(r);
   document.getElementById('fondoModal').classList.add('abierto');
   cargarHistorial(id);
   cargarCorreoCompleto(r);
@@ -1187,6 +1375,7 @@ async function cerrarModal() {
   correoActual = null;
   clearInterval(timerRevision);
   timerRevision = null;
+  detenerCronometro();
   const actual = seleccionado;
   document.getElementById('fondoModal').classList.remove('abierto');
   document.getElementById('mHistorial').innerHTML = '';
@@ -1210,6 +1399,8 @@ async function guardarEstado() {
   seleccionado.estado = estado;
   mensaje.style.color = '#16a34a';
   mensaje.textContent = 'Estado guardado.';
+  // Al registrarla el contador se detiene y muestra el tiempo total; si vuelve a abrirse, sigue contando.
+  tomarRevision(seleccionado.id);
   pintar();
   cargarHistorial(seleccionado.id);
 }
@@ -1746,6 +1937,8 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
   if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
   if (tab === 'empresa') return marco('empresa', aviso);
   if (tab === 'cache') return marco('cache', aviso);
+  if (tab === 'reparto') return marco('reparto', aviso);
+  if (tab === 'historico') return marco('historico', aviso);
 
   const [ru, rg] = await Promise.all([api('/api/usuarios'), api('/api/grupos')]);
   if (!ru.ok) return alert(ru.data.error || 'No se pudo cargar la lista de usuarios.');
@@ -1762,8 +1955,9 @@ function marco(tab, aviso) {
   const boton = (id, texto) =>
     `<button class="${tab === id ? 'btn' : 'btn-sec'}" data-accion="tab-${id}">${texto}</button>`;
 
-  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') : '') +
+  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + boton('reparto', 'Reparto') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
+    (esProg ? boton('historico', 'Historial') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
     `<button class="btn-sec" data-accion="cerrar">Cerrar</button>`;
@@ -1775,6 +1969,8 @@ function marco(tab, aviso) {
   else if (tab === 'bloqueos') cuerpo = '<div id="tablaBloqueos"></div>';
   else if (tab === 'empresa') cuerpo = formEmpresa();
   else if (tab === 'cache') cuerpo = '<div id="panelCache">Cargando…</div>';
+  else if (tab === 'reparto') cuerpo = '<div id="panelReparto">Cargando…</div>';
+  else if (tab === 'historico') cuerpo = '<div id="panelHistorico">Cargando…</div>';
   else cuerpo = formAuditoria();
 
   abrirVentana(`
@@ -1785,6 +1981,100 @@ function marco(tab, aviso) {
   if (tab === 'auditoria') buscarAuditoria();
   if (tab === 'bloqueos') cargarBloqueos();
   if (tab === 'cache') cargarCache();
+  if (tab === 'reparto') cargarReparto();
+  if (tab === 'historico') cargarHistorico();
+}
+
+/* ---------- Reparto automático ---------- */
+
+async function cargarReparto() {
+  const r = await api('/api/asesores');
+  const box = document.getElementById('panelReparto');
+  if (!box) return;
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar el reparto.')}</div>`;
+    return;
+  }
+  const estado = { 'en linea': 'En línea', ausente: 'Ausente (no recibe nuevas)', desconectado: 'Desconectado' };
+  box.innerHTML = `
+    <p>Las reservas y los cambios nuevos se entregan solos al asesor <strong>en línea</strong> con menos reservas abiertas.
+      Un cambio va al mismo asesor que tiene la reserva original. Si un asesor se desconecta sin abrir una reserva, vuelve a repartirse.
+      Reciben quienes tienen el permiso <strong>Recibir reservas</strong> (en Grupos o en el usuario); quienes tienen <strong>Supervisar</strong> ven todo y reasignan.</p>
+    <label class="chk"><input type="checkbox" id="rActivo" ${r.data.activo ? 'checked' : ''}> Reparto automático activado</label>
+    <div class="pie-acciones"><button class="btn" data-accion="reparto-guardar">Guardar</button></div>
+    <div class="titulo-seccion">Asesores que reciben reservas</div>
+    ${r.data.asesores.length ? `<div class="tabla-wrap tabla-chica"><table>
+      <thead><tr><th>Asesor</th><th>Grupo</th><th>Estado</th><th>Reservas abiertas</th></tr></thead>
+      <tbody>${r.data.asesores.map(a => `<tr><td>${esc(a.nombre)}</td><td>${esc(a.grupo)}</td><td>${esc(estado[a.estado] || a.estado)}</td><td>${a.carga}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="vacio-total">Nadie tiene todavía el permiso "Recibir reservas". Actívalo en el grupo de los asesores o en cada usuario.</div>'}`;
+}
+
+async function guardarReparto() {
+  const r = await api('/api/reparto', { activo: document.getElementById('rActivo').checked });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo guardar.', false);
+  await cargarReparto();
+  mostrarAviso('Reparto guardado.', true);
+}
+
+/* ---------- Historial de Microsoft 365 (solo programador) ---------- */
+
+let timerHistorico = null;
+
+async function cargarHistorico() {
+  clearTimeout(timerHistorico);
+  const r = await api('/api/historico');
+  const box = document.getElementById('panelHistorico');
+  if (!box) return;
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar el historial.')}</div>`;
+    return;
+  }
+  const h = r.data;
+  const imp = h.importacion;
+  const estado = !imp ? 'Todavía no se ha importado nada.'
+    : imp.terminado ? `Lectura terminada: ${imp.importados} correos nuevos leídos de ${esc(imp.buzon)}.`
+    : imp.activo ? `Leyendo ${esc(imp.buzon)}… ${imp.importados} correos nuevos hasta ahora (va por ${esc(fechaHora(imp.cursor))}).`
+    : `En pausa: ${imp.importados} correos leídos (va por ${esc(fechaHora(imp.cursor))}).`;
+  const costo = (h.por_analizar * h.costoPorCorreo).toFixed(2);
+  const buzones = (h.buzones || []).map(b => `<option>${esc(b)}</option>`).join('');
+  box.innerHTML = `
+    <p>Trae los correos viejos de la bandeja de entrada de Microsoft 365 <strong>sin marcarlos como leídos</strong>.
+      Entran como <strong>Histórico</strong>: no suenan, no se reparten y no cuentan como pendientes, pero se pueden buscar en la pestaña Histórico
+      y sirven para que los cambios encuentren su reserva original. Los correos que ya están en el panel no se tocan.</p>
+    <div class="tarjetas">
+      <div class="tarjeta t-total"><div class="etiqueta">Correos del historial</div><div class="numero">${h.por_analizar + h.analizados}</div></div>
+      <div class="tarjeta t-pendientes"><div class="etiqueta">Por analizar (IA)</div><div class="numero">${h.por_analizar}</div></div>
+      <div class="tarjeta t-registradas"><div class="etiqueta">Analizados</div><div class="numero">${h.analizados}</div></div>
+      <div class="tarjeta t-reservas"><div class="etiqueta">Reservas y cambios encontrados</div><div class="numero">${h.reservas}</div></div>
+    </div>
+    <p><strong>Estado:</strong> ${estado}${imp && imp.ultimo_error ? `<br><span style="color:#dc2626">Último error: ${esc(imp.ultimo_error)}</span>` : ''}</p>
+    <p class="etiqueta-sec">La IA analiza unos 25 correos del historial cada 10 minutos (los correos nuevos siempre van primero).
+      Costo aproximado de lo que falta: US$ ${costo} en OpenRouter.</p>
+    <div class="form-fila">
+      <label>Buzón<select id="hBuzon">${buzones}</select></label>
+      <label>Meses hacia atrás<input id="hMeses" type="number" min="1" max="24" step="1" value="3"></label>
+    </div>
+    <div class="pie-acciones">
+      <button class="btn" data-accion="historico-iniciar" ${imp && imp.activo ? 'disabled' : ''}>Importar historial</button>
+      ${imp && !imp.terminado ? (imp.activo
+        ? '<button class="btn-sec" data-accion="historico-pausar">Pausar</button>'
+        : '<button class="btn-sec" data-accion="historico-reanudar">Reanudar</button>') : ''}
+      <button class="btn-sec" data-accion="historico-actualizar">Actualizar</button>
+    </div>`;
+  if (imp && imp.activo) timerHistorico = setTimeout(() => { if (document.getElementById('panelHistorico')) cargarHistorico(); }, 10000);
+}
+
+async function accionHistorico(accion) {
+  if (accion === 'iniciar') {
+    const meses = Number(val('hMeses'));
+    if (!confirm(`Se leerán los correos de los últimos ${meses} meses de ${val('hBuzon')} (sin marcarlos como leídos) y la IA los analizará poco a poco.\n\n¿Continuar?`)) return;
+    const r = await api('/api/historico/iniciar', { meses, buzon: val('hBuzon') });
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo iniciar.', false);
+  } else {
+    const r = await api('/api/historico/' + accion, {});
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo cambiar.', false);
+  }
+  await cargarHistorico();
 }
 
 function vista(titulo, cuerpo, volver) {
@@ -2180,6 +2470,13 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-empresa') return abrirHerramientas('empresa');
   if (a === 'tab-cache') return abrirHerramientas('cache');
   if (a === 'cache-guardar') return guardarAjustesCache();
+  if (a === 'tab-reparto') return abrirHerramientas('reparto');
+  if (a === 'tab-historico') return abrirHerramientas('historico');
+  if (a === 'reparto-guardar') return guardarReparto();
+  if (a === 'historico-iniciar') return accionHistorico('iniciar');
+  if (a === 'historico-pausar') return accionHistorico('pausar');
+  if (a === 'historico-reanudar') return accionHistorico('reanudar');
+  if (a === 'historico-actualizar') return cargarHistorico();
   if (a === 'cache-borrar-viejas') return borrarCache(false);
   if (a === 'cache-borrar-todo') return borrarCache(true);
   if (a === 'guardar-empresa') return guardarEmpresa();
@@ -2317,7 +2614,10 @@ document.getElementById('btnMaximizar').addEventListener('click', alternarMaximi
 document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') cerrarVentana(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModal(); cerrarVentana(); cerrarChat(); } });
 document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
-document.getElementById('mDatos').addEventListener('click', e => { if (e.target.id === 'btnAgencia') guardarAgencia(); });
+document.getElementById('mDatos').addEventListener('click', e => {
+  if (e.target.id === 'btnAgencia') guardarAgencia();
+  if (e.target.id === 'btnAsignar') asignarReserva();
+});
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
 document.getElementById('btnReanalizar').addEventListener('click', reanalizar);
 document.getElementById('btnImagenes').addEventListener('click', mostrarImagenes);
@@ -2357,16 +2657,22 @@ document.querySelectorAll('#pestanas .pestana').forEach(b =>
 document.getElementById('btnHoy').addEventListener('click', () => {
   document.getElementById('desde').value = hoyISO();
   document.getElementById('hasta').value = hoyISO();
-  pintar();
+  alCambiarFechas();
 });
 document.getElementById('btnAyer').addEventListener('click', () => {
   document.getElementById('desde').value = ayerISO();
   document.getElementById('hasta').value = ayerISO();
-  pintar();
+  alCambiarFechas();
 });
 
-['desde', 'hasta', 'filtroIntencion', 'filtroEstado', 'filtroOrden', 'soloCompletos'].forEach(id =>
+['filtroIntencion', 'filtroEstado', 'filtroOrden', 'soloCompletos', 'filtroAsesor'].forEach(id =>
   document.getElementById(id).addEventListener('change', pintar));
+['desde', 'hasta'].forEach(id => document.getElementById(id).addEventListener('change', alCambiarFechas));
+document.getElementById('buscarHistorico').addEventListener('input', () => {
+  clearTimeout(timerBusqueda);
+  timerBusqueda = setTimeout(() => cargarReservas(true), 500);
+});
+document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
 
 if (localStorage.getItem('tema') === 'oscuro') {
   document.body.classList.add('oscuro');
