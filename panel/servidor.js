@@ -31,6 +31,10 @@ const TIPOS_ADJUNTO = {
   txt: 'text/plain', csv: 'text/csv'
 };
 const SE_ABREN = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
+// Archivos que se pueden adjuntar al responder o enviar un correo (máximo 10 y 20 MB en total).
+const SE_ADJUNTAN = new Set([...Object.keys(TIPOS_ADJUNTO), 'zip']);
+const MAX_ADJUNTOS = 10;
+const MAX_BYTES_ADJUNTOS = 20 * 1024 * 1024;
 
 const MINUTOS_SIN_LATIDO = 2;
 const MINUTOS_AUSENTE = 5;
@@ -376,6 +380,25 @@ function enviarArchivo(res, datos, nombre, abrir) {
   res.end(datos);
 }
 
+function adjuntosParaEnviar(lista) {
+  if (lista === undefined || lista === null) return { adjuntos: [] };
+  if (!Array.isArray(lista) || lista.length > MAX_ADJUNTOS) return { error: `Puedes adjuntar hasta ${MAX_ADJUNTOS} archivos.` };
+  let total = 0;
+  const adjuntos = [];
+  for (const a of lista) {
+    const nombre = String((a && a.nombre) || '').replace(/[\\/:*?"<>|\r\n]/g, '_').trim().slice(0, 150);
+    if (!nombre || !SE_ADJUNTAN.has(extension(nombre))) {
+      return { error: `El archivo "${nombre || 'sin nombre'}" no se puede adjuntar por seguridad.` };
+    }
+    if (typeof a.datos !== 'string' || !/^[A-Za-z0-9+/=]*$/.test(a.datos)) return { error: `El archivo "${nombre}" llegó dañado.` };
+    const contenido = Buffer.from(a.datos, 'base64');
+    total += contenido.length;
+    if (total > MAX_BYTES_ADJUNTOS) return { error: 'Los adjuntos no pueden pasar de 20 MB en total.' };
+    adjuntos.push({ filename: nombre, content: contenido });
+  }
+  return { adjuntos };
+}
+
 function imagenValida(s) {
   return typeof s === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(s) && s.length <= 3000000;
 }
@@ -560,10 +583,18 @@ async function registrar(u, accion, entidad, entidadId, anterior, nuevo, detalle
   );
 }
 
+const MAX_CUERPO = 30 * 1024 * 1024;
+
 function leerCuerpo(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', c => data += c);
+    req.on('data', c => {
+      data += c;
+      if (data.length > MAX_CUERPO) {
+        req.destroy();
+        reject(new Error('El envío es demasiado grande.'));
+      }
+    });
     req.on('end', () => {
       try { resolve(JSON.parse(data || '{}')); }
       catch (e) { reject(e); }
@@ -1247,9 +1278,11 @@ http.createServer(async (req, res) => {
 
       if (req.method === 'POST' && url === '/api/correo/responder') {
         if (!puede('responder_correo')) return json(res, 403, { error: 'No tienes permiso para responder correos.' });
-        const { id, texto: respuesta } = await leerCuerpo(req);
+        const { id, texto: respuesta, adjuntos } = await leerCuerpo(req);
         const limpio = String(respuesta || '').trim();
         if (!limpio || limpio.length > 5000) return json(res, 400, { error: 'El mensaje debe tener entre 1 y 5000 caracteres.' });
+        const archivos = adjuntosParaEnviar(adjuntos);
+        if (archivos.error) return json(res, 400, { error: archivos.error });
         const fila = (await client.query(
           'SELECT id, remitente, asunto, message_id, buzon, cuerpo, fecha FROM clasificacion WHERE id = $1', [Number(id)]
         )).rows[0];
@@ -1268,15 +1301,16 @@ http.createServer(async (req, res) => {
         }
         await salida.transporte.sendMail({
           from: `"${salida.nombre}" <${fila.buzon}>`,
-          to: para, subject: asunto, text: cuerpoCompleto, headers: cabeceras
+          to: para, subject: asunto, text: cuerpoCompleto, headers: cabeceras, attachments: archivos.adjuntos
         });
-        await registrar(u, 'responder_correo', 'reserva', fila.id, '', para, 'Respuesta enviada desde ' + fila.buzon);
+        await registrar(u, 'responder_correo', 'reserva', fila.id, '', para, 'Respuesta enviada desde ' + fila.buzon +
+          (archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : ''));
         return json(res, 200, { ok: true });
       }
 
       if (req.method === 'POST' && url === '/api/correo/nuevo') {
         if (!puede('enviar_correo')) return json(res, 403, { error: 'No tienes permiso para enviar correos nuevos.' });
-        const { buzon, para, asunto, texto: cuerpoNuevo } = await leerCuerpo(req);
+        const { buzon, para, asunto, texto: cuerpoNuevo, adjuntos } = await leerCuerpo(req);
         const destino = emailDeRemitente(para);
         if (!destino) return json(res, 400, { error: 'Escribe un correo de destino válido.' });
         const salida = transporteDe(buzon);
@@ -1284,11 +1318,14 @@ http.createServer(async (req, res) => {
         const limpio = String(cuerpoNuevo || '').trim();
         const tema = String(asunto || '').trim();
         if (!limpio || !tema) return json(res, 400, { error: 'El asunto y el mensaje son obligatorios.' });
+        const archivos = adjuntosParaEnviar(adjuntos);
+        if (archivos.error) return json(res, 400, { error: archivos.error });
         await salida.transporte.sendMail({
           from: `"${salida.nombre}" <${buzon}>`,
-          to: destino, subject: tema, text: limpio
+          to: destino, subject: tema, text: limpio, attachments: archivos.adjuntos
         });
-        await registrar(u, 'enviar_correo', 'correo', destino, '', tema, 'Enviado desde ' + buzon);
+        await registrar(u, 'enviar_correo', 'correo', destino, '', tema, 'Enviado desde ' + buzon +
+          (archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : ''));
         return json(res, 200, { ok: true });
       }
 

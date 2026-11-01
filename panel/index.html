@@ -109,6 +109,9 @@
   #fondoModal.minimizado .meta { display: none; }
   #fondoModal.minimizado .modal-cabecera h2 { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
   #mRespuesta { flex: 0 0 auto; }
+  .lista-adjuntos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .lista-adjuntos .chip { gap: 8px; }
+  .lista-adjuntos .chip button { background: none; border: none; cursor: pointer; color: var(--texto-suave); font-size: 15px; line-height: 1; padding: 0; }
   #mRespuesta .respuesta-caja { min-height: 170px; resize: vertical; }
   #fondoModal .modal.respondiendo .correo-marco { height: 28vh; }
   .modal-cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 20px 10px; border-bottom: 1px solid var(--borde); }
@@ -320,7 +323,9 @@
     <div class="modal-cuerpo" id="mRespuesta" style="display:none; border-top:1px solid var(--borde);">
       <div class="titulo-seccion">Responder a <span id="mDestino"></span></div>
       <textarea id="mTexto" rows="8" class="respuesta-caja" placeholder="Escribe la respuesta. El correo original se incluye citado debajo."></textarea>
+      <div class="lista-adjuntos" id="adjuntos-respuesta"></div>
       <div class="pie-acciones">
+        <button type="button" class="btn-sec" data-elegir-adjuntos="respuesta">📎 Adjuntar archivos</button>
         <button class="btn" id="btnEnviarRespuesta">Enviar respuesta</button>
         <button class="btn-sec" id="btnCancelarRespuesta">Cancelar</button>
       </div>
@@ -1385,6 +1390,7 @@ function mostrarRespuesta() {
 function ocultarRespuesta() {
   document.getElementById('mRespuesta').style.display = 'none';
   document.getElementById('mTexto').value = '';
+  limpiarAdjuntos('respuesta');
   ventanaReserva().classList.remove('respondiendo');
 }
 
@@ -1449,11 +1455,92 @@ function iniciarArrastre(e) {
   e.preventDefault();
 }
 
+/* ---------- Adjuntar archivos de la computadora (responder y correo nuevo) ---------- */
+
+const ADJUNTOS_PERMITIDOS = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'zip'];
+const MAX_ADJUNTOS = 10;
+const MAX_BYTES_ADJUNTOS = 20 * 1024 * 1024;
+const adjuntosElegidos = { respuesta: [], nuevo: [] };
+const selectorArchivos = Object.assign(document.createElement('input'), { type: 'file', multiple: true });
+selectorArchivos.accept = ADJUNTOS_PERMITIDOS.map(e => '.' + e).join(',');
+let destinoAdjuntos = 'respuesta';
+
+function pintarAdjuntosElegidos(clave) {
+  const caja = document.getElementById('adjuntos-' + clave);
+  if (!caja) return;
+  caja.innerHTML = adjuntosElegidos[clave].map((a, i) => `
+    <span class="chip">📎 ${esc(a.nombre)} · ${tamano(a.tamano)}
+      <button type="button" title="Quitar" data-quitar-adjunto="${clave}" data-indice="${i}">×</button>
+    </span>`).join('');
+}
+
+function leerArchivo(archivo) {
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(String(lector.result).split(',')[1] || '');
+    lector.onerror = () => mal(new Error('No se pudo leer ' + archivo.name));
+    lector.readAsDataURL(archivo);
+  });
+}
+
+async function agregarArchivos(clave, archivos) {
+  const lista = adjuntosElegidos[clave];
+  for (const archivo of archivos) {
+    const ext = (archivo.name.toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || '';
+    if (!ADJUNTOS_PERMITIDOS.includes(ext)) {
+      alert(`"${archivo.name}" no se puede adjuntar por seguridad.\nSe permiten: ${ADJUNTOS_PERMITIDOS.join(', ')}.`);
+      continue;
+    }
+    if (lista.length >= MAX_ADJUNTOS) { alert(`Puedes adjuntar hasta ${MAX_ADJUNTOS} archivos.`); break; }
+    const total = lista.reduce((s, a) => s + a.tamano, 0) + archivo.size;
+    if (total > MAX_BYTES_ADJUNTOS) { alert(`"${archivo.name}" no cabe: los adjuntos no pueden pasar de 20 MB en total.`); continue; }
+    try {
+      lista.push({ nombre: archivo.name, tamano: archivo.size, datos: await leerArchivo(archivo) });
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+  pintarAdjuntosElegidos(clave);
+}
+
+function limpiarAdjuntos(clave) {
+  adjuntosElegidos[clave] = [];
+  pintarAdjuntosElegidos(clave);
+}
+
+selectorArchivos.addEventListener('change', async () => {
+  await agregarArchivos(destinoAdjuntos, Array.from(selectorArchivos.files));
+  selectorArchivos.value = '';
+});
+
+document.addEventListener('click', e => {
+  const elegir = e.target.closest('[data-elegir-adjuntos]');
+  if (elegir) {
+    destinoAdjuntos = elegir.dataset.elegirAdjuntos;
+    selectorArchivos.click();
+    return;
+  }
+  const quitar = e.target.closest('[data-quitar-adjunto]');
+  if (quitar) {
+    adjuntosElegidos[quitar.dataset.quitarAdjunto].splice(Number(quitar.dataset.indice), 1);
+    pintarAdjuntosElegidos(quitar.dataset.quitarAdjunto);
+  }
+});
+
+function paraEnviar(clave) {
+  return adjuntosElegidos[clave].map(a => ({ nombre: a.nombre, datos: a.datos }));
+}
+
 async function enviarRespuesta() {
   if (!seleccionado) return;
   const texto = document.getElementById('mTexto').value.trim();
   if (!texto) return alert('Escribe el mensaje antes de enviar.');
-  const r = await api('/api/correo/responder', { id: seleccionado.id, texto });
+  const boton = document.getElementById('btnEnviarRespuesta');
+  boton.disabled = true;
+  boton.textContent = 'Enviando…';
+  const r = await api('/api/correo/responder', { id: seleccionado.id, texto, adjuntos: paraEnviar('respuesta') });
+  boton.disabled = false;
+  boton.textContent = 'Enviar respuesta';
   if (!r.ok) return alert(r.data.error || 'No se pudo enviar la respuesta.');
   ocultarRespuesta();
   const mensaje = document.getElementById('mMensaje');
@@ -1466,6 +1553,7 @@ async function abrirCorreoNuevo() {
   const r = await api('/api/correo/buzones');
   if (!r.ok) return alert(r.data.error || 'No se pudieron cargar las cuentas de correo.');
   const opciones = r.data.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  adjuntosElegidos.nuevo = [];
   abrirVentana(`
     <div class="barra-ventana">
       <h2>Correo nuevo</h2>
@@ -1477,17 +1565,22 @@ async function abrirCorreoNuevo() {
       <label>Asunto<input id="cnAsunto"></label>
     </div>
     <label class="etiqueta-sec">Mensaje
-      <textarea id="cnTexto" rows="6" class="respuesta-caja"></textarea>
+      <textarea id="cnTexto" rows="8" class="respuesta-caja" style="resize: vertical; min-height: 170px;"></textarea>
     </label>
-    <div class="pie-acciones"><button class="btn" data-accion="enviar-correo-nuevo">Enviar correo</button></div>
+    <div class="lista-adjuntos" id="adjuntos-nuevo"></div>
+    <div class="pie-acciones">
+      <button type="button" class="btn-sec" data-elegir-adjuntos="nuevo">📎 Adjuntar archivos</button>
+      <button class="btn" data-accion="enviar-correo-nuevo">Enviar correo</button>
+    </div>
     <div class="aviso" id="avisoV"></div>`);
 }
 
 async function enviarCorreoNuevo() {
   const r = await api('/api/correo/nuevo', {
-    buzon: val('cnBuzon'), para: val('cnPara'), asunto: val('cnAsunto'), texto: val('cnTexto')
+    buzon: val('cnBuzon'), para: val('cnPara'), asunto: val('cnAsunto'), texto: val('cnTexto'), adjuntos: paraEnviar('nuevo')
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo enviar el correo.', false);
+  limpiarAdjuntos('nuevo');
   cerrarVentana();
   alert('Correo enviado.');
 }
