@@ -291,6 +291,7 @@
     <div class="modal-pie">
       <select id="mEstado"></select>
       <button class="btn-sec" id="btnResponder" style="display:none;">Responder</button>
+      <button class="btn-sec" id="btnReanalizar" style="display:none;">Volver a analizar</button>
       <button class="btn" id="btnGuardar">Guardar estado</button>
       <div class="mensaje" id="mMensaje"></div>
     </div>
@@ -405,6 +406,10 @@ function textoLimpio(texto) {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n\n')
     .trim();
+}
+
+function enReanalisis(r) {
+  return Boolean(r.error_ia) && String(r.motivo || '').startsWith('Reanálisis');
 }
 
 function falta(valor) {
@@ -761,7 +766,7 @@ function pintar() {
         return `
       <tr data-id="${r.id}">
         <td>${fechaCorta(r.fecha)}</td>
-        <td><span class="etq ${r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
+        <td><span class="etq ${r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
         <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
         <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
         <td>${falta(paxDe(r))}</td>
@@ -869,7 +874,7 @@ async function abrirModal(id) {
     <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
     <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
     <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
-    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.error_ia ? `<tr><td>Error de la IA</td><td>${esc(r.motivo || 'La IA no respondió')}. Se vuelve a intentar en la próxima ejecución del flujo.</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
+    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${r.error_ia ? `<tr><td>${enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${esc(r.motivo || 'La IA no respondió')}. Se analiza de nuevo en la próxima ejecución del flujo.</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
 
   const puedeEstado = puede('cambiar_estado');
   document.getElementById('mEstado').disabled = !puedeEstado;
@@ -879,6 +884,7 @@ async function abrirModal(id) {
 
   document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
   document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
+  document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
   document.getElementById('mRespuesta').style.display = 'none';
   document.getElementById('fondoModal').classList.add('abierto');
   cargarHistorial(id);
@@ -1007,6 +1013,22 @@ async function descargarExportacion() {
   descargarCsv(usuario ? ['Usuario', 'Acción', 'Fecha y hora de la acción', 'Antes', 'Después', ...cabeceras] : cabeceras,
     filas, `reservas_${usuario || 'todos'}_${desde}_a_${hasta}.csv`);
   mostrarAviso(`Listo: se exportaron ${filas.length} filas.`, true);
+}
+
+async function reanalizar() {
+  if (!seleccionado) return;
+  if (!confirm('La IA volverá a analizar este correo en la próxima ejecución del flujo.\n\nLos datos actuales de este correo (y los cambios hechos a mano en él) se reemplazarán por el nuevo análisis. La agencia corregida y recordada se vuelve a aplicar sola.\n\n¿Continuar?')) return;
+  const mensaje = document.getElementById('mMensaje');
+  const r = await api('/api/reserva/reanalizar', { id: seleccionado.id });
+  if (!r.ok) {
+    mensaje.style.color = '#dc2626';
+    mensaje.textContent = r.data.error || 'No se pudo pedir el reanálisis.';
+    return;
+  }
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = 'Listo: se analizará de nuevo en la próxima ejecución del flujo.';
+  cargarReservas();
+  cargarHistorial(seleccionado.id);
 }
 
 function exportarAuditoria() {
@@ -1794,6 +1816,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModa
 document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
 document.getElementById('mDatos').addEventListener('click', e => { if (e.target.id === 'btnAgencia') guardarAgencia(); });
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
+document.getElementById('btnReanalizar').addEventListener('click', reanalizar);
 document.getElementById('btnCancelarRespuesta').addEventListener('click', ocultarRespuesta);
 document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);

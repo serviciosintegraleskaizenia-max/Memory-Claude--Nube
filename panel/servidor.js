@@ -612,6 +612,25 @@ http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    if (req.method === 'POST' && url === '/api/reserva/reanalizar') {
+      if (!puede('cambiar_estado')) return json(res, 403, { error: 'No tienes permiso para volver a analizar correos.' });
+      const { id } = await leerCuerpo(req);
+      const fila = (await client.query('SELECT id, message_id, asunto FROM clasificacion WHERE id = $1', [Number(id)])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      if (!fila.message_id) return json(res, 400, { error: 'Este correo no tiene identificador; no se puede volver a analizar.' });
+      const registradas = (await client.query(
+        "SELECT COUNT(*)::int AS n FROM clasificacion WHERE message_id = $1 AND estado = 'registrada'", [fila.message_id]
+      )).rows[0].n;
+      if (registradas) {
+        return json(res, 409, { error: 'Este correo ya tiene servicios registrados. Para no perder ese trabajo, no se puede volver a analizar.' });
+      }
+      // n8n lo toma en su próxima ejecución (nodo "Reintentar fallidos") y reemplaza estas filas por las nuevas.
+      await client.query('UPDATE clasificacion SET error_ia = TRUE, motivo = $2 WHERE message_id = $1',
+        [fila.message_id, 'Reanálisis pedido por ' + (u.nombre || u.usuario)]);
+      await registrar(u, 'pedir_reanalisis', 'reserva', fila.id, '', '', fila.asunto || '');
+      return json(res, 200, { ok: true });
+    }
+
     if (req.method === 'GET' && url === '/api/revisiones') {
       await limpiarRevisiones();
       const r = await client.query('SELECT reserva_id, usuario, nombre, desde FROM revisiones');

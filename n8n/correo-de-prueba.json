@@ -498,7 +498,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Arregla tildes dañadas que mandan algunos sistemas (BÃ¡varo -> Bávaro).\nconst MALAS = { 'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ãº': 'ú', 'Ã±': 'ñ', 'Ã‘': 'Ñ', 'Ã‰': 'É', 'Ã“': 'Ó', 'Ãš': 'Ú', 'Ã¼': 'ü', 'â€¢': '•', 'â€“': '–', 'â€œ': '\"', 'â€\\x9d': '\"' };\n\nfunction decodificar(s) {\n  return String(s || '')\n    .replace(/Ã[¡©­³º±‘‰“š¼]|â€[¢“œ\\x9d]/g, m => MALAS[m] || m)\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;|&#x27;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&');\n}\n\nfunction textoPlano(parte) {\n  if (!parte) return '';\n  if (parte.mimeType === 'text/plain' && parte.body && parte.body.data) {\n    return Buffer.from(parte.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n  }\n  for (const p of (parte.parts || [])) {\n    const t = textoPlano(p);\n    if (t) return t;\n  }\n  return '';\n}\n\nfunction htmlATexto(html) {\n  return String(html || '')\n    .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/p>|<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n}\n\n// Gmail llega un correo por elemento; Microsoft 365 llega como una lista en \"value\".\nconst BUZON_GMAIL = 'serviciosintegraleskaizen.ia@gmail.com';\nconst BUZON_MICROSOFT = 'operaciones@somosviajepuntacana.com';\nconst entradas = $input.all().flatMap(item => Array.isArray(item.json.value)\n  ? item.json.value.map(m => ({ json: m, buzon: BUZON_MICROSOFT }))\n  : [{ json: item.json, buzon: BUZON_GMAIL }]);\n\nreturn entradas.filter(item => item.json.id).map(item => {\n  const j = item.json;\n  if (j.receivedDateTime) {\n    const de = (j.from && j.from.emailAddress) || {};\n    const cuerpo = (j.body && j.body.content) || '';\n    return {\n      json: {\n        metadata: { 'message-id': j.id },\n        buzon: item.buzon,\n        from: decodificar(de.name ? `${de.name} <${de.address}>` : (de.address || '')),\n        subject: decodificar(j.subject || ''),\n        date: j.receivedDateTime,\n        textPlain: decodificar(j.body && j.body.contentType === 'html' ? htmlATexto(cuerpo) : cuerpo)\n      }\n    };\n  }\n  const cabeceras = (j.payload && j.payload.headers) || [];\n  const leer = (nombre) => {\n    const h = cabeceras.find(x => x.name && x.name.toLowerCase() === nombre.toLowerCase());\n    if (h) return h.value;\n    const directo = j[nombre] || j[nombre.toLowerCase()];\n    if (directo && typeof directo === 'object') return directo.text || '';\n    return directo || '';\n  };\n  const fecha = leer('Date') || (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '');\n  const texto = j.text || textoPlano(j.payload) || htmlATexto(j.html) || j.snippet || '';\n  return {\n    json: {\n      metadata: { 'message-id': j.id },\n      buzon: item.buzon,\n      from: decodificar(leer('From')),\n      subject: decodificar(leer('Subject')),\n      date: fecha,\n      textPlain: decodificar(texto)\n    }\n  };\n});"
+        "jsCode": "// Arregla tildes dañadas que mandan algunos sistemas (BÃ¡varo -> Bávaro).\nconst MALAS = { 'Ã¡': 'á', 'Ã©': 'é', 'Ã­': 'í', 'Ã³': 'ó', 'Ãº': 'ú', 'Ã±': 'ñ', 'Ã‘': 'Ñ', 'Ã‰': 'É', 'Ã“': 'Ó', 'Ãš': 'Ú', 'Ã¼': 'ü', 'â€¢': '•', 'â€“': '–', 'â€œ': '\"', 'â€\\x9d': '\"' };\n\nfunction decodificar(s) {\n  return String(s || '')\n    .replace(/Ã[¡©­³º±‘‰“š¼]|â€[¢“œ\\x9d]/g, m => MALAS[m] || m)\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;|&#x27;/g, \"'\")\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&');\n}\n\nfunction textoPlano(parte) {\n  if (!parte) return '';\n  if (parte.mimeType === 'text/plain' && parte.body && parte.body.data) {\n    return Buffer.from(parte.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');\n  }\n  for (const p of (parte.parts || [])) {\n    const t = textoPlano(p);\n    if (t) return t;\n  }\n  return '';\n}\n\nfunction htmlATexto(html) {\n  return String(html || '')\n    .replace(/<(style|script)[\\s\\S]*?<\\/\\1>/gi, ' ')\n    .replace(/<br\\s*\\/?>|<\\/p>|<\\/div>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ');\n}\n\n// Gmail llega un correo por elemento; Microsoft 365 llega como una lista en \"value\".\nconst BUZON_GMAIL = 'serviciosintegraleskaizen.ia@gmail.com';\nconst BUZON_MICROSOFT = 'operaciones@somosviajepuntacana.com';\nconst entradas = $('Juntar correos').all().flatMap(item => Array.isArray(item.json.value)\n  ? item.json.value.map(m => ({ json: m, buzon: BUZON_MICROSOFT }))\n  : [{ json: item.json, buzon: BUZON_GMAIL }]);\n\nconst leidos = entradas.filter(item => item.json.id).map(item => {\n  const j = item.json;\n  if (j.receivedDateTime) {\n    const de = (j.from && j.from.emailAddress) || {};\n    const cuerpo = (j.body && j.body.content) || '';\n    return {\n      json: {\n        metadata: { 'message-id': j.id },\n        buzon: item.buzon,\n        from: decodificar(de.name ? `${de.name} <${de.address}>` : (de.address || '')),\n        subject: decodificar(j.subject || ''),\n        date: j.receivedDateTime,\n        textPlain: decodificar(j.body && j.body.contentType === 'html' ? htmlATexto(cuerpo) : cuerpo)\n      }\n    };\n  }\n  const cabeceras = (j.payload && j.payload.headers) || [];\n  const leer = (nombre) => {\n    const h = cabeceras.find(x => x.name && x.name.toLowerCase() === nombre.toLowerCase());\n    if (h) return h.value;\n    const directo = j[nombre] || j[nombre.toLowerCase()];\n    if (directo && typeof directo === 'object') return directo.text || '';\n    return directo || '';\n  };\n  const fecha = leer('Date') || (j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '');\n  const texto = j.text || textoPlano(j.payload) || htmlATexto(j.html) || j.snippet || '';\n  return {\n    json: {\n      metadata: { 'message-id': j.id },\n      buzon: item.buzon,\n      from: decodificar(leer('From')),\n      subject: decodificar(leer('Subject')),\n      date: fecha,\n      textPlain: decodificar(texto)\n    }\n  };\n});\n\n// Correos que fallaron antes (vienen del nodo \"Reintentar fallidos\"), aunque ya no estén en las fechas que se leen.\nconst reintentos = $input.all().map(x => x.json).filter(j => j.reintento && j.message_id).map(j => ({\n  json: {\n    metadata: { 'message-id': j.message_id },\n    buzon: j.buzon || BUZON_GMAIL,\n    from: j.remitente || '',\n    subject: j.asunto || '',\n    date: j.fecha || '',\n    textPlain: j.cuerpo || ''\n  }\n}));\n\n// Si un correo llega por los dos caminos, se usa una sola vez (el recién leído tiene el texto más completo).\nconst vistos = new Set();\nreturn [...leidos, ...reintentos].filter(x => {\n  const id = x.json.metadata['message-id'];\n  if (vistos.has(id)) return false;\n  vistos.add(id);\n  return true;\n});"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -578,6 +578,30 @@
       ],
       "id": "fb8c768d-1c0a-409d-a839-2716bdc8defc",
       "name": "Juntar correos"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT ON (message_id) TRUE AS reintento, message_id, buzon, remitente, asunto, fecha, cuerpo FROM clasificacion WHERE error_ia = TRUE AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%' ORDER BY message_id, id DESC LIMIT 30;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        -20,
+        -96
+      ],
+      "id": "faa2de82-ff3f-41fe-aa3c-d3439be1fe81",
+      "name": "Reintentar fallidos",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "Hl3xWYSboz9pRsXx",
+          "name": "Postgres account"
+        }
+      },
+      "notes": "Trae hasta 30 correos que fallaron en la IA (o con reanálisis pedido desde el panel) para analizarlos otra vez, sin importar la fecha."
     }
   ],
   "pinData": {},
@@ -698,6 +722,17 @@
       ]
     },
     "Juntar correos": {
+      "main": [
+        [
+          {
+            "node": "Reintentar fallidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reintentar fallidos": {
       "main": [
         [
           {
