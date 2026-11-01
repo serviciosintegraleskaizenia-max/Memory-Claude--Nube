@@ -162,7 +162,19 @@
   .alerta-x:hover { opacity: 0.8; }
   .respuesta-caja { width: 100%; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--fondo); color: var(--texto); font-size: 14px; font-family: inherit; }
   .avisos { position: fixed; top: 16px; right: 16px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
-  .alerta { background: #0b4f8a; color: white; padding: 12px 16px; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); max-width: 360px; font-size: 13px; }
+  .alerta { background: #0b4f8a; color: white; padding: 12px 16px; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); max-width: 360px; font-size: 13px; transition: opacity 0.4s; }
+  .alerta.saliendo { opacity: 0; }
+  .campana { position: relative; }
+  .campana .badge { position: absolute; top: -7px; right: -7px; margin: 0; }
+  .bandeja { position: fixed; top: 64px; right: 16px; z-index: 210; width: min(400px, 94vw); max-height: 70vh; background: var(--tarjeta); color: var(--texto); border: 1px solid var(--borde); border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); display: none; flex-direction: column; }
+  .bandeja.abierta { display: flex; }
+  .bandeja-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--borde); font-weight: 600; flex-wrap: wrap; }
+  .bandeja-lista { overflow-y: auto; }
+  .bandeja-item { padding: 10px 14px; border-bottom: 1px solid var(--borde); font-size: 13px; cursor: pointer; }
+  .bandeja-item:hover { background: var(--hover); }
+  .bandeja-item.no-leido { border-left: 4px solid #1679c2; font-weight: 600; }
+  .bandeja-item small { display: block; color: var(--texto-suave); font-size: 11px; margin-top: 3px; font-weight: normal; }
+  .bandeja-vacia { padding: 24px; text-align: center; color: var(--texto-suave); font-size: 13px; }
 
   .caja-ventana { background: var(--tarjeta); color: var(--texto); width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
   .barra-ventana { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -227,6 +239,7 @@
   </div>
   <div class="encabezado-der">
     <span class="usuario-activo" id="usuarioActivo"></span>
+    <button class="btn-tema campana" id="btnCampana" title="Notificaciones">🔔<span class="badge" id="badgeCampana" style="display:none;"></span></button>
     <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
     <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
@@ -374,6 +387,16 @@
 </div>
 
 <div class="avisos" id="avisos"></div>
+<div class="bandeja" id="bandeja" role="dialog" aria-label="Notificaciones">
+  <div class="bandeja-cabecera">
+    <span>Notificaciones</span>
+    <span>
+      <button class="btn-mini" id="btnLeerTodas">Marcar todas como leídas</button>
+      <button class="btn-mini" id="btnVaciarBandeja">Vaciar</button>
+    </span>
+  </div>
+  <div class="bandeja-lista" id="bandejaLista"></div>
+</div>
 
 <div class="overlay" id="overlay">
   <div class="caja-ventana" id="caja"></div>
@@ -644,6 +667,7 @@ function mostrarApp(s) {
   document.getElementById('btnExcel').style.display = puede('exportar_datos') ? 'inline-block' : 'none';
   document.getElementById('btnCorreoNuevo').style.display = puede('enviar_correo') ? 'inline-block' : 'none';
   document.getElementById('btnAvisos').style.display = ('Notification' in window && Notification.permission === 'default') ? 'inline-block' : 'none';
+  cargarBandeja();
   cargarReservas();
   iniciarLatido();
   detenerTemporizadores();
@@ -679,17 +703,28 @@ async function cargarReservas() {
 
   datos = r.data.map(sinEntidades);
   pintar();
-  nuevas.forEach(x => mostrarAlerta(x.categoria === 'MODIFICACION'
-    ? `Modificación en la reserva de ${x.nombre_cliente || x.asunto || 'sin nombre'}`
-    : `Nueva reserva: ${x.nombre_cliente || x.asunto || 'sin nombre'}`));
-  (av.ok ? av.data : []).forEach(a => mostrarAlerta(decodificar(a.texto), a.reserva_id));
+  // Un aviso por correo, no por cada servicio (llegada, salida...) del mismo correo.
+  const correosVistos = new Set();
+  const avisosNuevos = nuevas.filter(x => {
+    const clave = x.message_id || 'id:' + x.id;
+    if (correosVistos.has(clave)) return false;
+    correosVistos.add(clave);
+    return true;
+  }).map(x => {
+    const nombre = decodificar(x.nombre_cliente || x.asunto || 'sin nombre');
+    return {
+      texto: x.categoria === 'MODIFICACION' ? `Modificación en la reserva de ${nombre}` : `Nueva reserva: ${nombre}`,
+      reservaId: x.id
+    };
+  });
+  notificar([...avisosNuevos, ...(av.ok ? av.data : []).map(a => ({ texto: decodificar(a.texto), reservaId: a.reserva_id }))]);
 }
 
-let pendientesAviso = 0;
 let tituloBase = document.title;
 
 function actualizarTitulo() {
-  document.title = pendientesAviso > 0 ? `(${pendientesAviso}) ${tituloBase}` : tituloBase;
+  const n = noLeidas();
+  document.title = n > 0 ? `(${n}) ${tituloBase}` : tituloBase;
 }
 
 async function cargarEmpresa() {
@@ -732,27 +767,107 @@ function sonarAviso() {
   } catch (e) {}
 }
 
-window.addEventListener('focus', () => { pendientesAviso = 0; actualizarTitulo(); });
+/* ---------- Avisos: se van solos a los 10 segundos y quedan en la campanita ---------- */
 
-function mostrarAlerta(texto, reservaId) {
+const MAX_AVISOS_A_LA_VEZ = 3;
+const SEGUNDOS_AVISO = 10;
+const MAX_NOTIFICACIONES = 100;
+let notificaciones = [];
+
+function claveBandeja() {
+  return 'notificaciones:' + (sesionActual ? sesionActual.usuario : '');
+}
+
+function cargarBandeja() {
+  try {
+    notificaciones = JSON.parse(localStorage.getItem(claveBandeja()) || '[]');
+    if (!Array.isArray(notificaciones)) notificaciones = [];
+  } catch (e) {
+    notificaciones = [];
+  }
+  pintarBandeja();
+}
+
+function guardarBandeja() {
+  try { localStorage.setItem(claveBandeja(), JSON.stringify(notificaciones)); } catch (e) {}
+}
+
+function noLeidas() {
+  return notificaciones.filter(n => !n.leida).length;
+}
+
+function pintarBandeja() {
+  const n = noLeidas();
+  const badge = document.getElementById('badgeCampana');
+  badge.textContent = n > 99 ? '99+' : n;
+  badge.style.display = n ? 'inline-block' : 'none';
+  document.getElementById('bandejaLista').innerHTML = notificaciones.length
+    ? notificaciones.map(x => `
+        <div class="bandeja-item ${x.leida ? '' : 'no-leido'}" data-notificacion="${esc(x.id)}" title="${x.reservaId ? 'Abrir la reserva' : ''}">
+          ${esc(x.texto)}<small>${fechaHora(x.fecha)}</small>
+        </div>`).join('')
+    : '<div class="bandeja-vacia">No hay notificaciones.</div>';
+  actualizarTitulo();
+}
+
+function marcarLeida(id) {
+  const n = notificaciones.find(x => x.id === id);
+  if (n && !n.leida) {
+    n.leida = true;
+    guardarBandeja();
+    pintarBandeja();
+  }
+  return n;
+}
+
+function abrirDesdeAviso(id) {
+  const n = marcarLeida(id);
+  if (n && n.reservaId && datos.some(x => x.id === n.reservaId)) abrirModal(n.reservaId);
+}
+
+function alternarBandeja(abrir) {
+  const bandeja = document.getElementById('bandeja');
+  bandeja.classList.toggle('abierta', abrir === undefined ? !bandeja.classList.contains('abierta') : abrir);
+}
+
+function mostrarToast(texto, alHacerClic) {
   const box = document.getElementById('avisos');
   const div = document.createElement('div');
   div.className = 'alerta';
   div.textContent = texto;
-  if (reservaId) {
+  const quitar = () => {
+    div.classList.add('saliendo');
+    setTimeout(() => div.remove(), 400);
+  };
+  if (alHacerClic) {
     div.style.cursor = 'pointer';
-    div.title = 'Abrir la reserva';
-    div.onclick = () => { div.remove(); abrirModal(reservaId); };
+    div.onclick = () => { div.remove(); alHacerClic(); };
   }
-  box.appendChild(div);
   const cerrar = document.createElement('button');
   cerrar.className = 'alerta-x';
   cerrar.textContent = '×';
-  cerrar.onclick = e => { e.stopPropagation(); div.remove(); };
+  cerrar.onclick = e => { e.stopPropagation(); quitar(); };
   div.prepend(cerrar);
-  pendientesAviso += 1;
-  actualizarTitulo();
-  avisoEscritorio(texto);
+  box.appendChild(div);
+  setTimeout(quitar, SEGUNDOS_AVISO * 1000);
+}
+
+// Guarda los avisos en la campanita y muestra unos pocos en pantalla por 10 segundos.
+function notificar(lista) {
+  if (!lista.length) return;
+  const nuevas = lista.map(x => ({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    texto: x.texto, reservaId: x.reservaId || null, fecha: new Date().toISOString(), leida: false
+  }));
+  // La lista ya viene de la más reciente a la más vieja: quedan arriba en la bandeja.
+  notificaciones = [...nuevas, ...notificaciones].slice(0, MAX_NOTIFICACIONES);
+  guardarBandeja();
+  pintarBandeja();
+  const libres = Math.max(0, MAX_AVISOS_A_LA_VEZ - document.getElementById('avisos').children.length);
+  nuevas.slice(0, libres).forEach(n => mostrarToast(n.texto, () => abrirDesdeAviso(n.id)));
+  const resto = nuevas.length - Math.min(libres, nuevas.length);
+  if (resto > 0) mostrarToast(`Y ${resto} ${resto === 1 ? 'aviso más' : 'avisos más'} en la campanita 🔔`, () => alternarBandeja(true));
+  avisoEscritorio(nuevas.length === 1 ? nuevas[0].texto : `${nuevas.length} avisos nuevos en el panel de reservas`);
   sonarAviso();
 }
 
@@ -2214,6 +2329,27 @@ document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRe
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
 document.getElementById('btnExcel').addEventListener('click', abrirExportar);
 document.getElementById('btnTema').addEventListener('click', alternarTema);
+document.getElementById('btnCampana').addEventListener('click', e => { e.stopPropagation(); alternarBandeja(); });
+document.getElementById('bandejaLista').addEventListener('click', e => {
+  const item = e.target.closest('[data-notificacion]');
+  if (!item) return;
+  alternarBandeja(false);
+  abrirDesdeAviso(item.dataset.notificacion);
+});
+document.getElementById('btnLeerTodas').addEventListener('click', () => {
+  notificaciones.forEach(n => { n.leida = true; });
+  guardarBandeja();
+  pintarBandeja();
+});
+document.getElementById('btnVaciarBandeja').addEventListener('click', () => {
+  if (!confirm('¿Borrar todas las notificaciones?')) return;
+  notificaciones = [];
+  guardarBandeja();
+  pintarBandeja();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('#bandeja, #btnCampana')) alternarBandeja(false);
+});
 
 document.querySelectorAll('#pestanas .pestana').forEach(b =>
   b.addEventListener('click', () => cambiarVista(b.dataset.vista)));
