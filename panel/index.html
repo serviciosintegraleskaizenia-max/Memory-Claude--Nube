@@ -939,7 +939,8 @@ async function abrirModal(id) {
   document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
   document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
   document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
-  document.getElementById('mRespuesta').style.display = 'none';
+  // Una respuesta a medias (texto y adjuntos) nunca pasa de una reserva a otra.
+  ocultarRespuesta();
   document.getElementById('fondoModal').classList.add('abierto');
   cargarHistorial(id);
   cargarCorreoCompleto(r);
@@ -1065,6 +1066,7 @@ async function guardarCopiaCorreo() {
 
 async function cerrarModal() {
   if (!seleccionado) return;
+  ocultarRespuesta();
   restaurarVentana();
   document.getElementById('mMarco').srcdoc = '';
   correoActual = null;

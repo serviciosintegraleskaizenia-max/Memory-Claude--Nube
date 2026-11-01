@@ -35,6 +35,8 @@ const SE_ABREN = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'];
 const SE_ADJUNTAN = new Set([...Object.keys(TIPOS_ADJUNTO), 'zip']);
 const MAX_ADJUNTOS = 10;
 const MAX_BYTES_ADJUNTOS = 20 * 1024 * 1024;
+// Microsoft 365 acepta hasta unos 3 MB de adjuntos por correo en el envío simple.
+const MAX_BYTES_MICROSOFT = 3 * 1024 * 1024;
 
 const MINUTOS_SIN_LATIDO = 2;
 const MINUTOS_AUSENTE = 5;
@@ -122,6 +124,13 @@ async function inicializarTablas() {
   // Las filas que ya existían quedan como procesadas; solo las nuevas generan aviso.
   await client.query('ALTER TABLE clasificacion ADD COLUMN IF NOT EXISTS aviso_procesado BOOLEAN NOT NULL DEFAULT TRUE');
   await client.query('ALTER TABLE clasificacion ALTER COLUMN aviso_procesado SET DEFAULT FALSE');
+  // Un mismo correo no se puede guardar dos veces aunque dos ejecuciones de n8n se crucen.
+  try {
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS clasificacion_correo_unico
+      ON clasificacion (message_id, numero_servicio) WHERE COALESCE(message_id, '') <> ''`);
+  } catch (e) {
+    console.log('Aviso: no se pudo crear la protección contra duplicados (¿hay correos repetidos?):', e.message);
+  }
 }
 
 client.connect()
@@ -172,10 +181,10 @@ function extension(nombre) {
   return m ? m[1] : '';
 }
 
-// Pide a n8n el correo (o un adjunto) en vivo desde Microsoft 365.
-async function pedirCorreoEnVivo(datos) {
-  const destino = config.n8n && config.n8n.correoCompleto;
-  if (!destino) throw new Error('Falta configurar n8n.correoCompleto en config.js.');
+// Llama a un flujo de n8n (webhook) y devuelve su respuesta { ok: true, ... }.
+async function llamarN8n(clave, datos, flujo) {
+  const destino = config.n8n && config.n8n[clave];
+  if (!destino) throw new Error(`Falta configurar n8n.${clave} en config.js.`);
   const control = new AbortController();
   const reloj = setTimeout(() => control.abort(), 60 * 1000);
   try {
@@ -185,9 +194,9 @@ async function pedirCorreoEnVivo(datos) {
       body: JSON.stringify(datos),
       signal: control.signal
     });
-    if (!r.ok) throw new Error('n8n respondió ' + r.status + '. ¿Está activo el flujo "Correo completo"?');
+    if (!r.ok) throw new Error(`n8n respondió ${r.status}. ¿Está activo el flujo "${flujo}"?`);
     const respuesta = await r.json();
-    if (!respuesta || respuesta.ok !== true) throw new Error((respuesta && respuesta.error) || 'n8n no devolvió el correo.');
+    if (!respuesta || respuesta.ok !== true) throw new Error((respuesta && respuesta.error) || `El flujo "${flujo}" no respondió bien.`);
     return respuesta;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('Microsoft 365 tardó demasiado en responder.');
@@ -195,6 +204,36 @@ async function pedirCorreoEnVivo(datos) {
     throw e;
   } finally {
     clearTimeout(reloj);
+  }
+}
+
+// Pide a n8n el correo (o un adjunto) en vivo desde Microsoft 365.
+function pedirCorreoEnVivo(datos) {
+  return llamarN8n('correoCompleto', datos, 'Correo completo');
+}
+
+// Buzones de Microsoft 365 desde los que se envía por n8n (flujo "Enviar correo").
+function buzonesMicrosoftEnvio() {
+  return config.n8n && config.n8n.enviarCorreo ? (config.n8n.buzonesMicrosoft || []) : [];
+}
+
+function enviarPorMicrosoft(datos, adjuntos) {
+  const total = adjuntos.reduce((s, a) => s + a.content.length, 0);
+  if (total > MAX_BYTES_MICROSOFT) {
+    throw Object.assign(new Error('Desde Microsoft 365 los adjuntos no pueden pasar de 3 MB en total por correo.'), { codigo: 400 });
+  }
+  return llamarN8n('enviarCorreo', { ...datos, adjuntos: adjuntos.map(a => ({ nombre: a.filename, datos: a.content.toString('base64') })) }, 'Enviar correo');
+}
+
+// Envía por SMTP (cuentas de config.correo) con un mensaje claro si la cuenta rechaza la clave.
+async function enviarPorSmtp(salida, mensaje) {
+  try {
+    await salida.transporte.sendMail(mensaje);
+  } catch (e) {
+    if (e.responseCode === 535 || /Username and Password not accepted|BadCredentials/i.test(e.message)) {
+      throw Object.assign(new Error('La cuenta de correo rechazó la clave. En Gmail hace falta una "contraseña de aplicación" en config.js.'), { codigo: 400 });
+    }
+    throw new Error('No se pudo enviar el correo: ' + e.message);
   }
 }
 
@@ -1273,7 +1312,7 @@ http.createServer(async (req, res) => {
         if (!puede('responder_correo') && !puede('enviar_correo')) {
           return json(res, 403, { error: 'No tienes permiso para enviar correos.' });
         }
-        return json(res, 200, Object.keys(config.correo || {}));
+        return json(res, 200, [...new Set([...buzonesMicrosoftEnvio(), ...Object.keys(config.correo || {})])]);
       }
 
       if (req.method === 'POST' && url === '/api/correo/responder') {
@@ -1289,6 +1328,20 @@ http.createServer(async (req, res) => {
         if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
         const para = emailDeRemitente(fila.remitente);
         if (!para) return json(res, 400, { error: 'No se encontró un correo válido del remitente.' });
+        const detalleAdjuntos = archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : '';
+        if (esMicrosoft(fila.buzon)) {
+          // Microsoft 365: la respuesta va dentro de la misma conversación y queda en Elementos enviados.
+          if (!buzonesMicrosoftEnvio().includes(fila.buzon)) {
+            return json(res, 400, { error: 'El envío desde ' + fila.buzon + ' no está configurado (flujo "Enviar correo" en config.js).' });
+          }
+          try {
+            await enviarPorMicrosoft({ accion: 'responder', buzon: fila.buzon, message_id: fila.message_id, texto: limpio }, archivos.adjuntos);
+          } catch (e) {
+            return json(res, e.codigo || 502, { error: e.message });
+          }
+          await registrar(u, 'responder_correo', 'reserva', fila.id, '', para, 'Respuesta enviada desde ' + fila.buzon + detalleAdjuntos);
+          return json(res, 200, { ok: true });
+        }
         const salida = transporteDe(fila.buzon);
         if (!salida) return json(res, 400, { error: 'Esa cuenta no está configurada para enviar correos.' });
         const asunto = /^re:/i.test(fila.asunto || '') ? fila.asunto : 'Re: ' + (fila.asunto || '');
@@ -1299,12 +1352,15 @@ http.createServer(async (req, res) => {
           cabeceras['In-Reply-To'] = fila.message_id;
           cabeceras['References'] = fila.message_id;
         }
-        await salida.transporte.sendMail({
-          from: `"${salida.nombre}" <${fila.buzon}>`,
-          to: para, subject: asunto, text: cuerpoCompleto, headers: cabeceras, attachments: archivos.adjuntos
-        });
-        await registrar(u, 'responder_correo', 'reserva', fila.id, '', para, 'Respuesta enviada desde ' + fila.buzon +
-          (archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : ''));
+        try {
+          await enviarPorSmtp(salida, {
+            from: `"${salida.nombre}" <${fila.buzon}>`,
+            to: para, subject: asunto, text: cuerpoCompleto, headers: cabeceras, attachments: archivos.adjuntos
+          });
+        } catch (e) {
+          return json(res, e.codigo || 502, { error: e.message });
+        }
+        await registrar(u, 'responder_correo', 'reserva', fila.id, '', para, 'Respuesta enviada desde ' + fila.buzon + detalleAdjuntos);
         return json(res, 200, { ok: true });
       }
 
@@ -1313,19 +1369,29 @@ http.createServer(async (req, res) => {
         const { buzon, para, asunto, texto: cuerpoNuevo, adjuntos } = await leerCuerpo(req);
         const destino = emailDeRemitente(para);
         if (!destino) return json(res, 400, { error: 'Escribe un correo de destino válido.' });
-        const salida = transporteDe(buzon);
-        if (!salida) return json(res, 400, { error: 'Esa cuenta no está configurada para enviar correos.' });
         const limpio = String(cuerpoNuevo || '').trim();
         const tema = String(asunto || '').trim();
         if (!limpio || !tema) return json(res, 400, { error: 'El asunto y el mensaje son obligatorios.' });
         const archivos = adjuntosParaEnviar(adjuntos);
         if (archivos.error) return json(res, 400, { error: archivos.error });
-        await salida.transporte.sendMail({
-          from: `"${salida.nombre}" <${buzon}>`,
-          to: destino, subject: tema, text: limpio, attachments: archivos.adjuntos
-        });
-        await registrar(u, 'enviar_correo', 'correo', destino, '', tema, 'Enviado desde ' + buzon +
-          (archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : ''));
+        const detalleAdjuntos = archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : '';
+        if (buzonesMicrosoftEnvio().includes(buzon)) {
+          try {
+            await enviarPorMicrosoft({ accion: 'nuevo', buzon, para: destino, asunto: tema, texto: limpio }, archivos.adjuntos);
+          } catch (e) {
+            return json(res, e.codigo || 502, { error: e.message });
+          }
+          await registrar(u, 'enviar_correo', 'correo', destino, '', tema, 'Enviado desde ' + buzon + detalleAdjuntos);
+          return json(res, 200, { ok: true });
+        }
+        const salida = transporteDe(buzon);
+        if (!salida) return json(res, 400, { error: 'Esa cuenta no está configurada para enviar correos.' });
+        try {
+          await enviarPorSmtp(salida, { from: `"${salida.nombre}" <${buzon}>`, to: destino, subject: tema, text: limpio, attachments: archivos.adjuntos });
+        } catch (e) {
+          return json(res, e.codigo || 502, { error: e.message });
+        }
+        await registrar(u, 'enviar_correo', 'correo', destino, '', tema, 'Enviado desde ' + buzon + detalleAdjuntos);
         return json(res, 200, { ok: true });
       }
 

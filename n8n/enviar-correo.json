@@ -1,0 +1,114 @@
+{
+  "name": "Enviar correo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "enviar-correo",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ebe7d0ef-36b6-4d00-97b9-5f50068f11b2",
+      "name": "Pedido del panel",
+      "webhookId": "0a1c1076-6f7e-48e8-a914-59ae8d3d6b5b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma el pedido a Microsoft 365: responder dentro de la conversación o enviar un correo nuevo.\nconst p = $json.body || {};\nconst html = t => String(t || '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c])).replace(/\\r?\\n/g, '<br>');\nconst adjuntos = (p.adjuntos || []).map(a => ({\n  '@odata.type': '#microsoft.graph.fileAttachment',\n  name: a.nombre,\n  contentBytes: a.datos\n}));\nconst base = 'https://graph.microsoft.com/v1.0/users/' + p.buzon;\n\nif (p.accion === 'responder') {\n  // La respuesta va al remitente, con el correo original citado debajo, y queda en Elementos enviados.\n  return [{ json: {\n    url: base + '/messages/' + encodeURIComponent(p.message_id) + '/reply',\n    cuerpo: { comment: html(p.texto), message: { attachments: adjuntos } }\n  } }];\n}\n\nreturn [{ json: {\n  url: base + '/sendMail',\n  cuerpo: {\n    message: {\n      subject: p.asunto || '',\n      body: { contentType: 'HTML', content: html(p.texto) },\n      toRecipients: [{ emailAddress: { address: p.para } }],\n      attachments: adjuntos\n    },\n    saveToSentItems: true\n  }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "id": "dc9540e0-4cc5-46f9-be01-142d339aa4d0",
+      "name": "Preparar envío"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ],
+      "id": "02681457-edeb-4f27-a324-1d51c9f5b718",
+      "name": "Microsoft 365: enviar",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Usa la credencial de Microsoft 365 (OAuth2) con permiso Mail.Send."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Microsoft responde vacío cuando el envío salió bien.\nconst r = $input.first().json || {};\nif (r.error) {\n  const detalle = typeof r.error === 'string' ? r.error : (r.error.message || JSON.stringify(r.error));\n  return [{ json: { ok: false, error: 'Microsoft 365 no envió el correo: ' + detalle } }];\n}\nreturn [{ json: { ok: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "79c4234c-0644-4a9b-80c1-e314b9b9fee8",
+      "name": "Respuesta al panel"
+    }
+  ],
+  "connections": {
+    "Pedido del panel": {
+      "main": [
+        [
+          {
+            "node": "Preparar envío",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar envío": {
+      "main": [
+        [
+          {
+            "node": "Microsoft 365: enviar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft 365: enviar": {
+      "main": [
+        [
+          {
+            "node": "Respuesta al panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
