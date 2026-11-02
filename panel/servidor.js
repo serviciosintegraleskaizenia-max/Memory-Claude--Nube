@@ -174,6 +174,19 @@ async function inicializarTablas() {
   await client.query('DROP TRIGGER IF EXISTS clasificacion_historico ON clasificacion');
   await client.query(`CREATE TRIGGER clasificacion_historico BEFORE INSERT ON clasificacion
     FOR EACH ROW EXECUTE PROCEDURE clasificacion_historico()`);
+  // Reanálisis seguro: las filas viejas con error de un correo se borran justo cuando llega su análisis nuevo
+  // (en el mismo guardado), no antes. Si la IA o n8n fallan a mitad, el correo sigue marcado y se reintenta.
+  await client.query(`CREATE OR REPLACE FUNCTION clasificacion_reemplazo() RETURNS trigger AS $$
+    BEGIN
+      IF COALESCE(NEW.message_id, '') <> '' THEN
+        DELETE FROM clasificacion c
+        WHERE c.message_id = NEW.message_id AND c.error_ia = TRUE AND c.creado < COALESCE(NEW.creado, NOW());
+      END IF;
+      RETURN NEW;
+    END $$ LANGUAGE plpgsql`);
+  await client.query('DROP TRIGGER IF EXISTS clasificacion_reemplazo ON clasificacion');
+  await client.query(`CREATE TRIGGER clasificacion_reemplazo BEFORE INSERT ON clasificacion
+    FOR EACH ROW EXECUTE PROCEDURE clasificacion_reemplazo()`);
   await client.query('CREATE INDEX IF NOT EXISTS clasificacion_estado ON clasificacion (estado)');
   await client.query("CREATE INDEX IF NOT EXISTS clasificacion_clave ON clasificacion ((COALESCE(NULLIF(message_id, ''), 'id:' || id)))");
 
