@@ -27,8 +27,8 @@ function Anotar($texto) {
   if ($lineas.Count -gt 2000) { $lineas | Select-Object -Last 2000 | Set-Content $registro -Encoding UTF8 }
 }
 function Avisar($texto) {
-  # Mensaje en pantalla de Windows (si el equipo lo permite).
-  try { msg.exe * /TIME:300 "Panel de reservas: $texto" 2>$null } catch {}
+  # No se muestra nada en la pantalla de la oficina: el aviso le llega solo al programador
+  # (el panel, al encender, le manda correo y aviso en la campanita).
 }
 
 if (Test-Path (Join-Path $Panel 'MANTENIMIENTO.txt')) { exit 0 }
@@ -76,6 +76,7 @@ if ($ocupado) {
   Start-Sleep -Seconds 3
 }
 Anotar 'Encendiendo el panel...'
+$env:ARRANQUE_VIGILANTE = '1'
 Start-Process -FilePath 'node' -ArgumentList 'servidor.js' -WorkingDirectory $Panel -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $Panel 'panel.log') -RedirectStandardError (Join-Path $Panel 'panel-error.log')
 Start-Sleep -Seconds 15

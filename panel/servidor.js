@@ -237,6 +237,7 @@ client.connect()
     setInterval(repartir, 10 * 1000);
     setInterval(importarHistorico, 20 * 1000);
     setTimeout(revisarSalud, 60 * 1000);
+    setTimeout(() => avisarArranqueDelVigilante().catch(e => console.log('Aviso de arranque:', e.message)), 20 * 1000);
     setInterval(revisarSalud, 5 * 60 * 1000);
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
@@ -1259,6 +1260,21 @@ async function correoDeAlerta(asunto, texto) {
 }
 
 let revisandoSalud = false;
+async function programadores() {
+  return (await client.query("SELECT usuario FROM usuarios WHERE activo = TRUE AND grupo = 'Programador'")).rows.map(x => x.usuario);
+}
+
+// Si el vigilante de Windows tuvo que volver a encender el panel, se le avisa al programador.
+async function avisarArranqueDelVigilante() {
+  if (process.env.ARRANQUE_VIGILANTE !== '1') return;
+  const texto = 'El panel se había caído y el vigilante de Windows lo volvió a encender solo.';
+  await client.query("INSERT INTO alertas (clave, texto, resuelta) VALUES ('panel', $1, NOW())", [texto]);
+  await avisar(await programadores(), '⚠ ' + texto, null);
+  const envio = await correoDeAlerta('⚠ Panel de reservas: se reinició solo', texto + '\n\nRevisa C:\\panel-correos\\vigilante.log y panel-error.log para ver qué pasó.');
+  await client.query("UPDATE alertas SET correo = $1 WHERE id = (SELECT MAX(id) FROM alertas WHERE clave = 'panel')", [envio]);
+  await registrar(SISTEMA, 'panel_reiniciado', 'sistema', 'panel', '', '', texto + ' · Correo: ' + envio);
+}
+
 async function revisarSalud() {
   if (revisandoSalud) return;
   revisandoSalud = true;
@@ -1266,8 +1282,8 @@ async function revisarSalud() {
     const chequeos = [await chequearN8n(), await chequearFlujo(), await chequearIa(), await chequearSaldo()];
     estadoSalud.revisado = new Date().toISOString();
     estadoSalud.chequeos = chequeos;
-    const destinatarios = [...new Set([...(await usuariosConPermiso('ver_control')).map(x => x.usuario),
-      ...(await client.query("SELECT usuario FROM usuarios WHERE activo = TRUE AND grupo = 'Programador'")).rows.map(x => x.usuario)])];
+    // Las alertas del sistema son solo para el programador (Kaizen IA).
+    const destinatarios = await programadores();
     for (const c of chequeos) {
       const activa = (await client.query('SELECT id FROM alertas WHERE clave = $1 AND resuelta IS NULL', [c.clave])).rows[0];
       if (c.estado === 'falla' && !activa) {
@@ -1799,8 +1815,8 @@ http.createServer(async (req, res) => {
     /* ---------- Estado del sistema (alertas de fallos) ---------- */
 
     if (url === '/api/salud' || url === '/api/salud/revisar') {
-      if (u.grupo !== 'Programador' && !puede('ver_control') && !puede('administrar_usuarios')) {
-        return json(res, 403, { error: 'No tienes permiso para ver el estado del sistema.' });
+      if (u.grupo !== 'Programador') {
+        return json(res, 403, { error: 'Solo el programador puede ver el estado del sistema.' });
       }
       if (req.method === 'POST' && url === '/api/salud/revisar') await revisarSalud();
       const activas = (await client.query('SELECT clave, texto, creada FROM alertas WHERE resuelta IS NULL ORDER BY creada')).rows;

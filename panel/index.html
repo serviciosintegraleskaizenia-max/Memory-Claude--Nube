@@ -1609,7 +1609,8 @@ async function latido() {
 /* ---------- Alertas de fallos del sistema (programador, gerencia y administración) ---------- */
 
 function puedeVerSalud() {
-  return Boolean(sesionActual) && (sesionActual.grupo === 'Programador' || puede('ver_control') || puede('administrar_usuarios'));
+  // Las alertas del sistema y su pestaña son solo para el programador (Kaizen IA).
+  return Boolean(sesionActual) && sesionActual.grupo === 'Programador';
 }
 
 async function cargarAlertasSistema() {
@@ -1640,7 +1641,7 @@ async function cargarEstadoSistema(revisar) {
   }
   const d = r.data;
   box.innerHTML = `
-    <p>El panel revisa cada 5 minutos que todo funcione. Si algo falla, avisa en la campanita y con una franja roja arriba
+    <p>El panel revisa cada 5 minutos que todo funcione. Solo tú (programador) ves esto. Si algo falla, te avisa en la campanita y con una franja roja arriba
       ${d.correos ? `y manda un correo a ${d.correos} dirección(es) configurada(s)` : '(para recibir también un correo, agrega alertas.correos en config.js)'}.</p>
     <div class="tabla-wrap tabla-chica"><table>
       <thead><tr><th>Qué se vigila</th><th>Estado</th><th>Detalle</th></tr></thead>
