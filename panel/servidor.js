@@ -1327,8 +1327,9 @@ http.createServer(async (req, res) => {
         const r = await client.query(
           `SELECT ${columnas} FROM clasificacion c ${uniones}
            WHERE c.estado = 'historico' ${q ? `AND (c.asunto ILIKE $1 OR c.remitente ILIKE $1 OR c.nombre_cliente ILIKE $1 OR c.agencia ILIKE $1
-             OR c.hotel ILIKE $1 OR c.vuelo ILIKE $1 OR c.telefono ILIKE $1 OR c.cuerpo ILIKE $1)` : ''}`,
-          q ? ['%' + q.replace(/[\\%_]/g, m => '\\' + m) + '%'] : []
+             OR c.hotel ILIKE $1 OR c.vuelo ILIKE $1 OR c.telefono ILIKE $1 OR c.cuerpo ILIKE $1
+             OR c.id::text = $2)` : ''}`,
+          q ? ['%' + q.replace(/[\\%_]/g, m => '\\' + m) + '%', q.replace(/^#/, '')] : []
         );
         filas = r.rows
           .filter(x => {

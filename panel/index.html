@@ -92,7 +92,8 @@
   .revision.tarde, .cronometro.tarde { background: #fee2e2; color: #991b1b; font-weight: 700; }
   .cronometro { display: inline-block; font-variant-numeric: tabular-nums; background: #dcfce7; color: #166534; border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; margin-top: 6px; }
   .cronometro.parado { background: #e2e8f0; color: #475569; }
-  .buscar-historico { min-width: 220px; }
+  .buscar-historico { min-width: 300px; }
+  .num-reserva { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
   .fondo-modal, .overlay, .fondo-chat { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; padding: 16px; }
@@ -295,7 +296,7 @@
       <option value="historico">Histórico</option>
     </select>
     <select id="filtroAsesor" style="display:none;" title="Asesor asignado"></select>
-    <input type="search" id="buscarHistorico" class="buscar-historico" style="display:none;" placeholder="Buscar en el histórico (cliente, asunto, hotel, vuelo...)">
+    <input type="search" id="buscarHistorico" class="buscar-historico" placeholder="🔍 Buscar cliente, # reserva, agencia, vuelo, hotel..." title="Busca por nombre del cliente, número de reserva (#123), agencia, vuelo, hotel, teléfono o asunto">
     <select id="filtroOrden">
       <option value="servicio">Orden: fecha de servicio (más próxima)</option>
       <option value="recibido">Orden: fecha de recibido (más reciente)</option>
@@ -941,8 +942,14 @@ function filtrar() {
   const hasta = document.getElementById('hasta').value;
   const soloCompletos = document.getElementById('soloCompletos').checked && vistaActual !== 'historico';
   const asesor = puede('supervisar') ? document.getElementById('filtroAsesor').value : '';
+  // En el histórico la búsqueda la hace el servidor; en las demás pestañas se filtra aquí mismo.
+  const busqueda = vistaActual === 'historico' ? '' : normalizarBusqueda(document.getElementById('buscarHistorico').value);
+  const numero = /^#?\d+$/.test(busqueda) ? Number(busqueda.replace('#', '')) : null;
 
   const lista = datos.filter(r => {
+    if (busqueda && !(numero !== null
+      ? r.id === numero
+      : normalizarBusqueda([r.nombre_cliente, agenciaDe(r), r.agencia, r.asunto, r.remitente, r.vuelo, r.hotel, r.telefono, r.actividad, r.tipo_servicio, '#' + r.id].join(' ')).includes(busqueda))) return false;
     if (asesor === '-' && r.asignado_a) return false;
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
@@ -979,7 +986,7 @@ function pintar() {
           : '') + marcaAsignado(r);
         return `
       <tr data-id="${r.id}">
-        <td>${fechaCorta(r.fecha)}</td>
+        <td>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}</div></td>
         <td><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
         <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
         <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
@@ -1017,7 +1024,9 @@ function cambiarVista(vista) {
   vistaActual = vista;
   document.querySelectorAll('#pestanas .pestana').forEach(b =>
     b.classList.toggle('activa', b.dataset.vista === vista));
-  document.getElementById('buscarHistorico').style.display = vista === 'historico' ? 'inline-block' : 'none';
+  document.getElementById('buscarHistorico').placeholder = vista === 'historico'
+    ? '🔍 Buscar en el histórico (cliente, asunto, hotel, vuelo...)'
+    : '🔍 Buscar cliente, # reserva, agencia, vuelo, hotel...';
   // El histórico trae otra lista del servidor; al salir se vuelve a la lista normal.
   if (vista === 'historico' || antes === 'historico') {
     datos = [];
@@ -1026,6 +1035,11 @@ function cambiarVista(vista) {
     return;
   }
   pintar();
+}
+
+// Búsqueda sin importar mayúsculas ni tildes: "nunez" encuentra "Núñez".
+function normalizarBusqueda(t) {
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function alCambiarFechas() {
@@ -1205,7 +1219,7 @@ async function abrirModal(id) {
 
   document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
   document.getElementById('mMeta').innerHTML =
-    `De: ${esc(r.remitente)}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
+    `Reserva <strong>#${r.id}</strong> · De: ${esc(r.remitente)}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
   const cajaCorreo = document.getElementById('mCorreo');
   cajaCorreo.textContent = 'Cargando el correo...';
   api('/api/reserva/cuerpo?id=' + id).then(rc => {
@@ -2710,7 +2724,8 @@ document.getElementById('btnAyer').addEventListener('click', () => {
 ['desde', 'hasta'].forEach(id => document.getElementById(id).addEventListener('change', alCambiarFechas));
 document.getElementById('buscarHistorico').addEventListener('input', () => {
   clearTimeout(timerBusqueda);
-  timerBusqueda = setTimeout(() => cargarReservas(true), 500);
+  // Histórico: busca en el servidor. Demás pestañas: filtra al instante lo que ya está cargado.
+  timerBusqueda = vistaActual === 'historico' ? setTimeout(() => cargarReservas(true), 500) : setTimeout(pintar, 150);
 });
 document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
 
