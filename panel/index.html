@@ -95,6 +95,13 @@
   /* Buscador a la derecha de las pestañas */
   .buscar-historico { margin-left: auto; align-self: center; width: min(420px, 100%); margin-bottom: 6px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: 999px; font-size: 14px; background: var(--tarjeta); color: var(--texto); }
   .buscar-historico:focus { outline: none; border-color: #1679c2; box-shadow: 0 0 0 3px rgba(22,121,194,0.18); }
+  .alertas-sistema { background: #fee2e2; color: #7f1d1d; border: 1px solid #fca5a5; border-left: 6px solid #dc2626; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+  .alertas-sistema strong { font-size: 15px; }
+  .alertas-sistema .btn-mini { margin-left: auto; }
+  body.oscuro .alertas-sistema { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
+  .salud-bien { color: #16a34a; font-weight: 700; }
+  .salud-falla { color: #dc2626; font-weight: 700; }
+  .salud-sin { color: var(--texto-suave); font-weight: 700; }
   .num-reserva { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
@@ -261,6 +268,7 @@
 </header>
 
 <main>
+  <div id="alertasSistema" class="alertas-sistema" style="display:none;"></div>
   <div class="tarjetas">
     <div class="tarjeta t-reservas"><div class="etiqueta">Reservas</div><div class="numero" id="n-reservas">0</div></div>
     <div class="tarjeta t-pendientes"><div class="etiqueta">Pendientes de transcribir</div><div class="numero" id="n-pendientes">0</div></div>
@@ -1595,6 +1603,59 @@ async function latido() {
   await api('/api/latido', { activo });
   const r = await api('/api/conectados');
   if (r.ok) pintarConectados(r.data);
+  cargarAlertasSistema();
+}
+
+/* ---------- Alertas de fallos del sistema (programador, gerencia y administración) ---------- */
+
+function puedeVerSalud() {
+  return Boolean(sesionActual) && (sesionActual.grupo === 'Programador' || puede('ver_control') || puede('administrar_usuarios'));
+}
+
+async function cargarAlertasSistema() {
+  const caja = document.getElementById('alertasSistema');
+  if (!puedeVerSalud()) { caja.style.display = 'none'; return; }
+  const r = await api('/api/salud');
+  if (!r.ok || !r.data.activas.length) { caja.style.display = 'none'; return; }
+  caja.innerHTML = `<strong>⚠ Falla en el sistema</strong>
+    <span>${r.data.activas.map(a => esc(a.texto)).join('<br>')}</span>
+    <button class="btn-mini" data-ver-estado="1">Ver estado del sistema</button>`;
+  caja.style.display = 'flex';
+}
+
+function iconoSalud(estado) {
+  return estado === 'bien' ? '<span class="salud-bien">✔ Bien</span>'
+    : estado === 'falla' ? '<span class="salud-falla">✖ Falla</span>'
+    : '<span class="salud-sin">— Sin datos</span>';
+}
+
+async function cargarEstadoSistema(revisar) {
+  const box = document.getElementById('panelEstado');
+  if (!box) return;
+  if (revisar) box.innerHTML = 'Revisando…';
+  const r = await api(revisar ? '/api/salud/revisar' : '/api/salud', revisar ? {} : undefined);
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo revisar el sistema.')}</div>`;
+    return;
+  }
+  const d = r.data;
+  box.innerHTML = `
+    <p>El panel revisa cada 5 minutos que todo funcione. Si algo falla, avisa en la campanita y con una franja roja arriba
+      ${d.correos ? `y manda un correo a ${d.correos} dirección(es) configurada(s)` : '(para recibir también un correo, agrega alertas.correos en config.js)'}.</p>
+    <div class="tabla-wrap tabla-chica"><table>
+      <thead><tr><th>Qué se vigila</th><th>Estado</th><th>Detalle</th></tr></thead>
+      <tbody>${(d.chequeos || []).map(c => `<tr><td>${esc(c.nombre)}</td><td>${iconoSalud(c.estado)}</td><td style="white-space:normal">${esc(c.detalle)}</td></tr>`).join('')
+        || '<tr><td colspan="3">Todavía no se ha revisado. Pulsa "Revisar ahora".</td></tr>'}</tbody>
+    </table></div>
+    <p class="etiqueta-sec">Última revisión: ${d.revisado ? esc(fechaHora(d.revisado)) : 'pendiente'} · Saldo mínimo: US$ ${esc(d.saldoMinimo)} · Alerta si n8n no lee correos en ${esc(d.minutosSinFlujo)} min.</p>
+    <div class="pie-acciones"><button class="btn" data-accion="salud-revisar">Revisar ahora</button></div>
+    <div class="titulo-seccion">Últimas alertas</div>
+    ${d.historial.length ? `<div class="tabla-wrap tabla-chica"><table>
+      <thead><tr><th>Desde</th><th>Hasta</th><th>Qué pasó</th><th>Correo</th></tr></thead>
+      <tbody>${d.historial.map(a => `<tr><td>${esc(fechaHora(a.creada))}</td><td>${a.resuelta ? esc(fechaHora(a.resuelta)) : '<span class="salud-falla">Sigue</span>'}</td>
+        <td style="white-space:normal">${esc(a.texto)}</td><td style="white-space:normal">${esc(a.correo)}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="vacio-total">No ha habido fallas.</div>'}`;
+  cargarAlertasSistema();
 }
 
 function iniciarLatido() {
@@ -1976,6 +2037,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
     listaGrupos = [];
     return marco('auditoria', aviso);
   }
+  if (tab === 'estado') return marco('estado', aviso);
   if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
   if (tab === 'empresa') return marco('empresa', aviso);
   if (tab === 'cache') return marco('cache', aviso);
@@ -2000,6 +2062,7 @@ function marco(tab, aviso) {
   const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + boton('reparto', 'Reparto') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
     (esProg ? boton('historico', 'Historial') : '') +
+    (puedeVerSalud() ? boton('estado', 'Estado del sistema') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
     `<button class="btn-sec" data-accion="cerrar">Cerrar</button>`;
@@ -2013,6 +2076,7 @@ function marco(tab, aviso) {
   else if (tab === 'cache') cuerpo = '<div id="panelCache">Cargando…</div>';
   else if (tab === 'reparto') cuerpo = '<div id="panelReparto">Cargando…</div>';
   else if (tab === 'historico') cuerpo = '<div id="panelHistorico">Cargando…</div>';
+  else if (tab === 'estado') cuerpo = '<div id="panelEstado">Cargando…</div>';
   else cuerpo = formAuditoria();
 
   abrirVentana(`
@@ -2025,6 +2089,7 @@ function marco(tab, aviso) {
   if (tab === 'cache') cargarCache();
   if (tab === 'reparto') cargarReparto();
   if (tab === 'historico') cargarHistorico();
+  if (tab === 'estado') cargarEstadoSistema(false);
 }
 
 /* ---------- Reparto automático ---------- */
@@ -2526,6 +2591,8 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'cache-guardar') return guardarAjustesCache();
   if (a === 'tab-reparto') return abrirHerramientas('reparto');
   if (a === 'tab-historico') return abrirHerramientas('historico');
+  if (a === 'tab-estado') return abrirHerramientas('estado');
+  if (a === 'salud-revisar') return cargarEstadoSistema(true);
   if (a === 'reparto-guardar') return guardarReparto();
   if (a === 'historico-iniciar') return accionHistorico('iniciar');
   if (a === 'historico-pausar') return accionHistorico('pausar');
@@ -2730,6 +2797,7 @@ document.getElementById('buscarHistorico').addEventListener('input', () => {
   timerBusqueda = vistaActual === 'historico' ? setTimeout(() => cargarReservas(true), 500) : setTimeout(pintar, 150);
 });
 document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
+document.getElementById('alertasSistema').addEventListener('click', e => { if (e.target.dataset.verEstado) abrirHerramientas('estado'); });
 
 if (localStorage.getItem('tema') === 'oscuro') {
   document.body.classList.add('oscuro');

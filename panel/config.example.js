@@ -16,6 +16,18 @@ module.exports = {
 
   // Flujo de n8n que marca el correo como leído cuando todos sus servicios quedan "Registrada".
   // Debe estar activo (Publish). Si se deja vacío, el panel no marca nada.
+  // Alertas de fallos: a quién se le manda un correo cuando algo falla (además de la campanita del panel).
+  alertas: {
+    correos: ['gerencia@tuempresa.com'],
+    saldoMinimo: 3,         // US$: avisa si el saldo de OpenRouter baja de esto
+    minutosSinFlujo: 30,    // avisa si n8n no lee correos en estos minutos
+    erroresIaPorHora: 5     // avisa si fallan más correos que esto en una hora
+  },
+  // Opcional: la misma clave de OpenRouter que usa n8n, solo para vigilar el saldo.
+  openrouter: {
+    apiKey: ''
+  },
+
   n8n: {
     marcarLeido: 'http://localhost:5678/webhook/marcar-leido',
     // Flujo "Correo completo": trae el correo de Microsoft 365 con imágenes y adjuntos.

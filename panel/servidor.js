@@ -210,6 +210,17 @@ async function inicializarTablas() {
     fin TIMESTAMPTZ)`);
   await client.query('CREATE INDEX IF NOT EXISTS tiempo_reserva_reserva ON tiempo_reserva (reserva_id)');
   await client.query('CREATE INDEX IF NOT EXISTS tiempo_reserva_usuario ON tiempo_reserva (usuario, inicio)');
+  // Alertas de fallos: n8n escribe aquí en cada ejecución (nodo "Reintentar fallidos"); el panel vigila.
+  await client.query(`CREATE TABLE IF NOT EXISTS salud_n8n (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    visto TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  await client.query(`CREATE TABLE IF NOT EXISTS alertas (
+    id SERIAL PRIMARY KEY,
+    clave VARCHAR(30) NOT NULL,
+    texto TEXT NOT NULL,
+    correo TEXT NOT NULL DEFAULT '',
+    creada TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resuelta TIMESTAMPTZ)`);
   await client.query(`CREATE TABLE IF NOT EXISTS tiempo_aviso (
     reserva_id INTEGER PRIMARY KEY,
     creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -225,6 +236,8 @@ client.connect()
     setInterval(revisarTiempos, 30 * 1000);
     setInterval(repartir, 10 * 1000);
     setInterval(importarHistorico, 20 * 1000);
+    setTimeout(revisarSalud, 60 * 1000);
+    setInterval(revisarSalud, 5 * 60 * 1000);
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
 
@@ -1144,6 +1157,140 @@ async function estadoHistorico() {
   return { importacion: est, ...c };
 }
 
+/* ---------- Alertas de fallos: vigila n8n, el flujo de correos, la IA y el saldo de OpenRouter ---------- */
+
+const AJUSTES_ALERTAS = Object.assign({ correos: [], saldoMinimo: 3, minutosSinFlujo: 30, erroresIaPorHora: 5 }, config.alertas || {});
+const estadoSalud = { revisado: null, chequeos: [] };
+
+async function conTiempo(url, opciones = {}, ms = 10000) {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), ms);
+  try {
+    return await fetch(url, { ...opciones, signal: control.signal });
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+function origenN8n() {
+  const url = config.n8n && (config.n8n.correoCompleto || config.n8n.marcarLeido || config.n8n.enviarCorreo);
+  try { return url ? new URL(url).origin : null; } catch (e) { return null; }
+}
+
+async function chequearN8n() {
+  const origen = origenN8n();
+  if (!origen) return { clave: 'n8n', nombre: 'n8n encendido', estado: 'sin datos', detalle: 'No hay direcciones de n8n en config.js.' };
+  try {
+    const r = await conTiempo(origen + '/healthz', {}, 8000);
+    if (r.ok) return { clave: 'n8n', nombre: 'n8n encendido', estado: 'bien', detalle: 'n8n responde.' };
+    return { clave: 'n8n', nombre: 'n8n encendido', estado: 'falla', detalle: `n8n respondió con error ${r.status}.` };
+  } catch (e) {
+    return { clave: 'n8n', nombre: 'n8n encendido', estado: 'falla', detalle: 'n8n no responde. ¿Está abierto en la computadora?' };
+  }
+}
+
+async function chequearFlujo() {
+  const fila = (await client.query('SELECT visto, NOW() - visto AS hace FROM salud_n8n WHERE id = 1')).rows[0];
+  if (!fila) {
+    return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'sin datos', detalle: 'Falta el aviso de vida en el nodo "Reintentar fallidos" (paso de instalación de las alertas).' };
+  }
+  const minutos = Math.round((Date.now() - new Date(fila.visto).getTime()) / 60000);
+  const cuando = new Date(fila.visto).toLocaleString('es-DO', { timeZone: ZONA_HORARIA, dateStyle: 'short', timeStyle: 'short' });
+  if (minutos > AJUSTES_ALERTAS.minutosSinFlujo) {
+    return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'falla', detalle: `El flujo "Correos - leer y clasificar" no corre desde ${cuando} (hace ${minutos} min). No están entrando correos nuevos.` };
+  }
+  return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'bien', detalle: `Última lectura: ${cuando}.` };
+}
+
+async function chequearIa() {
+  const r = (await client.query(
+    `SELECT COUNT(DISTINCT message_id)::int AS n, MAX(motivo) AS ejemplo FROM clasificacion
+     WHERE error_ia = TRUE AND motivo LIKE 'Error de la IA%' AND creado > NOW() - INTERVAL '1 hour'`
+  )).rows[0];
+  if (r.n >= AJUSTES_ALERTAS.erroresIaPorHora) {
+    const sinSaldo = /402|credit|insufficient|saldo/i.test(r.ejemplo || '');
+    return { clave: 'ia', nombre: 'IA (OpenRouter)', estado: 'falla',
+      detalle: `${r.n} correos fallaron con la IA en la última hora${sinSaldo ? ' por falta de saldo en OpenRouter' : ''}. Ejemplo: ${String(r.ejemplo || '').slice(0, 160)}` };
+  }
+  return { clave: 'ia', nombre: 'IA (OpenRouter)', estado: 'bien', detalle: r.n ? `${r.n} error(es) aislados en la última hora; se reintentan solos.` : 'Sin errores en la última hora.' };
+}
+
+async function chequearSaldo() {
+  const clave = config.openrouter && config.openrouter.apiKey;
+  if (!clave) return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'sin datos', detalle: 'Para vigilar el saldo, agrega openrouter.apiKey en config.js.' };
+  try {
+    const r = await conTiempo('https://openrouter.ai/api/v1/credits', { headers: { Authorization: 'Bearer ' + clave } }, 10000);
+    const d = (await r.json().catch(() => ({}))).data || {};
+    if (!r.ok || d.total_credits === undefined) {
+      return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'sin datos', detalle: `OpenRouter no devolvió el saldo (código ${r.status}).` };
+    }
+    const saldo = Number(d.total_credits) - Number(d.total_usage || 0);
+    const texto = `Saldo disponible: US$ ${saldo.toFixed(2)}.`;
+    if (saldo < AJUSTES_ALERTAS.saldoMinimo) {
+      return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'falla', detalle: `${texto} Recarga en openrouter.ai → Credits (mínimo configurado: US$ ${AJUSTES_ALERTAS.saldoMinimo}).` };
+    }
+    return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'bien', detalle: texto };
+  } catch (e) {
+    return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'sin datos', detalle: 'No se pudo consultar OpenRouter (¿sin internet?).' };
+  }
+}
+
+// Avisa por correo a las direcciones de config.alertas.correos: primero por Microsoft 365 (n8n) y, si no, por SMTP.
+async function correoDeAlerta(asunto, texto) {
+  const para = (AJUSTES_ALERTAS.correos || []).filter(x => /@/.test(x));
+  if (!para.length) return 'sin destinatarios';
+  const errores = [];
+  const ms = buzonesMicrosoftEnvio()[0];
+  if (ms && config.n8n && config.n8n.enviarCorreo) {
+    try {
+      for (const destino of para) await llamarN8n('enviarCorreo', { accion: 'nuevo', buzon: ms, para: destino, asunto, texto, adjuntos: [] }, 'Enviar correo');
+      return 'enviado por ' + ms;
+    } catch (e) { errores.push(e.message); }
+  }
+  for (const buzon of Object.keys(config.correo || {})) {
+    const salida = transporteDe(buzon);
+    if (!salida) continue;
+    try {
+      await enviarPorSmtp(salida, { from: `"${salida.nombre}" <${buzon}>`, to: para.join(', '), subject: asunto, text: texto });
+      return 'enviado por ' + buzon;
+    } catch (e) { errores.push(e.message); }
+  }
+  return 'no enviado: ' + (errores.join(' | ') || 'no hay cuenta para enviar');
+}
+
+let revisandoSalud = false;
+async function revisarSalud() {
+  if (revisandoSalud) return;
+  revisandoSalud = true;
+  try {
+    const chequeos = [await chequearN8n(), await chequearFlujo(), await chequearIa(), await chequearSaldo()];
+    estadoSalud.revisado = new Date().toISOString();
+    estadoSalud.chequeos = chequeos;
+    const destinatarios = [...new Set([...(await usuariosConPermiso('ver_control')).map(x => x.usuario),
+      ...(await client.query("SELECT usuario FROM usuarios WHERE activo = TRUE AND grupo = 'Programador'")).rows.map(x => x.usuario)])];
+    for (const c of chequeos) {
+      const activa = (await client.query('SELECT id FROM alertas WHERE clave = $1 AND resuelta IS NULL', [c.clave])).rows[0];
+      if (c.estado === 'falla' && !activa) {
+        const nueva = (await client.query('INSERT INTO alertas (clave, texto) VALUES ($1, $2) RETURNING id', [c.clave, c.detalle])).rows[0];
+        await avisar(destinatarios, `⚠ Falla en el sistema — ${c.nombre}: ${c.detalle}`, null);
+        const envio = await correoDeAlerta(`⚠ Panel de reservas: falla en ${c.nombre}`,
+          `Se detectó un problema en el Panel de Reservas.\n\n${c.nombre}: ${c.detalle}\n\nRevisa Herramientas → Estado del sistema en el panel.`);
+        await client.query('UPDATE alertas SET correo = $2 WHERE id = $1', [nueva.id, envio]);
+        await registrar(SISTEMA, 'alerta_falla', 'sistema', c.clave, '', 'falla', c.detalle + ' · Correo: ' + envio);
+      } else if (c.estado === 'bien' && activa) {
+        await client.query('UPDATE alertas SET resuelta = NOW() WHERE id = $1', [activa.id]);
+        await avisar(destinatarios, `✅ Resuelto — ${c.nombre}: ${c.detalle}`, null);
+        const envio = await correoDeAlerta(`✅ Panel de reservas: se resolvió ${c.nombre}`, `${c.nombre} volvió a funcionar.\n\n${c.detalle}`);
+        await registrar(SISTEMA, 'alerta_resuelta', 'sistema', c.clave, 'falla', 'bien', c.detalle + ' · Correo: ' + envio);
+      }
+    }
+  } catch (e) {
+    console.log('Error revisando la salud del sistema:', e.message);
+  } finally {
+    revisandoSalud = false;
+  }
+}
+
 // Para quien recibe reservas sin supervisar: devuelve el nombre de otro asesor si la reserva es de él.
 async function asignadaAOtro(reservaId, u, puede) {
   if (!puede('recibir_reservas') || puede('supervisar')) return null;
@@ -1647,6 +1794,19 @@ http.createServer(async (req, res) => {
         banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
       });
       return json(res, 200, { ok: true });
+    }
+
+    /* ---------- Estado del sistema (alertas de fallos) ---------- */
+
+    if (url === '/api/salud' || url === '/api/salud/revisar') {
+      if (u.grupo !== 'Programador' && !puede('ver_control') && !puede('administrar_usuarios')) {
+        return json(res, 403, { error: 'No tienes permiso para ver el estado del sistema.' });
+      }
+      if (req.method === 'POST' && url === '/api/salud/revisar') await revisarSalud();
+      const activas = (await client.query('SELECT clave, texto, creada FROM alertas WHERE resuelta IS NULL ORDER BY creada')).rows;
+      const historial = (await client.query('SELECT clave, texto, correo, creada, resuelta FROM alertas ORDER BY id DESC LIMIT 20')).rows;
+      return json(res, 200, { ...estadoSalud, activas, historial,
+        correos: (AJUSTES_ALERTAS.correos || []).length, saldoMinimo: AJUSTES_ALERTAS.saldoMinimo, minutosSinFlujo: AJUSTES_ALERTAS.minutosSinFlujo });
     }
 
     /* ---------- Hito 4: asesores y reasignación ---------- */

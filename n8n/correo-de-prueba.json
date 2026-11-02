@@ -582,7 +582,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT DISTINCT ON (message_id) TRUE AS reintento, message_id, buzon, remitente, asunto, fecha, cuerpo FROM clasificacion WHERE error_ia = TRUE AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%' ORDER BY message_id, id DESC LIMIT 30;",
+        "query": "WITH latido AS (INSERT INTO salud_n8n (id, visto) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET visto = NOW() RETURNING id)\n(SELECT DISTINCT ON (message_id) TRUE AS reintento, message_id, buzon, remitente, asunto, fecha, cuerpo FROM clasificacion WHERE error_ia = TRUE AND estado <> 'historico' AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%' ORDER BY message_id, id DESC LIMIT 30)\nUNION ALL\n(SELECT DISTINCT ON (message_id) TRUE AS reintento, message_id, buzon, remitente, asunto, fecha, cuerpo FROM clasificacion WHERE error_ia = TRUE AND estado = 'historico' AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%' ORDER BY message_id, id DESC LIMIT 25);\n",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
