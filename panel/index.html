@@ -92,7 +92,9 @@
   .revision.tarde, .cronometro.tarde { background: #fee2e2; color: #991b1b; font-weight: 700; }
   .cronometro { display: inline-block; font-variant-numeric: tabular-nums; background: #dcfce7; color: #166534; border-radius: 6px; padding: 2px 8px; font-size: 13px; font-weight: 600; margin-top: 6px; }
   .cronometro.parado { background: #e2e8f0; color: #475569; }
-  .buscar-historico { min-width: 300px; }
+  /* Buscador a la derecha de las pestañas */
+  .buscar-historico { margin-left: auto; align-self: center; width: min(420px, 100%); margin-bottom: 6px; padding: 9px 12px; border: 1px solid var(--borde); border-radius: 999px; font-size: 14px; background: var(--tarjeta); color: var(--texto); }
+  .buscar-historico:focus { outline: none; border-color: #1679c2; box-shadow: 0 0 0 3px rgba(22,121,194,0.18); }
   .num-reserva { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
@@ -274,6 +276,7 @@
     <button class="pestana" data-vista="revision">En revisión ahora <span class="contador" id="cnt-revision">0</span></button>
     <button class="pestana" data-vista="registradas">Reservas registradas <span class="contador" id="cnt-registradas">0</span></button>
     <button class="pestana" data-vista="historico" title="Correos viejos importados de Microsoft 365">Histórico</button>
+    <input type="search" id="buscarHistorico" class="buscar-historico" placeholder="🔍 Buscar cliente, # reserva, agencia, vuelo, hotel..." title="Busca por nombre del cliente, número de reserva (#123), agencia, vuelo, hotel, teléfono o asunto">
   </div>
 
   <div class="barra">
@@ -296,7 +299,6 @@
       <option value="historico">Histórico</option>
     </select>
     <select id="filtroAsesor" style="display:none;" title="Asesor asignado"></select>
-    <input type="search" id="buscarHistorico" class="buscar-historico" placeholder="🔍 Buscar cliente, # reserva, agencia, vuelo, hotel..." title="Busca por nombre del cliente, número de reserva (#123), agencia, vuelo, hotel, teléfono o asunto">
     <select id="filtroOrden">
       <option value="servicio">Orden: fecha de servicio (más próxima)</option>
       <option value="recibido">Orden: fecha de recibido (más reciente)</option>
