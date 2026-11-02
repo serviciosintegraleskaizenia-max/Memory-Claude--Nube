@@ -1333,7 +1333,9 @@ async function cargarCorreoCompleto(r) {
   origen.textContent = c.origen === 'copia'
     ? `Copia guardada el ${fechaHora(c.guardado)}${c.automatica ? ' (automática)' : ''}`
     : 'En vivo desde Microsoft 365';
-  marco.srcdoc = documentoCorreo(c.html, false);
+  // Primero se muestra el marco y después se carga el correo (si se carga oculto, Chrome a veces lo deja en blanco).
+  verSoloTexto(false);
+  cargarEnMarco(documentoCorreo(c.html, false));
   document.getElementById('btnImagenes').style.display = c.imagenesExternas && puede('mostrar_imagenes') ? 'inline-block' : 'none';
   const btnCopia = document.getElementById('btnCopia');
   btnCopia.style.display = puede('guardar_copia') ? 'inline-block' : 'none';
@@ -1343,9 +1345,30 @@ async function cargarCorreoCompleto(r) {
   verSoloTexto(false);
 }
 
+// Chrome a veces no dibuja el correo dentro de la ventana que se está abriendo y queda en blanco.
+// Al terminar de cargar se oculta y se vuelve a mostrar el marco (lo mismo que "Ver solo texto" y volver).
+function repintarMarco() {
+  const marco = document.getElementById('mMarco');
+  if (marco.style.display === 'none') return;
+  marco.style.display = 'none';
+  void marco.offsetHeight;
+  marco.style.display = 'block';
+}
+
+function cargarEnMarco(html) {
+  const marco = document.getElementById('mMarco');
+  marco.onload = () => {
+    requestAnimationFrame(repintarMarco);
+    // Una vez más cuando termina la animación de apertura de la ventana.
+    setTimeout(repintarMarco, 400);
+  };
+  const reserva = seleccionado;
+  requestAnimationFrame(() => { if (seleccionado === reserva) marco.srcdoc = html; });
+}
+
 function mostrarImagenes() {
   if (!correoActual || !puede('mostrar_imagenes')) return;
-  document.getElementById('mMarco').srcdoc = documentoCorreo(correoActual.html, true);
+  cargarEnMarco(documentoCorreo(correoActual.html, true));
   document.getElementById('btnImagenes').style.display = 'none';
 }
 
