@@ -23,7 +23,20 @@ module.exports = {
     minutosSinFlujo: 30,    // avisa si n8n no lee correos en estos minutos
     erroresIaPorHora: 5     // avisa si fallan más correos que esto en una hora
   },
-  // Opcional: la misma clave de OpenRouter que usa n8n, solo para vigilar el saldo.
+  // Motor de correo dentro del panel (reemplaza al flujo "Correos - leer y clasificar" de n8n).
+  // Primero se usa en modo sombra (sombra: true): lee y clasifica, pero solo para comparar con n8n.
+  motor: {
+    activo: false,
+    sombra: true,
+    intervaloMinutos: 10,
+    ventanaDias: 2,
+    buzones: ['operaciones@tuempresa.com'],
+    microsoft: { tenantId: '', clientId: '', clientSecret: '' },
+    modelo: 'anthropic/claude-haiku-5.5'
+  },
+
+  // Clave de OpenRouter (la misma de n8n): la usa el motor de correo y la vigilancia del saldo.
+  // Se escribe solo aquí, en la PC. Nunca en el chat ni en GitHub.
   openrouter: {
     apiKey: ''
   },

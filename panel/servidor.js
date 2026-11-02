@@ -6,8 +6,11 @@ const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
 const nodemailer = require('nodemailer');
 const config = require('./config');
+const crearMotor = require('./motor');
 
 const client = new Client(config.db);
+// Motor de correo dentro del panel (reemplaza al flujo de n8n cuando se active en config.js).
+const motorCorreo = crearMotor({ client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' } });
 
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada', 'historico'];
 // Estados en los que una reserva todavía necesita trabajo (se reparte y cuenta tiempo).
@@ -228,7 +231,9 @@ async function inicializarTablas() {
 
 client.connect()
   .then(inicializarTablas)
+  .then(() => motorCorreo.preparar())
   .then(() => {
+    motorCorreo.iniciar();
     procesarModificaciones();
     setInterval(procesarModificaciones, 30 * 1000);
     setTimeout(mantenerCache, 60 * 1000);
@@ -1191,16 +1196,18 @@ async function chequearN8n() {
 }
 
 async function chequearFlujo() {
+  const conMotor = config.motor && config.motor.activo && config.motor.sombra === false;
+  const nombre = conMotor ? 'Lectura de correos (motor)' : 'Lectura de correos (n8n)';
   const fila = (await client.query('SELECT visto, NOW() - visto AS hace FROM salud_n8n WHERE id = 1')).rows[0];
   if (!fila) {
-    return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'sin datos', detalle: 'Falta el aviso de vida en el nodo "Reintentar fallidos" (paso de instalación de las alertas).' };
+    return { clave: 'flujo', nombre, estado: 'sin datos', detalle: 'Falta el aviso de vida en el nodo "Reintentar fallidos" (paso de instalación de las alertas).' };
   }
   const minutos = Math.round((Date.now() - new Date(fila.visto).getTime()) / 60000);
   const cuando = new Date(fila.visto).toLocaleString('es-DO', { timeZone: ZONA_HORARIA, dateStyle: 'short', timeStyle: 'short' });
   if (minutos > AJUSTES_ALERTAS.minutosSinFlujo) {
-    return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'falla', detalle: `El flujo "Correos - leer y clasificar" no corre desde ${cuando} (hace ${minutos} min). No están entrando correos nuevos.` };
+    return { clave: 'flujo', nombre, estado: 'falla', detalle: `${conMotor ? 'El motor de correo no lee' : 'El flujo "Correos - leer y clasificar" no corre'} desde ${cuando} (hace ${minutos} min). No están entrando correos nuevos.` };
   }
-  return { clave: 'flujo', nombre: 'Lectura de correos (n8n)', estado: 'bien', detalle: `Última lectura: ${cuando}.` };
+  return { clave: 'flujo', nombre, estado: 'bien', detalle: `Última lectura: ${cuando}.` };
 }
 
 async function chequearIa() {
@@ -1813,6 +1820,15 @@ http.createServer(async (req, res) => {
     }
 
     /* ---------- Estado del sistema (alertas de fallos) ---------- */
+
+    if (url === '/api/motor' || url === '/api/motor/ciclo') {
+      if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede ver el motor de correo.' });
+      if (req.method === 'POST' && url === '/api/motor/ciclo') {
+        motorCorreo.ciclo().catch(e => console.log('Motor:', e.message));
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 200, { estado: await motorCorreo.estado(), comparacion: await motorCorreo.comparar() });
+    }
 
     if (url === '/api/salud' || url === '/api/salud/revisar') {
       if (u.grupo !== 'Programador') {

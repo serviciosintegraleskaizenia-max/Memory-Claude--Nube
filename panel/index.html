@@ -1655,8 +1655,44 @@ async function cargarEstadoSistema(revisar) {
       <thead><tr><th>Desde</th><th>Hasta</th><th>Qué pasó</th><th>Correo</th></tr></thead>
       <tbody>${d.historial.map(a => `<tr><td>${esc(fechaHora(a.creada))}</td><td>${a.resuelta ? esc(fechaHora(a.resuelta)) : '<span class="salud-falla">Sigue</span>'}</td>
         <td style="white-space:normal">${esc(a.texto)}</td><td style="white-space:normal">${esc(a.correo)}</td></tr>`).join('')}</tbody>
-    </table></div>` : '<div class="vacio-total">No ha habido fallas.</div>'}`;
+    </table></div>` : '<div class="vacio-total">No ha habido fallas.</div>'}
+    <div id="panelMotor"></div>`;
   cargarAlertasSistema();
+  pintarMotor();
+}
+
+// Motor de correo dentro del panel: estado y, en modo sombra, la comparación con n8n.
+async function pintarMotor() {
+  const caja = document.getElementById('panelMotor');
+  if (!caja) return;
+  const r = await api('/api/motor');
+  if (!r.ok) return;
+  const e = r.data.estado;
+  const c = r.data.comparacion;
+  if (!e.activo && !c.total) {
+    caja.innerHTML = '<div class="titulo-seccion">Motor de correo</div><p class="etiqueta-sec">Apagado. Se enciende en config.js (motor.activo).</p>';
+    return;
+  }
+  const pct = (a, b) => b ? Math.round(100 * a / b) + ' %' : '—';
+  caja.innerHTML = `
+    <div class="titulo-seccion">Motor de correo ${e.sombra ? '(modo sombra: compara con n8n, no guarda reservas)' : '(lee los correos del panel)'}</div>
+    <p>${esc(e.mensaje || 'Todavía no ha corrido.')}<br>
+      <span class="etiqueta-sec">Última vuelta: ${e.fin ? esc(fechaHora(e.fin)) : '—'} · cada ${esc(e.intervaloMinutos)} min · ${esc((e.buzones || []).join(', '))}${e.corriendo ? ' · trabajando ahora…' : ''}</span></p>
+    <div class="pie-acciones" style="margin-bottom:14px"><button class="btn-sec" data-accion="motor-ciclo">Leer correos ahora</button></div>
+    ${e.sombra ? `
+      <div class="tarjetas">
+        <div class="tarjeta t-total"><div class="etiqueta">Correos analizados por el motor</div><div class="numero">${c.total}</div></div>
+        <div class="tarjeta t-reservas"><div class="etiqueta">Con resultado de n8n para comparar</div><div class="numero">${c.comparables}</div></div>
+        <div class="tarjeta t-registradas"><div class="etiqueta">Misma intención (categoría)</div><div class="numero">${pct(c.categoriaIgual, c.comparables)}</div></div>
+        <div class="tarjeta t-pendientes"><div class="etiqueta">Todos los datos iguales</div><div class="numero">${pct(c.iguales, c.comparables)}</div></div>
+      </div>
+      ${c.conErrorIA ? `<p class="etiqueta-sec">⚠ ${c.conErrorIA} correo(s) con error de la IA en el motor (se reintentan solos): ${c.correos.filter(x => x.errorIA).slice(0, 5).map(x => esc(x.asunto || x.message_id)).join(' · ')}</p>` : ''}
+      <p class="etiqueta-sec">La IA no responde siempre igual: diferencias pequeñas (mayúsculas, "Hotel" delante del nombre) son normales. Lo importante es la intención, las fechas, horas, vuelos y PAX.</p>
+      ${c.correos.filter(x => x.diferencias.length).length ? `<div class="tabla-wrap tabla-chica"><table>
+        <thead><tr><th>Correo</th><th>Servicio</th><th>Dato</th><th>n8n</th><th>Motor</th></tr></thead>
+        <tbody>${c.correos.filter(x => x.diferencias.length).slice(0, 30).flatMap(x => x.diferencias.map(d =>
+          `<tr><td style="white-space:normal">${esc(x.asunto)}</td><td>${d.servicio}</td><td>${esc(d.campo)}</td><td style="white-space:normal">${esc(d.n8n)}</td><td style="white-space:normal">${esc(d.motor)}</td></tr>`)).join('')}</tbody>
+      </table></div>` : '<div class="vacio-total">Sin diferencias por ahora.</div>'}` : ''}`;
 }
 
 function iniciarLatido() {
@@ -2594,6 +2630,7 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-historico') return abrirHerramientas('historico');
   if (a === 'tab-estado') return abrirHerramientas('estado');
   if (a === 'salud-revisar') return cargarEstadoSistema(true);
+  if (a === 'motor-ciclo') { api('/api/motor/ciclo', {}).then(() => setTimeout(pintarMotor, 3000)); return mostrarAviso('El motor está leyendo los correos. La tabla se actualiza en unos segundos.', true); }
   if (a === 'reparto-guardar') return guardarReparto();
   if (a === 'historico-iniciar') return accionHistorico('iniciar');
   if (a === 'historico-pausar') return accionHistorico('pausar');
