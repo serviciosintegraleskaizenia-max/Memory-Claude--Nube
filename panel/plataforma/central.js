@@ -27,11 +27,16 @@ function claveAleatoria(n = 10) {
   return Array.from(crypto.randomBytes(n), b => letras[b % letras.length]).join('');
 }
 
+// IP de esta PC en la red de la oficina. Primero 192.168.x.x y 10.x.x.x (WiFi o cable);
+// las 172.x.x.x suelen ser redes virtuales de Docker o WSL.
 function ipLocal() {
-  for (const lista of Object.values(os.networkInterfaces())) {
-    for (const x of lista || []) if (x.family === 'IPv4' && !x.internal) return x.address;
+  const todas = [];
+  for (const [nombre, lista] of Object.entries(os.networkInterfaces())) {
+    for (const x of lista || []) if (x.family === 'IPv4' && !x.internal) todas.push({ nombre, ip: x.address });
   }
-  return '127.0.0.1';
+  const puntos = x => (/^192\.168\./.test(x.ip) ? 3 : /^10\./.test(x.ip) ? 2 : 1) - (/docker|vethernet|wsl|virtual|vmware|vbox/i.test(x.nombre) ? 2 : 0);
+  todas.sort((a, b) => puntos(b) - puntos(a));
+  return todas.length ? todas[0].ip : '127.0.0.1';
 }
 
 function puertoLibre(puerto) {
