@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
-const config = require('./config');
+// Con PANEL_CONFIG se usa el archivo de ajustes indicado (por ejemplo, el del panel central).
+const config = require(process.env.PANEL_CONFIG ? require('path').resolve(process.env.PANEL_CONFIG) : './config');
 
 (async () => {
   const [usuario, clave] = process.argv.slice(2);
