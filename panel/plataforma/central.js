@@ -86,6 +86,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       titulo VARCHAR(120) NOT NULL,
       texto TEXT NOT NULL,
       creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // El central es de Kaizen IA (la tabla nace con el nombre de Somos Viajes por defecto).
+    await client.query("UPDATE empresa_datos SET nombre = 'Kaizen IA - Central' WHERE id = 1 AND nombre = 'Somos Viajes Punta Cana'");
     const hay = (await client.query('SELECT COUNT(*)::int AS n FROM plantillas_mensaje')).rows[0].n;
     if (!hay) {
       for (const [tipo, titulo] of [['antes', 'Recordatorio amable (antes de la fecha)'], ['dia', 'Hoy vence el pago'], ['vencido', 'Pago vencido']]) {
@@ -268,7 +270,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const nombre = esDemo ? 'Demo de ventas' : texto(f.nombre, 120);
     if (!nombre) throw Object.assign(new Error('Falta el nombre de la empresa.'), { codigo: 400 });
     if (!SLUG.test(slug) || (!esDemo && (RESERVADOS.has(slug) || slug === 'demo'))) {
-      throw Object.assign(new Error('El subdominio debe tener de 3 a 30 letras minúsculas, números o guiones (ej.: viajes-caribe), y no puede ser una palabra reservada.'), { codigo: 400 });
+      const motivo = RESERVADOS.has(slug) || slug === 'demo'
+        ? `"${slug}" es una palabra reservada. Usa otra (ej.: ${slug}-viajes).`
+        : `"${slug}" no sirve: usa de 3 a 30 letras minúsculas, números o guiones, sin espacios ni acentos (ej.: viajes-caribe).`;
+      throw Object.assign(new Error('Subdominio: ' + motivo), { codigo: 400, campo: 'slug' });
     }
     if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
       throw Object.assign(new Error('Ya existe una empresa con ese subdominio.'), { codigo: 400 });
@@ -640,7 +645,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
       return json(res, 404, { error: 'No encontrado' });
     } catch (err) {
-      return json(res, err.codigo || 500, { error: err.message });
+      return json(res, err.codigo || 500, { error: err.message, campo: err.campo || '' });
     }
   }
 

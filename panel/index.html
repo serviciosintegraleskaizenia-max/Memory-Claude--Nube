@@ -108,6 +108,7 @@
   .franja-pago-dia { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
   .franja-pago-vencido { background: #fee2e2; color: #7f1d1d; border-color: #fca5a5; }
   body.oscuro .franja { filter: brightness(0.85); }
+  .campo-error { border: 2px solid #dc2626 !important; background: #fef2f2 !important; }
   .emp-subnav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
   .emp-tarjeta, .emp-form, .emp-resultado { border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; background: var(--tarjeta); }
   .emp-resultado { border-color: #86efac; }
@@ -2530,6 +2531,28 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; return pintarEmpresas(); }
 
   if (a === 'emp-crear') {
+    // Revisión antes de enviar: se marca el campo con problema y se lleva la vista a él.
+    const marcar = (id, texto) => {
+      const el = document.getElementById(id);
+      el.classList.add('campo-error');
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.focus();
+      mostrarAviso(texto, false);
+    };
+    document.querySelectorAll('.emp-form .campo-error').forEach(x => x.classList.remove('campo-error'));
+    const slug = val('nSlug').trim().toLowerCase();
+    const RESERVADAS = ['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'panel', 'chat', 'n8n', 'pruebas', 'demo'];
+    if (!val('nNombre').trim()) return marcar('nNombre', 'Falta el nombre de la empresa.');
+    if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(slug)) return marcar('nSlug', `Subdominio: "${slug}" no sirve. Usa de 3 a 30 letras minúsculas, números o guiones, sin espacios ni acentos (ej.: viajes-caribe).`);
+    if (RESERVADAS.includes(slug)) return marcar('nSlug', `Subdominio: "${slug}" es una palabra reservada. Usa otra (ej.: ${slug}-viajes).`);
+    if (!val('nAdminNombre').trim()) return marcar('nAdminNombre', 'Falta el nombre del usuario principal.');
+    if (!/^[a-z0-9._-]{3,50}$/.test(val('nAdminUsuario').trim().toLowerCase())) return marcar('nAdminUsuario', 'El usuario principal necesita de 3 a 50 letras o números, sin espacios.');
+    if (val('nProveedor') === 'imap') {
+      const usuarioImap = val('nUsuario').trim();
+      if (usuarioImap && !usuarioImap.includes('@')) return marcar('nUsuario', 'El usuario del correo debe ser el correo completo (ej.: reservas@gmail.com), o déjalo vacío para usar el buzón.');
+      if (!val('nBuzon').includes('@')) return marcar('nBuzon', 'Escribe el buzón completo (ej.: reservas@gmail.com).');
+    }
+    if (!val('nConfirmar')) return marcar('nConfirmar', 'Escribe tu contraseña para confirmar.');
     const modulos = Object.fromEntries([...document.querySelectorAll('.emp-form [data-modulo]')].map(x => [x.dataset.modulo, x.checked]));
     const datos = {
       nombre: val('nNombre').trim(), slug: val('nSlug').trim().toLowerCase(), sedes: val('nSedes'),
@@ -2540,7 +2563,10 @@ async function accionEmpresas(a, b) {
     mostrarAviso('Creando la empresa y encendiendo su panel… (unos segundos)', true);
     const r = await api('/api/central/empresas', datos);
     b.disabled = false;
-    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear la empresa.', false);
+    if (!r.ok) {
+      if (r.data.campo === 'slug') return marcar('nSlug', r.data.error);
+      return mostrarAviso(r.data.error || 'No se pudo crear la empresa.', false);
+    }
     const bienvenida = `Hola ${datos.admin.nombre}, ya está listo el panel de reservas de ${datos.nombre}.\n\nEntra aquí: ${r.data.url}\nUsuario: ${r.data.admin.usuario}\nContraseña temporal: ${r.data.admin.clave}\n\nAl entrar te pedirá cambiar la contraseña. Equipo Kaizen IA.`;
     resultadoEmpresas = `<div class="emp-resultado"><div class="titulo-seccion">✔ Empresa creada</div>
       <p>Guarda estos datos ahora: <strong>la contraseña temporal no se vuelve a mostrar</strong>.</p>${textoCopiable(bienvenida)}</div>`;
@@ -3368,6 +3394,15 @@ document.getElementById('franjas').addEventListener('click', async e => {
   if (!id) return;
   await api('/api/anuncio/cerrar', { id: Number(id) });
   cargarFranjas();
+});
+// Nueva empresa: el subdominio se arma solo con el nombre (mientras no lo escribas a mano).
+document.getElementById('caja').addEventListener('input', e => {
+  if (e.target.id === 'nSlug') { e.target.dataset.manual = '1'; e.target.classList.remove('campo-error'); return; }
+  if (e.target.id !== 'nNombre') return;
+  const slug = document.getElementById('nSlug');
+  if (!slug || slug.dataset.manual) return;
+  slug.value = e.target.value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30).replace(/-+$/, '');
 });
 // Empresas: mostrar los campos según el correo elegido y llenar los servidores de Gmail, Zoho, etc.
 document.getElementById('caja').addEventListener('change', e => {
