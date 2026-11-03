@@ -108,6 +108,8 @@
   .franja-pago-dia { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
   .franja-pago-vencido { background: #fee2e2; color: #7f1d1d; border-color: #fca5a5; }
   body.oscuro .franja { filter: brightness(0.85); }
+  .btn-peligro { background: #dc2626; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  .btn-peligro:disabled { opacity: 0.6; cursor: default; }
   .campo-error { border: 2px solid #dc2626 !important; background: #fef2f2 !important; }
   .emp-subnav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
   .emp-tarjeta, .emp-form, .emp-resultado { border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; background: var(--tarjeta); }
@@ -116,6 +118,7 @@
   .emp-cabeza a { margin-left: auto; font-size: 13px; }
   .emp-tarjeta details { border-top: 1px solid var(--borde); padding: 8px 0; }
   .emp-tarjeta summary { cursor: pointer; font-weight: 600; }
+  .emp-info { font-size: 12px; color: var(--texto-suave); margin: 8px 0; line-height: 1.6; }
   .emp-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
   .chip-verde { color: #166534; border-color: #86efac; }
   .chip-amarillo { color: #854d0e; border-color: #fde047; }
@@ -2226,9 +2229,16 @@ function pintarEmpresas() {
 }
 
 function chipEstado(e) {
-  const estado = { activa: ['Activa', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'], apagada: ['Apagada', 'chip-gris'] }[e.estado] || [e.estado, 'chip-gris'];
-  return `<span class="chip ${estado[1]}">${estado[0]}</span>
-    <span class="chip ${e.vivo ? 'chip-verde' : 'chip-rojo'}">${e.vivo ? '● En línea' : '● Sin respuesta'}</span>`;
+  const estado = { activa: ['Activa', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'], apagada: ['Apagada', 'chip-gris'], creando: ['Creándose…', 'chip-amarillo'] }[e.estado] || [e.estado, 'chip-gris'];
+  return `<span class="chip ${estado[1]}">${estado[0]}</span>` + (e.estado === 'apagada' ? ''
+    : `<span class="chip ${e.vivo ? 'chip-verde' : 'chip-rojo'}">${e.vivo ? '● En línea' : '● Sin respuesta'}</span>`);
+}
+
+// El aviso de la ventana queda abajo: se lleva la vista hasta él para que no pase desapercibido.
+function avisoEmpresas(texto, ok) {
+  mostrarAviso(texto, ok);
+  const el = document.getElementById('avisoV');
+  if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 function listaEmpresas() {
@@ -2267,9 +2277,9 @@ function tarjetaEmpresa(e) {
       <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a>
     </div>
     ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
-    <p class="etiqueta-sec">Correo: ${esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
+    <p class="emp-info">Correo: ${esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
       · IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
-      ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor ? '<br>Motor: ' + esc(e.motor.mensaje || '') : ''}</p>
+      ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor && e.motor.mensaje ? '<br>Motor: ' + esc(e.motor.mensaje) : ''}</p>
 
     <details><summary>Módulos contratados</summary>
       <div class="emp-checks">${modulos}</div>
@@ -2313,6 +2323,16 @@ function tarjetaEmpresa(e) {
       ${camposCorreo('c' + id, { ...c, empresaId: id })}
       <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="c${id}Confirmar" type="password" autocomplete="current-password"></label></div>
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-correo" data-id="${id}">Guardar y reiniciar su panel</button></div>
+    </details>
+
+    <details><summary class="salud-falla">Eliminar empresa</summary>
+      <p>Se borra <strong>para siempre</strong>: su base de datos (reservas, usuarios, historial), sus ajustes y claves, y se apaga su panel. No se puede deshacer.
+        Si es un cliente real, antes descarga sus datos (Exportar a Excel dentro de su panel).</p>
+      <div class="form-fila">
+        <label>Escribe «${esc(e.slug)}» para confirmar<input id="xSlug-${id}" maxlength="30" autocomplete="off"></label>
+        <label>Tu contraseña<input id="xClave-${id}" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="pie-acciones"><button class="btn-peligro" data-accion="emp-eliminar" data-id="${id}">Eliminar para siempre</button></div>
     </details>
 
     <div class="pie-acciones">
@@ -2510,7 +2530,7 @@ async function cargarDemo() {
 async function accionEmpresas(a, b) {
   const id = Number(b.dataset.id);
   const recargar = async (texto, ok = true) => { await cargarEmpresas(); if (texto) mostrarAviso(texto, ok); };
-  const res = (r, ok) => (r.ok ? recargar(ok) : mostrarAviso(r.data.error || 'No se pudo completar.', false));
+  const res = (r, ok) => (r.ok ? recargar(ok) : avisoEmpresas(r.data.error || 'No se pudo completar.', false));
 
   if (a === 'emp-copiar') return copiarTexto(b);
   if (a === 'emp-probar-ia') {
@@ -2560,12 +2580,15 @@ async function accionEmpresas(a, b) {
       ...leerCorreo('n'), modulos, confirmar: val('nConfirmar')
     };
     b.disabled = true;
-    mostrarAviso('Creando la empresa y encendiendo su panel… (unos segundos)', true);
+    const textoBoton = b.textContent;
+    b.textContent = 'Creando… (puede tardar hasta 1 minuto, no cierres esta ventana)';
+    mostrarAviso('Creando la empresa y encendiendo su panel…', true);
     const r = await api('/api/central/empresas', datos);
     b.disabled = false;
+    b.textContent = textoBoton;
     if (!r.ok) {
       if (r.data.campo === 'slug') return marcar('nSlug', r.data.error);
-      return mostrarAviso(r.data.error || 'No se pudo crear la empresa.', false);
+      return avisoEmpresas(r.data.error || 'No se pudo crear la empresa.', false);
     }
     const bienvenida = `Hola ${datos.admin.nombre}, ya está listo el panel de reservas de ${datos.nombre}.\n\nEntra aquí: ${r.data.url}\nUsuario: ${r.data.admin.usuario}\nContraseña temporal: ${r.data.admin.clave}\n\nAl entrar te pedirá cambiar la contraseña. Equipo Kaizen IA.`;
     resultadoEmpresas = `<div class="emp-resultado"><div class="titulo-seccion">✔ Empresa creada</div>
@@ -2612,6 +2635,15 @@ async function accionEmpresas(a, b) {
     return res(await api(`/api/central/empresas/${id}/pausar`, { motivo }), 'Servicio en pausa: solo el programador puede entrar.');
   }
   if (a === 'emp-reanudar') return res(await api(`/api/central/empresas/${id}/reanudar`, {}), 'Servicio reanudado.');
+  if (a === 'emp-eliminar') {
+    const slug = val('xSlug-' + id).trim().toLowerCase();
+    if (!confirm(`¿Eliminar "${slug}" para siempre, con todas sus reservas y usuarios?`)) return;
+    b.disabled = true;
+    b.textContent = 'Eliminando…';
+    const r = await api(`/api/central/empresas/${id}/eliminar`, { slug, confirmar: val('xClave-' + id) });
+    if (!r.ok) { b.disabled = false; b.textContent = 'Eliminar para siempre'; }
+    return res(r, 'Empresa eliminada con su base de datos.');
+  }
 
   if (a === 'emp-plantilla-editar') {
     const p = plantillasMensaje.find(x => x.id === id);

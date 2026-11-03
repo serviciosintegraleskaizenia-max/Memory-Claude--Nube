@@ -114,7 +114,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ms);
     try {
-      const r = await fetch(`http://127.0.0.1:${e.puerto}/api/empresa`, { signal: control.signal });
+      const r = await fetch(`http://127.0.0.1:${e.puerto}/api/listo`, { signal: control.signal });
       return r.ok;
     } catch (err) { return false; } finally { clearTimeout(reloj); }
   }
@@ -209,14 +209,39 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       cwd: CARPETA, detached: true, windowsHide: true, stdio: ['ignore', salida, errores],
       env: { ...process.env, PANEL_CONFIG: archivoDe(e), ARRANQUE_VIGILANTE: '' }
     });
+    let termino = false;
+    hijo.on('exit', () => { termino = true; }); // si se cierra con error al arrancar, no hace falta seguir esperando
     hijo.unref();
     fs.closeSync(salida); fs.closeSync(errores);
     await client.query('UPDATE empresas SET pid = $1 WHERE id = $2', [hijo.pid, e.id]);
-    for (let i = 0; i < 40; i++) {
-      await new Promise(r => setTimeout(r, 500));
+    // Hasta 90 segundos: la primera vez crea todas sus tablas (en Docker puede tardar).
+    for (let i = 0; i < 90 && !termino; i++) {
+      await new Promise(r => setTimeout(r, 1000));
       if (await responde(e, 1000)) return true;
     }
     return false;
+  }
+
+  // Borra la base de datos, la carpeta (ajustes y claves) y el registro de una empresa. Primero apaga su panel.
+  async function borrarTodo(e) {
+    await apagar(e).catch(() => {});
+    const base = String(e.base_datos || '');
+    if (/^panel_[a-z0-9_]+$/.test(base)) {
+      try {
+        await client.query(`DROP DATABASE IF EXISTS "${base}" WITH (FORCE)`);
+      } catch (err) {
+        // Postgres viejo (sin FORCE): se cierran las conexiones y se borra.
+        await client.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [base]).catch(() => {});
+        await client.query(`DROP DATABASE IF EXISTS "${base}"`);
+      }
+    }
+    const carpeta = path.resolve(carpetaDe(e));
+    if (SLUG.test(e.slug) && carpeta.startsWith(path.resolve(CARPETA_EMPRESAS) + path.sep)) {
+      for (let i = 0; i < 5; i++) {
+        try { fs.rmSync(carpeta, { recursive: true, force: true }); break; } catch (err) { await new Promise(r => setTimeout(r, 1000)); }
+      }
+    }
+    if (e.id) await client.query('DELETE FROM empresas WHERE id = $1', [e.id]);
   }
 
   // Se le pide al panel de la empresa que se apague (con su clave secreta). No se cierra un proceso por número:
@@ -289,14 +314,30 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     if (existe) throw Object.assign(new Error(`Ya hay una base de datos llamada ${base}. Elige otro subdominio.`), { codigo: 400 });
     const puerto = await siguientePuerto();
     await client.query(`CREATE DATABASE "${base}"`);
-    const e = (await client.query(
-      'INSERT INTO empresas (slug, nombre, base_datos, puerto, es_demo) VALUES ($1, $2, $3, $4, $5) RETURNING *', [slug, nombre, base, puerto, !!esDemo])).rows[0];
+    let e = { slug, base_datos: base, puerto };
+    try {
+      e = (await client.query(
+        "INSERT INTO empresas (slug, nombre, base_datos, puerto, es_demo, estado) VALUES ($1, $2, $3, $4, $5, 'creando') RETURNING *", [slug, nombre, base, puerto, !!esDemo])).rows[0];
+      const r = await terminarCreacion(u, f, esDemo, e, admin);
+      await client.query("UPDATE empresas SET estado = 'activa' WHERE id = $1", [e.id]);
+      return r;
+    } catch (err) {
+      // Si algo falla a mitad, se deshace todo: no quedan empresas a medias.
+      await borrarTodo(e).catch(x => console.log('No se pudo deshacer la empresa', slug, x.message));
+      throw Object.assign(new Error('No se creó la empresa (se deshizo todo, puedes volver a intentarlo): ' + err.message), { codigo: err.codigo || 500 });
+    }
+  }
+
+  async function terminarCreacion(u, f, esDemo, e, admin) {
+    const { slug, nombre, base_datos: base, puerto } = e;
     const ajustes = ajustesDesde(e, esDemo ? {} : f);
     escribirAjustes(e, ajustes);
     await client.query('UPDATE empresas SET correo = $1 WHERE id = $2', [resumenCorreo(ajustes), e.id]);
 
     if (!(await encender(e))) {
-      throw Object.assign(new Error(`La empresa se creó pero su panel no encendió. Revisa ${path.join(carpetaDe(e), 'panel-error.log')}`), { codigo: 500 });
+      let detalle = '';
+      try { detalle = fs.readFileSync(path.join(carpetaDe(e), 'panel-error.log'), 'utf8').trim().split('\n').slice(-3).join(' ').slice(0, 300); } catch (err) {}
+      throw Object.assign(new Error('su panel no encendió.' + (detalle ? ' Detalle: ' + detalle : ' Revisa que Postgres (Docker) esté encendido.')), { codigo: 500 });
     }
     // El panel nuevo ya creó sus tablas. Ahora: grupos, usuarios, nombre y módulos.
     const yo = (await client.query('SELECT usuario, nombre, password_hash FROM usuarios WHERE usuario = $1', [u.usuario])).rows[0];
@@ -479,6 +520,15 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
           await client.query("UPDATE empresas SET estado = 'apagada' WHERE id = $1", [e.id]);
           await apagar(e);
           await registrar(u, 'apagar_empresa', 'empresa', e.slug, '', '', '');
+          return json(res, 200, { ok: true });
+        }
+        if (accion === 'eliminar') {
+          await confirmar(f.confirmar);
+          if (texto(f.slug, 30).toLowerCase() !== e.slug) {
+            return json(res, 400, { error: `Para eliminar escribe exactamente el subdominio: ${e.slug}` });
+          }
+          await borrarTodo(e);
+          await registrar(u, 'eliminar_empresa', 'empresa', e.slug, e.base_datos, '', `${e.nombre} eliminada con su base de datos`);
           return json(res, 200, { ok: true });
         }
         if (accion === 'pausar' || accion === 'reanudar') {

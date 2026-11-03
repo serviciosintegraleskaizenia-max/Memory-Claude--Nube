@@ -37,6 +37,8 @@ const EMPRESAS = ['todas', ...SEDES];
 // cada panel usa su propia cookie para que entrar a una empresa no cierre la sesión de otra.
 const COOKIE = config.puerto === 3001 ? 'sesion' : 'sesion' + config.puerto;
 const sesiones = new Map();
+// Se pone en true cuando el panel terminó de preparar todas sus tablas (lo espera el panel central).
+let panelListo = false;
 const presencia = new Map();
 const CARPETA = __dirname;
 // Archivos propios de cada empresa (caché de correos): en su carpeta, no en la del programa.
@@ -298,6 +300,7 @@ client.connect()
     setTimeout(revisarSalud, 60 * 1000);
     setTimeout(() => avisarArranqueDelVigilante().catch(e => console.log('Aviso de arranque:', e.message)), 20 * 1000);
     setInterval(revisarSalud, 5 * 60 * 1000);
+    panelListo = true;
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
 
@@ -1427,6 +1430,11 @@ async function usuarioDeSesion(req) {
 http.createServer(async (req, res) => {
   try {
     const url = req.url.split('?')[0];
+
+    // El panel central espera a que este panel esté completamente listo antes de configurarlo.
+    if (req.method === 'GET' && url === '/api/listo') {
+      return json(res, panelListo ? 200 : 503, { listo: panelListo });
+    }
 
     // El panel central apaga este panel con su clave secreta (solo desde la misma máquina).
     if (req.method === 'POST' && url === '/api/interno/apagar') {
