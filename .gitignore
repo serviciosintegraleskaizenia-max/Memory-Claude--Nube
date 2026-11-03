@@ -5,3 +5,7 @@ config-actualizado.js
 *.env
 
 node_modules/
+
+# Ajustes y claves de cada empresa (los crea la pestaña Empresas)
+empresas/
+panel/empresas/

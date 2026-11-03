@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Reservas - Somos Viajes Punta Cana</title>
+<title>Panel de reservas</title>
 <style>
   :root {
     --fondo: #eef2f7; --tarjeta: #ffffff; --texto: #1e293b; --texto-suave: #64748b;
@@ -99,6 +99,27 @@
   .alertas-sistema strong { font-size: 15px; }
   .alertas-sistema .btn-mini { margin-left: auto; }
   body.oscuro .alertas-sistema { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
+  .franja { border-radius: 10px; padding: 9px 14px; margin-bottom: 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 14px; border: 1px solid; border-left-width: 6px; }
+  .franja .btn-mini { margin-left: auto; }
+  .franja-demo { background: #e0f2fe; color: #075985; border-color: #7dd3fc; }
+  .franja-anuncio { background: #ede9fe; color: #4c1d95; border-color: #c4b5fd; }
+  .franja-pausa { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+  .franja-pago-antes { background: #fef9c3; color: #713f12; border-color: #fde047; }
+  .franja-pago-dia { background: #ffedd5; color: #7c2d12; border-color: #fdba74; }
+  .franja-pago-vencido { background: #fee2e2; color: #7f1d1d; border-color: #fca5a5; }
+  body.oscuro .franja { filter: brightness(0.85); }
+  .emp-subnav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .emp-tarjeta, .emp-form, .emp-resultado { border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; background: var(--tarjeta); }
+  .emp-resultado { border-color: #86efac; }
+  .emp-cabeza { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; }
+  .emp-cabeza a { margin-left: auto; font-size: 13px; }
+  .emp-tarjeta details { border-top: 1px solid var(--borde); padding: 8px 0; }
+  .emp-tarjeta summary { cursor: pointer; font-weight: 600; }
+  .emp-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
+  .chip-verde { color: #166534; border-color: #86efac; }
+  .chip-amarillo { color: #854d0e; border-color: #fde047; }
+  .chip-rojo { color: #991b1b; border-color: #fca5a5; }
+  .chip-gris { color: var(--texto-suave); }
   .salud-bien { color: #16a34a; font-weight: 700; }
   .salud-falla { color: #dc2626; font-weight: 700; }
   .salud-sin { color: var(--texto-suave); font-weight: 700; }
@@ -218,7 +239,7 @@
 
 <div class="pantalla-login" id="pantallaLogin">
   <form class="caja-login" id="formLogin">
-    <h2 id="tituloLogin">Reservas - Somos Viajes Punta Cana</h2>
+    <h2 id="tituloLogin">Panel de reservas</h2>
     <p>Ingresa con tu usuario y contraseña.</p>
     <label for="usuario">Usuario</label>
     <input type="text" id="usuario" autocomplete="username" required>
@@ -249,7 +270,7 @@
 <a class="banner" id="banner" target="_blank" rel="noopener"><img id="bannerImg" alt="Publicidad"></a>
 <header>
   <div>
-    <h1 id="tituloEmpresa">Reservas - Somos Viajes Punta Cana</h1>
+    <h1 id="tituloEmpresa">Panel de reservas</h1>
     <p id="fecha"></p>
     <p id="datosEmpresa"></p>
   </div>
@@ -268,6 +289,7 @@
 </header>
 
 <main>
+  <div id="franjas"></div>
   <div id="alertasSistema" class="alertas-sistema" style="display:none;"></div>
   <div class="tarjetas">
     <div class="tarjeta t-reservas"><div class="etiqueta">Reservas</div><div class="numero" id="n-reservas">0</div></div>
@@ -457,7 +479,8 @@ const PERMISOS = [
   ['ver_control', 'Pantalla de Control: tiempos, reservas por asesor y gráficas']
 ];
 
-const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
+// Sedes de la empresa: llegan con la sesión (cada empresa tiene las suyas).
+let EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
 
 let datos = [];
 let seleccionado = null;
@@ -478,7 +501,7 @@ let vistaActual = 'todas';
 let cronometro = { base: 0, desde: 0, corriendo: false, limite: 1500, timer: null };
 let asesoresCache = { hora: 0, lista: [] };
 let timerBusqueda = null;
-let empresaActual = { nombre: 'Somos Viajes Punta Cana', rnc: '', direccion: '', banner_enlace: '' };
+let empresaActual = { nombre: '', rnc: '', direccion: '', banner_enlace: '' };
 
 function esc(valor) {
   return String(valor ?? '').replace(/[&<>"']/g, c =>
@@ -692,12 +715,15 @@ function mostrarApp(s) {
   document.getElementById('pantallaClave').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('usuarioActivo').textContent = (s.nombre || s.usuario) + ' · ' + s.grupo;
-  document.getElementById('btnControl').style.display = puede('ver_control') ? 'inline-block' : 'none';
+  const mod = s.modulos || {};
+  if (Array.isArray(s.sedes) && s.sedes.length) EMPRESAS = s.sedes;
+  document.getElementById('btnControl').style.display = puede('ver_control') && mod.control !== false ? 'inline-block' : 'none';
   document.getElementById('filtroAsesor').style.display = puede('supervisar') ? 'inline-block' : 'none';
   document.getElementById('btnHerramientas').style.display =
     (puede('administrar_usuarios') || puede('ver_auditoria')) ? 'inline-block' : 'none';
-  document.getElementById('btnChat').style.display = puede('usar_chat') ? 'inline-block' : 'none';
-  document.getElementById('btnChatFlotante').style.display = puede('usar_chat') ? 'inline-block' : 'none';
+  document.getElementById('btnChat').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
+  document.getElementById('btnChatFlotante').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
+  cargarFranjas();
   document.getElementById('btnExcel').style.display = puede('exportar_datos') ? 'inline-block' : 'none';
   document.getElementById('btnCorreoNuevo').style.display = puede('enviar_correo') ? 'inline-block' : 'none';
   document.getElementById('btnAvisos').style.display = ('Notification' in window && Notification.permission === 'default') ? 'inline-block' : 'none';
@@ -809,7 +835,7 @@ async function cargarEmpresa() {
 
 function avisoEscritorio(texto) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const n = new Notification('Somos Viajes - Reservas', { body: texto, tag: 'aviso-' + Date.now() });
+  const n = new Notification((empresaActual.nombre || 'Panel') + ' - Reservas', { body: texto, tag: 'aviso-' + Date.now() });
   n.onclick = () => { window.focus(); n.close(); };
 }
 
@@ -1604,6 +1630,7 @@ async function latido() {
   const r = await api('/api/conectados');
   if (r.ok) pintarConectados(r.data);
   cargarAlertasSistema();
+  cargarFranjas();
 }
 
 /* ---------- Alertas de fallos del sistema (programador, gerencia y administración) ---------- */
@@ -2075,6 +2102,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
     return marco('auditoria', aviso);
   }
   if (tab === 'estado') return marco('estado', aviso);
+  if (tab === 'empresas') return marco('empresas', aviso);
   if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
   if (tab === 'empresa') return marco('empresa', aviso);
   if (tab === 'cache') return marco('cache', aviso);
@@ -2096,9 +2124,11 @@ function marco(tab, aviso) {
   const boton = (id, texto) =>
     `<button class="${tab === id ? 'btn' : 'btn-sec'}" data-accion="tab-${id}">${texto}</button>`;
 
-  const tabs = (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + boton('reparto', 'Reparto') : '') +
+  const mod = sesionActual.modulos || {};
+  const tabs = (puedeVerEmpresas() ? boton('empresas', 'Empresas') : '') +
+    (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + (mod.reparto !== false ? boton('reparto', 'Reparto') : '') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
-    (esProg ? boton('historico', 'Historial') : '') +
+    (esProg && mod.historial !== false ? boton('historico', 'Historial') : '') +
     (puedeVerSalud() ? boton('estado', 'Estado del sistema') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
@@ -2114,6 +2144,7 @@ function marco(tab, aviso) {
   else if (tab === 'reparto') cuerpo = '<div id="panelReparto">Cargando…</div>';
   else if (tab === 'historico') cuerpo = '<div id="panelHistorico">Cargando…</div>';
   else if (tab === 'estado') cuerpo = '<div id="panelEstado">Cargando…</div>';
+  else if (tab === 'empresas') cuerpo = '<div id="panelEmpresas">Cargando…</div>';
   else cuerpo = formAuditoria();
 
   abrirVentana(`
@@ -2127,6 +2158,458 @@ function marco(tab, aviso) {
   if (tab === 'reparto') cargarReparto();
   if (tab === 'historico') cargarHistorico();
   if (tab === 'estado') cargarEstadoSistema(false);
+  if (tab === 'empresas') cargarEmpresas();
+}
+
+/* ---------- Empresas (solo en el panel central de Kaizen IA, solo el programador) ---------- */
+
+let datosEmpresas = null;
+let plantillasMensaje = [];
+let vistaEmpresas = 'lista';
+let resultadoEmpresas = '';
+
+function puedeVerEmpresas() {
+  return Boolean(sesionActual && sesionActual.central && sesionActual.grupo === 'Programador');
+}
+
+const PROVEEDORES_IMAP = {
+  gmail: { nombre: 'Gmail / Google Workspace', host: 'imap.gmail.com', puerto: 993, smtpHost: 'smtp.gmail.com', smtpPuerto: 465 },
+  zoho: { nombre: 'Zoho Mail', host: 'imap.zoho.com', puerto: 993, smtpHost: 'smtp.zoho.com', smtpPuerto: 465 },
+  hostinger: { nombre: 'Hostinger', host: 'imap.hostinger.com', puerto: 993, smtpHost: 'smtp.hostinger.com', smtpPuerto: 465 },
+  godaddy: { nombre: 'GoDaddy (correo de cPanel)', host: 'imap.secureserver.net', puerto: 993, smtpHost: 'smtpout.secureserver.net', smtpPuerto: 465 }
+};
+
+function textoCopiable(texto) {
+  return `<textarea class="input-ancho copiable" rows="6" readonly>${esc(texto)}</textarea>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-copiar">Copiar</button></div>`;
+}
+
+function copiarTexto(boton) {
+  const area = boton.closest('.emp-resultado, .emp-tarjeta, #panelEmpresas').querySelector('textarea.copiable');
+  if (!area) return;
+  area.select();
+  const listo = () => mostrarAviso('Copiado. Pégalo en WhatsApp o en un correo.', true);
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(area.value).then(listo, () => { document.execCommand('copy'); listo(); });
+  else { document.execCommand('copy'); listo(); }
+}
+
+async function cargarEmpresas() {
+  const box = document.getElementById('panelEmpresas');
+  if (!box) return;
+  const [r, p] = await Promise.all([api('/api/central/empresas'), api('/api/central/plantillas')]);
+  if (!r.ok) {
+    box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar la lista de empresas.')}</div>`;
+    return;
+  }
+  datosEmpresas = r.data;
+  plantillasMensaje = p.ok ? p.data : [];
+  pintarEmpresas();
+}
+
+function pintarEmpresas() {
+  const box = document.getElementById('panelEmpresas');
+  if (!box || !datosEmpresas) return;
+  const sub = (id, texto) => `<button class="${vistaEmpresas === id ? 'btn' : 'btn-sec'}" data-accion="emp-vista" data-vista="${id}">${texto}</button>`;
+  let cuerpo = '';
+  if (vistaEmpresas === 'nueva') cuerpo = formNuevaEmpresa();
+  else if (vistaEmpresas === 'mensajes') cuerpo = vistaMensajes();
+  else if (vistaEmpresas === 'demo') cuerpo = '<div id="panelDemo">Cargando…</div>';
+  else cuerpo = (resultadoEmpresas || '') + listaEmpresas();
+  box.innerHTML = `
+    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
+    ${cuerpo}`;
+  if (vistaEmpresas === 'demo') cargarDemo();
+  actualizarCamposCorreo(box);
+}
+
+function chipEstado(e) {
+  const estado = { activa: ['Activa', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'], apagada: ['Apagada', 'chip-gris'] }[e.estado] || [e.estado, 'chip-gris'];
+  return `<span class="chip ${estado[1]}">${estado[0]}</span>
+    <span class="chip ${e.vivo ? 'chip-verde' : 'chip-rojo'}">${e.vivo ? '● En línea' : '● Sin respuesta'}</span>`;
+}
+
+function listaEmpresas() {
+  const lista = datosEmpresas.empresas.filter(e => !e.es_demo);
+  if (!lista.length) {
+    return `<div class="vacio-total">Todavía no hay empresas. Crea la primera con <strong>+ Nueva empresa</strong>.<br>
+      Cada empresa tiene su propia base de datos y su propio panel: los datos nunca se mezclan.</div>`;
+  }
+  return lista.map(tarjetaEmpresa).join('');
+}
+
+function opcionesPlantilla(tipo, elegida) {
+  return `<option value="">Texto por defecto</option>` + plantillasMensaje.filter(p => p.tipo === tipo)
+    .map(p => `<option value="${p.id}" ${Number(elegida) === p.id ? 'selected' : ''}>${esc(p.titulo)}</option>`).join('');
+}
+
+function tarjetaEmpresa(e) {
+  const id = e.id;
+  const c = e.correo || {};
+  const n = e.numeros || {};
+  const pago = e.pagoCentral || {};
+  const plant = pago.plantillas || {};
+  const proveedor = { microsoft: 'Microsoft 365', imap: 'Gmail / dominio propio (IMAP)', ninguno: 'Sin correo' }[c.proveedor] || 'Sin correo';
+  const usuarios = e.usuarios || [];
+  const etapa = e.etapaPago;
+  const textoEtapa = !pago.activo ? 'Recordatorio apagado.'
+    : !etapa ? `Al día${e.cuenta && e.cuenta.pagado ? ' (pagado hasta ' + esc(e.cuenta.pagado) + ')' : ''}.`
+    : etapa.etapa === 'vencido' ? `<span class="salud-falla">Vencido hace ${etapa.dias} día(s) (${esc(etapa.vence)}).</span>`
+    : etapa.etapa === 'dia' ? '<span class="salud-falla">Vence hoy.</span>' : `Vence en ${etapa.dias} día(s) (${esc(etapa.vence)}).`;
+  const modulos = Object.entries(datosEmpresas.modulos).map(([k, m]) =>
+    `<label class="chk"><input type="checkbox" data-modulo="${k}" ${e.modulos[k] ? 'checked' : ''}> ${esc(m.nombre)}</label>`).join('');
+  return `
+  <div class="emp-tarjeta" data-emp="${id}">
+    <div class="emp-cabeza">
+      <strong>${esc(e.nombre)}</strong> ${chipEstado(e)}
+      <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a>
+    </div>
+    ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
+    <p class="etiqueta-sec">Correo: ${esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
+      · IA ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
+      ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor ? '<br>Motor: ' + esc(e.motor.mensaje || '') : ''}</p>
+
+    <details><summary>Módulos contratados</summary>
+      <div class="emp-checks">${modulos}</div>
+      <div class="pie-acciones"><button class="btn-sec" data-accion="emp-modulos" data-id="${id}">Guardar módulos</button></div>
+    </details>
+
+    <details><summary>Cobro y recordatorio de pago — ${textoEtapa}</summary>
+      <label class="chk"><input type="checkbox" id="pActivo-${id}" ${pago.activo ? 'checked' : ''}> Recordar el pago automáticamente</label>
+      <div class="form-fila">
+        <label>Día de pago (1 a 28)<input id="pDia-${id}" type="number" min="1" max="28" value="${esc(pago.dia || 5)}"></label>
+        <label>Monto<input id="pMonto-${id}" maxlength="20" value="${esc(pago.monto || '')}" placeholder="150"></label>
+        <label>Moneda<input id="pMoneda-${id}" maxlength="5" value="${esc(pago.moneda || 'US$')}"></label>
+        <label>Avisar días antes<input id="pAntes-${id}" type="number" min="0" max="15" value="${esc(pago.diasAntes ?? 3)}"></label>
+      </div>
+      <div class="form-fila"><label>Usuario principal (recibe el recordatorio)
+        <select id="pUsuario-${id}">${usuarios.map(u => `<option value="${esc(u.usuario)}" ${pago.usuario === u.usuario || (!pago.usuario && e.cuenta && e.cuenta.pago && e.cuenta.pago.usuario === u.usuario) ? 'selected' : ''}>${esc(u.nombre)} (${esc(u.usuario)})</option>`).join('')}</select>
+      </label></div>
+      <div class="form-fila">
+        <label>Mensaje antes de la fecha<select id="pPlAntes-${id}">${opcionesPlantilla('antes', plant.antes)}</select></label>
+        <label>Mensaje el día del pago<select id="pPlDia-${id}">${opcionesPlantilla('dia', plant.dia)}</select></label>
+        <label>Mensaje si se atrasa<select id="pPlVencido-${id}">${opcionesPlantilla('vencido', plant.vencido)}</select></label>
+      </div>
+      <p class="etiqueta-sec">El usuario principal ve una franja arriba del panel y un aviso en la campanita. Se quita al marcar el mes como pagado.</p>
+      <div class="pie-acciones">
+        <button class="btn-sec" data-accion="emp-pago" data-id="${id}">Guardar cobro</button>
+        <button class="btn" data-accion="emp-pagado" data-id="${id}">Marcar como pagado</button>
+      </div>
+    </details>
+
+    <details><summary>Enviar un anuncio</summary>
+      <div class="form-fila">
+        <label>Para<select id="aPara-${id}"><option value="*">Todos los usuarios</option>${usuarios.map(u => `<option value="${esc(u.usuario)}">${esc(u.nombre)} (${esc(u.grupo)})</option>`).join('')}</select></label>
+        <label>Título<input id="aTitulo-${id}" maxlength="120" value="Aviso de Kaizen IA"></label>
+      </div>
+      <div class="form-fila"><label>Del banco de mensajes<select id="aPlantilla-${id}"><option value="">— Escribir el mensaje abajo —</option>${plantillasMensaje.map(p => `<option value="${p.id}">${esc(p.titulo)}</option>`).join('')}</select></label></div>
+      <label class="etiqueta-sec">Mensaje (puedes usar {usuario} y {empresa})<textarea id="aTexto-${id}" class="input-ancho" rows="3" maxlength="2000"></textarea></label>
+      <div class="pie-acciones"><button class="btn-sec" data-accion="emp-anuncio" data-id="${id}">Enviar anuncio</button></div>
+    </details>
+
+    <details><summary>Correo e inteligencia artificial</summary>
+      ${camposCorreo('c' + id, c)}
+      <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="c${id}Confirmar" type="password" autocomplete="current-password"></label></div>
+      <div class="pie-acciones"><button class="btn-sec" data-accion="emp-correo" data-id="${id}">Guardar y reiniciar su panel</button></div>
+    </details>
+
+    <div class="pie-acciones">
+      ${e.estado === 'apagada' ? `<button class="btn-sec" data-accion="emp-encender" data-id="${id}">Encender</button>`
+        : `<button class="btn-sec" data-accion="emp-apagar" data-id="${id}">Apagar</button>`}
+      ${e.estado === 'pausada' ? `<button class="btn" data-accion="emp-reanudar" data-id="${id}">Reanudar servicio</button>`
+        : e.estado === 'activa' ? `<button class="btn-sec" data-accion="emp-pausar" data-id="${id}">Pausar servicio</button>` : ''}
+    </div>
+  </div>`;
+}
+
+// Campos de correo: Microsoft 365, Gmail/dominio propio (IMAP) o sin correo. Las claves vacías no se cambian.
+function camposCorreo(p, actual = {}) {
+  const prov = actual.proveedor || 'imap';
+  const pf = actual.perfil || {};
+  const existente = Boolean(actual.proveedor);
+  const nota = existente ? ' (vacío = no cambiar)' : '';
+  return `
+    <div class="form-fila">
+      <label>Correo de la empresa
+        <select id="${p}Proveedor" data-proveedor="${p}">
+          <option value="imap" ${prov === 'imap' ? 'selected' : ''}>Gmail o correo de su dominio (IMAP)</option>
+          <option value="microsoft" ${prov === 'microsoft' ? 'selected' : ''}>Microsoft 365 (Outlook de empresa)</option>
+          <option value="ninguno" ${prov === 'ninguno' ? 'selected' : ''}>Sin correo por ahora</option>
+        </select>
+      </label>
+      <label class="solo-correo">Buzón que recibe las reservas<input id="${p}Buzon" maxlength="120" value="${esc(actual.buzon || '')}" placeholder="reservas@agencia.com"></label>
+    </div>
+    <div class="solo-imap">
+      <div class="form-fila"><label>Proveedor (llena los servidores)
+        <select data-preset="${p}"><option value="">— Elegir —</option>${Object.entries(PROVEEDORES_IMAP).map(([k, x]) => `<option value="${k}">${esc(x.nombre)}</option>`).join('')}</select>
+      </label></div>
+      <div class="form-fila">
+        <label>Servidor IMAP<input id="${p}Host" maxlength="120" value="${esc(actual.host || '')}" placeholder="imap.gmail.com"></label>
+        <label>Puerto<input id="${p}Puerto" type="number" placeholder="993"></label>
+        <label>Servidor para responder (SMTP)<input id="${p}SmtpHost" maxlength="120" placeholder="smtp.gmail.com"></label>
+        <label>Puerto SMTP<input id="${p}SmtpPuerto" type="number" placeholder="465"></label>
+      </div>
+      <div class="form-fila">
+        <label>Usuario (normalmente el mismo correo)<input id="${p}Usuario" maxlength="120" placeholder="vacío = el buzón"></label>
+        <label>Contraseña de aplicación${nota}<input id="${p}Clave" type="password" autocomplete="new-password"></label>
+      </div>
+      <p class="etiqueta-sec">Gmail: la cuenta necesita la verificación en 2 pasos y una contraseña de aplicación (myaccount.google.com → Seguridad → Contraseñas de aplicaciones). No es la contraseña normal.</p>
+    </div>
+    <div class="solo-microsoft">
+      <div class="form-fila">
+        <label>Directory (tenant) ID${nota}<input id="${p}Tenant" maxlength="80"></label>
+        <label>Application (client) ID${nota}<input id="${p}Client" maxlength="80"></label>
+        <label>Secreto (Value)${nota}<input id="${p}Secreto" type="password" autocomplete="new-password"></label>
+      </div>
+      <p class="etiqueta-sec">De la aplicación de Azure de la empresa, con el permiso Mail.Read de aplicación.</p>
+    </div>
+    <div class="form-fila solo-correo">
+      <label>Clave de OpenRouter de esta empresa${nota}<input id="${p}Ia" type="password" autocomplete="new-password" placeholder="sk-or-..."></label>
+    </div>
+    <div class="form-fila solo-correo">
+      <label>Nombre con el que firma la empresa<input id="${p}PerfilNombre" maxlength="80" placeholder="Viajes del Mar" value="${esc(pf.nombre || '')}"></label>
+      <label>Sus dominios de correo<input id="${p}PerfilDominios" maxlength="300" placeholder="viajesdelmar.com" value="${esc(pf.dominios || '')}"></label>
+      <label>Sus teléfonos<input id="${p}PerfilTelefonos" maxlength="300" placeholder="+18095550000" value="${esc(pf.telefonos || '')}"></label>
+    </div>
+    <p class="etiqueta-sec solo-correo">La IA no pondrá a la propia empresa como agencia ni sus teléfonos como del pasajero.</p>`;
+}
+
+function actualizarCamposCorreo(raiz) {
+  raiz.querySelectorAll('select[data-proveedor]').forEach(sel => {
+    const caja = sel.closest('details, .emp-form') || raiz;
+    caja.querySelectorAll('.solo-imap').forEach(x => { x.style.display = sel.value === 'imap' ? '' : 'none'; });
+    caja.querySelectorAll('.solo-microsoft').forEach(x => { x.style.display = sel.value === 'microsoft' ? '' : 'none'; });
+    caja.querySelectorAll('.solo-correo').forEach(x => { x.style.display = sel.value === 'ninguno' ? 'none' : ''; });
+  });
+}
+
+function leerCorreo(p) {
+  const v = id => (document.getElementById(p + id) || {}).value || '';
+  return {
+    correo: {
+      proveedor: v('Proveedor'), buzon: v('Buzon').trim(),
+      imap: { host: v('Host').trim(), puerto: Number(v('Puerto')) || null, usuario: v('Usuario').trim(), clave: v('Clave'), smtpHost: v('SmtpHost').trim(), smtpPuerto: Number(v('SmtpPuerto')) || null },
+      microsoft: { tenantId: v('Tenant').trim(), clientId: v('Client').trim(), clientSecret: v('Secreto') }
+    },
+    ia: { apiKey: v('Ia').trim() },
+    perfil: { nombre: v('PerfilNombre').trim(), dominios: v('PerfilDominios'), telefonos: v('PerfilTelefonos') }
+  };
+}
+
+function formNuevaEmpresa() {
+  const modulos = Object.entries(datosEmpresas.modulos).map(([k, m]) =>
+    `<label class="chk"><input type="checkbox" data-modulo="${k}" ${m.porDefecto ? 'checked' : ''}> ${esc(m.nombre)}</label>`).join('');
+  const dominio = datosEmpresas.dominio;
+  return `
+  <div class="emp-form">
+    <p>Se crea una base de datos nueva y vacía y su propio panel. ${dominio
+      ? `Quedará en <strong>nombre.${esc(dominio)}</strong>.`
+      : `Mientras no hay dominio, se abre en esta red con la IP de esta PC: <strong>http://${esc(datosEmpresas.ip)}:puerto</strong>.`}</p>
+    <div class="form-fila">
+      <label>Nombre de la empresa<input id="nNombre" maxlength="120" placeholder="Viajes del Mar"></label>
+      <label>Subdominio (minúsculas, sin espacios)<input id="nSlug" maxlength="30" placeholder="viajes-del-mar"></label>
+      <label>Sedes u oficinas (opcional, separadas por coma)<input id="nSedes" maxlength="300" placeholder="Santo Domingo, Punta Cana"></label>
+    </div>
+    <div class="form-fila">
+      <label>Usuario principal: nombre<input id="nAdminNombre" maxlength="100" placeholder="Pedro Marte"></label>
+      <label>Usuario principal: usuario para entrar<input id="nAdminUsuario" maxlength="50" placeholder="pedro"></label>
+    </div>
+    <p class="etiqueta-sec">El usuario principal es el gerente de la empresa: administra sus usuarios y recibe los recordatorios de pago. Recibe una contraseña temporal que debe cambiar al entrar.</p>
+    ${camposCorreo('n', {})}
+    <div class="titulo-seccion">Módulos contratados</div>
+    <div class="emp-checks">${modulos}</div>
+    <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="nConfirmar" type="password" autocomplete="current-password"></label></div>
+    <div class="pie-acciones"><button class="btn" data-accion="emp-crear">Crear empresa</button></div>
+  </div>`;
+}
+
+function vistaMensajes() {
+  const tipos = { antes: 'Pago: antes de la fecha', dia: 'Pago: el día', vencido: 'Pago: atrasado', general: 'Anuncio general' };
+  const filas = plantillasMensaje.map(p => `<tr><td>${esc(tipos[p.tipo] || p.tipo)}</td><td>${esc(p.titulo)}</td><td style="white-space:normal">${esc(p.texto)}</td>
+    <td><button class="btn-mini" data-accion="emp-plantilla-editar" data-id="${p.id}">Editar</button>
+        <button class="btn-mini" data-accion="emp-plantilla-borrar" data-id="${p.id}">Borrar</button></td></tr>`).join('');
+  return `
+    <p>Textos listos para los recordatorios de pago y los anuncios. Variables: <code>{usuario}</code> <code>{empresa}</code> <code>{monto}</code> <code>{fecha}</code> <code>{dias}</code>.</p>
+    <div class="tabla-wrap tabla-chica"><table><thead><tr><th>Uso</th><th>Título</th><th>Mensaje</th><th></th></tr></thead><tbody>${filas || '<tr><td colspan="4">Sin mensajes.</td></tr>'}</tbody></table></div>
+    <div class="emp-form">
+      <div class="titulo-seccion" id="plTitulo">Nuevo mensaje</div>
+      <input type="hidden" id="plId">
+      <div class="form-fila">
+        <label>Uso<select id="plTipo">${Object.entries(tipos).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
+        <label>Título<input id="plNombre" maxlength="120"></label>
+      </div>
+      <label class="etiqueta-sec">Mensaje<textarea id="plTexto" class="input-ancho" rows="4" maxlength="2000"></textarea></label>
+      <div class="pie-acciones"><button class="btn" data-accion="emp-plantilla-guardar">Guardar mensaje</button></div>
+    </div>`;
+}
+
+async function cargarDemo() {
+  const box = document.getElementById('panelDemo');
+  if (!box) return;
+  const r = await api('/api/central/demo');
+  if (!r.ok) { box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar la demo.')}</div>`; return; }
+  const d = r.data;
+  if (!d.existe) {
+    box.innerHTML = `<p>La demo es un panel aparte con una agencia inventada (<strong>Agencia Demo Caribe</strong>), reservas, asesoras y gráficas de ejemplo.
+      No tiene ningún dato de tus clientes, no lee correos reales y no envía nada. Cada madrugada vuelve a empezar.</p>
+      <p>Solo se entra con los accesos que crees aquí (usuario y contraseña que vencen a las 48 horas).</p>
+      <div class="pie-acciones"><button class="btn" data-accion="emp-demo-crear">Crear la demo</button></div>`;
+    return;
+  }
+  const ahora = Date.now();
+  const filas = d.accesos.map(a => {
+    const vencido = new Date(a.vence).getTime() < ahora || !a.activo;
+    return `<tr><td>${esc(a.usuario)}</td><td>${esc(a.nombre)}</td><td>${esc(a.grupo === 'Visitante asesora' ? 'Asesora' : 'Gerencia')}</td>
+      <td>${esc(fechaHora(a.vence))} ${vencido ? '<span class="chip chip-gris">Vencido</span>' : '<span class="chip chip-verde">Activo</span>'}</td>
+      <td><button class="btn-mini" data-accion="emp-demo-borrar" data-id="${a.id}">Borrar</button></td></tr>`;
+  }).join('');
+  box.innerHTML = `
+    <p>Demo: <a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a> <span class="chip ${d.vivo ? 'chip-verde' : 'chip-rojo'}">${d.vivo ? '● En línea' : '● Sin respuesta'}</span></p>
+    <div class="emp-form">
+      <div class="titulo-seccion">Nuevo acceso de prueba</div>
+      <div class="form-fila">
+        <label>Para quién<input id="dNombre" maxlength="100" placeholder="Viajes Sol - Ana"></label>
+        <label>Ve el panel como<select id="dRol"><option value="gerencia">Gerencia (ve todo, incluido Control)</option><option value="asesora">Asesora</option></select></label>
+        <label>Horas<input id="dHoras" type="number" min="1" max="336" value="48"></label>
+      </div>
+      <div class="pie-acciones"><button class="btn" data-accion="emp-demo-acceso">Crear acceso</button>
+        <button class="btn-sec" data-accion="emp-demo-reiniciar">Reiniciar datos de ejemplo</button></div>
+    </div>
+    <div id="demoResultado"></div>
+    <div class="tabla-wrap tabla-chica"><table><thead><tr><th>Usuario</th><th>Para</th><th>Ve como</th><th>Vence</th><th></th></tr></thead>
+      <tbody>${filas || '<tr><td colspan="5">Sin accesos todavía.</td></tr>'}</tbody></table></div>`;
+}
+
+async function accionEmpresas(a, b) {
+  const id = Number(b.dataset.id);
+  const recargar = async (texto, ok = true) => { await cargarEmpresas(); if (texto) mostrarAviso(texto, ok); };
+  const res = (r, ok) => (r.ok ? recargar(ok) : mostrarAviso(r.data.error || 'No se pudo completar.', false));
+
+  if (a === 'emp-copiar') return copiarTexto(b);
+  if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; return pintarEmpresas(); }
+
+  if (a === 'emp-crear') {
+    const modulos = Object.fromEntries([...document.querySelectorAll('.emp-form [data-modulo]')].map(x => [x.dataset.modulo, x.checked]));
+    const datos = {
+      nombre: val('nNombre').trim(), slug: val('nSlug').trim().toLowerCase(), sedes: val('nSedes'),
+      admin: { nombre: val('nAdminNombre').trim(), usuario: val('nAdminUsuario').trim().toLowerCase() },
+      ...leerCorreo('n'), modulos, confirmar: val('nConfirmar')
+    };
+    b.disabled = true;
+    mostrarAviso('Creando la empresa y encendiendo su panel… (unos segundos)', true);
+    const r = await api('/api/central/empresas', datos);
+    b.disabled = false;
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear la empresa.', false);
+    const bienvenida = `Hola ${datos.admin.nombre}, ya está listo el panel de reservas de ${datos.nombre}.\n\nEntra aquí: ${r.data.url}\nUsuario: ${r.data.admin.usuario}\nContraseña temporal: ${r.data.admin.clave}\n\nAl entrar te pedirá cambiar la contraseña. Equipo Kaizen IA.`;
+    resultadoEmpresas = `<div class="emp-resultado"><div class="titulo-seccion">✔ Empresa creada</div>
+      <p>Guarda estos datos ahora: <strong>la contraseña temporal no se vuelve a mostrar</strong>.</p>${textoCopiable(bienvenida)}</div>`;
+    vistaEmpresas = 'lista';
+    return recargar('Empresa creada.');
+  }
+
+  const tarjeta = b.closest('.emp-tarjeta');
+  if (a === 'emp-modulos') {
+    const modulos = Object.fromEntries([...tarjeta.querySelectorAll('[data-modulo]')].map(x => [x.dataset.modulo, x.checked]));
+    return res(await api(`/api/central/empresas/${id}/modulos`, { modulos }), 'Módulos guardados. La empresa los ve en unos segundos.');
+  }
+  if (a === 'emp-pago') {
+    return res(await api(`/api/central/empresas/${id}/pago`, {
+      activo: document.getElementById('pActivo-' + id).checked, dia: val('pDia-' + id), monto: val('pMonto-' + id), moneda: val('pMoneda-' + id),
+      diasAntes: val('pAntes-' + id), usuario: val('pUsuario-' + id),
+      plantillas: { antes: val('pPlAntes-' + id), dia: val('pPlDia-' + id), vencido: val('pPlVencido-' + id) }
+    }), 'Cobro guardado.');
+  }
+  if (a === 'emp-pagado') {
+    if (!confirm('¿Marcar como pagado el mes que se está cobrando? Se quita el recordatorio.')) return;
+    const r = await api(`/api/central/empresas/${id}/pagado`, {});
+    return res(r, r.ok ? 'Pago registrado (' + r.data.periodo + ').' : '');
+  }
+  if (a === 'emp-anuncio') {
+    const r = await api(`/api/central/empresas/${id}/anuncio`, { para: val('aPara-' + id), titulo: val('aTitulo-' + id), plantilla: val('aPlantilla-' + id), texto: val('aTexto-' + id) });
+    return res(r, r.ok ? `Anuncio enviado a ${r.data.enviados} usuario(s).` : '');
+  }
+  if (a === 'emp-correo') {
+    const datos = { ...leerCorreo('c' + id), confirmar: val('c' + id + 'Confirmar') };
+    mostrarAviso('Guardando y reiniciando su panel…', true);
+    const r = await api(`/api/central/empresas/${id}/correo`, datos);
+    return res(r, r.ok ? (r.data.aviso || 'Correo e IA guardados. Su panel se reinició.') : '');
+  }
+  if (a === 'emp-encender' || a === 'emp-apagar') {
+    if (a === 'emp-apagar' && !confirm('¿Apagar el panel de esta empresa? Nadie podrá entrar hasta encenderlo.')) return;
+    mostrarAviso(a === 'emp-encender' ? 'Encendiendo…' : 'Apagando…', true);
+    return res(await api(`/api/central/empresas/${id}/${a.slice(4)}`, {}), a === 'emp-encender' ? 'Encendida.' : 'Apagada.');
+  }
+  if (a === 'emp-pausar') {
+    const motivo = prompt('Mensaje que verán al intentar entrar:', 'El servicio está en pausa. Comunícate con Kaizen IA.');
+    if (motivo === null) return;
+    return res(await api(`/api/central/empresas/${id}/pausar`, { motivo }), 'Servicio en pausa: solo el programador puede entrar.');
+  }
+  if (a === 'emp-reanudar') return res(await api(`/api/central/empresas/${id}/reanudar`, {}), 'Servicio reanudado.');
+
+  if (a === 'emp-plantilla-editar') {
+    const p = plantillasMensaje.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('plId').value = p.id;
+    document.getElementById('plTipo').value = p.tipo;
+    document.getElementById('plNombre').value = p.titulo;
+    document.getElementById('plTexto').value = p.texto;
+    document.getElementById('plTitulo').textContent = 'Editar mensaje';
+    return document.getElementById('plTexto').focus();
+  }
+  if (a === 'emp-plantilla-borrar') {
+    if (!confirm('¿Borrar este mensaje del banco?')) return;
+    return res(await api('/api/central/plantillas', { id, borrar: true }), 'Mensaje borrado.');
+  }
+  if (a === 'emp-plantilla-guardar') {
+    return res(await api('/api/central/plantillas', { id: Number(val('plId')) || null, tipo: val('plTipo'), titulo: val('plNombre'), texto: val('plTexto') }), 'Mensaje guardado.');
+  }
+
+  if (a === 'emp-demo-crear') {
+    b.disabled = true;
+    mostrarAviso('Creando la demo con datos de ejemplo… (unos segundos)', true);
+    const r = await api('/api/central/demo/crear', {});
+    b.disabled = false;
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear la demo.', false);
+    mostrarAviso('Demo creada. Ahora crea un acceso para el cliente.', true);
+    return cargarDemo();
+  }
+  if (a === 'emp-demo-reiniciar') {
+    if (!confirm('¿Volver a poner los datos de ejemplo? Los accesos se conservan.')) return;
+    const r = await api('/api/central/demo/reiniciar', {});
+    return mostrarAviso(r.ok ? 'Datos de ejemplo reiniciados.' : (r.data.error || 'No se pudo.'), r.ok);
+  }
+  if (a === 'emp-demo-borrar') {
+    if (!confirm('¿Borrar este acceso? La persona ya no podrá entrar.')) return;
+    const r = await api('/api/central/demo/acceso', { borrar: id });
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo borrar.', false);
+    mostrarAviso('Acceso borrado.', true);
+    return cargarDemo();
+  }
+  if (a === 'emp-demo-acceso') {
+    const nombre = val('dNombre').trim();
+    const r = await api('/api/central/demo/acceso', { nombre, rol: val('dRol'), horas: val('dHoras') });
+    if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear el acceso.', false);
+    const vence = new Date(r.data.vence).toLocaleString('es-DO', { dateStyle: 'medium', timeStyle: 'short' });
+    const mensaje = `Hola ${nombre}, aquí tienes tu acceso de prueba al panel de reservas de Kaizen IA.\n\nEntra aquí: ${r.data.url}\nUsuario: ${r.data.usuario}\nContraseña: ${r.data.clave}\n\nEs una agencia de ejemplo con datos inventados. Tu acceso vence el ${vence}.`;
+    await cargarDemo();
+    document.getElementById('demoResultado').innerHTML = `<div class="emp-resultado"><div class="titulo-seccion">✔ Acceso creado</div>
+      <p>La contraseña no se vuelve a mostrar. Copia el mensaje y mándaselo al cliente.</p>${textoCopiable(mensaje)}</div>`;
+    return mostrarAviso('Acceso creado.', true);
+  }
+}
+
+/* ---------- Franjas: demo, pausa, recordatorio de pago y anuncios ---------- */
+
+async function cargarFranjas() {
+  const caja = document.getElementById('franjas');
+  if (!caja || !sesionActual) return;
+  const r = await api('/api/franjas');
+  if (!r.ok || !r.data.length) { caja.innerHTML = ''; return; }
+  const titulos = { demo: '', pausa: '⏸ ', 'pago-antes': '🔔 Recordatorio de pago', 'pago-dia': '🔔 Hoy vence el pago', 'pago-vencido': '⚠ Pago vencido', anuncio: '📣 ' };
+  caja.innerHTML = r.data.map(f => `
+    <div class="franja franja-${esc(f.tipo)}">
+      <span>${f.tipo === 'anuncio' ? `<strong>📣 ${esc(f.titulo || 'Aviso')}:</strong> ` : (titulos[f.tipo] && f.tipo.startsWith('pago') ? `<strong>${titulos[f.tipo]}:</strong> ` : '')}${esc(f.texto)}</span>
+      ${f.tipo === 'anuncio' ? `<button class="btn-mini" data-cerrar-anuncio="${f.id}" title="Entendido">Entendido</button>` : ''}
+    </div>`).join('');
 }
 
 /* ---------- Reparto automático ---------- */
@@ -2629,6 +3112,8 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-reparto') return abrirHerramientas('reparto');
   if (a === 'tab-historico') return abrirHerramientas('historico');
   if (a === 'tab-estado') return abrirHerramientas('estado');
+  if (a === 'tab-empresas') return abrirHerramientas('empresas');
+  if (a.startsWith('emp-')) return accionEmpresas(a, b);
   if (a === 'salud-revisar') return cargarEstadoSistema(true);
   if (a === 'motor-ciclo') { api('/api/motor/ciclo', {}).then(() => setTimeout(pintarMotor, 3000)); return mostrarAviso('El motor está leyendo los correos. La tabla se actualiza en unos segundos.', true); }
   if (a === 'reparto-guardar') return guardarReparto();
@@ -2735,7 +3220,7 @@ document.getElementById('formClave').addEventListener('submit', enviarClave);
 document.getElementById('btnCancelarClave').addEventListener('click', cancelarClave);
 document.getElementById('btnSalir').addEventListener('click', cerrarSesion);
 document.getElementById('btnMiClave').addEventListener('click', () => mostrarClave(false));
-document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas());
+document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas(puedeVerEmpresas() ? 'empresas' : 'usuarios'));
 document.getElementById('btnChat').addEventListener('click', abrirChat);
 document.getElementById('btnChatFlotante').addEventListener('click', abrirChat);
 document.getElementById('btnAvisos').addEventListener('click', async () => {
@@ -2836,6 +3321,25 @@ document.getElementById('buscarHistorico').addEventListener('input', () => {
 });
 document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
 document.getElementById('alertasSistema').addEventListener('click', e => { if (e.target.dataset.verEstado) abrirHerramientas('estado'); });
+document.getElementById('franjas').addEventListener('click', async e => {
+  const id = e.target.dataset.cerrarAnuncio;
+  if (!id) return;
+  await api('/api/anuncio/cerrar', { id: Number(id) });
+  cargarFranjas();
+});
+// Empresas: mostrar los campos según el correo elegido y llenar los servidores de Gmail, Zoho, etc.
+document.getElementById('caja').addEventListener('change', e => {
+  if (e.target.matches('select[data-proveedor]')) actualizarCamposCorreo(document.getElementById('panelEmpresas') || document);
+  if (e.target.matches('select[data-preset]')) {
+    const x = PROVEEDORES_IMAP[e.target.value];
+    const p = e.target.dataset.preset;
+    if (!x) return;
+    document.getElementById(p + 'Host').value = x.host;
+    document.getElementById(p + 'Puerto').value = x.puerto;
+    document.getElementById(p + 'SmtpHost').value = x.smtpHost;
+    document.getElementById(p + 'SmtpPuerto').value = x.smtpPuerto;
+  }
+});
 
 if (localStorage.getItem('tema') === 'oscuro') {
   document.body.classList.add('oscuro');

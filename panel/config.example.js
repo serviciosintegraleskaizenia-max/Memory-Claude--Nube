@@ -14,6 +14,18 @@ module.exports = {
   },
   puerto: 3001,
 
+  // Sedes u oficinas de la empresa (para separar usuarios). Sin esta línea: las de Somos Viajes.
+  // sedes: ['Republica Dominicana', 'Orlando'],
+
+  // SOLO en el panel central de Kaizen IA (el tuyo): pestaña Empresas para crear y manejar empresas.
+  // En los paneles de los clientes NO se pone (o activo: false).
+  // central: {
+  //   activo: true,
+  //   carpeta: 'C:\\panel-correos\\empresas',  // aquí se guardan los ajustes y claves de cada empresa
+  //   puertoInicial: 3101,                       // la primera empresa usa 3101, la siguiente 3102...
+  //   dominio: ''                                // con dominio (ej. 'kaizenia.app') las direcciones serán empresa.kaizenia.app
+  // },
+
   // Flujo de n8n que marca el correo como leído cuando todos sus servicios quedan "Registrada".
   // Debe estar activo (Publish). Si se deja vacío, el panel no marca nada.
   // Alertas de fallos: a quién se le manda un correo cuando algo falla (además de la campanita del panel).
@@ -33,6 +45,13 @@ module.exports = {
     buzones: ['operaciones@tuempresa.com'],
     microsoft: { tenantId: '', clientId: '', clientSecret: '' },
     modelo: 'anthropic/claude-haiku-5.5'
+    // Otra forma (la usan las empresas creadas en la pestaña Empresas): varias cuentas, Microsoft 365 o IMAP.
+    // cuentas: [
+    //   { proveedor: 'microsoft', buzon: 'reservas@empresa.com', microsoft: { tenantId: '', clientId: '', clientSecret: '' } },
+    //   { proveedor: 'imap', buzon: 'reservas@empresa.com', imap: { host: 'imap.gmail.com', puerto: 993, usuario: 'reservas@empresa.com', clave: 'CONTRASEÑA_DE_APLICACION' } }
+    // ],
+    // La empresa que recibe los correos (la IA no la pone como agencia ni toma sus teléfonos). Sin esto: Somos Viaje.
+    // perfil: { nombre: 'Mi Agencia', dominios: ['miagencia.com'], telefonos: ['+18095550000'] }
   },
 
   // Clave de OpenRouter (la misma de n8n): la usa el motor de correo y la vigilancia del saldo.

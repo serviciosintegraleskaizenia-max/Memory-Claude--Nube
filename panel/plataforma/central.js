@@ -1,0 +1,559 @@
+// Panel central de Kaizen IA: pestaña Empresas (solo programador, solo si config.central.activo = true).
+// Crea empresas nuevas (base de datos propia + su panel en otro puerto), las enciende, pausa y cobra,
+// manda anuncios y maneja la demo de ventas con accesos de 48 horas.
+//
+// Cada empresa:
+//   - Base de datos propia (panel_<nombre>) en el mismo PostgreSQL: los datos nunca se mezclan.
+//   - Su propio panel (el mismo programa) en su puerto: http://IP-de-la-PC:puerto, o nombre.kaizenia.app en el servidor.
+//   - Sus claves (correo, IA) solo en su archivo empresas/<nombre>/config.js. Nunca se vuelven a mostrar.
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const net = require('net');
+const crypto = require('crypto');
+const { spawn } = require('child_process');
+const { Client } = require('pg');
+const bcrypt = require('bcryptjs');
+const { MODULOS, TEXTOS_PAGO, etapaPago, hoyLocal } = require('./cuenta');
+const { sembrarDemo, GRUPOS } = require('./demo');
+
+const RESERVADOS = new Set(['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'panel', 'chat', 'n8n', 'pruebas']);
+const SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+
+function claveAleatoria(n = 10) {
+  // Sin letras que se confunden (0/O, 1/l/I).
+  const letras = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.randomBytes(n), b => letras[b % letras.length]).join('');
+}
+
+function ipLocal() {
+  for (const lista of Object.values(os.networkInterfaces())) {
+    for (const x of lista || []) if (x.family === 'IPv4' && !x.internal) return x.address;
+  }
+  return '127.0.0.1';
+}
+
+function puertoLibre(puerto) {
+  return new Promise(r => {
+    const s = net.createServer().once('error', () => r(false)).once('listening', () => s.close(() => r(true)));
+    s.listen(puerto);
+  });
+}
+
+function texto(v, max = 200) {
+  return String(v ?? '').trim().slice(0, max);
+}
+
+module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
+  const aj = Object.assign({ activo: false, carpeta: path.join(CARPETA, 'empresas'), puertoInicial: 3101, dominio: '' }, config.central || {});
+  const activo = !!aj.activo;
+  const CARPETA_EMPRESAS = path.resolve(aj.carpeta);
+  const fallos = new Map();
+
+  async function preparar() {
+    if (!activo) return;
+    await client.query(`CREATE TABLE IF NOT EXISTS empresas (
+      id SERIAL PRIMARY KEY,
+      slug VARCHAR(30) UNIQUE NOT NULL,
+      nombre VARCHAR(120) NOT NULL,
+      base_datos VARCHAR(63) UNIQUE NOT NULL,
+      puerto INTEGER UNIQUE NOT NULL,
+      estado VARCHAR(20) NOT NULL DEFAULT 'activa',
+      es_demo BOOLEAN NOT NULL DEFAULT FALSE,
+      correo JSONB NOT NULL DEFAULT '{}'::jsonb,
+      pago JSONB NOT NULL DEFAULT '{}'::jsonb,
+      pid INTEGER,
+      notas TEXT NOT NULL DEFAULT '',
+      creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query(`CREATE TABLE IF NOT EXISTS plantillas_mensaje (
+      id SERIAL PRIMARY KEY,
+      tipo VARCHAR(20) NOT NULL,
+      titulo VARCHAR(120) NOT NULL,
+      texto TEXT NOT NULL,
+      creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    const hay = (await client.query('SELECT COUNT(*)::int AS n FROM plantillas_mensaje')).rows[0].n;
+    if (!hay) {
+      for (const [tipo, titulo] of [['antes', 'Recordatorio amable (antes de la fecha)'], ['dia', 'Hoy vence el pago'], ['vencido', 'Pago vencido']]) {
+        await client.query('INSERT INTO plantillas_mensaje (tipo, titulo, texto) VALUES ($1, $2, $3)', [tipo, titulo, TEXTOS_PAGO[tipo]]);
+      }
+      await client.query('INSERT INTO plantillas_mensaje (tipo, titulo, texto) VALUES ($1, $2, $3)',
+        ['general', 'Mantenimiento programado', 'Hola {usuario}: este domingo de 2:00 a 3:00 a. m. haremos mejoras en el panel. Puede que no esté disponible unos minutos. Equipo Kaizen IA.']);
+    }
+  }
+
+  // ---------- Conexión y procesos de cada empresa ----------
+
+  async function conEmpresa(e, fn) {
+    const c = new Client({ ...config.db, database: e.base_datos });
+    await c.connect();
+    try { return await fn(c); } finally { await c.end().catch(() => {}); }
+  }
+
+  const carpetaDe = e => path.join(CARPETA_EMPRESAS, e.slug);
+  const archivoDe = e => path.join(carpetaDe(e), 'config.js');
+  const urlDe = e => (aj.dominio ? `https://${e.slug}.${aj.dominio}` : `http://${ipLocal()}:${e.puerto}`);
+
+  async function responde(e, ms = 2500) {
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), ms);
+    try {
+      const r = await fetch(`http://127.0.0.1:${e.puerto}/api/empresa`, { signal: control.signal });
+      return r.ok;
+    } catch (err) { return false; } finally { clearTimeout(reloj); }
+  }
+
+  function leerAjustes(e) {
+    const archivo = archivoDe(e);
+    if (!fs.existsSync(archivo)) return null;
+    delete require.cache[require.resolve(archivo)];
+    return require(archivo);
+  }
+
+  function escribirAjustes(e, datos) {
+    fs.mkdirSync(carpetaDe(e), { recursive: true });
+    const cabecera = `// Ajustes de ${e.nombre} (creado por la pestaña Empresas del panel central de Kaizen IA).\n// Tiene claves: no lo compartas ni lo subas a internet.\n`;
+    fs.writeFileSync(archivoDe(e), cabecera + 'module.exports = ' + JSON.stringify(datos, null, 2) + ';\n', { mode: 0o600 });
+  }
+
+  // Arma el config.js de la empresa a partir del formulario. Las claves vacías conservan las anteriores.
+  function ajustesDesde(e, f, previo = {}) {
+    const correo = f.correo || {};
+    const proveedor = ['microsoft', 'imap', 'ninguno'].includes(correo.proveedor) ? correo.proveedor : 'ninguno';
+    const buzon = texto(correo.buzon, 120).toLowerCase();
+    const pm = (previo.motor && previo.motor.cuentas && previo.motor.cuentas[0]) || {};
+    const pp = (previo.motor && previo.motor.perfil) || {};
+    // Listas separadas por coma o espacio; vacío = se queda lo anterior.
+    const lista = (v, antes) => { const l = texto(v, 300).split(/[\s,]+/).filter(Boolean); return l.length ? l : (antes || []); };
+    const motor = {
+      activo: proveedor !== 'ninguno' && !e.es_demo,
+      sombra: false,
+      intervaloMinutos: 10,
+      ventanaDias: 2,
+      modelo: 'anthropic/claude-haiku-5.5',
+      perfil: {
+        nombre: texto(f.perfil && f.perfil.nombre, 80) || pp.nombre || e.nombre,
+        dominios: lista(f.perfil && f.perfil.dominios, pp.dominios),
+        telefonos: lista(f.perfil && f.perfil.telefonos, pp.telefonos)
+      },
+      cuentas: []
+    };
+    const smtp = {};
+    if (proveedor === 'microsoft') {
+      const m = correo.microsoft || {};
+      const pmm = pm.microsoft || {};
+      motor.cuentas.push({ proveedor, buzon, microsoft: {
+        tenantId: texto(m.tenantId, 80) || pmm.tenantId || '', clientId: texto(m.clientId, 80) || pmm.clientId || '',
+        clientSecret: texto(m.clientSecret, 200) || pmm.clientSecret || '' } });
+    } else if (proveedor === 'imap') {
+      const i = correo.imap || {};
+      const pi = pm.imap || {};
+      const imap = {
+        host: texto(i.host, 120) || pi.host || '', puerto: Number(i.puerto) || pi.puerto || 993,
+        usuario: texto(i.usuario, 120) || pi.usuario || buzon, clave: texto(i.clave, 200) || pi.clave || '',
+        smtpHost: texto(i.smtpHost, 120) || pi.smtpHost || '', smtpPuerto: Number(i.smtpPuerto) || pi.smtpPuerto || 465
+      };
+      motor.cuentas.push({ proveedor, buzon, imap });
+      // El mismo buzón responde por SMTP (Gmail: contraseña de aplicación).
+      if (imap.smtpHost) smtp[buzon] = { host: imap.smtpHost, port: imap.smtpPuerto, usuario: imap.usuario, clave: imap.clave, nombre: e.nombre, empresa: 'todas' };
+    }
+    return {
+      db: { ...config.db, database: e.base_datos },
+      sesion: { minutosInactividad: (config.sesion && config.sesion.minutosInactividad) || 30, secreto: (previo.sesion && previo.sesion.secreto) || crypto.randomBytes(32).toString('hex') },
+      puerto: e.puerto,
+      carpetaDatos: carpetaDe(e),
+      empresa: e.slug,
+      demo: !!e.es_demo,
+      sedes: texto(f.sedes, 300).split(',').map(x => x.trim()).filter(Boolean),
+      motor,
+      openrouter: { apiKey: texto(f.ia && f.ia.apiKey, 200) || (previo.openrouter && previo.openrouter.apiKey) || '' },
+      correo: smtp,
+      alertas: config.alertas || {}
+    };
+  }
+
+  // Resumen sin claves (lo que se guarda en la base del central y se muestra en pantalla).
+  function resumenCorreo(a) {
+    const c = a && a.motor && a.motor.cuentas && a.motor.cuentas[0];
+    if (!c) return { proveedor: 'ninguno', buzon: '' };
+    return {
+      proveedor: c.proveedor, buzon: c.buzon,
+      host: c.imap ? c.imap.host : '', clavePuesta: !!(c.imap ? c.imap.clave : c.microsoft && c.microsoft.clientSecret),
+      iaPuesta: !!(a.openrouter && a.openrouter.apiKey),
+      perfil: a.motor && a.motor.perfil ? { nombre: a.motor.perfil.nombre, dominios: a.motor.perfil.dominios.join(', '), telefonos: a.motor.perfil.telefonos.join(', ') } : null
+    };
+  }
+
+  async function encender(e) {
+    if (await responde(e)) return true;
+    fs.mkdirSync(carpetaDe(e), { recursive: true });
+    const salida = fs.openSync(path.join(carpetaDe(e), 'panel.log'), 'a');
+    const errores = fs.openSync(path.join(carpetaDe(e), 'panel-error.log'), 'a');
+    const hijo = spawn(process.execPath, [path.join(CARPETA, 'servidor.js')], {
+      cwd: CARPETA, detached: true, windowsHide: true, stdio: ['ignore', salida, errores],
+      env: { ...process.env, PANEL_CONFIG: archivoDe(e), ARRANQUE_VIGILANTE: '' }
+    });
+    hijo.unref();
+    fs.closeSync(salida); fs.closeSync(errores);
+    await client.query('UPDATE empresas SET pid = $1 WHERE id = $2', [hijo.pid, e.id]);
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      if (await responde(e, 1000)) return true;
+    }
+    return false;
+  }
+
+  // Se le pide al panel de la empresa que se apague (con su clave secreta). No se cierra un proceso por número:
+  // después de reiniciar la PC ese número puede ser de otro programa.
+  async function apagar(e) {
+    const secreto = ((leerAjustes(e) || {}).sesion || {}).secreto || '';
+    try {
+      await fetch(`http://127.0.0.1:${e.puerto}/api/interno/apagar`, { method: 'POST', headers: { 'x-kaizen': secreto } });
+    } catch (err) {}
+    for (let i = 0; i < 20 && await responde(e, 500); i++) await new Promise(r => setTimeout(r, 300));
+    await client.query('UPDATE empresas SET pid = NULL WHERE id = $1', [e.id]);
+  }
+
+  // Cada minuto: si una empresa encendida no responde dos veces seguidas, se vuelve a encender.
+  async function supervisar() {
+    const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada')")).rows;
+    for (const e of lista) {
+      if (await responde(e)) { fallos.delete(e.id); continue; }
+      const n = (fallos.get(e.id) || 0) + 1;
+      fallos.set(e.id, n);
+      if (n >= 2) {
+        fallos.delete(e.id);
+        const ok = await encender(e).catch(() => false);
+        console.log(`Empresa ${e.slug}: ${ok ? 'encendida de nuevo' : 'no pudo encender (revisa ' + path.join(carpetaDe(e), 'panel-error.log') + ')'}`);
+      }
+    }
+  }
+
+  function iniciar() {
+    if (!activo) return;
+    // Al encender el central, se encienden las empresas que estaban activas.
+    setTimeout(async () => {
+      const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada')")).rows;
+      for (const e of lista) await encender(e).catch(err => console.log('Empresa', e.slug, err.message));
+    }, 3000);
+    setInterval(() => supervisar().catch(err => console.log('Supervisión de empresas:', err.message)), 60 * 1000);
+  }
+
+  // ---------- Crear empresa ----------
+
+  async function siguientePuerto() {
+    const usado = new Set((await client.query('SELECT puerto FROM empresas')).rows.map(x => x.puerto));
+    for (let p = aj.puertoInicial; p < aj.puertoInicial + 500; p++) {
+      if (!usado.has(p) && p !== config.puerto && await puertoLibre(p)) return p;
+    }
+    throw new Error('No hay puertos libres.');
+  }
+
+  async function crearEmpresa(u, f, esDemo) {
+    const slug = esDemo ? 'demo' : texto(f.slug, 30).toLowerCase();
+    const nombre = esDemo ? 'Demo de ventas' : texto(f.nombre, 120);
+    if (!nombre) throw Object.assign(new Error('Falta el nombre de la empresa.'), { codigo: 400 });
+    if (!SLUG.test(slug) || (!esDemo && (RESERVADOS.has(slug) || slug === 'demo'))) {
+      throw Object.assign(new Error('El subdominio debe tener de 3 a 30 letras minúsculas, números o guiones (ej.: viajes-caribe), y no puede ser una palabra reservada.'), { codigo: 400 });
+    }
+    if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
+      throw Object.assign(new Error('Ya existe una empresa con ese subdominio.'), { codigo: 400 });
+    }
+    const admin = esDemo ? null : { usuario: texto(f.admin && f.admin.usuario, 50).toLowerCase(), nombre: texto(f.admin && f.admin.nombre, 100) };
+    if (admin && (!/^[a-z0-9._-]{3,50}$/.test(admin.usuario) || !admin.nombre)) {
+      throw Object.assign(new Error('El usuario principal necesita nombre y un usuario de 3 a 50 letras o números (sin espacios).'), { codigo: 400 });
+    }
+    if (admin && admin.usuario === u.usuario) throw Object.assign(new Error('El usuario principal no puede llamarse igual que el programador.'), { codigo: 400 });
+
+    const base = 'panel_' + slug.replace(/-/g, '_');
+    const existe = (await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [base])).rowCount;
+    if (existe) throw Object.assign(new Error(`Ya hay una base de datos llamada ${base}. Elige otro subdominio.`), { codigo: 400 });
+    const puerto = await siguientePuerto();
+    await client.query(`CREATE DATABASE "${base}"`);
+    const e = (await client.query(
+      'INSERT INTO empresas (slug, nombre, base_datos, puerto, es_demo) VALUES ($1, $2, $3, $4, $5) RETURNING *', [slug, nombre, base, puerto, !!esDemo])).rows[0];
+    const ajustes = ajustesDesde(e, esDemo ? {} : f);
+    escribirAjustes(e, ajustes);
+    await client.query('UPDATE empresas SET correo = $1 WHERE id = $2', [resumenCorreo(ajustes), e.id]);
+
+    if (!(await encender(e))) {
+      throw Object.assign(new Error(`La empresa se creó pero su panel no encendió. Revisa ${path.join(carpetaDe(e), 'panel-error.log')}`), { codigo: 500 });
+    }
+    // El panel nuevo ya creó sus tablas. Ahora: grupos, usuarios, nombre y módulos.
+    const yo = (await client.query('SELECT usuario, nombre, password_hash FROM usuarios WHERE usuario = $1', [u.usuario])).rows[0];
+    const claveAdmin = claveAleatoria(10);
+    await conEmpresa(e, async db => {
+      for (const [g, permisos] of Object.entries(GRUPOS)) {
+        if (!esDemo && g.startsWith('Visitante')) continue;
+        await db.query('INSERT INTO grupos (nombre, permisos, protegido) VALUES ($1, $2, FALSE) ON CONFLICT (nombre) DO NOTHING', [g, permisos]);
+      }
+      // El programador entra a todas las empresas con su mismo usuario y clave del central.
+      await db.query(`INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos)
+        VALUES ($1, $2, 'Programador', 'todas', $3, TRUE, FALSE, '{}') ON CONFLICT (usuario) DO NOTHING`, [yo.usuario, yo.nombre, yo.password_hash]);
+      if (admin) {
+        await db.query(`INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos)
+          VALUES ($1, $2, 'Gerencia', 'todas', $3, TRUE, TRUE, '{}')`, [admin.usuario, admin.nombre, bcrypt.hashSync(claveAdmin, 10)]);
+      }
+      await db.query('UPDATE empresa_datos SET nombre = $1 WHERE id = 1', [esDemo ? 'Agencia Demo Caribe' : nombre]);
+      const modulos = Object.fromEntries(Object.keys(MODULOS).map(k => [k, f.modulos ? f.modulos[k] === true : MODULOS[k].porDefecto]));
+      await db.query('UPDATE cuenta SET modulos = $1, pago = $2 WHERE id = 1', [modulos, admin ? { usuario: admin.usuario } : {}]);
+      if (esDemo) await sembrarDemo(db);
+    });
+    await registrar(u, esDemo ? 'crear_demo' : 'crear_empresa', 'empresa', slug, '', base, `${nombre} en el puerto ${puerto}`);
+    return { ok: true, url: urlDe(e), puerto, admin: admin ? { usuario: admin.usuario, clave: claveAdmin } : null };
+  }
+
+  // ---------- Lista y detalle ----------
+
+  async function detalle(e) {
+    const vivo = await responde(e);
+    let info = {};
+    try {
+      info = await conEmpresa(e, async db => {
+        const c = (await db.query('SELECT estado, motivo, modulos, pago, pagado FROM cuenta WHERE id = 1')).rows[0] || {};
+        const n = (await db.query(`SELECT
+            (SELECT COUNT(*)::int FROM usuarios WHERE activo = TRUE AND grupo <> 'Programador' AND vence IS NULL) AS usuarios,
+            (SELECT COUNT(*)::int FROM clasificacion WHERE creado >= date_trunc('day', NOW())) AS correos_hoy,
+            (SELECT MAX(creado) FROM clasificacion) AS ultimo_correo`)).rows[0];
+        const motor = (await db.query("SELECT mensaje, fin FROM motor_estado WHERE id = 1").catch(() => ({ rows: [] }))).rows[0] || null;
+        const usuarios = (await db.query("SELECT usuario, nombre, grupo FROM usuarios WHERE activo = TRUE AND grupo <> 'Programador' AND vence IS NULL ORDER BY nombre")).rows;
+        return { cuenta: c, numeros: n, motor, usuarios };
+      });
+    } catch (err) { info = { error: 'Sin conexión con su base de datos: ' + err.message }; }
+    const c = info.cuenta || {};
+    const etapa = c.pago ? etapaPago({ ...c.pago, activo: c.pago.activo }, c.pagado) : null;
+    return {
+      id: e.id, slug: e.slug, nombre: e.nombre, puerto: e.puerto, estado: e.estado, es_demo: e.es_demo, url: urlDe(e),
+      creado: e.creado, correo: e.correo, pagoCentral: e.pago, vivo, ...info, etapaPago: etapa,
+      modulos: Object.fromEntries(Object.keys(MODULOS).map(k => [k, c.modulos && typeof c.modulos[k] === 'boolean' ? c.modulos[k] : MODULOS[k].porDefecto]))
+    };
+  }
+
+  async function empresa(id) {
+    const e = (await client.query('SELECT * FROM empresas WHERE id = $1', [Number(id)])).rows[0];
+    if (!e) throw Object.assign(new Error('Empresa no encontrada.'), { codigo: 404 });
+    return e;
+  }
+
+  async function plantillasPorId() {
+    return new Map((await client.query('SELECT * FROM plantillas_mensaje')).rows.map(x => [x.id, x]));
+  }
+
+  // Lleva el ajuste de cobro (con los textos de las plantillas elegidas) a la base de la empresa.
+  async function aplicarPago(e) {
+    const p = e.pago || {};
+    const plantillas = await plantillasPorId();
+    const mensajes = {};
+    for (const etapa of ['antes', 'dia', 'vencido']) {
+      const t = p.plantillas && plantillas.get(Number(p.plantillas[etapa]));
+      mensajes[etapa] = t ? t.texto : TEXTOS_PAGO[etapa];
+    }
+    await conEmpresa(e, db => db.query('UPDATE cuenta SET pago = $1, actualizado = NOW() WHERE id = 1', [{
+      activo: !!p.activo, dia: p.dia, monto: p.monto, moneda: p.moneda, diasAntes: p.diasAntes, usuario: p.usuario, desde: p.desde, mensajes
+    }]));
+  }
+
+  // ---------- Demo: accesos de 48 horas ----------
+
+  async function demo() {
+    return (await client.query('SELECT * FROM empresas WHERE es_demo = TRUE LIMIT 1')).rows[0] || null;
+  }
+
+  // ---------- Rutas ----------
+
+  async function manejar(req, res, url, u, { json, leerCuerpo }) {
+    if (!activo) return json(res, 404, { error: 'Este panel no es el central.' });
+    if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede usar Empresas.' });
+    // Acciones delicadas: se vuelve a pedir la contraseña del programador.
+    const confirmar = async clave => {
+      const r = (await client.query('SELECT password_hash FROM usuarios WHERE id = $1', [u.id])).rows[0];
+      if (!r || !(await bcrypt.compare(String(clave || ''), r.password_hash))) {
+        throw Object.assign(new Error('Contraseña incorrecta. Para esta acción hay que confirmar tu contraseña.'), { codigo: 403 });
+      }
+    };
+    try {
+      const m = url.match(/^\/api\/central\/empresas\/(\d+)\/([a-z-]+)$/);
+
+      if (req.method === 'GET' && url === '/api/central/empresas') {
+        const lista = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
+        const detalles = await Promise.all(lista.map(detalle));
+        return json(res, 200, { empresas: detalles, modulos: MODULOS, ip: ipLocal(), dominio: aj.dominio, hoy: hoyLocal() });
+      }
+
+      if (req.method === 'POST' && url === '/api/central/empresas') {
+        const f = await leerCuerpo(req);
+        await confirmar(f.confirmar);
+        return json(res, 200, await crearEmpresa(u, f, false));
+      }
+
+      if (m && req.method === 'POST') {
+        const e = await empresa(m[1]);
+        const accion = m[2];
+        const f = await leerCuerpo(req);
+
+        if (accion === 'encender') {
+          await client.query("UPDATE empresas SET estado = CASE WHEN estado = 'apagada' THEN 'activa' ELSE estado END WHERE id = $1", [e.id]);
+          const ok = await encender(e);
+          return ok ? json(res, 200, { ok: true }) : json(res, 500, { error: 'No encendió. Revisa ' + path.join(carpetaDe(e), 'panel-error.log') });
+        }
+        if (accion === 'apagar') {
+          await client.query("UPDATE empresas SET estado = 'apagada' WHERE id = $1", [e.id]);
+          await apagar(e);
+          await registrar(u, 'apagar_empresa', 'empresa', e.slug, '', '', '');
+          return json(res, 200, { ok: true });
+        }
+        if (accion === 'pausar' || accion === 'reanudar') {
+          const pausar = accion === 'pausar';
+          const motivo = texto(f.motivo, 300);
+          await conEmpresa(e, db => db.query('UPDATE cuenta SET estado = $1, motivo = $2, actualizado = NOW() WHERE id = 1', [pausar ? 'pausada' : 'activa', pausar ? motivo : '']));
+          await client.query('UPDATE empresas SET estado = $1 WHERE id = $2', [pausar ? 'pausada' : 'activa', e.id]);
+          await registrar(u, pausar ? 'pausar_empresa' : 'reanudar_empresa', 'empresa', e.slug, '', '', motivo);
+          return json(res, 200, { ok: true });
+        }
+        if (accion === 'modulos') {
+          const modulos = Object.fromEntries(Object.keys(MODULOS).map(k => [k, !!(f.modulos && f.modulos[k])]));
+          await conEmpresa(e, db => db.query('UPDATE cuenta SET modulos = $1, actualizado = NOW() WHERE id = 1', [modulos]));
+          await registrar(u, 'modulos_empresa', 'empresa', e.slug, '', JSON.stringify(modulos), '');
+          return json(res, 200, { ok: true });
+        }
+        if (accion === 'pago') {
+          const pago = {
+            activo: !!f.activo,
+            dia: Math.min(28, Math.max(1, Number(f.dia) || 1)),
+            monto: texto(f.monto, 20), moneda: texto(f.moneda, 5) || 'US$',
+            diasAntes: Math.min(15, Math.max(0, Number(f.diasAntes) || 0)),
+            usuario: texto(f.usuario, 50),
+            plantillas: { antes: Number(f.plantillas && f.plantillas.antes) || null, dia: Number(f.plantillas && f.plantillas.dia) || null, vencido: Number(f.plantillas && f.plantillas.vencido) || null },
+            // El cobro empieza a contar desde el mes en que se activa (no se cobran meses anteriores).
+            desde: (e.pago && e.pago.desde) || hoyLocal().slice(0, 7)
+          };
+          e.pago = pago;
+          await client.query('UPDATE empresas SET pago = $1 WHERE id = $2', [pago, e.id]);
+          await aplicarPago(e);
+          await registrar(u, 'pago_empresa', 'empresa', e.slug, '', JSON.stringify(pago), '');
+          return json(res, 200, { ok: true });
+        }
+        if (accion === 'pagado') {
+          // Marca pagado el mes que se está cobrando (o el actual) y apaga el aviso.
+          const info = await conEmpresa(e, async db => (await db.query('SELECT pago, pagado FROM cuenta WHERE id = 1')).rows[0]);
+          const etapa = etapaPago(info.pago, info.pagado);
+          const periodo = /^\d{4}-\d{2}$/.test(f.periodo || '') ? f.periodo : (etapa ? etapa.periodo : hoyLocal().slice(0, 7));
+          await conEmpresa(e, db => db.query("UPDATE cuenta SET pagado = $1, aviso_pago = '', actualizado = NOW() WHERE id = 1", [periodo]));
+          await registrar(u, 'pago_recibido', 'empresa', e.slug, info.pagado || '', periodo, '');
+          return json(res, 200, { ok: true, periodo });
+        }
+        if (accion === 'anuncio') {
+          let textoAnuncio = texto(f.texto, 2000);
+          if (!textoAnuncio && f.plantilla) {
+            const p = (await client.query('SELECT texto FROM plantillas_mensaje WHERE id = $1', [Number(f.plantilla)])).rows[0];
+            textoAnuncio = p ? p.texto : '';
+          }
+          if (!textoAnuncio) return json(res, 400, { error: 'Escribe el mensaje o elige uno del banco.' });
+          const n = await conEmpresa(e, async db => {
+            const destino = f.para === '*'
+              ? (await db.query("SELECT usuario, nombre FROM usuarios WHERE activo = TRUE AND grupo <> 'Programador'")).rows
+              : (await db.query('SELECT usuario, nombre FROM usuarios WHERE activo = TRUE AND usuario = $1', [texto(f.para, 50)])).rows;
+            const empresaNombre = ((await db.query('SELECT nombre FROM empresa_datos WHERE id = 1')).rows[0] || {}).nombre || e.nombre;
+            for (const d of destino) {
+              const t = textoAnuncio.replace(/\{usuario\}/g, d.nombre || d.usuario).replace(/\{empresa\}/g, empresaNombre);
+              await db.query('INSERT INTO anuncios (para, titulo, texto, por) VALUES ($1, $2, $3, $4)', [d.usuario, texto(f.titulo, 120) || 'Aviso de Kaizen IA', t, u.usuario]);
+              await db.query('INSERT INTO avisos (para, texto) VALUES ($1, $2)', [d.usuario, (texto(f.titulo, 120) || 'Aviso de Kaizen IA') + ': ' + t.slice(0, 200)]);
+            }
+            return destino.length;
+          });
+          await registrar(u, 'anuncio_empresa', 'empresa', e.slug, '', String(n), textoAnuncio.slice(0, 200));
+          return json(res, 200, { ok: true, enviados: n });
+        }
+        if (accion === 'correo') {
+          await confirmar(f.confirmar);
+          const previo = leerAjustes(e) || {};
+          const nuevos = ajustesDesde(e, { ...f, sedes: f.sedes !== undefined ? f.sedes : (previo.sedes || []).join(', ') }, previo);
+          escribirAjustes(e, nuevos);
+          await client.query('UPDATE empresas SET correo = $1 WHERE id = $2', [resumenCorreo(nuevos), e.id]);
+          await apagar(e);
+          await new Promise(r => setTimeout(r, 800));
+          const ok = await encender(e);
+          await registrar(u, 'correo_empresa', 'empresa', e.slug, '', resumenCorreo(nuevos).proveedor, 'Ajustes de correo/IA cambiados');
+          return json(res, 200, { ok, aviso: ok ? '' : 'Se guardó, pero el panel no volvió a encender.' });
+        }
+        return json(res, 404, { error: 'Acción no válida.' });
+      }
+
+      // Banco de mensajes
+      if (url === '/api/central/plantillas') {
+        if (req.method === 'GET') return json(res, 200, (await client.query('SELECT * FROM plantillas_mensaje ORDER BY tipo, id')).rows);
+        const f = await leerCuerpo(req);
+        const tipo = ['antes', 'dia', 'vencido', 'general'].includes(f.tipo) ? f.tipo : 'general';
+        if (f.borrar && f.id) {
+          await client.query('DELETE FROM plantillas_mensaje WHERE id = $1', [Number(f.id)]);
+          return json(res, 200, { ok: true });
+        }
+        if (!texto(f.titulo) || !texto(f.texto, 2000)) return json(res, 400, { error: 'Pon un título y el texto del mensaje.' });
+        if (f.id) {
+          await client.query('UPDATE plantillas_mensaje SET tipo = $1, titulo = $2, texto = $3 WHERE id = $4', [tipo, texto(f.titulo, 120), texto(f.texto, 2000), Number(f.id)]);
+          // Las empresas que usan este mensaje reciben el texto nuevo.
+          const usan = (await client.query("SELECT * FROM empresas WHERE pago->'plantillas' IS NOT NULL")).rows
+            .filter(e => Object.values(e.pago.plantillas || {}).map(Number).includes(Number(f.id)));
+          for (const e of usan) await aplicarPago(e).catch(() => {});
+        } else {
+          await client.query('INSERT INTO plantillas_mensaje (tipo, titulo, texto) VALUES ($1, $2, $3)', [tipo, texto(f.titulo, 120), texto(f.texto, 2000)]);
+        }
+        return json(res, 200, { ok: true });
+      }
+
+      // Demo de ventas
+      if (url === '/api/central/demo' && req.method === 'GET') {
+        const e = await demo();
+        if (!e) return json(res, 200, { existe: false });
+        const accesos = await conEmpresa(e, async db => (await db.query(
+          "SELECT id, usuario, nombre, grupo, vence, nota, activo FROM usuarios WHERE vence IS NOT NULL ORDER BY vence DESC LIMIT 50")).rows).catch(() => []);
+        return json(res, 200, { existe: true, url: urlDe(e), vivo: await responde(e), accesos });
+      }
+      if (url === '/api/central/demo/crear' && req.method === 'POST') {
+        if (await demo()) return json(res, 400, { error: 'La demo ya existe.' });
+        const r = await crearEmpresa(u, {}, true);
+        return json(res, 200, r);
+      }
+      if (url === '/api/central/demo/reiniciar' && req.method === 'POST') {
+        const e = await demo();
+        if (!e) return json(res, 400, { error: 'Primero crea la demo.' });
+        const n = await conEmpresa(e, db => sembrarDemo(db));
+        await registrar(u, 'reiniciar_demo', 'empresa', 'demo', '', String(n), 'Datos de ejemplo reiniciados');
+        return json(res, 200, { ok: true });
+      }
+      if (url === '/api/central/demo/acceso' && req.method === 'POST') {
+        const e = await demo();
+        if (!e) return json(res, 400, { error: 'Primero crea la demo.' });
+        const f = await leerCuerpo(req);
+        if (f.borrar) {
+          await conEmpresa(e, db => db.query('DELETE FROM usuarios WHERE id = $1 AND vence IS NOT NULL', [Number(f.borrar)]));
+          await registrar(u, 'borrar_acceso_demo', 'usuario', String(f.borrar), '', '', '');
+          return json(res, 200, { ok: true });
+        }
+        const para = texto(f.nombre, 100);
+        if (!para) return json(res, 400, { error: 'Escribe para quién es el acceso (ej.: Viajes del Mar - Pedro).' });
+        const horas = Math.min(24 * 14, Math.max(1, Number(f.horas) || 48));
+        const grupo = f.rol === 'asesora' ? 'Visitante asesora' : 'Visitante gerencia';
+        const clave = claveAleatoria(10);
+        const acceso = await conEmpresa(e, async db => {
+          for (let i = 0; i < 5; i++) {
+            const usuario = 'demo' + crypto.randomInt(1000, 9999);
+            const r = await db.query(`INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos, vence, nota)
+              VALUES ($1, $2, $3, 'todas', $4, TRUE, FALSE, '{}', NOW() + make_interval(hours => $5), $6)
+              ON CONFLICT (usuario) DO NOTHING RETURNING usuario, vence`, [usuario, para, grupo, bcrypt.hashSync(clave, 10), horas, texto(f.nota, 200)]);
+            if (r.rows[0]) return r.rows[0];
+          }
+          throw new Error('No se pudo crear el usuario. Intenta otra vez.');
+        });
+        await registrar(u, 'crear_acceso_demo', 'usuario', acceso.usuario, '', String(horas) + ' h', para);
+        return json(res, 200, { ok: true, url: urlDe(e), usuario: acceso.usuario, clave, vence: acceso.vence });
+      }
+
+      return json(res, 404, { error: 'No encontrado' });
+    } catch (err) {
+      return json(res, err.codigo || 500, { error: err.message });
+    }
+  }
+
+  return { activo, preparar, iniciar, manejar };
+};

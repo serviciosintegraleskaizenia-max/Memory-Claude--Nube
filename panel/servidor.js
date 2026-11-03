@@ -5,27 +5,44 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
 const nodemailer = require('nodemailer');
-const config = require('./config');
+// Cada empresa tiene su propio archivo de ajustes (la pestaña Empresas lo crea); sin indicar, se usa config.js.
+const config = require(process.env.PANEL_CONFIG ? require('path').resolve(process.env.PANEL_CONFIG) : './config');
+const crearCuenta = require('./plataforma/cuenta');
+const crearCentral = require('./plataforma/central');
 const crearMotor = require('./motor');
 
 const client = new Client(config.db);
 // Motor de correo dentro del panel (reemplaza al flujo de n8n cuando se active en config.js).
-const motorCorreo = crearMotor({ client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' } });
+const motorCorreo = crearMotor({
+  client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' },
+  // La demo nunca lee buzones reales; y solo lee si la empresa tiene el módulo de correo.
+  habilitado: async () => !config.demo && await cuenta.tiene('correo')
+});
 
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada', 'historico'];
 // Estados en los que una reserva todavía necesita trabajo (se reparte y cuenta tiempo).
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
+const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), registrar: (...a) => registrar(...a), SISTEMA });
+// Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
+const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
-const EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
+// Sedes de la empresa (para separar usuarios por oficina). Sin ajuste: las de Somos Viajes.
+const SEDES = Array.isArray(config.sedes) ? config.sedes : ['Republica Dominicana', 'Orlando'];
+const EMPRESAS = ['todas', ...SEDES];
+// En una misma PC cada panel va en otro puerto y el navegador comparte las cookies entre puertos:
+// cada panel usa su propia cookie para que entrar a una empresa no cierre la sesión de otra.
+const COOKIE = config.puerto === 3001 ? 'sesion' : 'sesion' + config.puerto;
 const sesiones = new Map();
 const presencia = new Map();
 const CARPETA = __dirname;
+// Archivos propios de cada empresa (caché de correos): en su carpeta, no en la del programa.
+const DATOS = config.carpetaDatos ? path.resolve(config.carpetaDatos) : CARPETA;
 // Caché de correos completos: se puede vaciar en cualquier momento; si falta una copia, el correo se trae en vivo.
-const CACHE = path.join(CARPETA, 'cache-correos');
+const CACHE = path.join(DATOS, 'cache-correos');
 const CACHE_ARCHIVOS = path.join(CACHE, 'archivos');
 // Adjuntos que se pueden abrir o descargar. Los demás (.exe, .js, .html...) se bloquean.
 const TIPOS_ADJUNTO = {
@@ -64,6 +81,36 @@ const fallosLogin = new Map();
 const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12 };
 
 async function inicializarTablas() {
+  // Tablas base: en una empresa nueva (base vacía) el panel las crea solo. En Somos Viajes ya existen y no se tocan.
+  await client.query(`CREATE TABLE IF NOT EXISTS usuarios (
+    id SERIAL PRIMARY KEY,
+    usuario VARCHAR(50) UNIQUE,
+    nombre VARCHAR(100),
+    grupo VARCHAR(50),
+    empresa VARCHAR(50),
+    password_hash TEXT,
+    activo BOOLEAN DEFAULT TRUE,
+    debe_cambiar BOOLEAN DEFAULT FALSE,
+    permisos JSONB DEFAULT '{}'::jsonb)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS grupos (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(40) UNIQUE,
+    permisos JSONB DEFAULT '{}'::jsonb,
+    protegido BOOLEAN DEFAULT FALSE)`);
+  await client.query("INSERT INTO grupos (nombre, permisos, protegido) VALUES ('Programador', '{}', TRUE) ON CONFLICT (nombre) DO NOTHING");
+  await client.query(`CREATE TABLE IF NOT EXISTS auditoria (
+    id SERIAL PRIMARY KEY,
+    fecha TIMESTAMP DEFAULT NOW(),
+    usuario TEXT, nombre TEXT, accion TEXT, entidad TEXT, entidad_id TEXT, anterior TEXT, nuevo TEXT, detalle TEXT)`);
+  await client.query(`CREATE TABLE IF NOT EXISTS clasificacion (
+    id SERIAL PRIMARY KEY,
+    categoria TEXT, remitente TEXT, asunto TEXT, estado TEXT, fecha TEXT,
+    creado TIMESTAMP DEFAULT NOW(),
+    message_id TEXT, buzon TEXT, agencia TEXT, tipo_servicio TEXT, nombre_cliente TEXT, hora_servicio TEXT, vuelo TEXT,
+    hotel TEXT, punto_partida TEXT, punto_llegada TEXT, fecha_servicio TEXT,
+    adultos INTEGER, ninos INTEGER, infantes INTEGER, numero_servicio INTEGER,
+    error_ia BOOLEAN DEFAULT FALSE, motivo TEXT, cuerpo TEXT, aeropuerto TEXT, actividad TEXT, telefono TEXT,
+    aviso_procesado BOOLEAN NOT NULL DEFAULT FALSE)`);
   await client.query(`CREATE TABLE IF NOT EXISTS revisiones (
     reserva_id INTEGER PRIMARY KEY,
     usuario VARCHAR(50) NOT NULL,
@@ -231,9 +278,16 @@ async function inicializarTablas() {
 
 client.connect()
   .then(inicializarTablas)
+  .then(() => cuenta.preparar())
   .then(() => motorCorreo.preparar())
+  .then(() => central.preparar())
   .then(() => {
     motorCorreo.iniciar();
+    central.iniciar();
+    setTimeout(() => cuenta.revisarPago().catch(e => console.log('Pago:', e.message)), 30 * 1000);
+    setInterval(() => cuenta.revisarPago().catch(e => console.log('Pago:', e.message)), 60 * 60 * 1000);
+    setInterval(() => cuenta.desactivarVencidos().catch(e => console.log('Accesos:', e.message)), 60 * 1000);
+    if (config.demo) setInterval(() => reiniciarDemoDeMadrugada().catch(e => console.log('Demo:', e.message)), 10 * 60 * 1000);
     procesarModificaciones();
     setInterval(procesarModificaciones, 30 * 1000);
     setTimeout(mantenerCache, 60 * 1000);
@@ -246,6 +300,20 @@ client.connect()
     setInterval(revisarSalud, 5 * 60 * 1000);
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
+
+// Demo de ventas: cada día después de las 3:00 a. m. los datos de ejemplo vuelven a empezar (fechas de hoy).
+async function reiniciarDemoDeMadrugada() {
+  const { sembrarDemo } = require('./plataforma/demo');
+  const { hoyLocal } = require('./plataforma/cuenta');
+  const hoy = hoyLocal();
+  const hora = Number(new Intl.DateTimeFormat('en-US', { timeZone: ZONA_HORARIA, hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+  if (hora < 3) return;
+  const c = (await client.query('SELECT demo_dia FROM cuenta WHERE id = 1')).rows[0];
+  if (c && c.demo_dia === hoy) return;
+  await client.query('UPDATE cuenta SET demo_dia = $1 WHERE id = 1', [hoy]);
+  await sembrarDemo(client);
+  await registrar(SISTEMA, 'reiniciar_demo', 'empresa', 'demo', '', hoy, 'Reinicio automático de la madrugada');
+}
 
 function sinAcentos(s) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -276,8 +344,9 @@ function fechaServicioISO(texto, recibido) {
 
 /* ---------- Correo completo (Microsoft 365) y caché ---------- */
 
+// Buzón que responde por Microsoft 365. Si el buzón tiene cuenta SMTP en config.correo (Gmail, dominio propio), va por SMTP.
 function esMicrosoft(buzon) {
-  return Boolean(buzon) && !/@gmail\.com$/i.test(buzon);
+  return Boolean(buzon) && !/@gmail\.com$/i.test(buzon) && !(config.correo || {})[buzon];
 }
 
 function extension(nombre) {
@@ -322,6 +391,7 @@ function buzonesMicrosoftEnvio() {
 }
 
 function enviarPorMicrosoft(datos, adjuntos) {
+  if (config.demo) return Promise.resolve({ ok: true, demo: true });
   const total = adjuntos.reduce((s, a) => s + a.content.length, 0);
   if (total > MAX_BYTES_MICROSOFT) {
     throw Object.assign(new Error('Desde Microsoft 365 los adjuntos no pueden pasar de 3 MB en total por correo.'), { codigo: 400 });
@@ -331,6 +401,7 @@ function enviarPorMicrosoft(datos, adjuntos) {
 
 // Envía por SMTP (cuentas de config.correo) con un mensaje claro si la cuenta rechaza la clave.
 async function enviarPorSmtp(salida, mensaje) {
+  if (config.demo) return;
   try {
     await salida.transporte.sendMail(mensaje);
   } catch (e) {
@@ -973,6 +1044,7 @@ async function cargaDeAsesores() {
 let repartiendo = false;
 async function repartir() {
   if (repartiendo) return;
+  if (!(await cuenta.tiene('reparto').catch(() => true))) return;
   repartiendo = true;
   try {
     const ajustes = await ajustesReparto();
@@ -1089,6 +1161,7 @@ function isoSinMs(fecha) {
 let importando = false;
 async function importarHistorico() {
   if (importando) return;
+  if (!(await cuenta.tiene('historial').catch(() => true))) return;
   importando = true;
   try {
     for (let pagina = 0; pagina < HISTORICO_PAGINAS_POR_VUELTA; pagina++) {
@@ -1330,7 +1403,7 @@ async function limpiarRevisiones() {
 }
 
 async function usuarioDeSesion(req) {
-  const token = leerCookie(req, 'sesion');
+  const token = leerCookie(req, COOKIE);
   if (!token || !sesiones.has(token)) return null;
   const s = sesiones.get(token);
   const limite = config.sesion.minutosInactividad * 60 * 1000;
@@ -1340,11 +1413,11 @@ async function usuarioDeSesion(req) {
   }
   s.ultima = Date.now();
   const r = await client.query(
-    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos FROM usuarios WHERE usuario = $1',
+    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence FROM usuarios WHERE usuario = $1',
     [s.usuario]
   );
   const u = r.rows[0];
-  if (!u || !u.activo) {
+  if (!u || !u.activo || await cuenta.motivoBloqueo(u)) {
     sesiones.delete(token);
     return null;
   }
@@ -1354,6 +1427,19 @@ async function usuarioDeSesion(req) {
 http.createServer(async (req, res) => {
   try {
     const url = req.url.split('?')[0];
+
+    // El panel central apaga este panel con su clave secreta (solo desde la misma máquina).
+    if (req.method === 'POST' && url === '/api/interno/apagar') {
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      const clave = String(req.headers['x-kaizen'] || '');
+      const secreto = String((config.sesion && config.sesion.secreto) || '');
+      const ok = local && secreto.length >= 32 && clave.length === secreto.length &&
+        crypto.timingSafeEqual(Buffer.from(clave), Buffer.from(secreto));
+      if (!ok) return json(res, 403, { error: 'No autorizado' });
+      json(res, 200, { ok: true });
+      setTimeout(() => process.exit(0), 300);
+      return;
+    }
 
     if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
       return archivo(res, path.join(CARPETA, 'index.html'), 'text/html; charset=utf-8');
@@ -1395,15 +1481,20 @@ http.createServer(async (req, res) => {
         if (fallosIp >= MAX_FALLOS_IP) await bloquear('ip', ip, 'Demasiados intentos fallidos desde esta IP');
         return json(res, 401, { error: 'Usuario o contraseña incorrectos' });
       }
+      const bloqueoCuenta = await cuenta.motivoBloqueo(u);
+      if (bloqueoCuenta) {
+        await registrar(u, 'login_rechazado', 'sesion', u.usuario, '', '', bloqueoCuenta);
+        return json(res, 403, { error: bloqueoCuenta });
+      }
       const token = crypto.randomBytes(32).toString('hex');
       sesiones.set(token, { usuario: u.usuario, ultima: Date.now() });
       fallosLogin.delete('usuario:' + nombreIntento);
       await registrar(u, 'login', 'sesion', u.usuario, '', '', 'Inicio de sesión');
-      return json(res, 200, { ok: true }, { 'Set-Cookie': `sesion=${token}; HttpOnly; Path=/; SameSite=Strict` });
+      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict` });
     }
 
     if (req.method === 'POST' && url === '/api/logout') {
-      const token = leerCookie(req, 'sesion');
+      const token = leerCookie(req, COOKIE);
       const actual = await usuarioDeSesion(req);
       if (token) sesiones.delete(token);
       if (actual) {
@@ -1412,7 +1503,7 @@ http.createServer(async (req, res) => {
         await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE usuario = $1 AND fin IS NULL', [actual.usuario]);
         await registrar(actual, 'logout', 'sesion', actual.usuario, '', '', 'Cierre de sesión');
       }
-      return json(res, 200, { ok: true }, { 'Set-Cookie': 'sesion=; HttpOnly; Path=/; Max-Age=0' });
+      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; Path=/; Max-Age=0` });
     }
 
     const u = await usuarioDeSesion(req);
@@ -1422,7 +1513,9 @@ http.createServer(async (req, res) => {
       const permisos = permisosDe(u, await mapaGrupos());
       return json(res, 200, {
         usuario: u.usuario, nombre: u.nombre, grupo: u.grupo,
-        permisos, debe_cambiar: u.debe_cambiar
+        permisos, debe_cambiar: u.debe_cambiar,
+        modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
+        vence: u.vence || null
       });
     }
 
@@ -1434,6 +1527,27 @@ http.createServer(async (req, res) => {
 
     if (u.debe_cambiar && url !== '/api/cambiar-clave-propia') {
       return json(res, 403, { error: 'Debes cambiar tu contraseña antes de continuar.', debe_cambiar: true });
+    }
+
+    // Módulos que la empresa no tiene contratados.
+    const mods = await cuenta.modulos();
+    if ((!mods.chat && url.startsWith('/api/chat/')) || (!mods.control && url === '/api/control') ||
+        (!mods.reparto && (url === '/api/reparto' || url === '/api/reserva/asignar')) || (!mods.historial && url.startsWith('/api/historico'))) {
+      return json(res, 403, { error: 'Este módulo no está activo en tu plan. Comunícate con Kaizen IA.' });
+    }
+
+    if (req.method === 'GET' && url === '/api/franjas') {
+      return json(res, 200, await cuenta.franjas(u));
+    }
+    if (req.method === 'POST' && url === '/api/anuncio/cerrar') {
+      const { id } = await leerCuerpo(req);
+      await cuenta.cerrarAnuncio(u, id);
+      return json(res, 200, { ok: true });
+    }
+
+    // Pestaña Empresas: solo en el panel central y solo para el programador (lo revisa el módulo).
+    if (url.startsWith('/api/central/')) {
+      return central.manejar(req, res, url, u, { json, leerCuerpo });
     }
 
     if (req.method === 'POST' && url === '/api/latido') {
@@ -2320,6 +2434,7 @@ http.createServer(async (req, res) => {
         if (!puede('responder_correo') && !puede('enviar_correo')) {
           return json(res, 403, { error: 'No tienes permiso para enviar correos.' });
         }
+        if (config.demo) return json(res, 200, [require('./plataforma/demo').BUZON]);
         return json(res, 200, [...new Set([...buzonesMicrosoftEnvio(), ...Object.keys(config.correo || {})])]);
       }
 
@@ -2339,7 +2454,7 @@ http.createServer(async (req, res) => {
         const detalleAdjuntos = archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : '';
         if (esMicrosoft(fila.buzon)) {
           // Microsoft 365: la respuesta va dentro de la misma conversación y queda en Elementos enviados.
-          if (!buzonesMicrosoftEnvio().includes(fila.buzon)) {
+          if (!config.demo && !buzonesMicrosoftEnvio().includes(fila.buzon)) {
             return json(res, 400, { error: 'El envío desde ' + fila.buzon + ' no está configurado (flujo "Enviar correo" en config.js).' });
           }
           try {
@@ -2383,7 +2498,7 @@ http.createServer(async (req, res) => {
         const archivos = adjuntosParaEnviar(adjuntos);
         if (archivos.error) return json(res, 400, { error: archivos.error });
         const detalleAdjuntos = archivos.adjuntos.length ? '. Adjuntos: ' + archivos.adjuntos.map(a => a.filename).join(', ') : '';
-        if (buzonesMicrosoftEnvio().includes(buzon)) {
+        if (config.demo || buzonesMicrosoftEnvio().includes(buzon)) {
           try {
             await enviarPorMicrosoft({ accion: 'nuevo', buzon, para: destino, asunto: tema, texto: limpio }, archivos.adjuntos);
           } catch (e) {

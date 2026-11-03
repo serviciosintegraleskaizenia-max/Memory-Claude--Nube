@@ -7,6 +7,7 @@
 
 const ms = require('./microsoft');
 const ia = require('./clasificar');
+const imap = require('./imap');
 
 const COLUMNAS = ['categoria', 'remitente', 'asunto', 'estado', 'fecha', 'cuerpo', 'message_id', 'buzon', 'agencia',
   'nombre_cliente', 'telefono', 'adultos', 'ninos', 'infantes', 'error_ia', 'motivo', 'numero_servicio', 'tipo_servicio',
@@ -16,11 +17,24 @@ const COMPARAR = ['categoria', 'agencia', 'nombre_cliente', 'adultos', 'ninos', 
 const MAXIMO_FALLOS = 6;
 const esperar = ms_ => new Promise(r => setTimeout(r, ms_));
 
-module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
+module.exports = function crearMotor({ client, config, registrar, SISTEMA, habilitado = async () => true }) {
   const ajustes = () => Object.assign({
     activo: false, sombra: true, intervaloMinutos: 10, ventanaDias: 2, buzones: [], microsoft: {},
     maximoPorCiclo: 60, pausaMs: 1000, modelo: 'anthropic/claude-haiku-5.5'
   }, config.motor || {});
+  // Buzones a leer. Formato nuevo: cuentas [{ proveedor: 'microsoft' | 'imap', buzon, microsoft | imap }].
+  // Formato de Somos Viajes (buzones + microsoft) sigue sirviendo igual.
+  const cuentasDe = a => (Array.isArray(a.cuentas) && a.cuentas.length
+    ? a.cuentas
+    : (a.buzones || []).map(buzon => ({ proveedor: 'microsoft', buzon, microsoft: a.microsoft || {} })));
+  function faltaDato(c) {
+    if (c.proveedor === 'imap') {
+      const i = c.imap || {};
+      return !i.host || !i.usuario || !i.clave ? `Faltan los datos IMAP de ${c.buzon} (servidor, usuario o contraseña).` : '';
+    }
+    const m = c.microsoft || {};
+    return !m.tenantId || !m.clientId || !m.clientSecret ? `Faltan los datos de Microsoft 365 de ${c.buzon} en config.js.` : '';
+  }
   const claveIA = () => {
     const a = ajustes();
     return { apiKey: (a.ia && a.ia.apiKey) || (config.openrouter && config.openrouter.apiKey) || '', url: a.ia && a.ia.url, esperaReintento: a.ia && a.ia.esperaReintento };
@@ -59,12 +73,19 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
     return r.rows[0].n;
   }
 
-  async function correosPendientes(a) {
+  async function correosPendientes(a, abiertas) {
     const desde = new Date(Date.now() - a.ventanaDias * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     const leidos = [];
-    for (const buzon of a.buzones) {
-      const lista = await ms.listarRecientes(a.microsoft, buzon, desde);
-      leidos.push(...lista.map(m => ia.desdeGraph(m, buzon)));
+    for (const cuenta of cuentasDe(a)) {
+      if (cuenta.proveedor === 'imap') {
+        const sesion = await imap.abrir(cuenta.imap);
+        abiertas.push(sesion);
+        const lista = await sesion.listar(desde);
+        leidos.push(...lista.map(m => ({ id: m.id, buzon: cuenta.buzon, cuenta, uid: m.uid, sesion })));
+      } else {
+        const lista = await ms.listarRecientes(cuenta.microsoft, cuenta.buzon, desde);
+        leidos.push(...lista.map(m => { const correo = ia.desdeGraph(m, cuenta.buzon); return { id: correo.id, buzon: cuenta.buzon, cuenta, correo }; }));
+      }
     }
     // Los que fallaron antes (igual que el nodo "Reintentar fallidos"); en modo sombra no se tocan.
     const reintentos = a.sombra ? [] : (await client.query(
@@ -75,7 +96,10 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
        (SELECT DISTINCT ON (message_id) message_id, buzon, remitente, asunto, fecha, cuerpo FROM clasificacion
          WHERE error_ia = TRUE AND estado = 'historico' AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%'
          ORDER BY message_id, id DESC LIMIT 25)`
-    )).rows.map(x => ({ id: x.message_id, buzon: x.buzon, from: x.remitente || '', subject: x.asunto || '', date: x.fecha || '', textPlain: x.cuerpo || '', reintento: true }));
+    )).rows.map(x => ({
+      id: x.message_id, buzon: x.buzon, cuenta: cuentasDe(a).find(c => c.buzon === x.buzon) || null, reintento: true,
+      correo: { id: x.message_id, buzon: x.buzon, from: x.remitente || '', subject: x.asunto || '', date: x.fecha || '', textPlain: x.cuerpo || '', reintento: true }
+    }));
     const vistosIds = new Set();
     const todos = [...leidos, ...reintentos].filter(c => c.id && !vistosIds.has(c.id) && vistosIds.add(c.id));
     if (!todos.length) return { leidos: leidos.length, pendientes: [] };
@@ -85,6 +109,21 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
       : await client.query('SELECT DISTINCT message_id FROM clasificacion WHERE message_id = ANY($1::text[]) AND error_ia IS NOT TRUE', [ids])
     ).rows.map(x => x.message_id));
     return { leidos: leidos.length, pendientes: todos.filter(c => !hechos.has(c.id)) };
+  }
+
+  // Texto y adjuntos del correo. Microsoft: el texto ya vino en la lista, se piden los adjuntos.
+  // IMAP: se baja el correo completo (texto y adjuntos juntos). Reintentos de IMAP: solo el texto guardado.
+  async function contenido(item, conImagenes) {
+    if (item.uid && item.sesion) {
+      const r = await item.sesion.completo(item.uid, item.buzon);
+      r.correo.id = item.id;
+      return { correo: r.correo, adjuntos: conImagenes ? r.adjuntos : [] };
+    }
+    let adjuntos = [];
+    if (conImagenes && item.cuenta && item.cuenta.proveedor !== 'imap') {
+      adjuntos = await ms.adjuntos(item.cuenta.microsoft, item.buzon, item.id).catch(() => []);
+    }
+    return { correo: item.correo, adjuntos };
   }
 
   async function guardar(a, filas, imagenes) {
@@ -104,29 +143,40 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
 
   async function ciclo() {
     const a = ajustes();
-    if (corriendo || !a.activo) return;
+    if (corriendo || !a.activo || !(await habilitado().catch(() => false))) return;
     corriendo = true;
     const cuenta = { leidos: 0, nuevos: 0, con_error: 0, imagenes: 0, en_espera: 0 };
+    const abiertas = []; // conexiones IMAP de esta vuelta
     await client.query("UPDATE motor_estado SET inicio = NOW(), mensaje = 'Leyendo correos…' WHERE id = 1").catch(() => {});
     try {
-      if (!a.microsoft.tenantId || !a.microsoft.clientId || !a.microsoft.clientSecret) throw new Error('Faltan los datos de Microsoft 365 en config.js (motor.microsoft).');
+      const cuentas = cuentasDe(a);
+      if (!cuentas.length) throw new Error('No hay buzones para leer (motor.cuentas en config.js).');
+      for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
       if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter en config.js (openrouter.apiKey o motor.ia.apiKey).');
-      const { leidos, pendientes } = await correosPendientes(a);
+      const { leidos, pendientes } = await correosPendientes(a, abiertas);
       cuenta.leidos = leidos;
       // Aviso de vida: el panel sabe que la lectura de correos funciona (solo en modo real; en sombra lo sigue dando n8n).
       if (!a.sombra) await client.query('INSERT INTO salud_n8n (id, visto) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET visto = NOW()');
-      for (const correo of pendientes.slice(0, a.maximoPorCiclo)) {
-        const fallos = (await client.query('SELECT n, visto FROM motor_fallos WHERE message_id = $1', [correo.id])).rows[0];
+      for (const item of pendientes.slice(0, a.maximoPorCiclo)) {
+        const fallos = (await client.query('SELECT n, visto FROM motor_fallos WHERE message_id = $1', [item.id])).rows[0];
         // Un correo que falla muchas veces se vuelve a intentar cada 6 horas (no en cada vuelta).
         if (fallos && fallos.n >= MAXIMO_FALLOS && Date.now() - new Date(fallos.visto).getTime() < 6 * 3600000) { cuenta.en_espera++; continue; }
-        let imagenes = [];
         // Después de 2 fallos se intenta solo con el texto (igual que en n8n).
-        if (!fallos || fallos.n < 2) {
-          try {
-            imagenes = await ia.elegirImagenes(correo.id, await ms.adjuntos(a.microsoft, correo.buzon, correo.id), vistas);
-          } catch (e) { imagenes = []; }
+        const conImagenes = !fallos || fallos.n < 2;
+        let leido;
+        try {
+          leido = await contenido(item, conImagenes);
+        } catch (e) {
+          // No se pudo bajar el correo: se intenta en la próxima vuelta (y si sigue fallando, cada 6 horas).
+          cuenta.con_error++;
+          await client.query(`INSERT INTO motor_fallos (message_id, n) VALUES ($1, 1)
+            ON CONFLICT (message_id) DO UPDATE SET n = motor_fallos.n + 1, visto = NOW()`, [item.id]);
+          continue;
         }
-        const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo));
+        const correo = leido.correo;
+        let imagenes = [];
+        try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
+        const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
         const filas = ia.filasDesdeRespuesta(correo, respuesta);
         if (filas[0].error_ia) {
           await client.query(`INSERT INTO motor_fallos (message_id, n) VALUES ($1, 1)
@@ -143,11 +193,12 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
       const resto = Math.max(0, pendientes.length - a.maximoPorCiclo);
       await client.query(`UPDATE motor_estado SET fin = NOW(), leidos = $1, nuevos = $2, con_error = $3, imagenes = $4, mensaje = $5 WHERE id = 1`,
         [cuenta.leidos, cuenta.nuevos, cuenta.con_error, cuenta.imagenes,
-          (a.sombra ? 'Modo sombra. ' : '') + `Revisados ${cuenta.leidos} correos; ${cuenta.nuevos} analizados${cuenta.con_error ? ` (${cuenta.con_error} con error de la IA)` : ''}${cuenta.en_espera ? `; ${cuenta.en_espera} en espera por fallos repetidos` : ''}${resto ? `; quedan ${resto} para la próxima vuelta` : ''}.`]);
+          (a.sombra ? 'Modo sombra. ' : '') + `Revisados ${cuenta.leidos} correos; ${cuenta.nuevos} analizados${cuenta.con_error ? ` (${cuenta.con_error} con error)` : ''}${cuenta.en_espera ? `; ${cuenta.en_espera} en espera por fallos repetidos` : ''}${resto ? `; quedan ${resto} para la próxima vuelta` : ''}.`]);
     } catch (e) {
       await client.query('UPDATE motor_estado SET fin = NOW(), mensaje = $1 WHERE id = 1', ['Error: ' + e.message.slice(0, 300)]).catch(() => {});
       await registrar(SISTEMA, 'motor_error', 'sistema', 'motor', '', '', e.message.slice(0, 300)).catch(() => {});
     } finally {
+      for (const s of abiertas) await s.cerrar().catch(() => {});
       corriendo = false;
     }
   }
@@ -194,7 +245,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA }) {
   async function estado() {
     const a = ajustes();
     const e = (await client.query('SELECT * FROM motor_estado WHERE id = 1')).rows[0] || {};
-    return { activo: a.activo, sombra: a.sombra, buzones: a.buzones, intervaloMinutos: a.intervaloMinutos, corriendo, ...e };
+    return { activo: a.activo, sombra: a.sombra, buzones: cuentasDe(a).map(c => c.buzon), intervaloMinutos: a.intervaloMinutos, corriendo, ...e };
   }
 
   return { preparar, iniciar, ciclo, comparar, estado };
