@@ -860,7 +860,10 @@ function json(res, codigo, obj, cabeceras = {}) {
 function archivo(res, ruta, tipo) {
   fs.readFile(ruta, (err, data) => {
     if (err) { res.writeHead(404); return res.end('No encontrado'); }
-    res.writeHead(200, { 'Content-Type': tipo });
+    // Las páginas del panel no se guardan en el navegador: tras una actualización se ve siempre la versión nueva.
+    const cabeceras = { 'Content-Type': tipo };
+    if (/text\/html/.test(tipo)) cabeceras['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    res.writeHead(200, cabeceras);
     res.end(data);
   });
 }
