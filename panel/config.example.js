@@ -23,7 +23,8 @@ module.exports = {
   //   activo: true,
   //   carpeta: 'C:\\panel-correos\\empresas',  // aquí se guardan los ajustes y claves de cada empresa
   //   puertoInicial: 3101,                       // la primera empresa usa 3101, la siguiente 3102...
-  //   dominio: ''                                // con dominio (ej. 'kaizenia.app') las direcciones serán empresa.kaizenia.app
+  //   dominio: '',                               // con dominio (ej. 'kaizenia.app') las direcciones serán empresa.kaizenia.app
+  //   openrouterUrl: 'https://openrouter.ai/api/v1' // solo para pruebas; normalmente no se pone
   // },
 
   // Flujo de n8n que marca el correo como leído cuando todos sus servicios quedan "Registrada".

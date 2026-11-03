@@ -2165,6 +2165,7 @@ function marco(tab, aviso) {
 
 let datosEmpresas = null;
 let plantillasMensaje = [];
+let modelosIA = { defecto: 'anthropic/claude-haiku-5.5', modelos: [] };
 let vistaEmpresas = 'lista';
 let resultadoEmpresas = '';
 
@@ -2196,7 +2197,8 @@ function copiarTexto(boton) {
 async function cargarEmpresas() {
   const box = document.getElementById('panelEmpresas');
   if (!box) return;
-  const [r, p] = await Promise.all([api('/api/central/empresas'), api('/api/central/plantillas')]);
+  const [r, p, m] = await Promise.all([api('/api/central/empresas'), api('/api/central/plantillas'), api('/api/central/modelos')]);
+  if (m.ok) modelosIA = m.data;
   if (!r.ok) {
     box.innerHTML = `<div class="vacio-total">${esc(r.data.error || 'No se pudo cargar la lista de empresas.')}</div>`;
     return;
@@ -2265,7 +2267,7 @@ function tarjetaEmpresa(e) {
     </div>
     ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
     <p class="etiqueta-sec">Correo: ${esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
-      · IA ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
+      · IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
       ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor ? '<br>Motor: ' + esc(e.motor.mensaje || '') : ''}</p>
 
     <details><summary>Módulos contratados</summary>
@@ -2307,7 +2309,7 @@ function tarjetaEmpresa(e) {
     </details>
 
     <details><summary>Correo e inteligencia artificial</summary>
-      ${camposCorreo('c' + id, c)}
+      ${camposCorreo('c' + id, { ...c, empresaId: id })}
       <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="c${id}Confirmar" type="password" autocomplete="current-password"></label></div>
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-correo" data-id="${id}">Guardar y reiniciar su panel</button></div>
     </details>
@@ -2362,15 +2364,40 @@ function camposCorreo(p, actual = {}) {
       </div>
       <p class="etiqueta-sec">De la aplicación de Azure de la empresa, con el permiso Mail.Read de aplicación.</p>
     </div>
+    <div class="titulo-seccion solo-correo">Inteligencia artificial</div>
     <div class="form-fila solo-correo">
-      <label>Clave de OpenRouter de esta empresa${nota}<input id="${p}Ia" type="password" autocomplete="new-password" placeholder="sk-or-..."></label>
+      <label>Clave de OpenRouter de esta empresa${existente && actual.iaPuesta ? ' (vacío = no cambiar)' : ''}<input id="${p}Ia" type="password" autocomplete="new-password" placeholder="sk-or-..."></label>
+      <label>Modelo de IA<select id="${p}Modelo" data-modelo="${p}">${opcionesModelo(actual.modelo)}</select></label>
+      <label class="modelo-otro" style="display:none">ID del modelo (de openrouter.ai/models)<input id="${p}ModeloOtro" maxlength="100" placeholder="proveedor/nombre-del-modelo"></label>
     </div>
+    <div class="pie-acciones solo-correo">
+      <button class="btn-sec" data-accion="emp-probar-ia" data-prefijo="${p}" data-id="${existente ? (actual.empresaId || '') : ''}">Probar clave y modelo</button>
+      <span id="${p}PruebaIa" class="etiqueta-sec"></span>
+    </div>
+    <p class="etiqueta-sec solo-correo">Solo aparecen modelos que leen imágenes (las capturas de reservas). Precio en US$ por millón de tokens (entrada / salida); un correo usa unos 3,000 tokens. Cada empresa paga su IA con su propia clave.</p>
     <div class="form-fila solo-correo">
       <label>Nombre con el que firma la empresa<input id="${p}PerfilNombre" maxlength="80" placeholder="Viajes del Mar" value="${esc(pf.nombre || '')}"></label>
       <label>Sus dominios de correo<input id="${p}PerfilDominios" maxlength="300" placeholder="viajesdelmar.com" value="${esc(pf.dominios || '')}"></label>
       <label>Sus teléfonos<input id="${p}PerfilTelefonos" maxlength="300" placeholder="+18095550000" value="${esc(pf.telefonos || '')}"></label>
     </div>
     <p class="etiqueta-sec solo-correo">La IA no pondrá a la propia empresa como agencia ni sus teléfonos como del pasajero.</p>`;
+}
+
+function opcionesModelo(elegido) {
+  const lista = modelosIA.modelos.length ? modelosIA.modelos : [{ id: modelosIA.defecto, nombre: modelosIA.defecto }];
+  const actual = elegido || modelosIA.defecto;
+  const precio = m => (m.entrada || m.salida ? ` — US$ ${m.entrada} / ${m.salida}` : '');
+  const recomendado = lista.find(m => m.id === modelosIA.defecto);
+  const resto = lista.filter(m => m.id !== modelosIA.defecto);
+  return (recomendado ? `<option value="${esc(recomendado.id)}" ${actual === recomendado.id ? 'selected' : ''}>★ ${esc(recomendado.nombre)} (recomendado)${precio(recomendado)}</option>` : '')
+    + (!lista.some(m => m.id === actual) ? `<option value="${esc(actual)}" selected>${esc(actual)}</option>` : '')
+    + resto.map(m => `<option value="${esc(m.id)}" ${actual === m.id ? 'selected' : ''}>${esc(m.nombre)}${precio(m)}</option>`).join('')
+    + '<option value="__otro">Otro modelo (escribir el ID)…</option>';
+}
+
+function modeloElegido(p) {
+  const v = (document.getElementById(p + 'Modelo') || {}).value || '';
+  return v === '__otro' ? ((document.getElementById(p + 'ModeloOtro') || {}).value || '').trim() : v;
 }
 
 function actualizarCamposCorreo(raiz) {
@@ -2390,7 +2417,7 @@ function leerCorreo(p) {
       imap: { host: v('Host').trim(), puerto: Number(v('Puerto')) || null, usuario: v('Usuario').trim(), clave: v('Clave'), smtpHost: v('SmtpHost').trim(), smtpPuerto: Number(v('SmtpPuerto')) || null },
       microsoft: { tenantId: v('Tenant').trim(), clientId: v('Client').trim(), clientSecret: v('Secreto') }
     },
-    ia: { apiKey: v('Ia').trim() },
+    ia: { apiKey: v('Ia').trim(), modelo: modeloElegido(p) },
     perfil: { nombre: v('PerfilNombre').trim(), dominios: v('PerfilDominios'), telefonos: v('PerfilTelefonos') }
   };
 }
@@ -2485,6 +2512,21 @@ async function accionEmpresas(a, b) {
   const res = (r, ok) => (r.ok ? recargar(ok) : mostrarAviso(r.data.error || 'No se pudo completar.', false));
 
   if (a === 'emp-copiar') return copiarTexto(b);
+  if (a === 'emp-probar-ia') {
+    const p = b.dataset.prefijo;
+    const salida = document.getElementById(p + 'PruebaIa');
+    const modelo = modeloElegido(p);
+    if (!modelo) { salida.textContent = 'Escribe el ID del modelo.'; salida.style.color = '#dc2626'; return; }
+    b.disabled = true;
+    salida.textContent = 'Probando con OpenRouter…';
+    salida.style.color = '';
+    const r = await api('/api/central/probar-ia', { apiKey: val(p + 'Ia').trim(), modelo, empresa: b.dataset.id ? Number(b.dataset.id) : null });
+    b.disabled = false;
+    const ok = r.ok && r.data.ok;
+    salida.textContent = ok ? '✔ ' + r.data.mensaje : '✖ ' + ((r.data && r.data.error) || 'No se pudo probar.');
+    salida.style.color = ok ? '#16a34a' : '#dc2626';
+    return;
+  }
   if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; return pintarEmpresas(); }
 
   if (a === 'emp-crear') {
@@ -3330,6 +3372,10 @@ document.getElementById('franjas').addEventListener('click', async e => {
 // Empresas: mostrar los campos según el correo elegido y llenar los servidores de Gmail, Zoho, etc.
 document.getElementById('caja').addEventListener('change', e => {
   if (e.target.matches('select[data-proveedor]')) actualizarCamposCorreo(document.getElementById('panelEmpresas') || document);
+  if (e.target.matches('select[data-modelo]')) {
+    const otro = e.target.closest('.form-fila').querySelector('.modelo-otro');
+    if (otro) otro.style.display = e.target.value === '__otro' ? '' : 'none';
+  }
   if (e.target.matches('select[data-preset]')) {
     const x = PROVEEDORES_IMAP[e.target.value];
     const p = e.target.dataset.preset;

@@ -18,6 +18,15 @@ const bcrypt = require('bcryptjs');
 const { MODULOS, TEXTOS_PAGO, etapaPago, hoyLocal } = require('./cuenta');
 const { sembrarDemo, GRUPOS } = require('./demo');
 
+// Modelo de IA por defecto (el mismo de Somos Viajes). Debe leer imágenes: el motor manda las capturas.
+const MODELO_DEFECTO = 'anthropic/claude-haiku-5.5';
+const MODELO_VALIDO = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
+// Si OpenRouter no responde, se ofrecen estos.
+const MODELOS_RESPALDO = [
+  { id: 'anthropic/claude-haiku-5.5', nombre: 'Anthropic: Claude Haiku 5.5', imagenes: true },
+  { id: 'anthropic/claude-sonnet-5.5', nombre: 'Anthropic: Claude Sonnet 5.5', imagenes: true }
+];
+
 const RESERVADOS = new Set(['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'panel', 'chat', 'n8n', 'pruebas']);
 const SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
@@ -135,7 +144,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       sombra: false,
       intervaloMinutos: 10,
       ventanaDias: 2,
-      modelo: 'anthropic/claude-haiku-5.5',
+      modelo: MODELO_VALIDO.test(texto(f.ia && f.ia.modelo, 100)) ? texto(f.ia.modelo, 100) : ((previo.motor && previo.motor.modelo) || MODELO_DEFECTO),
       perfil: {
         nombre: texto(f.perfil && f.perfil.nombre, 80) || pp.nombre || e.nombre,
         dominios: lista(f.perfil && f.perfil.dominios, pp.dominios),
@@ -179,10 +188,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Resumen sin claves (lo que se guarda en la base del central y se muestra en pantalla).
   function resumenCorreo(a) {
-    const c = a && a.motor && a.motor.cuentas && a.motor.cuentas[0];
-    if (!c) return { proveedor: 'ninguno', buzon: '' };
+    const c = (a && a.motor && a.motor.cuentas && a.motor.cuentas[0]) || {};
     return {
-      proveedor: c.proveedor, buzon: c.buzon,
+      proveedor: c.proveedor || 'ninguno', buzon: c.buzon || '',
+      modelo: (a && a.motor && a.motor.modelo) || MODELO_DEFECTO,
       host: c.imap ? c.imap.host : '', clavePuesta: !!(c.imap ? c.imap.clave : c.microsoft && c.microsoft.clientSecret),
       iaPuesta: !!(a.openrouter && a.openrouter.apiKey),
       perfil: a.motor && a.motor.perfil ? { nombre: a.motor.perfil.nombre, dominios: a.motor.perfil.dominios.join(', '), telefonos: a.motor.perfil.telefonos.join(', ') } : null
@@ -364,6 +373,66 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     return (await client.query('SELECT * FROM empresas WHERE es_demo = TRUE LIMIT 1')).rows[0] || null;
   }
 
+  // ---------- Inteligencia artificial (OpenRouter) ----------
+
+  const OPENROUTER = (aj.openrouterUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+  let modelosGuardados = null;
+
+  // Modelos de OpenRouter que leen imágenes (el motor manda las capturas de reservas), con su precio.
+  async function modelos() {
+    if (modelosGuardados && Date.now() - modelosGuardados.en < 3600000) return modelosGuardados.lista;
+    try {
+      const control = new AbortController();
+      const reloj = setTimeout(() => control.abort(), 15000);
+      const r = await fetch(OPENROUTER + '/models', { signal: control.signal }).finally(() => clearTimeout(reloj));
+      const d = await r.json();
+      const porMillon = v => (Number(v) > 0 ? Math.round(Number(v) * 1e6 * 100) / 100 : 0);
+      const lista = (d.data || [])
+        .filter(m => MODELO_VALIDO.test(m.id || '') && ((m.architecture && (m.architecture.input_modalities || []).includes('image')) || /image/.test((m.architecture && m.architecture.modality) || '')))
+        .map(m => ({ id: m.id, nombre: m.name || m.id, imagenes: true, entrada: porMillon(m.pricing && m.pricing.prompt), salida: porMillon(m.pricing && m.pricing.completion) }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre));
+      if (!lista.length) throw new Error('lista vacía');
+      modelosGuardados = { en: Date.now(), lista };
+      return lista;
+    } catch (err) {
+      return MODELOS_RESPALDO;
+    }
+  }
+
+  // Prueba real: una pregunta mínima al modelo con esa clave (cuesta una fracción de centavo).
+  async function probarIA(apiKey, modelo) {
+    if (!apiKey) return { ok: false, error: 'Falta la clave de OpenRouter.' };
+    if (!MODELO_VALIDO.test(modelo || '')) return { ok: false, error: 'El nombre del modelo no es válido (ej.: anthropic/claude-haiku-5.5).' };
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), 30000);
+    try {
+      const r = await fetch(OPENROUTER + '/chat/completions', {
+        method: 'POST', signal: control.signal,
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelo, max_tokens: 5, messages: [{ role: 'user', content: 'Responde solo: OK' }] })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.choices) {
+        let saldo = null;
+        try {
+          const k = await (await fetch(OPENROUTER + '/key', { headers: { Authorization: 'Bearer ' + apiKey } })).json();
+          if (k && k.data && k.data.limit_remaining !== undefined && k.data.limit_remaining !== null) saldo = Math.round(k.data.limit_remaining * 100) / 100;
+        } catch (err) {}
+        return { ok: true, mensaje: `La clave funciona y el modelo ${modelo} respondió.` + (saldo !== null ? ` Le quedan US$ ${saldo} de límite.` : '') };
+      }
+      const detalle = (d.error && (d.error.message || d.error)) || ('código ' + r.status);
+      const motivo = r.status === 401 ? 'La clave de OpenRouter no es válida.'
+        : r.status === 402 ? 'La cuenta de OpenRouter no tiene saldo.'
+        : r.status === 404 || /model/i.test(String(detalle)) ? `OpenRouter no encontró el modelo "${modelo}".`
+        : 'OpenRouter respondió con error: ' + String(detalle).slice(0, 200);
+      return { ok: false, error: motivo };
+    } catch (err) {
+      return { ok: false, error: err.name === 'AbortError' ? 'OpenRouter tardó demasiado en responder.' : 'No hay conexión con OpenRouter: ' + err.message };
+    } finally {
+      clearTimeout(reloj);
+    }
+  }
+
   // ---------- Rutas ----------
 
   async function manejar(req, res, url, u, { json, leerCuerpo }) {
@@ -482,6 +551,21 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
           return json(res, 200, { ok, aviso: ok ? '' : 'Se guardó, pero el panel no volvió a encender.' });
         }
         return json(res, 404, { error: 'Acción no válida.' });
+      }
+
+      // Modelos de IA y prueba de la clave
+      if (url === '/api/central/modelos' && req.method === 'GET') {
+        return json(res, 200, { defecto: MODELO_DEFECTO, modelos: await modelos() });
+      }
+      if (url === '/api/central/probar-ia' && req.method === 'POST') {
+        const f = await leerCuerpo(req);
+        let apiKey = texto(f.apiKey, 200);
+        // Sin clave escrita: se prueba la que ya tiene guardada esa empresa (sin mostrarla).
+        if (!apiKey && f.empresa) {
+          const e = await empresa(f.empresa);
+          apiKey = ((leerAjustes(e) || {}).openrouter || {}).apiKey || '';
+        }
+        return json(res, 200, await probarIA(apiKey, texto(f.modelo, 100) || MODELO_DEFECTO));
       }
 
       // Banco de mensajes
