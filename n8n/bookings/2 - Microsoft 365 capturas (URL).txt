@@ -1,0 +1,1 @@
+{{ (() => { const b = ($("Traducir correo").all().find(c => c.json.metadata["message-id"] === $json.message_id)?.json.buzon || "").toLowerCase(); return b && !b.endsWith("@gmail.com") ? "https://graph.microsoft.com/v1.0/users/" + b + "/messages/" + encodeURIComponent($json.message_id) + "/attachments" : ""; })() }}

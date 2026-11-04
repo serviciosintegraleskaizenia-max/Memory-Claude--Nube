@@ -1,0 +1,1 @@
+https://graph.microsoft.com/v1.0/users/bookings@somosviaje.online/mailFolders/inbox/messages
