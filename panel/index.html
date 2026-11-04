@@ -2313,10 +2313,11 @@ function pintarEmpresas() {
   let cuerpo = '';
   if (vistaEmpresas === 'nueva') cuerpo = formNuevaEmpresa();
   else if (vistaEmpresas === 'mensajes') cuerpo = vistaMensajes();
+  else if (vistaEmpresas === 'existente') cuerpo = formExistente();
   else if (vistaEmpresas === 'demo') cuerpo = '<div id="panelDemo">Cargando…</div>';
   else cuerpo = (resultadoEmpresas || '') + listaEmpresas();
   box.innerHTML = `
-    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
+    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('existente', '+ Agregar existente')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
     ${cuerpo}`;
   if (vistaEmpresas === 'demo') cargarDemo();
   actualizarCamposCorreo(box);
@@ -2367,11 +2368,11 @@ function tarjetaEmpresa(e) {
   return `
   <div class="emp-tarjeta" data-emp="${id}">
     <div class="emp-cabeza">
-      <strong>${esc(e.nombre)}</strong> ${chipEstado(e)}
+      <strong>${esc(e.nombre)}</strong> ${chipEstado(e)}${e.externa ? ' <span class="chip chip-gris" title="Se maneja en su propia carpeta; el central solo la administra">Externa · base ' + esc(e.base_datos) + '</span>' : ''}
       <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a>
     </div>
     ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
-    <p class="emp-info">Correo: ${esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
+    <p class="emp-info">${e.externa ? 'Correo e IA: en su propio config.js' : 'Correo: ' + esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
       · IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
       ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor && e.motor.mensaje ? '<br>Motor: ' + esc(e.motor.mensaje) : ''}</p>
 
@@ -2413,24 +2414,25 @@ function tarjetaEmpresa(e) {
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-anuncio" data-id="${id}">Enviar anuncio</button></div>
     </details>
 
-    <details><summary>Correo e inteligencia artificial</summary>
+    ${e.externa ? '' : `<details><summary>Correo e inteligencia artificial</summary>
       ${camposCorreo('c' + id, { ...c, empresaId: id })}
       <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="c${id}Confirmar" type="password" autocomplete="current-password"></label></div>
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-correo" data-id="${id}">Guardar y reiniciar su panel</button></div>
-    </details>
+    </details>`}
 
-    <details><summary class="salud-falla">Eliminar empresa</summary>
-      <p>Se borra <strong>para siempre</strong>: su base de datos (reservas, usuarios, historial), sus ajustes y claves, y se apaga su panel. No se puede deshacer.
-        Si es un cliente real, antes descarga sus datos (Exportar a Excel dentro de su panel).</p>
+    <details><summary class="salud-falla">${e.externa ? 'Quitar de la lista' : 'Eliminar empresa'}</summary>
+      ${e.externa ? '<p>Solo se quita de esta lista. <strong>Su panel, su base de datos y sus datos quedan intactos.</strong></p>'
+        : `<p>Se borra <strong>para siempre</strong>: su base de datos (reservas, usuarios, historial), sus ajustes y claves, y se apaga su panel. No se puede deshacer.
+        Si es un cliente real, antes descarga sus datos (Exportar a Excel dentro de su panel).</p>`}
       <div class="form-fila">
         <label>Escribe «${esc(e.slug)}» para confirmar<input id="xSlug-${id}" maxlength="30" autocomplete="off"></label>
         <label>Tu contraseña<input id="xClave-${id}" type="password" autocomplete="current-password"></label>
       </div>
-      <div class="pie-acciones"><button class="btn-peligro" data-accion="emp-eliminar" data-id="${id}">Eliminar para siempre</button></div>
+      <div class="pie-acciones"><button class="btn-peligro" data-accion="emp-eliminar" data-id="${id}">${e.externa ? 'Quitar de la lista' : 'Eliminar para siempre'}</button></div>
     </details>
 
     <div class="pie-acciones">
-      ${e.estado === 'apagada' ? `<button class="btn-sec" data-accion="emp-encender" data-id="${id}">Encender</button>`
+      ${e.externa ? '' : e.estado === 'apagada' ? `<button class="btn-sec" data-accion="emp-encender" data-id="${id}">Encender</button>`
         : `<button class="btn-sec" data-accion="emp-apagar" data-id="${id}">Apagar</button>`}
       ${e.estado === 'pausada' ? `<button class="btn" data-accion="emp-reanudar" data-id="${id}">Reanudar servicio</button>`
         : e.estado === 'activa' ? `<button class="btn-sec" data-accion="emp-pausar" data-id="${id}">Pausar servicio</button>` : ''}
@@ -2561,6 +2563,27 @@ function formNuevaEmpresa() {
     <div class="emp-checks">${modulos}</div>
     <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="nConfirmar" type="password" autocomplete="current-password"></label></div>
     <div class="pie-acciones"><button class="btn" data-accion="emp-crear">Crear empresa</button></div>
+  </div>`;
+}
+
+function formExistente() {
+  return `
+  <div class="emp-form">
+    <p>Para una empresa que <strong>ya funciona</strong> con su propio panel (por ejemplo Somos Viajes en <code>C:\\panel-correos</code>).
+      Desde aquí le mandas recordatorios de pago y anuncios, cambias sus módulos o la pausas.
+      El central <strong>no</strong> la enciende ni la apaga (eso lo hace su vigilante) y <strong>nunca</strong> borra su base de datos.</p>
+    <p class="etiqueta-sec">Antes, esa empresa debe tener la versión nueva del panel instalada y encendida una vez.</p>
+    <div class="form-fila">
+      <label>Nombre<input id="xNombre" maxlength="120" value="Somos Viajes Punta Cana"></label>
+      <label>Subdominio<input id="xSlug" maxlength="30" value="somosviajes"></label>
+    </div>
+    <div class="form-fila">
+      <label>Base de datos<input id="xBase" maxlength="63" value="correos"></label>
+      <label>Puerto<input id="xPuerto" type="number" value="3001"></label>
+      <label>Dirección para abrirla (opcional)<input id="xUrl" maxlength="200" placeholder="https://somosviajes.kaizenia.app"></label>
+    </div>
+    <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="xConfirmar" type="password" autocomplete="current-password"></label></div>
+    <div class="pie-acciones"><button class="btn" data-accion="emp-existente">Agregar a la lista</button></div>
   </div>`;
 }
 
@@ -2729,9 +2752,19 @@ async function accionEmpresas(a, b) {
     return res(await api(`/api/central/empresas/${id}/pausar`, { motivo }), 'Servicio en pausa: solo el programador puede entrar.');
   }
   if (a === 'emp-reanudar') return res(await api(`/api/central/empresas/${id}/reanudar`, {}), 'Servicio reanudado.');
+  if (a === 'emp-existente') {
+    b.disabled = true;
+    const r = await api('/api/central/existente', { nombre: val('xNombre').trim(), slug: val('xSlug').trim().toLowerCase(), base_datos: val('xBase').trim(),
+      puerto: Number(val('xPuerto')), url: val('xUrl').trim(), confirmar: val('xConfirmar') });
+    b.disabled = false;
+    if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo agregar.', false);
+    vistaEmpresas = 'lista';
+    return recargar('Empresa agregada a la lista.');
+  }
   if (a === 'emp-eliminar') {
     const slug = val('xSlug-' + id).trim().toLowerCase();
-    if (!confirm(`¿Eliminar "${slug}" para siempre, con todas sus reservas y usuarios?`)) return;
+    const externa = Boolean((datosEmpresas.empresas.find(x => x.id === id) || {}).externa);
+    if (!confirm(externa ? `¿Quitar "${slug}" de la lista? Sus datos no se tocan.` : `¿Eliminar "${slug}" para siempre, con todas sus reservas y usuarios?`)) return;
     b.disabled = true;
     b.textContent = 'Eliminando…';
     const r = await api(`/api/central/empresas/${id}/eliminar`, { slug, confirmar: val('xClave-' + id) });

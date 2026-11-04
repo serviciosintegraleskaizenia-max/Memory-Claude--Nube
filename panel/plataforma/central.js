@@ -80,6 +80,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       pid INTEGER,
       notas TEXT NOT NULL DEFAULT '',
       creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Empresa externa: ya existía (ej. Somos Viajes en C:\panel-correos). El central solo la administra
+    // (cobro, anuncios, módulos, pausa); no la enciende, no la apaga y nunca borra su base de datos.
+    await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS externa BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS url_externa TEXT NOT NULL DEFAULT ''");
     await client.query(`CREATE TABLE IF NOT EXISTS plantillas_mensaje (
       id SERIAL PRIMARY KEY,
       tipo VARCHAR(20) NOT NULL,
@@ -108,7 +112,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   const carpetaDe = e => path.join(CARPETA_EMPRESAS, e.slug);
   const archivoDe = e => path.join(carpetaDe(e), 'config.js');
-  const urlDe = e => (aj.dominio ? `https://${e.slug}.${aj.dominio}` : `http://${ipLocal()}:${e.puerto}`);
+  const urlDe = e => (e.externa && e.url_externa ? e.url_externa
+    : aj.dominio ? `https://${e.slug}.${aj.dominio}` : `http://${ipLocal()}:${e.puerto}`);
 
   async function responde(e, ms = 2500) {
     const control = new AbortController();
@@ -224,6 +229,11 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Borra la base de datos, la carpeta (ajustes y claves) y el registro de una empresa. Primero apaga su panel.
   async function borrarTodo(e) {
+    // Externa: solo se quita de la lista. Su base de datos y su carpeta no se tocan nunca.
+    if (e.externa) {
+      if (e.id) await client.query('DELETE FROM empresas WHERE id = $1', [e.id]);
+      return;
+    }
     await apagar(e).catch(() => {});
     const base = String(e.base_datos || '');
     if (/^panel_[a-z0-9_]+$/.test(base)) {
@@ -257,7 +267,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Cada minuto: si una empresa encendida no responde dos veces seguidas, se vuelve a encender.
   async function supervisar() {
-    const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada')")).rows;
+    const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE")).rows;
     for (const e of lista) {
       if (await responde(e)) { fallos.delete(e.id); continue; }
       const n = (fallos.get(e.id) || 0) + 1;
@@ -274,7 +284,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     if (!activo) return;
     // Al encender el central, se encienden las empresas que estaban activas.
     setTimeout(async () => {
-      const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada')")).rows;
+      const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE")).rows;
       for (const e of lista) await encender(e).catch(err => console.log('Empresa', e.slug, err.message));
     }, 3000);
     setInterval(() => supervisar().catch(err => console.log('Supervisión de empresas:', err.message)), 60 * 1000);
@@ -384,6 +394,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const etapa = c.pago ? etapaPago({ ...c.pago, activo: c.pago.activo }, c.pagado) : null;
     return {
       id: e.id, slug: e.slug, nombre: e.nombre, puerto: e.puerto, estado: e.estado, es_demo: e.es_demo, url: urlDe(e),
+      externa: e.externa, base_datos: e.base_datos,
       creado: e.creado, correo: e.correo, pagoCentral: e.pago, vivo, ...info, etapaPago: etapa,
       modulos: Object.fromEntries(Object.keys(MODULOS).map(k => [k, c.modulos && typeof c.modulos[k] === 'boolean' ? c.modulos[k] : MODULOS[k].porDefecto]))
     };
@@ -506,10 +517,44 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         return json(res, 200, await crearEmpresa(u, f, false));
       }
 
+      // Agregar una empresa que ya funciona (ej. Somos Viajes) para administrarla desde aquí.
+      if (req.method === 'POST' && url === '/api/central/existente') {
+        const f = await leerCuerpo(req);
+        await confirmar(f.confirmar);
+        const nombre = texto(f.nombre, 120);
+        const slug = texto(f.slug, 30).toLowerCase();
+        const base = texto(f.base_datos, 63);
+        const puerto = Number(f.puerto);
+        const direccion = texto(f.url, 200);
+        if (!nombre) return json(res, 400, { error: 'Falta el nombre de la empresa.' });
+        if (!SLUG.test(slug) || RESERVADOS.has(slug) || slug === 'demo') return json(res, 400, { error: 'Subdominio: usa de 3 a 30 letras minúsculas, números o guiones (ej.: somosviajes).' });
+        if (!/^[A-Za-z0-9_]{1,63}$/.test(base)) return json(res, 400, { error: 'El nombre de la base de datos solo lleva letras, números y _ (ej.: correos).' });
+        if (base === (config.db && config.db.database)) return json(res, 400, { error: 'Esa es la base del propio panel central.' });
+        if (!Number.isInteger(puerto) || puerto < 1024 || puerto > 65535) return json(res, 400, { error: 'El puerto debe ser un número (ej.: 3001).' });
+        if (direccion && !/^https?:\/\/\S+$/i.test(direccion)) return json(res, 400, { error: 'La dirección debe empezar con http:// o https://' });
+        if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1 OR base_datos = $2 OR puerto = $3', [slug, base, puerto])).rowCount) {
+          return json(res, 400, { error: 'Ya hay una empresa en la lista con ese subdominio, esa base de datos o ese puerto.' });
+        }
+        if (!(await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [base])).rowCount) {
+          return json(res, 400, { error: `No existe la base de datos "${base}" en este Postgres.` });
+        }
+        const lista = await conEmpresa({ base_datos: base }, async db => (await db.query(
+          "SELECT to_regclass('public.cuenta') IS NOT NULL AS cuenta, to_regclass('public.usuarios') IS NOT NULL AS usuarios")).rows[0]);
+        if (!lista.usuarios) return json(res, 400, { error: `La base "${base}" no es de un panel de reservas.` });
+        if (!lista.cuenta) return json(res, 400, { error: 'Esa empresa todavía tiene una versión vieja del panel. Instálale primero la versión nueva y enciéndela una vez.' });
+        await client.query(`INSERT INTO empresas (slug, nombre, base_datos, puerto, estado, externa, url_externa)
+          VALUES ($1, $2, $3, $4, 'activa', TRUE, $5)`, [slug, nombre, base, puerto, direccion]);
+        await registrar(u, 'agregar_empresa_existente', 'empresa', slug, '', base, `${nombre} (puerto ${puerto})`);
+        return json(res, 200, { ok: true });
+      }
+
       if (m && req.method === 'POST') {
         const e = await empresa(m[1]);
         const accion = m[2];
         const f = await leerCuerpo(req);
+        if (e.externa && ['encender', 'apagar', 'correo'].includes(accion)) {
+          return json(res, 400, { error: 'Esta empresa se maneja en su propia carpeta: la enciende su vigilante y su correo se cambia en su config.js.' });
+        }
 
         if (accion === 'encender') {
           await client.query("UPDATE empresas SET estado = CASE WHEN estado = 'apagada' THEN 'activa' ELSE estado END WHERE id = $1", [e.id]);
@@ -528,7 +573,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
             return json(res, 400, { error: `Para eliminar escribe exactamente el subdominio: ${e.slug}` });
           }
           await borrarTodo(e);
-          await registrar(u, 'eliminar_empresa', 'empresa', e.slug, e.base_datos, '', `${e.nombre} eliminada con su base de datos`);
+          await registrar(u, 'eliminar_empresa', 'empresa', e.slug, e.base_datos, '',
+            e.externa ? `${e.nombre} quitada de la lista (su base de datos no se tocó)` : `${e.nombre} eliminada con su base de datos`);
           return json(res, 200, { ok: true });
         }
         if (accion === 'pausar' || accion === 'reanudar') {
