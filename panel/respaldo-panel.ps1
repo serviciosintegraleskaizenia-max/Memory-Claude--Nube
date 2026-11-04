@@ -57,8 +57,9 @@ foreach ($base in $bases) {
     if ($LASTEXITCODE -ne 0) { throw "docker cp termino con codigo $LASTEXITCODE" }
     docker exec $Contenedor rm -f "/tmp/$base.backup" | Out-Null
     $tam = (Get-Item $destinoBase).Length
-    $minimo = if ($base -eq 'correos') { 10000 } else { 1000 }
-    if ($tam -lt $minimo) { throw "el archivo quedo muy pequeno ($tam bytes)" }
+    # Solo la base de Somos Viajes debe pesar bastante; una base vacia (ej. "chatwoot") da un archivo chico y esta bien.
+    if ($base -eq 'correos' -and $tam -lt 10000) { throw "el archivo quedo muy pequeno ($tam bytes)" }
+    if ($tam -le 0) { throw "el archivo quedo vacio" }
     Bien ("{0}.backup  {1:N0} bytes" -f $base, $tam)
   } catch {
     Mal "Base ${base}: $($_.Exception.Message)"
