@@ -151,6 +151,11 @@ async function inicializarTablas() {
     actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
   await client.query('INSERT INTO empresa_datos (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS cache_dias INTEGER NOT NULL DEFAULT 30');
+  // Pantalla de inicio de sesión personalizable: foto de fondo, título, subtítulo y redes sociales.
+  await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS fondo_login TEXT');
+  await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS login_titulo VARCHAR(80) NOT NULL DEFAULT ''");
+  await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS login_subtitulo VARCHAR(160) NOT NULL DEFAULT ''");
+  await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS redes JSONB NOT NULL DEFAULT '{}'::jsonb");
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS copia_automatica BOOLEAN NOT NULL DEFAULT TRUE');
   await client.query(`CREATE TABLE IF NOT EXISTS correo_copia (
     message_id TEXT PRIMARY KEY,
@@ -625,8 +630,23 @@ function adjuntosParaEnviar(lista) {
   return { adjuntos };
 }
 
-function imagenValida(s) {
-  return typeof s === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(s) && s.length <= 3000000;
+function imagenValida(s, maximo = 3000000) {
+  return typeof s === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(s) && s.length <= maximo;
+}
+// La foto de fondo del login puede pesar más (hasta ~4 MB).
+const MAX_FONDO = 5600000;
+const REDES = ['instagram', 'facebook', 'whatsapp', 'tiktok', 'web'];
+// Convierte lo que escriba el usuario en un enlace válido (ej.: "@somosviajes", "8095550000", "somosviajes.com").
+function enlaceRed(red, valor) {
+  const v = String(valor || '').trim().slice(0, 200);
+  if (!v) return '';
+  if (/^https?:\/\/\S+$/i.test(v)) return v;
+  if (red === 'whatsapp') { const n = v.replace(/\D/g, ''); return n.length >= 8 ? 'https://wa.me/' + n : ''; }
+  if (red === 'instagram' && /^@?[\w.]{2,40}$/.test(v) && !/\.[a-z]{2,}$/i.test(v)) return 'https://instagram.com/' + v.replace(/^@/, '');
+  if (red === 'tiktok' && /^@?[\w.]{2,40}$/.test(v) && !/\.[a-z]{2,}$/i.test(v)) return 'https://www.tiktok.com/@' + v.replace(/^@/, '');
+  if (red === 'facebook' && /^[\w]{2,60}$/.test(v)) return 'https://facebook.com/' + v;
+  if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(v)) return 'https://' + v;
+  return '';
 }
 
 async function imagenEmpresa(res, campo) {
@@ -1514,10 +1534,12 @@ http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url === '/empresa/logo') return imagenEmpresa(res, 'logo');
     if (req.method === 'GET' && url === '/empresa/banner') return imagenEmpresa(res, 'banner');
+    if (req.method === 'GET' && url === '/empresa/fondo') return imagenEmpresa(res, 'fondo_login');
 
     if (req.method === 'GET' && url === '/api/empresa') {
       const r = await client.query(
         `SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS "tieneLogo", banner IS NOT NULL AS "tieneBanner",
+                fondo_login IS NOT NULL AS "tieneFondo", login_titulo, login_subtitulo, redes,
                 EXTRACT(EPOCH FROM actualizado)::bigint AS version
          FROM empresa_datos WHERE id = 1`
       );
@@ -1982,11 +2004,28 @@ http.createServer(async (req, res) => {
           return json(res, 400, { error: 'El logo y el banner deben ser PNG, JPG, WEBP o GIF de menos de 2 MB.' });
         }
       }
+      if (b.fondo && !imagenValida(b.fondo, MAX_FONDO)) {
+        return json(res, 400, { error: 'La foto de fondo debe ser JPG, PNG o WEBP de menos de 4 MB.' });
+      }
+      const loginTitulo = String(b.login_titulo || '').trim().slice(0, 80);
+      const loginSubtitulo = String(b.login_subtitulo || '').trim().slice(0, 160);
+      const redes = {};
+      for (const red of REDES) {
+        const valor = b.redes && b.redes[red];
+        if (!valor) continue;
+        const enlaceValido = enlaceRed(red, valor);
+        if (!enlaceValido) return json(res, 400, { error: `No entendí el enlace de ${red}. Pega la dirección completa (https://...).` });
+        redes[red] = enlaceValido;
+      }
       const previa = (await client.query(
         'SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS logo, banner IS NOT NULL AS banner FROM empresa_datos WHERE id = 1'
       )).rows[0];
-      const valores = [nombre, rnc, direccion, enlace];
-      const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'actualizado = NOW()'];
+      const valores = [nombre, rnc, direccion, enlace, loginTitulo, loginSubtitulo, redes];
+      const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'login_titulo = $5', 'login_subtitulo = $6', 'redes = $7', 'actualizado = NOW()'];
+      if (b.fondo !== undefined) {
+        valores.push(b.fondo || null);
+        cambios.push(`fondo_login = $${valores.length}`);
+      }
       for (const campo of ['logo', 'banner']) {
         if (b[campo] === undefined) continue;
         valores.push(b[campo] || null);
@@ -1996,7 +2035,9 @@ http.createServer(async (req, res) => {
       await registrar(u, 'editar_empresa', 'empresa', 1, previa, {
         nombre, rnc, direccion, banner_enlace: enlace,
         logo: b.logo === undefined ? 'sin cambio' : (b.logo ? 'nuevo' : 'quitado'),
-        banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado')
+        banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado'),
+        fondo: b.fondo === undefined ? 'sin cambio' : (b.fondo ? 'nuevo' : 'quitado'),
+        login_titulo: loginTitulo, login_subtitulo: loginSubtitulo, redes
       });
       return json(res, 200, { ok: true });
     }

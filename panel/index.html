@@ -235,6 +235,18 @@
   .pie-acciones { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
 
   .pantalla-login, .pantalla-clave { position: fixed; inset: 0; background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); display: none; align-items: center; justify-content: center; z-index: 100; }
+  .pantalla-login.con-fondo { background-size: cover; background-position: center; }
+  .logo-login { display: block; max-height: 64px; max-width: 220px; margin: 0 auto 14px; }
+  .redes { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .redes a { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; transition: transform .15s; }
+  .redes a:hover { transform: scale(1.1); }
+  .redes svg { width: 17px; height: 17px; display: block; }
+  .redes-login { margin-top: 16px; }
+  .red-instagram { background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
+  .red-facebook { background: #1877F2; }
+  .red-whatsapp { background: #25D366; }
+  .red-tiktok { background: #111; }
+  .red-web { background: #475569; }
   .caja-login { background: var(--tarjeta); color: var(--texto); padding: 30px; border-radius: 14px; width: min(360px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
   .caja-login h2 { margin: 0 0 6px; font-size: 18px; }
   .caja-login p { margin: 0 0 18px; font-size: 13px; color: var(--texto-suave); }
@@ -249,14 +261,16 @@
 
 <div class="pantalla-login" id="pantallaLogin">
   <form class="caja-login" id="formLogin">
+    <img class="logo-login" id="logoLogin" alt="" style="display:none;">
     <h2 id="tituloLogin">Panel de reservas</h2>
-    <p>Ingresa con tu usuario y contraseña.</p>
+    <p id="subtituloLogin">Ingresa con tu usuario y contraseña.</p>
     <label for="usuario">Usuario</label>
     <input type="text" id="usuario" autocomplete="username" required>
     <label for="password">Contraseña</label>
     <input type="password" id="password" autocomplete="current-password" required>
     <button class="btn" type="submit">Entrar</button>
     <div class="error-login" id="errorLogin"></div>
+    <div class="redes redes-login" id="redesLogin"></div>
   </form>
 </div>
 
@@ -294,6 +308,7 @@
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
     <button class="btn-tema" id="btnTema">Modo oscuro</button>
     <button class="btn-tema" id="btnSalir">Salir</button>
+    <div class="redes" id="redesEncabezado"></div>
     <div class="logo-caja"><img id="logoEmpresa" src="/empresa/logo" alt="Logo"></div>
   </div>
 </header>
@@ -838,7 +853,19 @@ async function cargarEmpresa() {
   const v = encodeURIComponent(r.data.version || '');
   const titulo = 'Reservas - ' + r.data.nombre;
   document.getElementById('tituloEmpresa').textContent = titulo;
-  document.getElementById('tituloLogin').textContent = titulo;
+  document.getElementById('tituloLogin').textContent = r.data.login_titulo || titulo;
+  document.getElementById('subtituloLogin').textContent = r.data.login_subtitulo || 'Ingresa con tu usuario y contraseña.';
+  const logoLogin = document.getElementById('logoLogin');
+  logoLogin.style.display = r.data.tieneLogo ? 'block' : 'none';
+  if (r.data.tieneLogo) logoLogin.src = '/empresa/logo?v=' + v;
+  const pantallaLogin = document.getElementById('pantallaLogin');
+  pantallaLogin.classList.toggle('con-fondo', Boolean(r.data.tieneFondo));
+  // Un velo oscuro encima de la foto para que la caja se lea bien con cualquier imagen.
+  pantallaLogin.style.backgroundImage = r.data.tieneFondo
+    ? `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url('/empresa/fondo?v=${v}')` : '';
+  const redes = pintarRedes(r.data.redes || {});
+  document.getElementById('redesLogin').innerHTML = redes;
+  document.getElementById('redesEncabezado').innerHTML = redes;
   document.getElementById('datosEmpresa').textContent =
     [r.data.rnc && 'RNC ' + r.data.rnc, r.data.direccion].filter(Boolean).join(' · ');
   document.getElementById('logoEmpresa').src = '/empresa/logo?v=' + v;
@@ -849,6 +876,22 @@ async function cargarEmpresa() {
   else banner.removeAttribute('href');
   tituloBase = titulo;
   actualizarTitulo();
+}
+
+// Íconos de redes sociales (solo se pega el enlace en Herramientas → Empresa).
+const ICONOS_RED = {
+  instagram: ['Instagram', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="#fff" stroke="none"/></svg>'],
+  facebook: ['Facebook', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.5 21v-7.2h2.4l.4-2.9h-2.8V9.1c0-.8.3-1.4 1.4-1.4h1.5V5.1c-.3 0-1.1-.1-2.1-.1-2.1 0-3.6 1.3-3.6 3.7v2.2H8.3v2.9h2.4V21h2.8z"/></svg>'],
+  whatsapp: ['WhatsApp', '<svg viewBox="0 0 24 24"><path d="M12 3.6a8.4 8.4 0 0 0-7.3 12.6L3.6 20.4l4.3-1.1A8.4 8.4 0 1 0 12 3.6z" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M9.3 7.9c.3-.4.7-.4.9 0l.7 1.5c.1.3 0 .6-.2.8l-.5.5c.6 1.1 1.4 1.9 2.5 2.5l.5-.5c.2-.2.5-.3.8-.2l1.5.7c.4.2.4.6 0 .9-.6.6-1.6 1-2.5.6-2.1-.9-3.8-2.6-4.6-4.7-.3-.9 0-1.8.9-2.1z" fill="#fff"/></svg>'],
+  tiktok: ['TikTok', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.2 3.5h2.6c.2 1.7 1.3 3 3.1 3.2v2.7c-1.2 0-2.2-.3-3.1-.9v5.8a5 5 0 1 1-5-5h.6v2.8h-.6a2.2 2.2 0 1 0 2.4 2.2V3.5z"/></svg>'],
+  web: ['Página web', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.6" ry="8.5"/><path d="M3.5 12h17M5 7.5h14M5 16.5h14"/></svg>']
+};
+
+function pintarRedes(redes) {
+  return Object.entries(ICONOS_RED)
+    .filter(([k]) => redes[k] && /^https?:\/\//i.test(redes[k]))
+    .map(([k, [nombre, svg]]) => `<a class="red-${k}" href="${esc(redes[k])}" target="_blank" rel="noopener" title="${nombre}">${svg}</a>`)
+    .join('');
 }
 
 function avisoEscritorio(texto) {
@@ -2908,12 +2951,12 @@ function formEmpresa() {
       <input id="eDireccion" class="input-ancho" maxlength="300" value="${esc(e.direccion)}">
     </label>
     <div class="form-fila">
-      <label>Logo (PNG, JPG, WEBP o GIF, máximo 2 MB)
+      <label>Logo: PNG con fondo transparente, 600 × 600 px (cuadrado) o 600 × 200 px (horizontal), máximo 2 MB
         <input id="eLogo" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
         <img class="vista-previa" src="/empresa/logo?v=${v}" alt="Logo actual">
         ${e.tieneLogo ? '<span class="chk"><input type="checkbox" id="eQuitarLogo"> Quitar logo</span>' : ''}
       </label>
-      <label>Banner de publicidad (franja arriba del panel)
+      <label>Banner de publicidad (franja arriba del panel): 1920 × 120 px, JPG o PNG, máximo 2 MB
         <input id="eBanner" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
         ${e.tieneBanner ? `<img class="vista-previa" src="/empresa/banner?v=${v}" alt="Banner actual">
         <span class="chk"><input type="checkbox" id="eQuitarBanner"> Quitar banner</span>` : ''}
@@ -2922,16 +2965,42 @@ function formEmpresa() {
     <label class="etiqueta-sec">Enlace al hacer clic en el banner (opcional)
       <input id="eEnlace" class="input-ancho" placeholder="https://" value="${esc(e.banner_enlace)}">
     </label>
+
+    <div class="titulo-seccion">Pantalla de inicio de sesión</div>
+    <div class="form-fila">
+      <label>Título (arriba de usuario y contraseña)<input id="eLoginTitulo" maxlength="80" placeholder="Reservas - ${esc(e.nombre)}" value="${esc(e.login_titulo || '')}"></label>
+      <label>Subtítulo<input id="eLoginSubtitulo" maxlength="160" placeholder="Ingresa con tu usuario y contraseña." value="${esc(e.login_subtitulo || '')}"></label>
+    </div>
+    <div class="form-fila">
+      <label>Foto de fondo: 1920 × 1080 px (Full HD), JPG o WEBP, ideal 300 a 800 KB (máximo 4 MB).
+        Deja el centro tranquilo: ahí va la caja blanca (360 px de ancho).
+        <input id="eFondo" type="file" accept="image/png,image/jpeg,image/webp">
+        ${e.tieneFondo ? `<img class="vista-previa" src="/empresa/fondo?v=${v}" alt="Fondo actual">
+        <span class="chk"><input type="checkbox" id="eQuitarFondo"> Quitar foto de fondo</span>` : ''}
+      </label>
+    </div>
+
+    <div class="titulo-seccion">Redes sociales (salen en el inicio de sesión y arriba del panel)</div>
+    <div class="form-fila">
+      <label>Instagram<input id="eRedInstagram" maxlength="200" placeholder="@somosviajes o https://instagram.com/..." value="${esc((e.redes || {}).instagram || '')}"></label>
+      <label>Facebook<input id="eRedFacebook" maxlength="200" placeholder="https://facebook.com/..." value="${esc((e.redes || {}).facebook || '')}"></label>
+      <label>WhatsApp<input id="eRedWhatsapp" maxlength="200" placeholder="+1 809 555 0000" value="${esc((e.redes || {}).whatsapp || '')}"></label>
+    </div>
+    <div class="form-fila">
+      <label>TikTok<input id="eRedTiktok" maxlength="200" placeholder="@somosviajes" value="${esc((e.redes || {}).tiktok || '')}"></label>
+      <label>Página web<input id="eRedWeb" maxlength="200" placeholder="somosviaje.online" value="${esc((e.redes || {}).web || '')}"></label>
+    </div>
+    <p class="etiqueta-sec">Deja vacío lo que no uses. Los íconos son los oficiales: no hace falta subir imágenes.</p>
     <div class="pie-acciones"><button class="btn" data-accion="guardar-empresa">Guardar datos de la empresa</button></div>`;
 }
 
-function leerImagen(input) {
+function leerImagen(input, maxMB = 2) {
   const archivo = input.files[0];
   if (!archivo) return Promise.resolve(undefined);
   if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(archivo.type)) {
-    return Promise.reject(new Error('El logo y el banner deben ser PNG, JPG, WEBP o GIF.'));
+    return Promise.reject(new Error('Las imágenes deben ser PNG, JPG, WEBP o GIF.'));
   }
-  if (archivo.size > 2 * 1024 * 1024) return Promise.reject(new Error('Cada imagen debe pesar menos de 2 MB.'));
+  if (archivo.size > maxMB * 1024 * 1024) return Promise.reject(new Error(`La imagen "${archivo.name}" pesa más de ${maxMB} MB.`));
   return new Promise((ok, mal) => {
     const lector = new FileReader();
     lector.onload = () => ok(lector.result);
@@ -2941,16 +3010,20 @@ function leerImagen(input) {
 }
 
 async function guardarEmpresa() {
-  let logo, banner;
+  let logo, banner, fondo;
   try {
     logo = document.getElementById('eQuitarLogo')?.checked ? null : await leerImagen(document.getElementById('eLogo'));
     banner = document.getElementById('eQuitarBanner')?.checked ? null : await leerImagen(document.getElementById('eBanner'));
+    fondo = document.getElementById('eQuitarFondo')?.checked ? null : await leerImagen(document.getElementById('eFondo'), 4);
   } catch (e) {
     return mostrarAviso(e.message, false);
   }
+  mostrarAviso('Guardando…', true);
   const r = await api('/api/empresa', {
     nombre: val('eNombre').trim(), rnc: val('eRnc').trim(), direccion: val('eDireccion').trim(),
-    banner_enlace: val('eEnlace').trim(), logo, banner
+    banner_enlace: val('eEnlace').trim(), logo, banner, fondo,
+    login_titulo: val('eLoginTitulo').trim(), login_subtitulo: val('eLoginSubtitulo').trim(),
+    redes: { instagram: val('eRedInstagram').trim(), facebook: val('eRedFacebook').trim(), whatsapp: val('eRedWhatsapp').trim(), tiktok: val('eRedTiktok').trim(), web: val('eRedWeb').trim() }
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
   await cargarEmpresa();
