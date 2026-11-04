@@ -2678,7 +2678,8 @@ async function accionEmpresas(a, b) {
     };
     document.querySelectorAll('.emp-form .campo-error').forEach(x => x.classList.remove('campo-error'));
     const slug = val('nSlug').trim().toLowerCase();
-    const RESERVADAS = ['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'panel', 'chat', 'n8n', 'pruebas', 'demo'];
+    const RESERVADAS = ['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'kaizenia', 'panel', 'chat', 'n8n', 'pruebas', 'demo',
+      'consola', 'oficina', 'hq', 'soporte', 'ayuda', 'pagos', 'pago', 'cotizar', 'tienda', 'blog', 'status', 'estado', 'docs', 'login', 'cuenta', 'clientes', 'ventas'];
     if (!val('nNombre').trim()) return marcar('nNombre', 'Falta el nombre de la empresa.');
     if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(slug)) return marcar('nSlug', `Subdominio: "${slug}" no sirve. Usa de 3 a 30 letras minúsculas, números o guiones, sin espacios ni acentos (ej.: viajes-caribe).`);
     if (RESERVADAS.includes(slug)) return marcar('nSlug', `Subdominio: "${slug}" es una palabra reservada. Usa otra (ej.: ${slug}-viajes).`);

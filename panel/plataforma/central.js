@@ -27,7 +27,9 @@ const MODELOS_RESPALDO = [
   { id: 'anthropic/claude-sonnet-5.5', nombre: 'Anthropic: Claude Sonnet 5.5', imagenes: true }
 ];
 
-const RESERVADOS = new Set(['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'panel', 'chat', 'n8n', 'pruebas']);
+// Subdominios que no puede usar un cliente: la web de Kaizen IA, tu consola de trabajo y los servicios.
+const RESERVADOS = new Set(['admin', 'www', 'api', 'app', 'mail', 'correo', 'central', 'kaizen', 'kaizenia', 'panel', 'chat', 'n8n', 'pruebas',
+  'consola', 'oficina', 'hq', 'soporte', 'ayuda', 'pagos', 'pago', 'cotizar', 'tienda', 'blog', 'status', 'estado', 'docs', 'login', 'cuenta', 'clientes', 'ventas']);
 const SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 function claveAleatoria(n = 10) {
