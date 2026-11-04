@@ -1,9 +1,16 @@
 // Microsoft 365 (Graph) con credenciales de aplicación: lo mismo que hacía n8n, pero desde el panel.
 const tokens = new Map();
 
+// Acepta el código del inquilino, el dominio (empresa.com) o la dirección completa del token copiada de n8n.
+function inquilino(valor) {
+  const t = String(valor || '').trim();
+  const m = t.match(/microsoftonline\.com\/([^/\s]+)/i);
+  return m ? m[1] : t.replace(/^\/+|\/+$/g, '');
+}
+
 function urls(cfg) {
   return {
-    login: (cfg.loginUrl || 'https://login.microsoftonline.com') + '/' + encodeURIComponent(cfg.tenantId) + '/oauth2/v2.0/token',
+    login: (cfg.loginUrl || 'https://login.microsoftonline.com') + '/' + encodeURIComponent(inquilino(cfg.tenantId)) + '/oauth2/v2.0/token',
     graph: cfg.graphUrl || 'https://graph.microsoft.com/v1.0'
   };
 }
@@ -22,6 +29,12 @@ async function token(cfg) {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok || !d.access_token) {
+    if (r.status === 404 || /AADSTS900023|AADSTS90002/.test(d.error_description || '')) {
+      throw new Error('Microsoft 365 no reconoce el tenantId de config.js. Debe ser el código (xxxxxxxx-xxxx-...) o el dominio de la empresa.');
+    }
+    if (/AADSTS7000215|invalid_client/.test((d.error_description || '') + (d.error || ''))) {
+      throw new Error('Microsoft 365 rechazó el secreto (clientSecret). Debe ser el "Value" del secreto, no el "Secret ID", y no estar vencido.');
+    }
     throw new Error('Microsoft 365 no dio permiso: ' + (d.error_description || d.error || ('código ' + r.status)).toString().split('\n')[0]);
   }
   tokens.set(clave, { valor: d.access_token, vence: Date.now() + (Number(d.expires_in) || 3600) * 1000 });
