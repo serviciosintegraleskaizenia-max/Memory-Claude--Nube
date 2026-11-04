@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 // Cada empresa tiene su propio archivo de ajustes (la pestaña Empresas lo crea); sin indicar, se usa config.js.
 const config = require(process.env.PANEL_CONFIG ? require('path').resolve(process.env.PANEL_CONFIG) : './config');
 const crearCuenta = require('./plataforma/cuenta');
+const { revisarReservas } = require('./revision');
 const crearCentral = require('./plataforma/central');
 const crearMotor = require('./motor');
 
@@ -27,7 +28,7 @@ const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), reg
 // Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
 // Sedes de la empresa (para separar usuarios por oficina). Sin ajuste: las de Somos Viajes.
@@ -252,6 +253,12 @@ async function inicializarTablas() {
   await client.query('CREATE INDEX IF NOT EXISTS asignaciones_usuario ON asignaciones (usuario)');
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS reparto_activo BOOLEAN NOT NULL DEFAULT TRUE');
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS reparto_desde TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+  // Reparto por cupos: cuántas reservas por día le tocan a cada persona (modo 'cupos').
+  await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS reparto_modo VARCHAR(12) NOT NULL DEFAULT 'automatico'");
+  await client.query(`CREATE TABLE IF NOT EXISTS reparto_cupos (
+    usuario VARCHAR(50) PRIMARY KEY,
+    cupo INTEGER NOT NULL DEFAULT 0,
+    actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
 
   // Hito 5: tiempo por reserva. Cada vez que alguien la tiene abierta es un tramo (inicio a fin).
   await client.query(`CREATE TABLE IF NOT EXISTS tiempo_reserva (
@@ -1029,8 +1036,8 @@ async function revisarTiempos() {
 /* ---------- Hito 4: reparto automático entre asesores conectados ---------- */
 
 async function ajustesReparto() {
-  return (await client.query('SELECT reparto_activo, reparto_desde FROM empresa_datos WHERE id = 1')).rows[0]
-    || { reparto_activo: false, reparto_desde: new Date() };
+  return (await client.query('SELECT reparto_activo, reparto_desde, reparto_modo FROM empresa_datos WHERE id = 1')).rows[0]
+    || { reparto_activo: false, reparto_desde: new Date(), reparto_modo: 'automatico' };
 }
 
 // Quienes reciben reservas: permiso "Recibir reservas" (el programador no entra en el reparto).
@@ -1047,6 +1054,16 @@ async function cargaDeAsesores() {
      GROUP BY a.usuario`, [ESTADOS_ABIERTOS]
   );
   return new Map(r.rows.map(x => [x.usuario, { carga: x.carga, ultima: x.ultima ? new Date(x.ultima).getTime() : 0 }]));
+}
+
+// Cupo diario de cada persona y cuántas reservas (correos) se le asignaron hoy (hora de RD).
+async function cuposDeHoy() {
+  const cupos = new Map((await client.query('SELECT usuario, cupo FROM reparto_cupos WHERE cupo > 0')).rows.map(x => [x.usuario, x.cupo]));
+  const hoy = new Map((await client.query(
+    `SELECT usuario, COUNT(DISTINCT clave)::int AS n FROM asignaciones
+     WHERE asignado_en >= (date_trunc('day', NOW() AT TIME ZONE $1) AT TIME ZONE $1)
+     GROUP BY usuario`, [ZONA_HORARIA])).rows.map(x => [x.usuario, x.n]));
+  return { cupos, hoy };
 }
 
 let repartiendo = false;
@@ -1098,6 +1115,8 @@ async function repartir() {
       (b[1][0].categoria === 'MODIFICACION') - (a[1][0].categoria === 'MODIFICACION') || a[1][0].id - b[1][0].id);
 
     const carga = await cargaDeAsesores();
+    const porCupos = ajustes.reparto_modo === 'cupos';
+    const { cupos, hoy } = porCupos ? await cuposDeHoy() : { cupos: new Map(), hoy: new Map() };
     let indice = null;
     const asignar = async (clave, usuario, filas) => {
       const hecho = await client.query(
@@ -1107,6 +1126,7 @@ async function repartir() {
       if (!hecho.rowCount) return false;
       const c = carga.get(usuario) || { carga: 0, ultima: 0 };
       carga.set(usuario, { carga: c.carga + 1, ultima: Date.now() });
+      hoy.set(usuario, (hoy.get(usuario) || 0) + 1);
       const primera = filas[0];
       const cliente = primera.nombre_cliente || primera.asunto || 'sin nombre';
       await avisar([usuario],
@@ -1115,11 +1135,22 @@ async function repartir() {
       await registrar(SISTEMA, 'reparto_asignada', 'reserva', primera.id, '', usuario, cliente);
       return true;
     };
-    const elegir = () => listos.slice().sort((a, b) => {
+    const porPendientes = (a, b) => {
       const x = carga.get(a) || { carga: 0, ultima: 0 };
       const y = carga.get(b) || { carga: 0, ultima: 0 };
       return x.carga - y.carga || x.ultima - y.ultima || a.localeCompare(b);
-    })[0];
+    };
+    // Automático: a quien tiene menos pendientes. Por cupos: en proporción al cupo (30/15/20...);
+    // quien llegó a su cupo deja de recibir y, si todos llegaron, se vuelve a "menos pendientes".
+    const elegir = () => {
+      if (porCupos) {
+        const conCupo = listos.filter(x => (cupos.get(x) || 0) > (hoy.get(x) || 0));
+        if (conCupo.length) {
+          return conCupo.sort((a, b) => ((hoy.get(a) || 0) / cupos.get(a)) - ((hoy.get(b) || 0) / cupos.get(b)) || porPendientes(a, b))[0];
+        }
+      }
+      return listos.slice().sort(porPendientes)[0];
+    };
 
     for (const [clave, filas] of orden) {
       let destino = null;
@@ -1616,6 +1647,7 @@ http.createServer(async (req, res) => {
         a.usuario AS asignado_a, COALESCE(us.nombre, a.usuario) AS asignado_nombre`;
       const uniones = `LEFT JOIN asignaciones a ON a.clave = ${CLAVE_SQL} LEFT JOIN usuarios us ON us.usuario = a.usuario`;
       let filas;
+      let revisiones = new Map();
       if (historico) {
         // Historial: se busca en el servidor (pueden ser miles) y se devuelven los 2000 más recientes que coinciden.
         const q = String(p.get('q') || '').trim().slice(0, 100);
@@ -1639,6 +1671,10 @@ http.createServer(async (req, res) => {
         filas = (await client.query(
           `SELECT ${columnas} FROM clasificacion c ${uniones} WHERE c.estado <> 'historico' ORDER BY c.id DESC LIMIT 5000`
         )).rows;
+        // Revisión automática sobre todas (antes de filtrar), para encontrar duplicados entre asesores.
+        try {
+          revisiones = revisarReservas(filas, { isoDe: x => fechaServicioISO(x.fecha_servicio, x.fecha), claveDe, hoy: require('./plataforma/cuenta').hoyLocal() });
+        } catch (e) { console.log('Revisión automática:', e.message); }
         // Quien recibe reservas del reparto (y no supervisa) ve solo las suyas y lo que no se reparte.
         if (puede('recibir_reservas') && !puede('supervisar')) {
           const ajustes = await ajustesReparto();
@@ -1674,6 +1710,8 @@ http.createServer(async (req, res) => {
       }
       return json(res, 200, filas.map(x => {
         const base = { ...x, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
+        const rev = revisiones.get(x.id);
+        if (rev && (rev.puntos.length || rev.urgente)) base.revision = rev;
         if (x.categoria === 'MODIFICACION') {
           const o = originales.get(x.id);
           base.original_id = o ? o.id : null;
@@ -1912,7 +1950,7 @@ http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url === '/api/empresa') {
-      if (!puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar los datos de la empresa.' });
+      if (!puede('configurar_empresa') && !puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar los datos de la empresa.' });
       const b = await leerCuerpo(req);
       const nombre = String(b.nombre || '').trim();
       if (nombre.length < 2 || nombre.length > 120) return json(res, 400, { error: 'El nombre debe tener entre 2 y 120 caracteres.' });
@@ -1971,18 +2009,20 @@ http.createServer(async (req, res) => {
     /* ---------- Hito 4: asesores y reasignación ---------- */
 
     if (req.method === 'GET' && url === '/api/asesores') {
-      if (!puede('supervisar') && !puede('ver_control') && !puede('administrar_usuarios')) {
+      if (!puede('supervisar') && !puede('ver_control') && !puede('administrar_usuarios') && !puede('configurar_empresa')) {
         return json(res, 403, { error: 'No tienes permiso para ver los asesores.' });
       }
       const conectados = estadosConectados();
       const carga = await cargaDeAsesores();
       const ajustes = await ajustesReparto();
+      const { cupos, hoy } = await cuposDeHoy();
       const lista = (await receptores()).map(x => ({
         usuario: x.usuario, nombre: x.nombre || x.usuario, grupo: x.grupo,
         estado: (conectados.get(x.usuario) || {}).estado || 'desconectado',
-        carga: (carga.get(x.usuario) || {}).carga || 0
+        carga: (carga.get(x.usuario) || {}).carga || 0,
+        cupo: cupos.get(x.usuario) || 0, hoy: hoy.get(x.usuario) || 0
       })).sort((a, b) => a.nombre.localeCompare(b.nombre));
-      return json(res, 200, { activo: ajustes.reparto_activo, asesores: lista });
+      return json(res, 200, { activo: ajustes.reparto_activo, modo: ajustes.reparto_modo || 'automatico', asesores: lista });
     }
 
     if (req.method === 'POST' && url === '/api/reserva/asignar') {
@@ -2016,14 +2056,25 @@ http.createServer(async (req, res) => {
     }
 
     if (url === '/api/reparto') {
-      if (!puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar el reparto.' });
+      if (!puede('configurar_empresa') && !puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para cambiar el reparto.' });
       if (req.method === 'POST') {
-        const { activo } = await leerCuerpo(req);
+        const { activo, modo, cupos } = await leerCuerpo(req);
         // Al volver a activarlo se reparte solo lo que llegue desde ahora (no lo acumulado mientras estuvo apagado).
         await client.query(
           'UPDATE empresa_datos SET reparto_desde = CASE WHEN reparto_activo THEN reparto_desde ELSE NOW() END, reparto_activo = $1 WHERE id = 1',
           [Boolean(activo)]);
-        await registrar(u, 'cambiar_reparto', 'empresa', 1, '', activo ? 'activado' : 'desactivado', '');
+        const nuevoModo = modo === 'cupos' ? 'cupos' : 'automatico';
+        await client.query('UPDATE empresa_datos SET reparto_modo = $1 WHERE id = 1', [nuevoModo]);
+        const validos = new Set((await receptores()).map(x => x.usuario));
+        const detalle = [];
+        for (const [usuario, valor] of Object.entries(cupos && typeof cupos === 'object' ? cupos : {})) {
+          if (!validos.has(usuario)) continue;
+          const n = Math.max(0, Math.min(1000, Math.floor(Number(valor) || 0)));
+          await client.query(`INSERT INTO reparto_cupos (usuario, cupo) VALUES ($1, $2)
+            ON CONFLICT (usuario) DO UPDATE SET cupo = EXCLUDED.cupo, actualizado = NOW()`, [usuario, n]);
+          detalle.push(`${usuario}=${n}`);
+        }
+        await registrar(u, 'cambiar_reparto', 'empresa', 1, '', (activo ? 'activado' : 'desactivado') + ' · ' + nuevoModo, detalle.join(', '));
         return json(res, 200, { ok: true });
       }
     }
@@ -2189,6 +2240,15 @@ http.createServer(async (req, res) => {
         maximo: f.tiempos.length ? Math.round(Math.max(...f.tiempos)) : null,
         dentro: f.tiempos.length ? Math.round(100 * f.tiempos.filter(x => x <= limite).length / f.tiempos.length) : null
       })).filter(x => x.grupo !== 'Programador').sort((a, b) => b.registradas - a.registradas || b.segundos - a.segundos);
+      // Cupo diario del reparto: cuántas lleva hoy cada uno de su cupo (solo si el reparto es por cupos).
+      const repartoActual = await ajustesReparto();
+      let cuposHoy = null;
+      if (repartoActual.reparto_modo === 'cupos') {
+        const { cupos, hoy } = await cuposDeHoy();
+        cuposHoy = (await receptores()).filter(x => x.grupo !== 'Programador')
+          .map(x => ({ usuario: x.usuario, nombre: x.nombre || x.usuario, cupo: cupos.get(x.usuario) || 0, hoy: hoy.get(x.usuario) || 0 }))
+          .sort((a, b) => b.cupo - a.cupo || a.nombre.localeCompare(b.nombre));
+      }
 
       // Lo que se está trabajando ahora mismo.
       const enCurso = (await client.query(
@@ -2271,7 +2331,7 @@ http.createServer(async (req, res) => {
           segundos: Math.round(enRango.reduce((a, x) => a + x.segundos, 0)),
           pasadas: usuarios.reduce((a, x) => a + x.pasadas, 0)
         },
-        usuarios, serie, enCurso,
+        usuarios, serie, enCurso, cuposHoy,
         detalle: detalle.sort((a, b) => (b.segundos || 0) - (a.segundos || 0)).slice(0, 300)
       });
     }
@@ -2353,7 +2413,7 @@ http.createServer(async (req, res) => {
     }
 
     if (url.startsWith('/api/cache')) {
-      if (u.grupo !== 'Programador' && !puede('administrar_usuarios')) {
+      if (u.grupo !== 'Programador' && !puede('administrar_usuarios') && !puede('configurar_empresa')) {
         return json(res, 403, { error: 'No tienes permiso para administrar la caché.' });
       }
 

@@ -127,6 +127,12 @@
   .salud-bien { color: #16a34a; font-weight: 700; }
   .salud-falla { color: #dc2626; font-weight: 700; }
   .salud-sin { color: var(--texto-suave); font-weight: 700; }
+  .chip-revisar { display: inline-block; margin: 3px 4px 0 0; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; cursor: help; }
+  .chip-urgente { display: inline-block; margin: 3px 4px 0 0; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .caja-revision { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; font-size: 13px; max-width: 640px; }
+  .caja-revision ul { margin: 4px 0 0 18px; padding: 0; }
+  body.oscuro .chip-revisar, body.oscuro .caja-revision { background: #451a03; color: #fde68a; border-color: #92400e; }
+  body.oscuro .chip-urgente { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
   .num-reserva { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
@@ -333,6 +339,12 @@
       <option value="historico">Histórico</option>
     </select>
     <select id="filtroAsesor" style="display:none;" title="Asesor asignado"></select>
+    <select id="filtroBuzon" style="display:none;" title="Buzón donde llegó el correo"></select>
+    <select id="filtroRevision" title="Revisión automática">
+      <option value="">Todas (revisión)</option>
+      <option value="puntos">⚠ Con puntos para revisar</option>
+      <option value="urgente">⏰ Urgentes (menos de 48 h)</option>
+    </select>
     <select id="filtroOrden">
       <option value="servicio">Orden: fecha de servicio (más próxima)</option>
       <option value="recibido">Orden: fecha de recibido (más reciente)</option>
@@ -360,6 +372,7 @@
         <h2 id="mAsunto"></h2>
         <div class="meta" id="mMeta"></div>
         <div id="mTiempo" class="cronometro" style="display:none;" title="Tiempo trabajando esta reserva"></div>
+        <div id="mRevision" class="caja-revision" style="display:none;"></div>
       </div>
       <div class="ventana-botones">
         <button class="cerrar" id="btnMinimizar" title="Minimizar">&#8211;</button>
@@ -470,7 +483,8 @@ const PERMISOS = [
   ['enviar_correo', 'Enviar correos nuevos'],
   ['editar_reservas', 'Editar reservas'],
   ['ver_todas_empresas', 'Ver todas las empresas'],
-  ['administrar_usuarios', 'Administrar usuarios'],
+  ['administrar_usuarios', 'Administrar usuarios (crear y editar usuarios)'],
+  ['configurar_empresa', 'Configurar empresa (nombre, logo, banner, reparto, caché)'],
   ['ver_auditoria', 'Ver auditoría'],
   ['usar_chat', 'Usar el chat privado'],
   ['exportar_datos', 'Exportar a Excel'],
@@ -724,7 +738,7 @@ function mostrarApp(s) {
   document.getElementById('btnControl').style.display = puede('ver_control') && mod.control !== false ? 'inline-block' : 'none';
   document.getElementById('filtroAsesor').style.display = puede('supervisar') ? 'inline-block' : 'none';
   document.getElementById('btnHerramientas').style.display =
-    (puede('administrar_usuarios') || puede('ver_auditoria')) ? 'inline-block' : 'none';
+    (puede('administrar_usuarios') || puede('configurar_empresa') || puede('ver_auditoria')) ? 'inline-block' : 'none';
   document.getElementById('btnChat').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
   document.getElementById('btnChatFlotante').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
   cargarFranjas();
@@ -792,6 +806,7 @@ async function cargarReservas(forzar) {
 
   datos = r.data.map(sinEntidades);
   pintarFiltroAsesor();
+  pintarFiltroBuzon();
   pintar();
   // Un aviso por correo, no por cada servicio (llegada, salida...) del mismo correo.
   const correosVistos = new Set();
@@ -982,6 +997,8 @@ function filtrar() {
   const hasta = document.getElementById('hasta').value;
   const soloCompletos = document.getElementById('soloCompletos').checked && vistaActual !== 'historico';
   const asesor = puede('supervisar') ? document.getElementById('filtroAsesor').value : '';
+  const buzon = document.getElementById('filtroBuzon').value;
+  const conRevision = document.getElementById('filtroRevision').value;
   // En el histórico la búsqueda la hace el servidor; en las demás pestañas se filtra aquí mismo.
   const busqueda = vistaActual === 'historico' ? '' : normalizarBusqueda(document.getElementById('buscarHistorico').value);
   const numero = /^#?\d+$/.test(busqueda) ? Number(busqueda.replace('#', '')) : null;
@@ -991,6 +1008,9 @@ function filtrar() {
       ? r.id === numero
       : normalizarBusqueda([r.nombre_cliente, agenciaDe(r), r.agencia, r.asunto, r.remitente, r.vuelo, r.hotel, r.telefono, r.actividad, r.tipo_servicio, '#' + r.id].join(' ')).includes(busqueda))) return false;
     if (asesor === '-' && r.asignado_a) return false;
+    if (buzon && r.buzon !== buzon) return false;
+    if (conRevision === 'puntos' && !(r.revision && r.revision.puntos.length)) return false;
+    if (conRevision === 'urgente' && !(r.revision && r.revision.urgente)) return false;
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
     if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
@@ -1023,7 +1043,7 @@ function pintar() {
         const tarde = rev && rev.segundos > rev.limite;
         const marca = (rev
           ? `<span class="revision ${tarde ? 'tarde' : ''}" title="${tarde ? 'Pasó el tiempo máximo por reserva' : ''}">En revisión: ${esc(rev.nombre || rev.usuario)} desde ${esc(horaCorta(rev.desde))}${rev.segundos ? ' · ⏱ ' + Math.floor(rev.segundos / 60) + ' min' : ''}${tarde ? ' ⚠' : ''}</span>`
-          : '') + marcaAsignado(r);
+          : '') + marcaAsignado(r) + marcaRevision(r);
         return `
       <tr data-id="${r.id}">
         <td>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}</div></td>
@@ -1091,11 +1111,40 @@ function porAnalizar(r) {
   return String(r.motivo || '').startsWith('Histórico');
 }
 
+// Revisión automática: "⚠ 2 para revisar" y "Urgente" (solo avisa; la reserva sigue normal).
+function marcaRevision(r) {
+  const v = r.revision;
+  if (!v) return '';
+  const n = (v.puntos || []).length;
+  return (v.urgente ? '<span class="chip-urgente" title="El servicio es en menos de 48 horas">⏰ Urgente</span>' : '')
+    + (n ? `<span class="chip-revisar" title="${esc(v.puntos.map(p => '• ' + p.texto).join('\n'))}">⚠ ${n} para revisar</span>` : '');
+}
+
+function pintarRevision(r) {
+  const caja = document.getElementById('mRevision');
+  const v = r.revision;
+  if (!v || (!v.puntos.length && !v.urgente)) { caja.style.display = 'none'; caja.innerHTML = ''; return; }
+  caja.innerHTML = `<strong>Revisión automática</strong>${v.urgente ? ' <span class="chip-urgente">⏰ Servicio en menos de 48 h</span>' : ''}
+    ${v.puntos.length ? '<ul>' + v.puntos.map(p => `<li>${esc(p.texto)}</li>`).join('') + '</ul>' : ''}
+    <div class="etiqueta-sec" style="margin-top:4px">Son avisos para revisar con calma; no cambian la reserva.</div>`;
+  caja.style.display = 'block';
+}
+
 function marcaAsignado(r) {
   if (!r.asignado_a) return '';
   const tuya = r.asignado_a === sesionActual.usuario;
   if (tuya && !puede('supervisar')) return '';
   return `<span class="asignado" title="Asignada por el reparto o por un supervisor">👤 ${tuya ? 'Tú' : esc(r.asignado_nombre || r.asignado_a)}</span>`;
+}
+
+// Filtro por buzón (operaciones@, bookings@...): solo aparece cuando hay más de uno.
+function pintarFiltroBuzon() {
+  const sel = document.getElementById('filtroBuzon');
+  const actual = sel.value;
+  const buzones = Array.from(new Set(datos.map(r => r.buzon).filter(Boolean))).sort();
+  sel.style.display = buzones.length > 1 ? 'inline-block' : 'none';
+  sel.innerHTML = [['', 'Todos los buzones'], ...buzones.map(b => [b, b])]
+    .map(([v, t]) => `<option value="${esc(v)}" ${v === actual ? 'selected' : ''}>${esc(t)}</option>`).join('');
 }
 
 function pintarFiltroAsesor() {
@@ -1259,7 +1308,8 @@ async function abrirModal(id) {
 
   document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
   document.getElementById('mMeta').innerHTML =
-    `Reserva <strong>#${r.id}</strong> · De: ${esc(r.remitente)}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
+    `Reserva <strong>#${r.id}</strong> · De: ${esc(r.remitente)}${r.buzon ? ' · Llegó a: ' + esc(r.buzon) : ''}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>`;
+  pintarRevision(r);
   const cajaCorreo = document.getElementById('mCorreo');
   cajaCorreo.textContent = 'Cargando el correo...';
   api('/api/reserva/cuerpo?id=' + id).then(rc => {
@@ -2107,10 +2157,11 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
   }
   if (tab === 'estado') return marco('estado', aviso);
   if (tab === 'empresas') return marco('empresas', aviso);
-  if (!puede('administrar_usuarios')) return marco('auditoria', aviso);
-  if (tab === 'empresa') return marco('empresa', aviso);
-  if (tab === 'cache') return marco('cache', aviso);
-  if (tab === 'reparto') return marco('reparto', aviso);
+  const configura = puede('configurar_empresa') || puede('administrar_usuarios');
+  if (configura && tab === 'empresa') return marco('empresa', aviso);
+  if (configura && tab === 'cache') return marco('cache', aviso);
+  if (configura && tab === 'reparto') return marco('reparto', aviso);
+  if (!puede('administrar_usuarios')) return marco(configura && tab !== 'auditoria' ? 'empresa' : 'auditoria', aviso);
   if (tab === 'historico') return marco('historico', aviso);
 
   const [ru, rg] = await Promise.all([api('/api/usuarios'), api('/api/grupos')]);
@@ -2130,7 +2181,8 @@ function marco(tab, aviso) {
 
   const mod = sesionActual.modulos || {};
   const tabs = (puedeVerEmpresas() ? boton('empresas', 'Empresas') : '') +
-    (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') + boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + (mod.reparto !== false ? boton('reparto', 'Reparto') : '') : '') +
+    (admin ? boton('usuarios', 'Usuarios') + boton('crear', 'Crear usuario') : '') +
+    (admin || puede('configurar_empresa') ? boton('empresa', 'Empresa') + boton('cache', 'Caché de correos') + (mod.reparto !== false ? boton('reparto', 'Reparto') : '') : '') +
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
     (esProg && mod.historial !== false ? boton('historico', 'Historial') : '') +
     (puedeVerSalud() ? boton('estado', 'Estado del sistema') : '') +
@@ -2723,21 +2775,38 @@ async function cargarReparto() {
     return;
   }
   const estado = { 'en linea': 'En línea', ausente: 'Ausente (no recibe nuevas)', desconectado: 'Desconectado' };
+  const cupos = r.data.modo === 'cupos';
   box.innerHTML = `
-    <p>Las reservas y los cambios nuevos se entregan solos al asesor <strong>en línea</strong> con menos reservas abiertas.
-      Un cambio va al mismo asesor que tiene la reserva original. Si un asesor se desconecta sin abrir una reserva, vuelve a repartirse.
-      Reciben quienes tienen el permiso <strong>Recibir reservas</strong> (en Grupos o en el usuario); quienes tienen <strong>Supervisar</strong> ven todo y reasignan.</p>
+    <p>Las reservas y los cambios nuevos se entregan solos a quien está <strong>en línea</strong>. Un cambio va a la misma persona que tiene la reserva original.
+      Si alguien se desconecta sin abrir una reserva, vuelve a repartirse. Reciben quienes tienen el permiso <strong>Recibir reservas</strong>;
+      quien además tiene <strong>Supervisar</strong> recibe igual y también ve todo y reasigna.</p>
     <label class="chk"><input type="checkbox" id="rActivo" ${r.data.activo ? 'checked' : ''}> Reparto automático activado</label>
-    <div class="pie-acciones"><button class="btn" data-accion="reparto-guardar">Guardar</button></div>
-    <div class="titulo-seccion">Asesores que reciben reservas</div>
+    <div class="form-fila"><label>Cómo repartir
+      <select id="rModo">
+        <option value="automatico" ${!cupos ? 'selected' : ''}>Equilibrado: a quien tenga menos reservas pendientes</option>
+        <option value="cupos" ${cupos ? 'selected' : ''}>Por cupos diarios: cada persona recibe en proporción a su cupo</option>
+      </select></label></div>
+    <p class="etiqueta-sec" id="rAyudaCupos" style="${cupos ? '' : 'display:none'}">Ejemplo: cupos 30, 15 y 20. Las reservas se reparten en esa proporción.
+      Quien llega a su cupo deja de recibir; si todos llegaron, se siguen repartiendo a quien tenga menos pendientes. Cupo 0 = solo recibe cuando todos llegaron a su cupo.
+      El conteo vuelve a cero cada día a medianoche.</p>
+    <div class="titulo-seccion">Quienes reciben reservas</div>
     ${r.data.asesores.length ? `<div class="tabla-wrap tabla-chica"><table>
-      <thead><tr><th>Asesor</th><th>Grupo</th><th>Estado</th><th>Reservas abiertas</th></tr></thead>
-      <tbody>${r.data.asesores.map(a => `<tr><td>${esc(a.nombre)}</td><td>${esc(a.grupo)}</td><td>${esc(estado[a.estado] || a.estado)}</td><td>${a.carga}</td></tr>`).join('')}</tbody>
-    </table></div>` : '<div class="vacio-total">Nadie tiene todavía el permiso "Recibir reservas". Actívalo en el grupo de los asesores o en cada usuario.</div>'}`;
+      <thead><tr><th>Persona</th><th>Grupo</th><th>Estado</th><th>Pendientes</th><th>Hoy</th><th class="col-cupo" style="${cupos ? '' : 'display:none'}">Cupo diario</th></tr></thead>
+      <tbody>${r.data.asesores.map(a => `<tr><td>${esc(a.nombre)}</td><td>${esc(a.grupo)}</td><td>${esc(estado[a.estado] || a.estado)}</td><td>${a.carga}</td>
+        <td>${a.hoy}${a.cupo ? ' / ' + a.cupo : ''}</td>
+        <td class="col-cupo" style="${cupos ? '' : 'display:none'}"><input type="number" min="0" max="1000" class="input-cupo" data-cupo="${esc(a.usuario)}" value="${a.cupo || 0}" style="width:90px"></td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="vacio-total">Nadie tiene todavía el permiso "Recibir reservas". Actívalo en el grupo o en cada usuario.</div>'}
+    <div class="pie-acciones"><button class="btn" data-accion="reparto-guardar">Guardar</button></div>`;
+  document.getElementById('rModo').addEventListener('change', e => {
+    const ver = e.target.value === 'cupos';
+    box.querySelectorAll('.col-cupo').forEach(x => { x.style.display = ver ? '' : 'none'; });
+    document.getElementById('rAyudaCupos').style.display = ver ? '' : 'none';
+  });
 }
 
 async function guardarReparto() {
-  const r = await api('/api/reparto', { activo: document.getElementById('rActivo').checked });
+  const cupos = Object.fromEntries([...document.querySelectorAll('[data-cupo]')].map(x => [x.dataset.cupo, Number(x.value) || 0]));
+  const r = await api('/api/reparto', { activo: document.getElementById('rActivo').checked, modo: document.getElementById('rModo').value, cupos });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo guardar.', false);
   await cargarReparto();
   mostrarAviso('Reparto guardado.', true);
@@ -3320,7 +3389,8 @@ document.getElementById('formClave').addEventListener('submit', enviarClave);
 document.getElementById('btnCancelarClave').addEventListener('click', cancelarClave);
 document.getElementById('btnSalir').addEventListener('click', cerrarSesion);
 document.getElementById('btnMiClave').addEventListener('click', () => mostrarClave(false));
-document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas(puedeVerEmpresas() ? 'empresas' : 'usuarios'));
+document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas(
+  puedeVerEmpresas() ? 'empresas' : puede('administrar_usuarios') ? 'usuarios' : puede('configurar_empresa') ? 'empresa' : 'auditoria'));
 document.getElementById('btnChat').addEventListener('click', abrirChat);
 document.getElementById('btnChatFlotante').addEventListener('click', abrirChat);
 document.getElementById('btnAvisos').addEventListener('click', async () => {
@@ -3411,7 +3481,7 @@ document.getElementById('btnAyer').addEventListener('click', () => {
   alCambiarFechas();
 });
 
-['filtroIntencion', 'filtroEstado', 'filtroOrden', 'soloCompletos', 'filtroAsesor'].forEach(id =>
+['filtroIntencion', 'filtroEstado', 'filtroOrden', 'soloCompletos', 'filtroAsesor', 'filtroBuzon', 'filtroRevision'].forEach(id =>
   document.getElementById(id).addEventListener('change', pintar));
 ['desde', 'hasta'].forEach(id => document.getElementById(id).addEventListener('change', alCambiarFechas));
 document.getElementById('buscarHistorico').addEventListener('input', () => {

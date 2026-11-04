@@ -200,6 +200,7 @@ function pintar(desde, hasta) {
       <h2>Por asesor</h2>
       <p class="sub">Tiempo = solo el tiempo con reservas abiertas. Promedio y máximo se calculan sobre las reservas que el asesor registró en el período.</p>
       ${tablaUsuarios(d)}
+      ${tablaCupos(d)}
     </div>
 
     <div class="seccion">
@@ -342,6 +343,18 @@ function tablaEnCurso(d) {
       <td>${esc(x.nombre)}</td><td>#${x.reserva_id}</td><td>${esc(x.nombre_cliente || x.asunto || '')}</td>
       <td class="num">${x.segundos > d.limite ? `<span class="tarde">⚠ ${duracion(x.segundos)}</span>` : duracion(x.segundos)}</td></tr>`).join('')}</tbody>
   </table></div>`;
+}
+
+// Reparto por cupos: cuántas reservas lleva hoy cada persona de su cupo diario.
+function tablaCupos(d) {
+  if (!d.cuposHoy || !d.cuposHoy.length) return '';
+  return `<h2 style="margin-top:18px">Cupos de hoy (reparto por cupos)</h2><div class="tabla-wrap"><table>
+    <thead><tr><th>Persona</th><th class="num">Recibidas hoy</th><th class="num">Cupo diario</th><th>Avance</th></tr></thead>
+    <tbody>${d.cuposHoy.map(c => {
+      const pct = c.cupo ? Math.min(100, Math.round(100 * c.hoy / c.cupo)) : 0;
+      return `<tr><td>${esc(c.nombre)}</td><td class="num">${c.hoy}</td><td class="num">${c.cupo || '—'}</td>
+        <td>${c.cupo ? `<div style="background:var(--borde);border-radius:6px;height:10px;width:160px;overflow:hidden"><div style="height:10px;width:${pct}%;background:${c.hoy >= c.cupo ? '#16a34a' : '#2563eb'}"></div></div> ${c.hoy} / ${c.cupo}` : 'Sin cupo (recibe cuando todos llegaron)'}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
 }
 
 function tablaUsuarios(d) {
