@@ -773,8 +773,22 @@ function filtrarPermisos(p) {
   return Object.fromEntries(PERMISOS.map(k => [k, k !== 'administrar_usuarios' && Boolean(p && p[k])]));
 }
 
+// IP real de quien entra. Si la conexión viene de esta misma máquina (Cloudflare Tunnel o el proxy
+// del servidor), se usa la IP que ese intermediario informa; si no, la de la conexión.
+// Así el bloqueo por intentos fallidos no bloquea a todos a la vez detrás del túnel.
+function esLocal(req) {
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+}
 function ipCliente(req) {
+  if (esLocal(req)) {
+    const reenviada = String(req.headers['cf-connecting-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0] || '').trim();
+    if (/^[0-9a-fA-F.:]{3,45}$/.test(reenviada)) return reenviada;
+  }
   return (req.socket.remoteAddress || 'desconocida').replace('::ffff:', '');
+}
+// Si se entró por HTTPS (túnel o proxy), la cookie de sesión solo viaja cifrada.
+function cookieSegura(req) {
+  return esLocal(req) && (req.headers['x-forwarded-proto'] === 'https' || /"scheme":"https"/.test(String(req.headers['cf-visitor'] || ''))) ? '; Secure' : '';
 }
 
 function normalizarNombre(s) {
@@ -1476,7 +1490,8 @@ http.createServer(async (req, res) => {
 
     // El panel central apaga este panel con su clave secreta (solo desde la misma máquina).
     if (req.method === 'POST' && url === '/api/interno/apagar') {
-      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      // Solo desde esta misma máquina y sin pasar por el túnel o un proxy (esos traen la IP de afuera).
+      const local = esLocal(req) && !req.headers['cf-connecting-ip'] && !req.headers['x-forwarded-for'];
       const clave = String(req.headers['x-kaizen'] || '');
       const secreto = String((config.sesion && config.sesion.secreto) || '');
       const ok = local && secreto.length >= 32 && clave.length === secreto.length &&
@@ -1536,7 +1551,7 @@ http.createServer(async (req, res) => {
       sesiones.set(token, { usuario: u.usuario, ultima: Date.now() });
       fallosLogin.delete('usuario:' + nombreIntento);
       await registrar(u, 'login', 'sesion', u.usuario, '', '', 'Inicio de sesión');
-      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict` });
+      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict${cookieSegura(req)}` });
     }
 
     if (req.method === 'POST' && url === '/api/logout') {
@@ -1549,7 +1564,7 @@ http.createServer(async (req, res) => {
         await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE usuario = $1 AND fin IS NULL', [actual.usuario]);
         await registrar(actual, 'logout', 'sesion', actual.usuario, '', '', 'Cierre de sesión');
       }
-      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; Path=/; Max-Age=0` });
+      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; Path=/; Max-Age=0${cookieSegura(req)}` });
     }
 
     const u = await usuarioDeSesion(req);
