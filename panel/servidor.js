@@ -99,7 +99,8 @@ async function inicializarTablas() {
     nombre VARCHAR(40) UNIQUE,
     permisos JSONB DEFAULT '{}'::jsonb,
     protegido BOOLEAN DEFAULT FALSE)`);
-  await client.query("INSERT INTO grupos (nombre, permisos, protegido) VALUES ('Programador', '{}', TRUE) ON CONFLICT (nombre) DO NOTHING");
+  // Sin ON CONFLICT: en bases antiguas la columna nombre puede no tener índice único.
+  await client.query("INSERT INTO grupos (nombre, permisos, protegido) SELECT 'Programador', '{}', TRUE WHERE NOT EXISTS (SELECT 1 FROM grupos WHERE nombre = 'Programador')");
   await client.query(`CREATE TABLE IF NOT EXISTS auditoria (
     id SERIAL PRIMARY KEY,
     fecha TIMESTAMP DEFAULT NOW(),
@@ -280,9 +281,10 @@ async function inicializarTablas() {
 
 client.connect()
   .then(inicializarTablas)
-  .then(() => cuenta.preparar())
-  .then(() => motorCorreo.preparar())
-  .then(() => central.preparar())
+  // Las partes nuevas no pueden tumbar el panel: si una falla, se anota y el resto sigue funcionando.
+  .then(() => cuenta.preparar().catch(e => console.log('Cuenta (módulos y avisos):', e.message)))
+  .then(() => motorCorreo.preparar().catch(e => console.log('Motor de correo:', e.message)))
+  .then(() => central.preparar().catch(e => console.log('Panel central:', e.message)))
   .then(() => {
     motorCorreo.iniciar();
     central.iniciar();

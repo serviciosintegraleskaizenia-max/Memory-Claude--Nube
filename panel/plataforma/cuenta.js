@@ -96,7 +96,12 @@ module.exports = function crearCuenta({ client, config, avisar, registrar, SISTE
 
   async function leer(fresca) {
     if (!fresca && guardada && Date.now() - leidaEn < 15000) return guardada;
-    guardada = (await client.query('SELECT * FROM cuenta WHERE id = 1')).rows[0] || { estado: 'activa', modulos: {}, pago: {}, pagado: '' };
+    try {
+      guardada = (await client.query('SELECT * FROM cuenta WHERE id = 1')).rows[0] || { estado: 'activa', modulos: {}, pago: {}, pagado: '' };
+    } catch (e) {
+      // Si la tabla no está, el panel sigue como siempre: activo y con todos los módulos.
+      return { estado: 'activa', modulos: {}, pago: {}, pagado: '' };
+    }
     leidaEn = Date.now();
     return guardada;
   }
@@ -154,7 +159,7 @@ module.exports = function crearCuenta({ client, config, avisar, registrar, SISTE
       if (principal === u.usuario) lista.push({ tipo: 'pago-' + e.etapa, texto });
     }
     const anuncios = await client.query(
-      'SELECT id, titulo, texto FROM anuncios WHERE cerrado IS NULL AND para = $1 ORDER BY id DESC LIMIT 3', [u.usuario]);
+      'SELECT id, titulo, texto FROM anuncios WHERE cerrado IS NULL AND para = $1 ORDER BY id DESC LIMIT 3', [u.usuario]).catch(() => ({ rows: [] }));
     for (const a of anuncios.rows) lista.push({ tipo: 'anuncio', id: a.id, titulo: a.titulo, texto: a.texto });
     return lista;
   }
