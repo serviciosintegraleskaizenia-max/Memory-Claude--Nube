@@ -770,7 +770,7 @@ function diaLocal(texto) {
 }
 
 function filtrarPermisos(p) {
-  return Object.fromEntries(PERMISOS.map(k => [k, Boolean(p && p[k])]));
+  return Object.fromEntries(PERMISOS.map(k => [k, k !== 'administrar_usuarios' && Boolean(p && p[k])]));
 }
 
 function ipCliente(req) {
@@ -882,9 +882,11 @@ async function mapaGrupos() {
   return new Map(r.rows.map(g => [g.nombre, { ...NINGUNO, ...g.permisos }]));
 }
 
+// Crear y editar usuarios es solo del Programador: no se puede dar por grupo ni por usuario
+// (igual que Estado del sistema, Historial, Grupos, Bloqueos y Empresas).
 function permisosDe(u, mapa) {
   if (u.grupo === 'Programador') return { ...TODOS };
-  return { ...NINGUNO, ...(mapa.get(u.grupo) || {}), ...(u.permisos || {}) };
+  return { ...NINGUNO, ...(mapa.get(u.grupo) || {}), ...(u.permisos || {}), administrar_usuarios: false };
 }
 
 async function grupoExiste(nombre) {
