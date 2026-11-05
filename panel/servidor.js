@@ -10,6 +10,7 @@ const config = require(process.env.PANEL_CONFIG ? require('path').resolve(proces
 const crearCuenta = require('./plataforma/cuenta');
 const { revisarReservas } = require('./revision');
 const crearCentral = require('./plataforma/central');
+const crearOficina = require('./plataforma/oficina');
 const crearMotor = require('./motor');
 
 const client = new Client(config.db);
@@ -27,6 +28,8 @@ const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), registrar: (...a) => registrar(...a), SISTEMA });
 // Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
+// Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
+const oficina = crearOficina({ client, config, registrar: (...a) => registrar(...a), central });
 const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
@@ -286,6 +289,13 @@ async function inicializarTablas() {
     correo TEXT NOT NULL DEFAULT '',
     creada TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resuelta TIMESTAMPTZ)`);
+  // Quién está conectado ahora (lo lee la Oficina del central para el chat con cada negocio).
+  await client.query(`CREATE TABLE IF NOT EXISTS conectados_ahora (
+    usuario VARCHAR(50) PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL DEFAULT '',
+    grupo VARCHAR(40) NOT NULL DEFAULT '',
+    estado VARCHAR(12) NOT NULL DEFAULT 'en linea',
+    visto TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await client.query(`CREATE TABLE IF NOT EXISTS tiempo_aviso (
     reserva_id INTEGER PRIMARY KEY,
     creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -297,6 +307,7 @@ client.connect()
   .then(() => cuenta.preparar().catch(e => console.log('Cuenta (módulos y avisos):', e.message)))
   .then(() => motorCorreo.preparar().catch(e => console.log('Motor de correo:', e.message)))
   .then(() => central.preparar().catch(e => console.log('Panel central:', e.message)))
+  .then(() => oficina.preparar().catch(e => console.log('Oficina:', e.message)))
   .then(() => {
     motorCorreo.iniciar();
     central.iniciar();
@@ -1525,6 +1536,10 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
       return archivo(res, path.join(CARPETA, 'index.html'), 'text/html; charset=utf-8');
     }
+    if (req.method === 'GET' && url === '/oficina') {
+      if (!central.activo) { res.writeHead(302, { Location: '/' }); return res.end(); }
+      return archivo(res, path.join(CARPETA, 'oficina.html'), 'text/html; charset=utf-8');
+    }
     if (req.method === 'GET' && url === '/control') {
       return archivo(res, path.join(CARPETA, 'control.html'), 'text/html; charset=utf-8');
     }
@@ -1582,6 +1597,7 @@ http.createServer(async (req, res) => {
       if (token) sesiones.delete(token);
       if (actual) {
         presencia.delete(actual.usuario);
+        await client.query('DELETE FROM conectados_ahora WHERE usuario = $1', [actual.usuario]).catch(() => {});
         await client.query('DELETE FROM revisiones WHERE usuario = $1', [actual.usuario]);
         await client.query('UPDATE tiempo_reserva SET fin = NOW(), visto = NOW() WHERE usuario = $1 AND fin IS NULL', [actual.usuario]);
         await registrar(actual, 'logout', 'sesion', actual.usuario, '', '', 'Cierre de sesión');
@@ -1629,6 +1645,9 @@ http.createServer(async (req, res) => {
     }
 
     // Pestaña Empresas: solo en el panel central y solo para el programador (lo revisa el módulo).
+    if (url.startsWith('/api/oficina/')) {
+      return oficina.manejar(req, res, url, u, { json, leerCuerpo });
+    }
     if (url.startsWith('/api/central/')) {
       return central.manejar(req, res, url, u, { json, leerCuerpo });
     }
@@ -1647,6 +1666,13 @@ http.createServer(async (req, res) => {
           nombre: u.nombre, grupo: u.grupo,
           ultimoLatido: ahora, ultimaActividad: previa.ultimaActividad
         });
+      }
+      const p = presencia.get(u.usuario);
+      if (p) {
+        const estado = ahora - p.ultimaActividad > MINUTOS_AUSENTE * 60000 ? 'ausente' : 'en linea';
+        client.query(`INSERT INTO conectados_ahora (usuario, nombre, grupo, estado, visto) VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT (usuario) DO UPDATE SET nombre = EXCLUDED.nombre, grupo = EXCLUDED.grupo, estado = EXCLUDED.estado, visto = NOW()`,
+          [u.usuario, u.nombre || '', u.grupo || '', estado]).catch(() => {});
       }
       return json(res, 200, { ok: true });
     }

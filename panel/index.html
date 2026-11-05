@@ -224,6 +224,12 @@
   .bandeja-item small { display: block; color: var(--texto-suave); font-size: 11px; margin-top: 3px; font-weight: normal; }
   .bandeja-vacia { padding: 24px; text-align: center; color: var(--texto-suave); font-size: 13px; }
 
+  /* Dentro de la Oficina: solo la ventana de Herramientas, a pantalla completa y sin fondo oscuro. */
+  body.incrustado #app, body.incrustado .chat-flotante, body.incrustado #pantallaLogin { display: none !important; }
+  body.incrustado .overlay { position: static; opacity: 1; pointer-events: auto; background: none; padding: 0; display: block; }
+  body.incrustado .caja-ventana { width: 100%; max-height: none; box-shadow: none; border-radius: 0; padding: 14px 16px; }
+  body.incrustado [data-accion="cerrar"] { display: none; }
+  body.incrustado-empresas .barra-ventana { display: none; }
   .caja-ventana { background: var(--tarjeta); color: var(--texto); width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
   .barra-ventana { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .barra-ventana h2 { margin: 0; font-size: 18px; }
@@ -742,8 +748,22 @@ function mostrarClave(forzado) {
   document.getElementById('formClave').reset();
 }
 
+// En el panel central, el programador trabaja en la Oficina (/oficina). Empresas y Herramientas se muestran
+// dentro de la Oficina con este mismo panel en modo "incrustado" (?incrustado=empresas | herramientas).
+const INCRUSTADO = ['empresas', 'herramientas'].includes(new URLSearchParams(location.search).get('incrustado'))
+  ? new URLSearchParams(location.search).get('incrustado') : '';
+
 function mostrarApp(s) {
   sesionActual = s;
+  if (s.central && s.grupo === 'Programador' && !INCRUSTADO) { location.replace('/oficina'); return; }
+  if (INCRUSTADO) {
+    if (Array.isArray(s.sedes) && s.sedes.length) EMPRESAS = s.sedes;
+    document.getElementById('pantallaLogin').style.display = 'none';
+    document.getElementById('pantallaClave').style.display = 'none';
+    document.body.classList.add('incrustado', 'incrustado-' + INCRUSTADO);
+    abrirHerramientas(INCRUSTADO === 'empresas' ? 'empresas' : 'usuarios');
+    return;
+  }
   document.getElementById('pantallaLogin').style.display = 'none';
   document.getElementById('pantallaClave').style.display = 'none';
   document.getElementById('app').style.display = 'block';
@@ -2187,6 +2207,7 @@ function abrirVentana(html) {
 }
 
 function cerrarVentana() {
+  if (INCRUSTADO) return;
   document.getElementById('overlay').classList.remove('abierto');
   document.getElementById('caja').innerHTML = '';
 }

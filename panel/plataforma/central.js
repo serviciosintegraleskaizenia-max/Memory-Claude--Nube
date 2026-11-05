@@ -747,5 +747,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     }
   }
 
-  return { activo, preparar, iniciar, manejar };
+  // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
+  const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
+  return { activo, preparar, iniciar, manejar, ayudantes };
 };
