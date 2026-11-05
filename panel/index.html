@@ -2396,7 +2396,7 @@ function tarjetaEmpresa(e) {
     </div>
     ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
     <p class="emp-info">${e.externa ? 'Correo e IA: en su propio config.js' : 'Correo: ' + esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
-      · IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
+      ${e.externa ? '' : `· IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'}`} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
       ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor && e.motor.mensaje ? '<br>Motor: ' + esc(e.motor.mensaje) : ''}</p>
 
     <details><summary>Módulos contratados</summary>

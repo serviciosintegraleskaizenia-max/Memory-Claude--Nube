@@ -193,7 +193,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
       const resto = Math.max(0, pendientes.length - a.maximoPorCiclo);
       await client.query(`UPDATE motor_estado SET fin = NOW(), leidos = $1, nuevos = $2, con_error = $3, imagenes = $4, mensaje = $5 WHERE id = 1`,
         [cuenta.leidos, cuenta.nuevos, cuenta.con_error, cuenta.imagenes,
-          (a.sombra ? 'Modo sombra. ' : '') + `Revisados ${cuenta.leidos} correos; ${cuenta.nuevos} analizados${cuenta.con_error ? ` (${cuenta.con_error} con error)` : ''}${cuenta.en_espera ? `; ${cuenta.en_espera} en espera por fallos repetidos` : ''}${resto ? `; quedan ${resto} para la próxima vuelta` : ''}.`]);
+          (a.sombra ? 'Modo sombra. ' : '') + `Revisados ${cuenta.leidos} correos; ${cuenta.nuevos} nuevos analizados${cuenta.con_error ? ` (${cuenta.con_error} con error)` : ''}${cuenta.en_espera ? `; ${cuenta.en_espera} en espera por fallos repetidos` : ''}${resto ? `; quedan ${resto} para la próxima vuelta` : ''}.`]);
     } catch (e) {
       await client.query('UPDATE motor_estado SET fin = NOW(), mensaje = $1 WHERE id = 1', ['Error: ' + e.message.slice(0, 300)]).catch(() => {});
       await registrar(SISTEMA, 'motor_error', 'sistema', 'motor', '', '', e.message.slice(0, 300)).catch(() => {});
