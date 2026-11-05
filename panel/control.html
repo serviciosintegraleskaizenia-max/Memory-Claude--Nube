@@ -69,7 +69,77 @@
   tr.mejor td { font-weight: 700; }
   .mensaje { color: var(--tarde); padding: 30px; text-align: center; }
   details summary { cursor: pointer; font-size: 12px; color: var(--texto-suave); margin-top: 8px; }
+  /* ---------- En vivo, Reparto ahora y Actividad ---------- */
+  .titulo-vivo { display: flex; align-items: center; gap: 8px; }
+  .pulso { width: 9px; height: 9px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 0 rgba(22,163,74,.6); animation: pulso 2s infinite; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); } 70% { box-shadow: 0 0 0 8px rgba(22,163,74,0); } 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); } }
+  @media (prefers-reduced-motion: reduce) { .pulso { animation: none; } }
+  .personas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .persona { border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; background: var(--tarjeta); display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+  .persona.desconectado { opacity: .72; }
+  .persona-cabeza { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; font-size: 14px; }
+  .persona-nombre { flex: 1; min-width: 0; }
+  .persona-nombre strong { display: block; overflow-wrap: anywhere; line-height: 1.25; }
+  .persona-nombre small { color: var(--texto-suave); font-size: 12px; display: block; }
+  .estado { font-size: 12px; border-radius: 999px; padding: 2px 9px; font-weight: 600; white-space: nowrap; }
+  .estado.en-linea { background: #dcfce7; color: #166534; }
+  .estado.ausente { background: #fef3c7; color: #92400e; }
+  .estado.desconectado { background: var(--hover); color: var(--texto-suave); }
+  body.oscuro .estado.en-linea { background: #14532d; color: #bbf7d0; }
+  body.oscuro .estado.ausente { background: #451a03; color: #fde68a; }
+  .abierta { border-radius: 10px; padding: 9px 11px; background: #eff6ff; border: 1px solid #bfdbfe; }
+  body.oscuro .abierta { background: #172554; border-color: #1e3a8a; }
+  .abierta.tarde-caja { background: var(--tarde-fondo); border-color: var(--tarde); }
+  .abierta .que { font-size: 12px; color: var(--texto-suave); }
+  .abierta .cliente { font-weight: 700; font-size: 14px; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .abierta .datos { font-size: 12px; color: var(--texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reloj { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+  .reloj b { font-variant-numeric: tabular-nums; font-size: 14px; }
+  .barrita { flex: 1; height: 6px; background: var(--borde); border-radius: 6px; overflow: hidden; }
+  .barrita i { display: block; height: 6px; background: #2563eb; border-radius: 6px; }
+  .barrita i.lleno { background: #16a34a; }
+  .barrita i.rojo { background: var(--tarde); }
+  .libre { font-size: 13px; color: var(--texto-suave); padding: 8px 10px; border: 1px dashed var(--borde); border-radius: 10px; }
+  .cifras { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; }
+  .cifras div { background: var(--hover); border-radius: 8px; padding: 5px 2px; }
+  .cifras b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cifras span { font-size: 10.5px; color: var(--texto-suave); white-space: nowrap; }
+  .ultimas { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+  .ultimas li { display: flex; gap: 6px; padding: 3px 0; border-top: 1px solid var(--borde); min-width: 0; }
+  .ultimas li .hora { color: var(--texto-suave); font-variant-numeric: tabular-nums; flex: none; }
+  .ultimas li .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reparto-cabeza { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600; }
+  .chip.si { background: #dcfce7; color: #166534; }
+  .chip.no { background: var(--tarde-fondo); color: var(--tarde-texto); }
+  .chip.info { background: var(--hover); color: var(--texto); font-weight: 500; }
+  body.oscuro .chip.si { background: #14532d; color: #bbf7d0; }
+  .toca { background: #fef9c3; color: #854d0e; border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+  body.oscuro .toca { background: #422006; color: #fde68a; }
+  .editor-reparto { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; margin-top: 10px; display: none; }
+  .editor-reparto.abierto { display: block; }
+  .editor-reparto label { font-size: 13px; display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+  .editor-reparto input[type=number] { width: 70px; padding: 5px 7px; border: 1px solid var(--borde); border-radius: 6px; background: var(--tarjeta); color: var(--texto); }
+  .editor-reparto select { padding: 6px 8px; border: 1px solid var(--borde); border-radius: 6px; background: var(--tarjeta); color: var(--texto); }
+  .linea-tiempo { list-style: none; margin: 0; padding: 0; }
+  .linea-tiempo .hora-grupo { font-size: 12px; font-weight: 700; color: var(--texto-suave); padding: 10px 0 4px; text-transform: uppercase; letter-spacing: .4px; }
+  .evento { display: grid; grid-template-columns: 70px 34px 1fr; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--borde); }
+  .evento .hora { font-size: 12px; color: var(--texto-suave); font-variant-numeric: tabular-nums; padding-top: 6px; white-space: nowrap; }
+  #vivoActividad { max-height: 620px; overflow-y: auto; padding-right: 4px; }
+  .evento .icono { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: var(--hover); }
+  .evento .frase { font-size: 13.5px; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+  .evento .frase small { display: block; color: var(--texto-suave); font-size: 12px; }
+  .evento.alerta .icono { background: var(--tarde-fondo); }
+  .evento.bien .icono { background: #dcfce7; }
+  body.oscuro .evento.bien .icono { background: #14532d; }
+  .filtros-act { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; align-items: center; }
+  .filtros-act select, .filtros-act input { padding: 6px 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); font-size: 13px; }
+  .mas { text-align: center; margin-top: 10px; }
   @media (max-width: 600px) {
+    .personas { grid-template-columns: 1fr; }
+    .cifras span { font-size: 9.5px; }
+    .cifras b { font-size: 14px; }
     main { padding: 12px 16px 30px; }
     header { padding: 12px 16px; }
     .rejilla { grid-template-columns: 1fr; }
@@ -79,7 +149,7 @@
 <body>
 <header>
   <div>
-    <h1>Control de asesores</h1>
+    <h1>Control</h1>
     <p id="subtitulo">Tiempo por reserva, reservas registradas y entradas de correo</p>
   </div>
   <div>
@@ -88,6 +158,36 @@
   </div>
 </header>
 <main>
+  <div class="seccion" id="secVivo">
+    <div class="cabeza">
+      <div><h2 class="titulo-vivo"><span class="pulso" aria-hidden="true"></span>En vivo ahora</h2>
+      <p class="sub">Qué está haciendo cada persona en este momento. Se actualiza solo cada 10 segundos.</p></div>
+    </div>
+    <div id="vivoPersonas"><div class="vacio">Cargando…</div></div>
+  </div>
+  <div class="seccion" id="secReparto">
+    <h2>🎯 Reparto de reservas ahora</h2>
+    <p class="sub">A quién le van llegando las reservas nuevas. Solo reciben las personas en línea.</p>
+    <div id="vivoReparto"><div class="vacio">Cargando…</div></div>
+  </div>
+  <div class="seccion" id="secActividad">
+    <div class="cabeza">
+      <div><h2>📋 Actividad</h2><p class="sub">Todo lo que se hizo en el día, explicado en palabras. Lo más reciente arriba.</p></div>
+      <div class="filtros-act">
+        <input type="date" id="actDia" title="Día">
+        <select id="actUsuario" title="Persona"><option value="">Todas las personas</option></select>
+        <select id="actTipo" title="Tipo">
+          <option value="">Todo</option>
+          <option value="reservas">Reservas</option>
+          <option value="correos">Correos</option>
+          <option value="reparto">Reparto</option>
+          <option value="accesos">Entradas y salidas</option>
+          <option value="sistema">Sistema y ajustes</option>
+        </select>
+      </div>
+    </div>
+    <div id="vivoActividad"><div class="vacio">Cargando…</div></div>
+  </div>
   <div id="contenido"><div class="vacio">Cargando…</div></div>
 </main>
 <div class="tooltip" id="tooltip"></div>
@@ -191,16 +291,9 @@ function pintar(desde, hasta) {
     ${seccionMejores(d)}
 
     <div class="seccion">
-      <h2>Trabajando ahora</h2>
-      <p class="sub">Reservas abiertas en este momento. En rojo las que pasan de ${limiteMin} minutos.</p>
-      ${tablaEnCurso(d)}
-    </div>
-
-    <div class="seccion">
       <h2>Por asesor</h2>
       <p class="sub">Tiempo = solo el tiempo con reservas abiertas. Promedio y máximo se calculan sobre las reservas que el asesor registró en el período.</p>
       ${tablaUsuarios(d)}
-      ${tablaCupos(d)}
     </div>
 
     <div class="seccion">
@@ -514,7 +607,7 @@ document.addEventListener('click', e => {
   }
   if (e.target.id === 'btnVer') return cargar();
 });
-document.getElementById('btnActualizar').addEventListener('click', cargar);
+document.getElementById('btnActualizar').addEventListener('click', () => { cargar(); cargarVivo(); });
 document.addEventListener('change', e => {
   if (e.target.id === 'mesSel') {
     mesElegido = e.target.value;
@@ -528,7 +621,282 @@ window.addEventListener('resize', () => {
 });
 document.getElementById('btnPanel').addEventListener('click', () => { window.location.href = '/'; });
 
+/* ---------- En vivo, Reparto ahora y Actividad ---------- */
+
+let vivo = null;
+let vivoRecibido = 0;
+let editandoReparto = false;
+let actLimite = 80;
+const COLORES = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4f46e5', '#65a30d', '#c2410c'];
+
+function colorDe(usuario) {
+  let h = 0;
+  for (const c of String(usuario)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return COLORES[h % COLORES.length];
+}
+function iniciales(nombre) {
+  return String(nombre || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+function horaDe(iso) {
+  return new Date(iso).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', timeZone: ZONA });
+}
+function haceCuanto(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'hace un momento';
+  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+  return `hace ${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')} min`;
+}
+function reloj(seg) {
+  const s = Math.max(0, Math.round(seg));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
+}
+function textoEstado(e) {
+  return e === 'en linea' ? '🟢 En línea' : e === 'ausente' ? '🟡 Ausente' : '⚪ Desconectado';
+}
+function claseEstado(e) { return e === 'en linea' ? 'en-linea' : e === 'ausente' ? 'ausente' : 'desconectado'; }
+function textoReserva(r, id) {
+  const partes = [];
+  if (id) partes.push('#' + id);
+  if (r && (r.cliente || r.asunto)) partes.push(r.cliente || r.asunto);
+  return partes.join(' · ');
+}
+function corto(t, n) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+const ESTADOS_BONITOS = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', descartada: 'Descartada', historico: 'Histórico' };
+function estadoBonito(e) { return ESTADOS_BONITOS[e] || e || '—'; }
+
+// Convierte un registro de la auditoría en una frase clara con su ícono.
+function frase(x, sinQuien) {
+  const quien = sinQuien ? '' : `<strong>${esc(x.nombre || x.usuario)}</strong> `;
+  const res = x.reserva;
+  const id = x.entidad === 'reserva' ? x.entidad_id : '';
+  const cual = `<strong>${esc(textoReserva(res, id) || ('#' + id))}</strong>`;
+  const extra = res && res.agencia ? `Agencia: ${esc(res.agencia)}` : '';
+  const R = (icono, texto, nota, tipo, clase) => ({ icono, texto, nota: nota || '', tipo, clase: clase || '' });
+  switch (x.accion) {
+    case 'abrir_reserva': return R('📂', `${quien}abrió la reserva ${cual}`, extra, 'reservas');
+    case 'cerrar_reserva': return R('📁', `${quien}cerró la reserva ${cual}`, '', 'reservas');
+    case 'cambiar_estado':
+      if (x.nuevo === 'registrada') return R('✅', `${quien}registró la reserva ${cual}`, extra, 'reservas', 'bien');
+      return R('🔄', `${quien}cambió ${cual} de <em>${esc(estadoBonito(x.anterior))}</em> a <em>${esc(estadoBonito(x.nuevo))}</em>`, extra, 'reservas');
+    case 'editar_agencia': return R('✏️', `${quien}corrigió la agencia de ${cual}`, `${esc(x.anterior || '(vacía)')} → ${esc(x.nuevo)}`, 'reservas');
+    case 'pedir_reanalisis': return R('🤖', `${quien}pidió a la IA leer otra vez ${cual}`, '', 'reservas');
+    case 'responder_correo': return R('✉️', `${quien}respondió el correo de ${cual}`, `Para: ${esc(x.nuevo)}${x.detalle ? ' · ' + esc(x.detalle) : ''}`, 'correos', 'bien');
+    case 'enviar_correo': return R('📤', `${quien}envió un correo nuevo a <strong>${esc(x.entidad_id)}</strong>`, `Asunto: ${esc(x.nuevo)}`, 'correos', 'bien');
+    case 'guardar_copia': return R('💾', `${quien}guardó una copia del correo de ${cual}`, '', 'correos');
+    case 'descargar_adjunto': return R('📎', `${quien}descargó un adjunto de ${cual}`, esc(x.detalle), 'correos');
+    case 'abrir_adjunto': return R('📎', `${quien}abrió un adjunto de ${cual}`, esc(x.detalle), 'correos');
+    case 'marcar_leido_fallido': return R('⚠️', `No se pudo marcar un correo como leído`, esc(x.detalle), 'correos', 'alerta');
+    case 'marcar_leido': return R('👁️', `${quien}marcó un correo como leído`, esc(x.detalle), 'correos');
+    case 'reparto_asignada': return R('🎯', `El reparto le dio a <strong>${esc(x.nombreNuevo || x.nuevo)}</strong> la reserva ${cual}`, extra, 'reparto');
+    case 'reparto_devuelta': return R('↩️', `Una reserva de <strong>${esc(x.nombreAnterior || x.anterior)}</strong> volvió al reparto`, esc(x.detalle), 'reparto');
+    case 'reasignar_reserva':
+      if (!x.nuevo) return R('👥', `${quien}le quitó ${cual} a <strong>${esc(x.nombreAnterior || x.anterior)}</strong>`, 'Vuelve a repartirse', 'reparto');
+      return R('👥', `${quien}pasó ${cual} a <strong>${esc(x.nombreNuevo || x.nuevo)}</strong>`, x.anterior ? `Antes la tenía ${esc(x.nombreAnterior || x.anterior)}` : '', 'reparto');
+    case 'cambiar_reparto': return R('⚙️', `${quien}cambió el reparto: <strong>${esc(x.nuevo)}</strong>`, esc(x.detalle), 'reparto');
+    case 'reserva_pasada_de_tiempo': return R('⏰', `La reserva ${cual} pasó del tiempo máximo (${esc(x.nuevo)})`, esc(x.detalle), 'reservas', 'alerta');
+    case 'modificacion_recibida': return R('📨', `Llegó un cambio para la reserva ${cual}`, x.anterior ? `Estaba en ${esc(estadoBonito(x.anterior))}; pasa a Actualizada` : '', 'reservas');
+    case 'login': return R('🟢', `${quien}entró al panel`, '', 'accesos');
+    case 'logout': return R('⚪', `${quien}salió del panel`, '', 'accesos');
+    case 'login_fallido': return R('⛔', `Intento de entrada fallido con el usuario <strong>${esc(x.usuario)}</strong>`, 'Usuario o contraseña incorrectos', 'accesos', 'alerta');
+    case 'login_bloqueado': return R('🔒', `Intento de entrada bloqueado (<strong>${esc(x.usuario)}</strong>)`, esc(x.detalle), 'accesos', 'alerta');
+    case 'login_rechazado': return R('🚫', `${quien}no pudo entrar`, esc(x.detalle), 'accesos', 'alerta');
+    case 'cambiar_clave_propia': return R('🔑', `${quien}cambió su contraseña`, '', 'accesos');
+    case 'exportar': return R('📊', `${quien}descargó un Excel de reservas`, esc(x.detalle), 'sistema');
+    case 'mensaje_enviado': return R('💬', `${quien}envió un mensaje por el chat`, '', 'sistema');
+    case 'editar_empresa': return R('🏢', `${quien}cambió los datos de la empresa`, '', 'sistema');
+    case 'crear_usuario': return R('👤', `${quien}creó el usuario <strong>${esc(x.entidad_id)}</strong>`, '', 'sistema');
+    case 'eliminar_usuario': return R('🗑️', `${quien}eliminó un usuario`, esc(x.detalle), 'sistema', 'alerta');
+    case 'editar_usuario': return R('👤', `${quien}editó el usuario <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'activar_usuario': return R('👤', `${quien}activó a <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'desactivar_usuario': return R('👤', `${quien}desactivó a <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'restablecer_clave': return R('🔑', `${quien}restableció la contraseña de <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'alerta_falla': return R('⚠️', `Alerta del sistema: ${esc(x.detalle)}`, '', 'sistema', 'alerta');
+    case 'alerta_resuelta': return R('✔️', `Se resolvió una alerta`, esc(x.detalle), 'sistema', 'bien');
+    case 'motor_error': return R('⚠️', `El lector de correos tuvo un problema`, esc(x.detalle), 'sistema', 'alerta');
+    case 'panel_reiniciado': return R('🔁', `El panel se reinició`, esc(x.detalle), 'sistema');
+    default: return R('•', `${quien ? quien.trim() + ': ' : ''}${esc(String(x.accion).replace(/_/g, ' '))}`, esc([x.entidad_id, x.detalle].filter(Boolean).join(' · ')), 'sistema');
+  }
+}
+
+async function cargarVivo() {
+  const dia = document.getElementById('actDia').value;
+  const r = await api('/api/control/vivo' + (dia ? '?dia=' + encodeURIComponent(dia) : ''));
+  if (!r.ok) {
+    const msg = `<div class="mensaje">${esc(r.status === 401 ? 'Tu sesión terminó. Entra de nuevo en el panel.' : (r.data.error || 'No se pudo cargar.'))}</div>`;
+    document.getElementById('vivoPersonas').innerHTML = msg;
+    return;
+  }
+  vivo = r.data;
+  vivoRecibido = Date.now();
+  if (!document.getElementById('actDia').value) document.getElementById('actDia').value = vivo.dia;
+  document.getElementById('actDia').max = vivo.hoy;
+  pintarPersonas();
+  if (!editandoReparto) pintarReparto();
+  pintarActividad();
+}
+
+function pintarPersonas() {
+  const v = vivo;
+  const caja = document.getElementById('vivoPersonas');
+  if (!v.personas.length) { caja.innerHTML = '<div class="vacio">No hay nadie conectado ni ha trabajado nadie hoy todavía.</div>'; return; }
+  const enLinea = v.personas.filter(p => p.estado !== 'desconectado').length;
+  caja.innerHTML = `<p class="sub" style="margin-top:-4px">${enLinea === 1 ? '1 persona conectada' : enLinea + ' personas conectadas'} ahora${v.personas.length - enLinea ? ` · ${v.personas.length - enLinea === 1 ? '1 trabajó hoy y ya no está conectada' : (v.personas.length - enLinea) + ' trabajaron hoy y ya no están conectadas'}` : ''}. Recibidas = reservas que le dio el reparto hoy · Correos = respuestas y correos enviados hoy · Tiempo = con reservas abiertas hoy.</p>
+  <div class="personas">${v.personas.map(p => {
+    const h = p.hoy;
+    const abiertas = p.abiertas.length ? p.abiertas.map(a => `
+      <div class="abierta" data-limite-caja="${a.segundos}">
+        <div class="que">📂 ${p.estado === 'desconectado' ? 'Dejó abierta (queda apartada unos minutos)' : 'Revisando ahora'}${a.categoria === 'MODIFICACION' ? ' un <strong>cambio</strong>' : ''} · ${esc(estadoBonito(a.estado))}</div>
+        <div class="cliente" title="${esc(a.cliente || a.asunto)}">#${a.id} · ${esc(a.cliente || a.asunto || 'Sin nombre')}</div>
+        <div class="datos" title="${esc([a.agencia, a.servicio, a.fecha_servicio, a.buzon].filter(Boolean).join(' · '))}">${esc([a.agencia && 'Agencia: ' + a.agencia, a.servicio, a.fecha_servicio, a.buzon && 'Llegó a: ' + a.buzon].filter(Boolean).join(' · ') || corto(a.asunto, 80))}</div>
+        <div class="reloj">⏱ <b data-seg="${a.segundos}">${reloj(a.segundos)}</b>
+          <span class="barrita"><i data-barra="${a.segundos}" style="width:${Math.min(100, 100 * a.segundos / v.limite)}%"></i></span>
+          <span style="color:var(--texto-suave)">de ${Math.round(v.limite / 60)} min</span></div>
+        <div class="datos" style="margin-top:3px">Abierta desde las ${esc(horaDe(a.desde))}</div>
+      </div>`).join('')
+      : `<div class="libre">${p.estado === 'desconectado' ? `Desconectada${h.ultima ? ' · última actividad ' + esc(haceCuanto(h.ultima)) : ''}` : `Sin reserva abierta${h.pendientes ? ` · tiene <strong>${h.pendientes}</strong> pendiente(s) por atender` : ''}`}</div>`;
+    return `<div class="persona ${claseEstado(p.estado)}">
+      <div class="persona-cabeza">
+        <div class="avatar" style="background:${colorDe(p.usuario)}">${esc(iniciales(p.nombre))}</div>
+        <div class="persona-nombre"><strong>${esc(p.nombre)}</strong><small>${esc(p.grupo)}${h.primera ? ' · desde las ' + esc(horaDe(h.primera)) : ''}</small></div>
+        <span class="estado ${claseEstado(p.estado)}">${textoEstado(p.estado)}</span>
+      </div>
+      ${abiertas}
+      <div class="cifras">
+        <div><b>${h.recibidas}${h.cupo ? `<span style="font-size:11px;font-weight:400">/${h.cupo}</span>` : ''}</b><span>Recibidas</span></div>
+        <div><b>${h.registradas}</b><span>Registradas</span></div>
+        <div><b>${h.respuestas}</b><span>Correos</span></div>
+        <div><b>${h.pendientes}</b><span>Pendientes</span></div>
+        <div><b>${h.segundos >= 3600 ? horas(h.segundos) : Math.round(h.segundos / 60) + ' min'}</b><span>Tiempo</span></div>
+      </div>
+      ${p.ultimas.length ? `<ul class="ultimas">${p.ultimas.map(x => { const f = frase(x, true); const t = f.texto.replace(/^[a-záéíóú]/, c => c.toUpperCase()); return `<li><span class="hora">${esc(horaDe(x.fecha))}</span><span>${f.icono}</span><span class="txt" title="${esc(t.replace(/<[^>]+>/g, ''))}">${t}</span></li>`; }).join('')}</ul>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+  tic();
+}
+
+function pintarReparto() {
+  const r = vivo.reparto;
+  const caja = document.getElementById('vivoReparto');
+  const modoTexto = r.modo === 'cupos' ? 'Por cupos diarios' : 'Automático (al que tenga menos pendientes)';
+  const nombreSig = r.siguiente ? (r.personas.find(x => x.usuario === r.siguiente) || {}).nombre || r.siguiente : '';
+  const filas = r.personas.map(x => {
+    const pct = x.cupo ? Math.min(100, Math.round(100 * x.hoy / x.cupo)) : 0;
+    return `<tr>
+      <td><span class="avatar" style="display:inline-grid;width:24px;height:24px;font-size:11px;vertical-align:middle;margin-right:6px;background:${colorDe(x.usuario)}">${esc(iniciales(x.nombre))}</span>${esc(x.nombre)}${r.activo && x.usuario === r.siguiente ? '<span class="toca">le toca la próxima</span>' : ''}</td>
+      <td><span class="estado ${claseEstado(x.estado)}">${textoEstado(x.estado)}</span></td>
+      <td class="num">${x.pendientes}</td>
+      <td class="num">${x.hoy}</td>
+      ${r.modo === 'cupos' ? `<td>${x.cupo ? `<div style="display:flex;align-items:center;gap:8px"><span class="barrita" style="width:120px;flex:none"><i class="${x.hoy >= x.cupo ? 'lleno' : ''}" style="width:${pct}%"></i></span>${x.hoy} / ${x.cupo}${x.hoy >= x.cupo ? ' ✔' : ''}</div>` : '<span style="color:var(--texto-suave)">Sin cupo</span>'}</td>` : ''}
+    </tr>`;
+  }).join('');
+  caja.innerHTML = `
+    <div class="reparto-cabeza">
+      <span class="chip ${r.activo ? 'si' : 'no'}">${r.activo ? '● Encendido' : '● Apagado'}</span>
+      <span class="chip info">${esc(modoTexto)}</span>
+      <span class="chip info" title="Reservas abiertas que no tienen dueño (llegaron con el reparto apagado o antes de encenderlo): las ve todo el equipo">${r.sinAsignar} sin dueño</span>
+      ${r.activo && nombreSig ? `<span class="chip info">Próxima para: <strong>${esc(nombreSig)}</strong></span>` : ''}
+      ${r.activo && !r.siguiente ? '<span class="chip no">Nadie en línea para recibir</span>' : ''}
+      ${r.todosLlenos ? '<span class="chip info">Todos llegaron a su cupo: ahora va al que tenga menos pendientes</span>' : ''}
+      ${r.puedeCambiar ? '<button class="btn-sec" id="btnEditarReparto" style="margin-left:auto">Cambiar reparto</button>' : ''}
+    </div>
+    ${r.personas.length ? `<div class="tabla-wrap"><table>
+      <thead><tr><th>Persona</th><th>Estado</th><th class="num">Pendientes ahora</th><th class="num">Recibidas hoy</th>${r.modo === 'cupos' ? '<th>Cupo de hoy</th>' : ''}</tr></thead>
+      <tbody>${filas}</tbody></table></div>`
+      : '<div class="vacio">Nadie tiene el permiso "Recibir reservas".</div>'}
+    ${r.puedeCambiar ? `<div class="editor-reparto" id="editorReparto">
+      <div style="margin-bottom:10px">
+        <label><input type="checkbox" id="rActivo" ${r.activo ? 'checked' : ''}> Reparto encendido</label>
+        <label>Modo <select id="rModo">
+          <option value="automatico" ${r.modo !== 'cupos' ? 'selected' : ''}>Automático: al que tenga menos pendientes</option>
+          <option value="cupos" ${r.modo === 'cupos' ? 'selected' : ''}>Por cupos diarios</option>
+        </select></label>
+      </div>
+      <div id="rCupos" style="display:${r.modo === 'cupos' ? 'block' : 'none'}">
+        <p class="sub">Cuántas reservas por día recibe cada persona. 0 = solo recibe cuando todos llegaron a su cupo.</p>
+        ${r.personas.map(x => `<label>${esc(x.nombre)} <input type="number" min="0" max="1000" data-cupo="${esc(x.usuario)}" value="${x.cupo}"></label>`).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn" id="btnGuardarReparto">Guardar</button>
+        <button class="btn-sec" id="btnCancelarReparto">Cancelar</button>
+        <span id="rMensaje" style="font-size:13px;align-self:center"></span>
+      </div>
+    </div>` : ''}`;
+}
+
+function pintarActividad() {
+  const caja = document.getElementById('vivoActividad');
+  const sel = document.getElementById('actUsuario');
+  if (vivo.actividad === null) {
+    document.getElementById('secActividad').style.display = 'none';
+    return;
+  }
+  const elegido = sel.value;
+  sel.innerHTML = '<option value="">Todas las personas</option>' + vivo.usuarios.map(x => `<option value="${esc(x.usuario)}" ${x.usuario === elegido ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
+  const tipo = document.getElementById('actTipo').value;
+  const lista = vivo.actividad.map(x => ({ x, f: frase(x) }))
+    .filter(({ x, f }) => (!elegido || x.usuario === elegido || x.nuevo === elegido || x.anterior === elegido) && (!tipo || f.tipo === tipo));
+  if (!lista.length) { caja.innerHTML = '<div class="vacio">No hay actividad con estos filtros.</div>'; return; }
+  let html = '<ul class="linea-tiempo">';
+  let horaPrevia = '';
+  for (const { x, f } of lista.slice(0, actLimite)) {
+    const hora = new Date(x.fecha).toLocaleTimeString('es-DO', { hour: 'numeric', timeZone: ZONA });
+    if (hora !== horaPrevia) { html += `<li class="hora-grupo">${esc(hora.replace(/\s/g, ' '))}</li>`; horaPrevia = hora; }
+    html += `<li class="evento ${f.clase}"><span class="hora">${esc(horaDe(x.fecha))}</span><span class="icono">${f.icono}</span>
+      <span class="frase">${f.texto}${f.nota ? `<small>${f.nota}</small>` : ''}</span></li>`;
+  }
+  html += '</ul>';
+  if (lista.length > actLimite) html += `<div class="mas"><button class="btn-sec" id="btnMasActividad">Ver más (${lista.length - actLimite} más)</button></div>`;
+  caja.innerHTML = html;
+}
+
+// Relojes en vivo: avanzan cada segundo sin pedir nada al servidor.
+function tic() {
+  if (!vivo) return;
+  const extra = (Date.now() - vivoRecibido) / 1000;
+  document.querySelectorAll('[data-seg]').forEach(b => { b.textContent = reloj(Number(b.dataset.seg) + extra); });
+  document.querySelectorAll('[data-barra]').forEach(i => {
+    const s = Number(i.dataset.barra) + extra;
+    i.style.width = Math.min(100, 100 * s / vivo.limite) + '%';
+    i.classList.toggle('rojo', s > vivo.limite);
+  });
+  document.querySelectorAll('[data-limite-caja]').forEach(c => c.classList.toggle('tarde-caja', Number(c.dataset.limiteCaja) + extra > vivo.limite));
+}
+
+document.addEventListener('click', async e => {
+  if (e.target.id === 'btnEditarReparto') {
+    editandoReparto = document.getElementById('editorReparto').classList.toggle('abierto');
+    return;
+  }
+  if (e.target.id === 'btnCancelarReparto') { editandoReparto = false; return pintarReparto(); }
+  if (e.target.id === 'btnMasActividad') { actLimite += 150; return pintarActividad(); }
+  if (e.target.id === 'btnGuardarReparto') {
+    const cupos = {};
+    document.querySelectorAll('[data-cupo]').forEach(i => { cupos[i.dataset.cupo] = Number(i.value) || 0; });
+    e.target.disabled = true;
+    try {
+      const r = await fetch('/api/reparto', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: document.getElementById('rActivo').checked, modo: document.getElementById('rModo').value, cupos }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { document.getElementById('rMensaje').textContent = d.error || 'No se pudo guardar.'; e.target.disabled = false; return; }
+      editandoReparto = false;
+      await cargarVivo();
+    } catch (err) {
+      document.getElementById('rMensaje').textContent = 'No hay conexión con el servidor.';
+      e.target.disabled = false;
+    }
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'rModo') document.getElementById('rCupos').style.display = e.target.value === 'cupos' ? 'block' : 'none';
+  if (e.target.id === 'actUsuario' || e.target.id === 'actTipo') { actLimite = 80; pintarActividad(); }
+  if (e.target.id === 'actDia') { actLimite = 80; cargarVivo(); }
+});
+
 try { if (localStorage.getItem('tema') === 'oscuro') document.body.classList.add('oscuro'); } catch (e) {}
+cargarVivo();
+setInterval(() => { if (!document.hidden) cargarVivo(); }, 10 * 1000);
+setInterval(tic, 1000);
 cargar();
 // "Trabajando ahora" se refresca solo cada minuto.
 setInterval(() => { if (!document.hidden) cargar(); }, 60 * 1000);

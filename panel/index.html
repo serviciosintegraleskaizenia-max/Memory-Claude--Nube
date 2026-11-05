@@ -109,6 +109,7 @@
   .franja-pago-vencido { background: #fee2e2; color: #7f1d1d; border-color: #fca5a5; }
   body.oscuro .franja { filter: brightness(0.85); }
   .btn-peligro { background: #dc2626; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  .btn-mini.btn-mini-peligro { color: #dc2626; border-color: #fca5a5; }
   .btn-peligro:disabled { opacity: 0.6; cursor: default; }
   .campo-error { border: 2px solid #dc2626 !important; background: #fef2f2 !important; }
   .emp-subnav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -3193,6 +3194,7 @@ function tablaUsuarios() {
         <button class="btn-mini" data-accion="editar-usuario" data-id="${x.id}">Editar</button>
         ${bloqueoClave ? '' : `<button class="btn-mini" data-accion="clave" data-id="${x.id}">Restablecer clave</button>`}
         ${esProg ? '' : `<button class="btn-mini" data-accion="activo" data-id="${x.id}" data-activo="${x.activo}">${x.activo ? 'Desactivar' : 'Activar'}</button>`}
+        ${esProg || soyYo || sesionActual.grupo !== 'Programador' ? '' : `<button class="btn-mini btn-mini-peligro" data-accion="eliminar-usuario" data-id="${x.id}">Eliminar</button>`}
       </td>
     </tr>`;
   }).join('');
@@ -3295,6 +3297,21 @@ async function guardarReset(id) {
   const r = await api('/api/usuarios/clave', { id, clave: val('rClave') });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo restablecer.', false);
   await abrirHerramientas('usuarios', 'Contraseña restablecida. El usuario deberá cambiarla al entrar.');
+}
+
+async function eliminarUsuario(id) {
+  const x = listaUsuarios.find(v => String(v.id) === String(id));
+  if (!x) return;
+  const escrito = prompt(`Eliminar a ${x.nombre} (${x.usuario}) para siempre.\n\n` +
+    `• Sus reservas sin terminar vuelven al reparto para otra persona.\n` +
+    `• La auditoría y las reservas que ya trabajó se conservan con su nombre.\n` +
+    `• No se puede deshacer (si te equivocas, créalo de nuevo).\n\n` +
+    `Para confirmar escribe su usuario: ${x.usuario}`);
+  if (escrito === null) return;
+  const r = await api('/api/usuarios/eliminar', { id: x.id, confirmar: escrito });
+  if (!r.ok) return alert(r.data.error || 'No se pudo eliminar el usuario.');
+  await abrirHerramientas('usuarios', `Usuario ${x.usuario} eliminado.` +
+    (r.data.devueltas ? ` ${r.data.devueltas} reserva(s) volvieron al reparto.` : ''));
 }
 
 async function cambiarActivo(id, estabaActivo) {
@@ -3406,6 +3423,7 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'editar-usuario') return vistaEditarUsuario(id);
   if (a === 'clave') return vistaReset(id);
   if (a === 'activo') return cambiarActivo(id, b.dataset.activo === 'true');
+  if (a === 'eliminar-usuario') return eliminarUsuario(id);
   if (a === 'crear-usuario') return crearUsuario();
   if (a === 'guardar-usuario') return guardarUsuario(id);
   if (a === 'guardar-clave') return guardarReset(id);

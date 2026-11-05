@@ -1614,7 +1614,7 @@ http.createServer(async (req, res) => {
 
     // Módulos que la empresa no tiene contratados.
     const mods = await cuenta.modulos();
-    if ((!mods.chat && url.startsWith('/api/chat/')) || (!mods.control && url === '/api/control') ||
+    if ((!mods.chat && url.startsWith('/api/chat/')) || (!mods.control && (url === '/api/control' || url.startsWith('/api/control/'))) ||
         (!mods.reparto && (url === '/api/reparto' || url === '/api/reserva/asignar')) || (!mods.historial && url.startsWith('/api/historico'))) {
       return json(res, 403, { error: 'Este módulo no está activo en tu plan. Comunícate con Kaizen IA.' });
     }
@@ -2190,6 +2190,158 @@ http.createServer(async (req, res) => {
     }
 
     /* ---------- Hito 5: pantalla de control ---------- */
+
+    // Control en vivo: qué hace cada persona ahora, cómo va el reparto y la actividad del día en frases.
+    // Se pide cada pocos segundos; no toca las estadísticas pesadas de /api/control.
+    if (req.method === 'GET' && url === '/api/control/vivo') {
+      if (!puede('ver_control')) return json(res, 403, { error: 'No tienes permiso para ver la pantalla de control.' });
+      const p = new URL(req.url, 'http://localhost').searchParams;
+      const zona = ZONA_HORARIA;
+      const hoyDia = diaLocal(new Date().toISOString());
+      const dia = /^\d{4}-\d{2}-\d{2}$/.test(p.get('dia') || '') && p.get('dia') <= hoyDia ? p.get('dia') : hoyDia;
+      // Rango del día en la hora de RD, expresado en la hora del servidor (auditoria.fecha no guarda zona).
+      const rangoAud = (col, n) => `${col} >= (($${n}::date::timestamp AT TIME ZONE '${zona}') AT TIME ZONE current_setting('TimeZone'))
+        AND ${col} < ((($${n}::date + 1)::timestamp AT TIME ZONE '${zona}') AT TIME ZONE current_setting('TimeZone'))`;
+      const soyProg = u.grupo === 'Programador';
+      const todos = (await client.query('SELECT usuario, nombre, grupo, activo FROM usuarios')).rows;
+      const fichas = new Map(todos.map(x => [x.usuario, x]));
+      const esProg = usuario => (fichas.get(usuario) || {}).grupo === 'Programador';
+      const conectados = estadosConectados();
+      const lista = await receptores();
+      const recibe = new Set(lista.map(x => x.usuario));
+
+      // Reservas abiertas en pantalla ahora (ventana abierta) con su reloj.
+      await limpiarRevisiones();
+      const abiertas = (await client.query(
+        `SELECT v.reserva_id, v.usuario, v.desde, EXTRACT(EPOCH FROM (NOW() - v.desde))::int AS en_pantalla,
+                COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (COALESCE(t.fin, NOW()) - t.inicio))) FROM tiempo_reserva t
+                          WHERE t.reserva_id = v.reserva_id), 0)::int AS segundos,
+                c.nombre_cliente, c.asunto, c.agencia, c.categoria, c.estado, c.buzon, c.tipo_servicio, c.fecha_servicio
+         FROM revisiones v JOIN clasificacion c ON c.id = v.reserva_id`)).rows;
+      const abiertaDe = new Map();
+      for (const a of abiertas) (abiertaDe.get(a.usuario) || abiertaDe.set(a.usuario, []).get(a.usuario)).push(a);
+
+      // Números del día por persona.
+      const contar = async (sql, vals) => new Map((await client.query(sql, vals)).rows.map(x => [x.usuario, x.n]));
+      const recibidasHoy = await contar(
+        `SELECT usuario, COUNT(DISTINCT clave)::int AS n FROM asignaciones
+         WHERE asignado_en >= (date_trunc('day', NOW() AT TIME ZONE $1) AT TIME ZONE $1) GROUP BY usuario`, [zona]);
+      const registradasHoy = await contar(
+        `SELECT a.usuario, COUNT(DISTINCT a.entidad_id)::int AS n FROM auditoria a
+         WHERE a.accion = 'cambiar_estado' AND a.nuevo = 'registrada' AND ${rangoAud('a.fecha', 1)} GROUP BY a.usuario`, [hoyDia]);
+      const respuestasHoy = await contar(
+        `SELECT a.usuario, COUNT(*)::int AS n FROM auditoria a
+         WHERE a.accion IN ('responder_correo', 'enviar_correo') AND ${rangoAud('a.fecha', 1)} GROUP BY a.usuario`, [hoyDia]);
+      const tiempoHoy = await contar(
+        `SELECT usuario, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::int AS n FROM tiempo_reserva
+         WHERE inicio >= (date_trunc('day', NOW() AT TIME ZONE $1) AT TIME ZONE $1) GROUP BY usuario`, [zona]);
+      const entradas = new Map((await client.query(
+        `SELECT a.usuario, MIN(a.fecha AT TIME ZONE current_setting('TimeZone')) AS primera,
+                MAX(a.fecha AT TIME ZONE current_setting('TimeZone')) AS ultima
+         FROM auditoria a WHERE ${rangoAud('a.fecha', 1)} GROUP BY a.usuario`, [hoyDia])).rows.map(x => [x.usuario, x]));
+      const carga = await cargaDeAsesores();
+      const { cupos } = await cuposDeHoy();
+      const ultimas = new Map();
+      for (const x of (await client.query(
+        `SELECT * FROM (
+           SELECT a.usuario, a.accion, a.entidad, a.entidad_id, a.anterior, a.nuevo, a.detalle,
+                  a.fecha AT TIME ZONE current_setting('TimeZone') AS fecha,
+                  ROW_NUMBER() OVER (PARTITION BY a.usuario ORDER BY a.id DESC) AS n
+           FROM auditoria a
+           WHERE ${rangoAud('a.fecha', 1)} AND a.accion NOT IN ('abrir_adjunto', 'mensaje_enviado')) z
+         WHERE z.n <= 4 ORDER BY z.fecha DESC`, [hoyDia])).rows) {
+        (ultimas.get(x.usuario) || ultimas.set(x.usuario, []).get(x.usuario)).push(x);
+      }
+
+      // Tarjetas: quien está conectado o trabajó hoy (el programador no aparece salvo para sí mismo).
+      const quienes = new Set([...conectados.keys(), ...recibidasHoy.keys(), ...registradasHoy.keys(), ...abiertaDe.keys()]);
+      const personas = Array.from(quienes).filter(x => fichas.has(x) && (!esProg(x) || soyProg && x === u.usuario)).map(usuario => {
+        const f = fichas.get(usuario);
+        const c = conectados.get(usuario);
+        const e = entradas.get(usuario) || {};
+        return {
+          usuario, nombre: f.nombre || usuario, grupo: f.grupo,
+          estado: c ? c.estado : 'desconectado',
+          recibe: recibe.has(usuario),
+          abiertas: (abiertaDe.get(usuario) || []).map(a => ({
+            id: a.reserva_id, cliente: a.nombre_cliente || '', asunto: a.asunto || '', agencia: a.agencia || '',
+            categoria: a.categoria || '', estado: a.estado || '', buzon: a.buzon || '', servicio: a.tipo_servicio || '',
+            fecha_servicio: a.fecha_servicio || '', desde: a.desde, enPantalla: a.en_pantalla, segundos: a.segundos
+          })),
+          hoy: {
+            recibidas: recibidasHoy.get(usuario) || 0, registradas: registradasHoy.get(usuario) || 0,
+            respuestas: respuestasHoy.get(usuario) || 0, segundos: tiempoHoy.get(usuario) || 0,
+            pendientes: (carga.get(usuario) || {}).carga || 0, cupo: cupos.get(usuario) || 0,
+            primera: e.primera || null, ultima: e.ultima || null
+          },
+          ultimas: (ultimas.get(usuario) || []).map(x => ({ ...x, n: undefined }))
+        };
+      });
+      const orden = { 'en linea': 0, ausente: 1, desconectado: 2 };
+      personas.sort((a, b) => orden[a.estado] - orden[b.estado] || b.abiertas.length - a.abiertas.length || a.nombre.localeCompare(b.nombre));
+
+      // Reparto ahora.
+      const ajustes = await ajustesReparto();
+      const sinAsignar = (await client.query(
+        `SELECT COUNT(*)::int AS n FROM clasificacion c
+         WHERE c.categoria IN ('RESERVA', 'MODIFICACION') AND c.estado = ANY($1::text[]) AND c.error_ia IS NOT TRUE
+           AND NOT EXISTS (SELECT 1 FROM asignaciones a WHERE a.clave = ${CLAVE_SQL})`, [ESTADOS_ABIERTOS])).rows[0].n;
+      // A quién le tocaría la próxima reserva (misma regla que repartir()).
+      const listosAhora = lista.filter(x => (conectados.get(x.usuario) || {}).estado === 'en linea').map(x => x.usuario);
+      const porPend = (a, b) => {
+        const x = carga.get(a) || { carga: 0, ultima: 0 }, y = carga.get(b) || { carga: 0, ultima: 0 };
+        return x.carga - y.carga || x.ultima - y.ultima || a.localeCompare(b);
+      };
+      let siguiente = null;
+      if (ajustes.reparto_modo === 'cupos') {
+        const conCupo = listosAhora.filter(x => (cupos.get(x) || 0) > (recibidasHoy.get(x) || 0));
+        if (conCupo.length) siguiente = conCupo.sort((a, b) => ((recibidasHoy.get(a) || 0) / cupos.get(a)) - ((recibidasHoy.get(b) || 0) / cupos.get(b)) || porPend(a, b))[0];
+      }
+      if (!siguiente && listosAhora.length) siguiente = listosAhora.slice().sort(porPend)[0];
+      const reparto = {
+        activo: ajustes.reparto_activo, modo: ajustes.reparto_modo || 'automatico', siguiente,
+        todosLlenos: ajustes.reparto_modo === 'cupos' && listosAhora.length > 0 && !listosAhora.some(x => (cupos.get(x) || 0) > (recibidasHoy.get(x) || 0)),
+        puedeCambiar: puede('configurar_empresa') || puede('administrar_usuarios'),
+        sinAsignar,
+        personas: lista.map(x => ({
+          usuario: x.usuario, nombre: x.nombre || x.usuario, grupo: x.grupo,
+          estado: (conectados.get(x.usuario) || {}).estado || 'desconectado',
+          pendientes: (carga.get(x.usuario) || {}).carga || 0,
+          hoy: recibidasHoy.get(x.usuario) || 0, cupo: cupos.get(x.usuario) || 0
+        })).sort((a, b) => (orden[a.estado] - orden[b.estado]) || a.nombre.localeCompare(b.nombre))
+      };
+
+      // Actividad del día elegido (solo con permiso de auditoría), con los datos de la reserva para leerla fácil.
+      let actividad = null;
+      if (puede('ver_auditoria')) {
+        const filas = (await client.query(
+          `SELECT a.id, a.usuario, a.nombre, a.accion, a.entidad, a.entidad_id, a.anterior, a.nuevo, a.detalle,
+                  a.fecha AT TIME ZONE current_setting('TimeZone') AS fecha
+           FROM auditoria a WHERE ${rangoAud('a.fecha', 1)} ORDER BY a.id DESC LIMIT 400`, [dia])).rows
+          .filter(x => soyProg || !esProg(x.usuario));
+        const ids = [...new Set(filas.filter(x => x.entidad === 'reserva' && /^\d+$/.test(x.entidad_id)).map(x => Number(x.entidad_id)))];
+        const reservas = new Map((await client.query(
+          'SELECT id, nombre_cliente, asunto, agencia, categoria, buzon FROM clasificacion WHERE id = ANY($1::int[])', [ids]
+        )).rows.map(x => [String(x.id), x]));
+        const nombreDe = usuario => (fichas.get(usuario) || {}).nombre || usuario;
+        actividad = filas.map(x => {
+          const r = x.entidad === 'reserva' ? reservas.get(x.entidad_id) : null;
+          return {
+            ...x, nombre: x.nombre || nombreDe(x.usuario),
+            nombreNuevo: x.accion === 'reparto_asignada' || x.accion === 'reasignar_reserva' ? nombreDe(x.nuevo) : undefined,
+            nombreAnterior: x.accion === 'reasignar_reserva' || x.accion === 'reparto_devuelta' ? nombreDe(x.anterior) : undefined,
+            reserva: r ? { cliente: r.nombre_cliente || '', asunto: r.asunto || '', agencia: r.agencia || '', categoria: r.categoria || '', buzon: r.buzon || '' } : null
+          };
+        });
+      }
+
+      return json(res, 200, {
+        ahora: new Date().toISOString(), dia, hoy: hoyDia, limite: MINUTOS_LIMITE_RESERVA * 60,
+        personas, reparto, actividad,
+        usuarios: todos.filter(x => soyProg || x.grupo !== 'Programador').map(x => ({ usuario: x.usuario, nombre: x.nombre || x.usuario }))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre))
+      });
+    }
 
     if (req.method === 'GET' && url === '/api/control') {
       if (!puede('ver_control')) return json(res, 403, { error: 'No tienes permiso para ver la pantalla de control.' });
@@ -2850,6 +3002,45 @@ http.createServer(async (req, res) => {
         if (!activo) cerrarSesionesDe(destino.usuario);
         await registrar(u, activo ? 'activar_usuario' : 'desactivar_usuario', 'usuario', destino.id, '', '', destino.usuario);
         return json(res, 200, { ok: true });
+      }
+
+      // Eliminar un usuario (solo el Programador: crear y administrar usuarios ya es solo suyo).
+      // Sus reservas sin terminar vuelven al reparto; la auditoría y los tiempos ya trabajados se conservan.
+      if (req.method === 'POST' && url === '/api/usuarios/eliminar') {
+        if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede eliminar usuarios.' });
+        const { id, confirmar } = await leerCuerpo(req);
+        const destino = await buscarPorId(id);
+        if (!destino) return json(res, 404, { error: 'Usuario no encontrado' });
+        if (esIntocable(destino)) return json(res, 403, { error: 'El usuario programador no se puede eliminar.' });
+        if (destino.id === u.id) return json(res, 403, { error: 'No puedes eliminar tu propio usuario.' });
+        if (String(confirmar || '').trim().toLowerCase() !== destino.usuario) {
+          return json(res, 400, { error: `Para confirmar escribe el usuario exactamente: ${destino.usuario}` });
+        }
+        let devueltas = 0;
+        await client.query('BEGIN');
+        try {
+          devueltas = (await client.query(
+            `DELETE FROM asignaciones a WHERE a.usuario = $1
+               AND EXISTS (SELECT 1 FROM clasificacion c WHERE ${CLAVE_SQL} = a.clave AND c.estado = ANY($2::text[]))`,
+            [destino.usuario, ESTADOS_ABIERTOS])).rowCount;
+          await client.query('UPDATE tiempo_reserva SET fin = visto WHERE usuario = $1 AND fin IS NULL', [destino.usuario]);
+          await client.query('DELETE FROM revisiones WHERE usuario = $1', [destino.usuario]);
+          await client.query('DELETE FROM reparto_cupos WHERE usuario = $1', [destino.usuario]);
+          await client.query('DELETE FROM avisos WHERE para = $1', [destino.usuario]);
+          await client.query('DELETE FROM mensajes WHERE de = $1 OR para = $1', [destino.usuario]);
+          await client.query('DELETE FROM usuarios WHERE id = $1', [destino.id]);
+          await client.query('COMMIT');
+        } catch (e) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw e;
+        }
+        cerrarSesionesDe(destino.usuario);
+        presencia.delete(destino.usuario);
+        await registrar(u, 'eliminar_usuario', 'usuario', destino.id,
+          { usuario: destino.usuario, nombre: destino.nombre, grupo: destino.grupo }, '',
+          `${destino.nombre || destino.usuario} · ${devueltas} reserva(s) devuelta(s) al reparto`);
+        repartir().catch(() => {});
+        return json(res, 200, { ok: true, devueltas });
       }
 
       return json(res, 404, { error: 'Ruta no encontrada' });
