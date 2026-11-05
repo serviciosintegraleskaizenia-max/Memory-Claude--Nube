@@ -136,6 +136,36 @@
   .filtros-act { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; align-items: center; }
   .filtros-act select, .filtros-act input { padding: 6px 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); font-size: 13px; }
   .mas { text-align: center; margin-top: 10px; }
+  /* ---------- Accesos rápidos ---------- */
+  .accesos { position: sticky; top: 0; z-index: 20; background: var(--fondo); display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0; margin-bottom: 6px; }
+  .accesos a { text-decoration: none; color: var(--texto); background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 999px; padding: 6px 13px; font-size: 13px; white-space: nowrap; }
+  .accesos a:hover { border-color: #1679c2; color: #1679c2; }
+  .seccion, #mejores, #estadisticas { scroll-margin-top: 60px; }
+  /* ---------- Chat dentro de Control ---------- */
+  .btn-chat-tarjeta { border: 1px solid var(--borde); background: var(--tarjeta); color: var(--texto); border-radius: 8px; padding: 4px 9px; cursor: pointer; font-size: 13px; flex: none; }
+  .btn-chat-tarjeta:hover { border-color: #1679c2; color: #1679c2; }
+  .btn-avisar { margin-top: 8px; width: 100%; background: var(--tarde); color: #fff; border: none; border-radius: 8px; padding: 7px 10px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .num-chat { background: #dc2626; color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
+  #panelChat { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100vw; background: var(--tarjeta); border-left: 1px solid var(--borde); box-shadow: -6px 0 24px rgba(15,23,42,.18); z-index: 50; display: none; flex-direction: column; }
+  #panelChat.abierto { display: flex; }
+  @media (min-width: 1300px) { body.con-chat main { margin-right: 380px; } }
+  .chat-cabeza { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: #fff; }
+  .chat-cabeza strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-cabeza button { background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .chat-lista { overflow-y: auto; flex: 1; }
+  .chat-contacto { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--borde); cursor: pointer; }
+  .chat-contacto:hover { background: var(--hover); }
+  .chat-contacto .quien { flex: 1; min-width: 0; }
+  .chat-contacto .quien small { display: block; color: var(--texto-suave); font-size: 12px; }
+  .chat-mensajes { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--fondo); }
+  .burbuja { max-width: 82%; padding: 7px 10px; border-radius: 12px; font-size: 13.5px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .burbuja.mia { align-self: flex-end; background: #1679c2; color: #fff; border-bottom-right-radius: 4px; }
+  .burbuja.otra { align-self: flex-start; background: var(--tarjeta); border: 1px solid var(--borde); border-bottom-left-radius: 4px; }
+  .burbuja small { display: block; font-size: 10.5px; opacity: .75; margin-top: 3px; }
+  .burbuja img { max-width: 100%; border-radius: 8px; display: block; margin-bottom: 4px; cursor: pointer; }
+  .chat-escribir { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--borde); }
+  .chat-escribir textarea { flex: 1; resize: none; height: 64px; padding: 8px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); font: inherit; font-size: 13.5px; }
+  .chat-contexto { font-size: 12px; padding: 7px 12px; background: var(--tarde-fondo); color: var(--tarde-texto); }
   @media (max-width: 600px) {
     .personas { grid-template-columns: 1fr; }
     .cifras span { font-size: 9.5px; }
@@ -153,11 +183,20 @@
     <p id="subtitulo">Tiempo por reserva, reservas registradas y entradas de correo</p>
   </div>
   <div>
+    <button class="btn-tema" id="btnChat" style="display:none">💬 Chat <span class="num-chat" id="numChat" style="display:none"></span></button>
     <button class="btn-tema" id="btnActualizar">Actualizar</button>
     <button class="btn-tema" id="btnPanel">Volver al panel</button>
   </div>
 </header>
 <main>
+  <nav class="accesos" aria-label="Ir a">
+    <a href="#secVivo">🟢 En vivo</a>
+    <a href="#secReparto">🎯 Reparto</a>
+    <a href="#secActividad">📋 Actividad</a>
+    <a href="#mejores">🏆 Top 3 del día y del mes</a>
+    <a href="#estadisticas">📊 Estadísticas y gráficas</a>
+    <a href="#resumenAnio">📅 Año</a>
+  </nav>
   <div class="seccion" id="secVivo">
     <div class="cabeza">
       <div><h2 class="titulo-vivo"><span class="pulso" aria-hidden="true"></span>En vivo ahora</h2>
@@ -191,6 +230,22 @@
   <div id="contenido"><div class="vacio">Cargando…</div></div>
 </main>
 <div class="tooltip" id="tooltip"></div>
+<aside id="panelChat" aria-label="Chat">
+  <div class="chat-cabeza">
+    <button id="chatAtras" style="display:none" title="Volver a la lista">←</button>
+    <strong id="chatTitulo">Chat</strong>
+    <button id="chatCerrar" title="Cerrar">✕</button>
+  </div>
+  <div class="chat-lista" id="chatLista"></div>
+  <div id="chatConversacion" style="display:none;flex:1;flex-direction:column;min-height:0">
+    <div class="chat-contexto" id="chatContexto" style="display:none"></div>
+    <div class="chat-mensajes" id="chatMensajes"></div>
+    <div class="chat-escribir">
+      <textarea id="chatTexto" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter nueva línea)" maxlength="1000"></textarea>
+      <button class="btn" id="chatEnviar">Enviar</button>
+    </div>
+  </div>
+</aside>
 
 <script>
 const ZONA = 'America/Santo_Domingo';
@@ -278,6 +333,7 @@ function pintar(desde, hasta) {
   document.getElementById('subtitulo').textContent = `Período: ${textoRango} · tiempo máximo por reserva: ${limiteMin} min`;
 
   document.getElementById('contenido').innerHTML = `
+    <div id="estadisticas"></div>
     ${barraFechas(desde, hasta)}
     <div class="tarjetas">
       <div class="tarjeta"><div class="etiqueta">Correos que entraron</div><div class="numero">${t.correos}</div></div>
@@ -383,7 +439,7 @@ function seccionMejores(d) {
   const k = d.ranking;
   const opciones = k.meses.map(m => `<option value="${esc(m)}" ${m === k.mes ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
   return `
-    <div class="rejilla">
+    <div class="rejilla" id="mejores">
       <div class="seccion">
         <h2>🏆 Mejores asesores del día</h2>
         <p class="sub">${esc(diaLargo(k.dia))} · más reservas registradas (si empatan, el de menor tiempo promedio).</p>
@@ -412,11 +468,11 @@ function seccionMejores(d) {
 function seccionAnio(d) {
   const k = d.ranking;
   if (!k.resumenAnio.length) {
-    return `<div class="seccion"><h2>Resumen del año ${esc(k.anio)}</h2><div class="vacio">Sin reservas registradas en ${esc(k.anio)}.</div></div>`;
+    return `<div class="seccion" id="resumenAnio"><h2>Resumen del año ${esc(k.anio)}</h2><div class="vacio">Sin reservas registradas en ${esc(k.anio)}.</div></div>`;
   }
   const totalMes = MESES.map((_, i) => k.resumenAnio.reduce((a, u) => a + u.meses[i], 0));
   const mejor = k.resumenAnio[0];
-  return `<div class="seccion">
+  return `<div class="seccion" id="resumenAnio">
     <h2>Resumen del año ${esc(k.anio)}</h2>
     <p class="sub">Reservas registradas por cada asesor, mes por mes. 🏆 Mejor asesor del año: <strong>${esc(mejor.nombre)}</strong> con ${mejor.total} reservas.</p>
     <div class="tabla-wrap"><table>
@@ -729,6 +785,8 @@ async function cargarVivo() {
   }
   vivo = r.data;
   vivoRecibido = Date.now();
+  document.getElementById('btnChat').style.display = vivo.puedeChat ? '' : 'none';
+  if (vivo.puedeChat) await cargarContactosChat();
   if (!document.getElementById('actDia').value) document.getElementById('actDia').value = vivo.dia;
   document.getElementById('actDia').max = vivo.hoy;
   pintarPersonas();
@@ -753,6 +811,7 @@ function pintarPersonas() {
           <span class="barrita"><i data-barra="${a.segundos}" style="width:${Math.min(100, 100 * a.segundos / v.limite)}%"></i></span>
           <span style="color:var(--texto-suave)">de ${Math.round(v.limite / 60)} min</span></div>
         <div class="datos" style="margin-top:3px">Abierta desde las ${esc(horaDe(a.desde))}</div>
+        ${v.puedeChat && p.usuario !== v.yo ? `<button class="btn-avisar" data-avisar="${esc(p.usuario)}" data-reserva="${a.id}" style="display:${a.segundos > v.limite ? 'block' : 'none'}">⏰ Avisar que se apure</button>` : ''}
       </div>`).join('')
       : `<div class="libre">${p.estado === 'desconectado' ? `Desconectada${h.ultima ? ' · última actividad ' + esc(haceCuanto(h.ultima)) : ''}` : `Sin reserva abierta${h.pendientes ? ` · tiene <strong>${h.pendientes}</strong> pendiente(s) por atender` : ''}`}</div>`;
     return `<div class="persona ${claseEstado(p.estado)}">
@@ -760,6 +819,7 @@ function pintarPersonas() {
         <div class="avatar" style="background:${colorDe(p.usuario)}">${esc(iniciales(p.nombre))}</div>
         <div class="persona-nombre"><strong>${esc(p.nombre)}</strong><small>${esc(p.grupo)}${h.primera ? ' · desde las ' + esc(horaDe(h.primera)) : ''}</small></div>
         <span class="estado ${claseEstado(p.estado)}">${textoEstado(p.estado)}</span>
+        ${v.puedeChat && p.usuario !== v.yo ? `<button class="btn-chat-tarjeta" data-chat="${esc(p.usuario)}" title="Escribirle por el chat">💬${noLeidosDe(p.usuario) ? `<span class="num-chat">${noLeidosDe(p.usuario)}</span>` : ''}</button>` : ''}
       </div>
       ${abiertas}
       <div class="cifras">
@@ -860,7 +920,12 @@ function tic() {
     i.style.width = Math.min(100, 100 * s / vivo.limite) + '%';
     i.classList.toggle('rojo', s > vivo.limite);
   });
-  document.querySelectorAll('[data-limite-caja]').forEach(c => c.classList.toggle('tarde-caja', Number(c.dataset.limiteCaja) + extra > vivo.limite));
+  document.querySelectorAll('[data-limite-caja]').forEach(c => {
+    const tarde = Number(c.dataset.limiteCaja) + extra > vivo.limite;
+    c.classList.toggle('tarde-caja', tarde);
+    const b = c.querySelector('.btn-avisar');
+    if (b) b.style.display = tarde ? 'block' : 'none';
+  });
 }
 
 document.addEventListener('click', async e => {
@@ -892,6 +957,128 @@ document.addEventListener('change', e => {
   if (e.target.id === 'actUsuario' || e.target.id === 'actTipo') { actLimite = 80; pintarActividad(); }
   if (e.target.id === 'actDia') { actLimite = 80; cargarVivo(); }
 });
+
+/* ---------- Chat (el mismo chat del panel) ---------- */
+
+let contactosChat = [];
+let chatCon = null;
+let timerChat = null;
+
+function noLeidosDe(usuario) { return (contactosChat.find(c => c.usuario === usuario) || {}).noLeidos || 0; }
+
+async function cargarContactosChat() {
+  const r = await api('/api/chat/contactos');
+  if (!r.ok) return;
+  contactosChat = r.data;
+  const total = contactosChat.reduce((a, c) => a + (c.noLeidos || 0), 0);
+  const n = document.getElementById('numChat');
+  n.textContent = total;
+  n.style.display = total ? '' : 'none';
+  if (document.getElementById('panelChat').classList.contains('abierto') && !chatCon) pintarListaChat();
+}
+
+function pintarListaChat() {
+  document.getElementById('chatTitulo').textContent = 'Chat';
+  document.getElementById('chatAtras').style.display = 'none';
+  document.getElementById('chatConversacion').style.display = 'none';
+  const lista = document.getElementById('chatLista');
+  lista.style.display = '';
+  const orden = { 'en linea': 0, ausente: 1, desconectado: 2 };
+  lista.innerHTML = contactosChat.length ? contactosChat.slice()
+    .sort((a, b) => (b.noLeidos || 0) - (a.noLeidos || 0) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre))
+    .map(c => `<div class="chat-contacto" data-chat="${esc(c.usuario)}">
+      <span class="avatar" style="width:30px;height:30px;font-size:12px;background:${colorDe(c.usuario)}">${esc(iniciales(c.nombre))}</span>
+      <span class="quien"><strong>${esc(c.nombre)}</strong><small>${textoEstado(c.estado)} · ${esc(c.grupo || '')}</small></span>
+      ${c.noLeidos ? `<span class="num-chat">${c.noLeidos}</span>` : ''}
+    </div>`).join('') : '<div class="vacio">No hay otros usuarios.</div>';
+}
+
+function abrirPanelChat(usuario, texto, contexto) {
+  document.getElementById('panelChat').classList.add('abierto');
+  document.body.classList.add('con-chat');
+  clearInterval(timerChat);
+  timerChat = setInterval(() => { cargarContactosChat(); if (chatCon) cargarMensajesChat(false); }, 3000);
+  if (!usuario) { chatCon = null; return cargarContactosChat().then(pintarListaChat); }
+  chatCon = usuario;
+  const c = contactosChat.find(x => x.usuario === usuario) || { nombre: usuario, estado: 'desconectado' };
+  document.getElementById('chatTitulo').textContent = c.nombre + ' · ' + textoEstado(c.estado).replace(/^\S+\s/, '');
+  document.getElementById('chatAtras').style.display = '';
+  document.getElementById('chatLista').style.display = 'none';
+  document.getElementById('chatConversacion').style.display = 'flex';
+  const ctx = document.getElementById('chatContexto');
+  ctx.style.display = contexto ? '' : 'none';
+  ctx.textContent = contexto || '';
+  const caja = document.getElementById('chatTexto');
+  if (texto !== undefined) caja.value = texto;
+  caja.focus();
+  caja.selectionStart = caja.selectionEnd = caja.value.length;
+  cargarMensajesChat(true);
+}
+
+function cerrarPanelChat() {
+  document.getElementById('panelChat').classList.remove('abierto');
+  document.body.classList.remove('con-chat');
+  clearInterval(timerChat);
+  timerChat = null;
+  chatCon = null;
+}
+
+async function cargarMensajesChat(alFinal) {
+  if (!chatCon) return;
+  const con = chatCon;
+  const r = await api('/api/chat/mensajes?con=' + encodeURIComponent(con));
+  if (!r.ok || con !== chatCon) return;
+  const box = document.getElementById('chatMensajes');
+  const cerca = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  box.innerHTML = r.data.length ? r.data.map(m => `<div class="burbuja ${m.de === vivo.yo ? 'mia' : 'otra'}">${m.tieneImagen ? `<img src="/api/chat/imagen?id=${m.id}" alt="Imagen" data-ver-imagen="1">` : ''}${esc(m.texto)}<small>${esc(new Date(m.fecha).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: ZONA }))}</small></div>`).join('')
+    : '<div class="vacio">Todavía no hay mensajes. Escribe el primero.</div>';
+  if (alFinal || cerca) box.scrollTop = box.scrollHeight;
+}
+
+async function enviarMensajeChat() {
+  const caja = document.getElementById('chatTexto');
+  const texto = caja.value.trim();
+  if (!chatCon || !texto) return;
+  const boton = document.getElementById('chatEnviar');
+  boton.disabled = true;
+  try {
+    const r = await fetch('/api/chat/enviar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ para: chatCon, texto }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return alert(d.error || 'No se pudo enviar el mensaje.');
+    caja.value = '';
+    document.getElementById('chatContexto').style.display = 'none';
+    await cargarMensajesChat(true);
+  } catch (e) {
+    alert('No hay conexión con el servidor.');
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+document.addEventListener('click', e => {
+  const c = e.target.closest('[data-chat]');
+  if (c) return abrirPanelChat(c.dataset.chat);
+  const a = e.target.closest('[data-avisar]');
+  if (a) {
+    const p = (vivo.personas || []).find(x => x.usuario === a.dataset.avisar) || {};
+    const res = (p.abiertas || []).find(x => String(x.id) === a.dataset.reserva) || {};
+    const min = Math.round(((res.segundos || 0) + (Date.now() - vivoRecibido) / 1000) / 60);
+    const nombre = String(p.nombre || '').split(' ')[0];
+    const cliente = res.cliente || res.asunto || '';
+    return abrirPanelChat(a.dataset.avisar,
+      `Hola ${nombre}, llevas ${min} minutos con la reserva #${res.id}${cliente ? ' (' + cliente + ')' : ''}. ¿Necesitas ayuda o ya la terminas?`,
+      `⏰ ${p.nombre} lleva ${min} min con la reserva #${res.id}. Puedes cambiar el mensaje antes de enviarlo.`);
+  }
+  if (e.target.closest('#btnChat')) return document.getElementById('panelChat').classList.contains('abierto') ? cerrarPanelChat() : abrirPanelChat();
+  if (e.target.id === 'chatCerrar') return cerrarPanelChat();
+  if (e.target.id === 'chatAtras') { chatCon = null; return pintarListaChat(); }
+  if (e.target.id === 'chatEnviar') return enviarMensajeChat();
+  if (e.target.dataset && e.target.dataset.verImagen) window.open(e.target.src);
+});
+document.getElementById('chatTexto').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeChat(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('panelChat').classList.contains('abierto')) cerrarPanelChat(); });
 
 try { if (localStorage.getItem('tema') === 'oscuro') document.body.classList.add('oscuro'); } catch (e) {}
 cargarVivo();

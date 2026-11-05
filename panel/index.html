@@ -766,7 +766,8 @@ function mostrarApp(s) {
   detenerTemporizadores();
   timerLatido = setInterval(latido, 60 * 1000);
   timerRefresco = setInterval(cargarReservas, 15 * 1000);
-  timerBadge = setInterval(actualizarBadgeChat, 20 * 1000);
+  timerBadge = setInterval(actualizarBadgeChat, 10 * 1000);
+  noLeidosPrevios = null;
   actualizarBadgeChat();
 }
 
@@ -1848,7 +1849,28 @@ function clasePunto(estado) {
   return 'gris';
 }
 
+// Avisa (ventanita, sonido y aviso de Windows) cuando llega un mensaje nuevo con el chat cerrado,
+// aunque la persona tenga una reserva abierta: así ve enseguida lo que le escribe la gerencia.
+let noLeidosPrevios = null;
+function avisarMensajesNuevos(lista) {
+  const ahora = new Map(lista.map(c => [c.usuario, c.noLeidos || 0]));
+  const chatAbierto = document.getElementById('fondoChat').classList.contains('abierto');
+  if (noLeidosPrevios) {
+    for (const c of lista) {
+      const antes = noLeidosPrevios.get(c.usuario) || 0;
+      if ((c.noLeidos || 0) > antes && !(chatAbierto && contactoChat === c.usuario)) {
+        const texto = `💬 ${c.nombre} te escribió por el chat${c.noLeidos > 1 ? ` (${c.noLeidos} mensajes)` : ''}. Toca aquí para leerlo.`;
+        mostrarToast(texto, () => { contactoChat = c.usuario; abrirChat(); });
+        avisoEscritorio(`${c.nombre} te escribió por el chat`);
+        sonarAviso();
+      }
+    }
+  }
+  noLeidosPrevios = ahora;
+}
+
 function actualizarBadge(lista) {
+  avisarMensajesNuevos(lista);
   const total = lista.reduce((s, c) => s + (c.noLeidos || 0), 0);
   const badge = document.getElementById('badgeChat');
   badge.textContent = total;

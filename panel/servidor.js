@@ -2337,6 +2337,7 @@ http.createServer(async (req, res) => {
 
       return json(res, 200, {
         ahora: new Date().toISOString(), dia, hoy: hoyDia, limite: MINUTOS_LIMITE_RESERVA * 60,
+        yo: u.usuario, puedeChat: Boolean(mods.chat) && puede('usar_chat'),
         personas, reparto, actividad,
         usuarios: todos.filter(x => soyProg || x.grupo !== 'Programador').map(x => ({ usuario: x.usuario, nombre: x.nombre || x.usuario }))
           .sort((a, b) => a.nombre.localeCompare(b.nombre))
