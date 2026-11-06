@@ -108,9 +108,11 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
       if (!String(f.telefono || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el teléfono del pasajero.' });
 
       // Aeropuerto que no corresponde con la zona del hotel.
+      // Puede traer varios aeropuertos separados por coma (escalas): basta con que uno sea de la zona del hotel.
       const aeropuerto = String(f.aeropuerto || '').toUpperCase().trim();
+      const codigos = aeropuerto.split(/[\s,;/]+/).filter(c => /^[A-Z]{3}$/.test(c));
       const zona = zonaDe(f.hotel, f.punto_llegada, f.punto_partida, primera.asunto);
-      if (aeropuerto && zona && !zona.aeropuertos.includes(aeropuerto)) {
+      if (codigos.length && zona && !codigos.some(c => zona.aeropuertos.includes(c))) {
         puntos.push({ tipo: 'contradiccion', texto: `El aeropuerto es ${aeropuerto} pero el hotel parece estar en ${zona.zona} (${zona.aeropuertos[0]}). Confírmalo con la agencia.` });
       }
 
