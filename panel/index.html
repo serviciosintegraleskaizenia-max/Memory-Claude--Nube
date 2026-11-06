@@ -380,7 +380,7 @@
     <table>
       <thead><tr>
         <th>Fecha de recibido</th><th>Intención</th><th>Agencia</th><th>Clientes</th><th>PAX</th>
-        <th>Aeropuerto</th><th>Actividad</th><th>Fecha servicio</th><th>Hora</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
+        <th>Aeropuerto</th><th>Actividad</th><th>Fecha servicio</th><th>Hora</th><th>Aerolínea</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
       </tr></thead>
       <tbody id="cuerpo"></tbody>
     </table>
@@ -1078,7 +1078,10 @@ function filtrar() {
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
     if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
-    if (vistaActual === 'registradas' && !(r.categoria === 'RESERVA' && r.estado === 'registrada')) return false;
+    if (vistaActual === 'registradas' && r.estado !== 'registrada') return false;
+    // La lista principal es lo que falta trabajar: lo registrado pasa a "Reservas registradas".
+    // Si se busca por nombre o número, se muestra igual para que nunca se pierda una reserva.
+    if (vistaActual === 'todas' && r.estado === 'registrada' && !busqueda && estado !== 'registrada') return false;
     return (!intencion || r.categoria === intencion)
       && (!estado || r.estado === estado)
       && (!desde || dia >= desde)
@@ -1091,8 +1094,8 @@ function filtrar() {
 function actualizarContadores() {
   const completos = datos.filter(esCompleto);
   const enRevision = datos.filter(r => revisiones.has(r.id)).length;
-  const registradas = datos.filter(r => r.categoria === 'RESERVA' && r.estado === 'registrada').length;
-  document.getElementById('cnt-todas').textContent = completos.filter(r => r.categoria === 'RESERVA').length;
+  const registradas = datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION')).length;
+  document.getElementById('cnt-todas').textContent = completos.filter(r => r.categoria === 'RESERVA' && r.estado !== 'registrada').length;
   document.getElementById('cnt-revision').textContent = enRevision;
   document.getElementById('cnt-registradas').textContent = registradas;
 }
@@ -1119,6 +1122,7 @@ function pintar() {
         <td>${falta(r.actividad || r.tipo_servicio)}</td>
         <td>${falta(r.fecha_servicio)}</td>
         <td>${falta(r.hora_servicio)}</td>
+        <td class="recortar" title="${esc(aerolineaDe(r.vuelo))}">${falta(aerolineaDe(r.vuelo))}</td>
         <td>${falta(r.vuelo)}</td>
         <td>${falta(r.hotel)}</td>
         <td>${etiquetaEstado(r.estado)}${marca}</td>
@@ -1399,6 +1403,7 @@ async function abrirModal(id) {
     <tr><td>Actividad</td><td>${falta(r.actividad || r.tipo_servicio)}</td></tr>
     <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
     <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
+    <tr><td>Aerolínea</td><td>${falta(aerolineaDe(r.vuelo))}</td></tr>
     <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
     <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
 
@@ -1657,11 +1662,33 @@ async function abrirExportar() {
     <div class="aviso" id="avisoV"></div>`);
 }
 
+// Aerolínea a partir del vuelo: "CM 213, CM 427" → "Copa Airlines"; "Copa 213" → "Copa".
+const AEROLINEAS = {
+  AA: 'American Airlines', CM: 'Copa Airlines', B6: 'JetBlue', DL: 'Delta', UA: 'United', AV: 'Avianca', LA: 'LATAM', LP: 'LATAM Perú',
+  XL: 'LATAM Ecuador', JJ: 'LATAM Brasil', NK: 'Spirit', F9: 'Frontier', WN: 'Southwest', AM: 'Aeroméxico', IB: 'Iberia', UX: 'Air Europa',
+  AF: 'Air France', KL: 'KLM', LH: 'Lufthansa', BA: 'British Airways', AC: 'Air Canada', WS: 'WestJet', TS: 'Air Transat', WG: 'Sunwing',
+  DM: 'Arajet', P5: 'Wingo', JA: 'JetSMART', H2: 'Sky Airline', G3: 'GOL', AD: 'Azul', AR: 'Aerolíneas Argentinas', ES: 'Estelar',
+  '9V': 'Avior', V0: 'Conviasa', QL: 'Laser', R7: 'Aserca', '4M': 'LATAM Argentina', '2K': 'Avianca Ecuador', TA: 'Avianca El Salvador',
+  SY: 'Sun Country', XP: 'Avelo', MX: 'Breeze', PU: 'Plus Ultra', EW: 'Eurowings', DE: 'Condor', TK: 'Turkish Airlines', VS: 'Virgin Atlantic',
+  NU: 'Neos', BW: 'Caribbean Airlines', '7N': 'Pawa', S6: 'Sunrise', JY: 'interCaribbean', '8M': 'Air Century'
+};
+function aerolineaDe(vuelo) {
+  const nombres = [];
+  for (const parte of String(vuelo || '').split(/[,;/]+/).map(x => x.trim()).filter(Boolean)) {
+    const m = parte.match(/^([A-Z0-9]{2})\s?-?\s?\d{1,4}[A-Z]?$/i);
+    let n = '';
+    if (m && /[A-Z]/i.test(m[1])) n = AEROLINEAS[m[1].toUpperCase()] || m[1].toUpperCase();
+    else { const t = parte.replace(/\s*#?\d{1,4}[A-Z]?$/i, '').trim(); if (t && /[a-záéíóúñ]{3,}/i.test(t)) n = t; }
+    if (n && !nombres.includes(n)) nombres.push(n);
+  }
+  return nombres.join(', ');
+}
+
 function filaExportar(x) {
   return [
     fechaCorta(x.fecha), x.categoria, agenciaDe(x), x.nombre_cliente || '', x.telefono || '', paxDe(x),
     x.aeropuerto || '', x.actividad || x.tipo_servicio || '', x.fecha_servicio || '',
-    x.hora_servicio || '', x.vuelo || '', x.hotel || '', x.estado || ''
+    x.hora_servicio || '', aerolineaDe(x.vuelo), x.vuelo || '', x.hotel || '', x.estado || ''
   ];
 }
 
@@ -1677,7 +1704,7 @@ async function descargarExportacion() {
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo exportar.', false);
   const lista = r.data.map(sinEntidades).filter(x => !intencion || x.categoria === intencion);
   if (!lista.length) return mostrarAviso('No hay registros con esos filtros.', false);
-  const cabeceras = ['Fecha de recibido', 'Intención', 'Agencia', 'Clientes', 'Teléfono', 'PAX', 'Aeropuerto', 'Actividad', 'Fecha servicio', 'Hora', 'Vuelo', 'Hotel', 'Estado'];
+  const cabeceras = ['Fecha de recibido', 'Intención', 'Agencia', 'Clientes', 'Teléfono', 'PAX', 'Aeropuerto', 'Actividad', 'Fecha servicio', 'Hora', 'Aerolínea', 'Vuelo', 'Hotel', 'Estado'];
   const filas = usuario
     ? lista.map(x => [x.accion_nombre || x.accion_usuario, NOMBRES_ACCION[x.accion] || x.accion, x.accion_fecha, x.anterior || '', x.nuevo || '', ...filaExportar(x)])
     : lista.map(filaExportar);
