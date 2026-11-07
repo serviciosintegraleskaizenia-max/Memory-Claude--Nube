@@ -716,10 +716,11 @@ function pintarChatK() {
     const i = m.info || {};
     return `<div class="burbuja otra">${esc(m.texto)}</div>` +
       (i.pasar_a_asesor ? `<div class="k-asesor">👤 <b>Pasa a un asesor de ${esc(i.sede)}</b>${i.motivo_texto ? ' · ' + esc(i.motivo_texto) : ''}${i.resumen_para_asesor ? `<br>${esc(i.resumen_para_asesor)}` : ''}</div>` : '') +
-      `<div class="k-meta">${i.idioma ? `<span class="chip az">${esc(IDIOMAS_K[i.idioma] || i.idioma)}</span> ` : ''}${i.web && i.web.usada ? '<span class="chip mor">🌐 internet</span> ' : ''}${i.ejemplos ? `<span class="chip gris">🎓 ${i.ejemplos} ejemplo(s)</span> ` : ''}
+      `<div class="k-meta">${i.idioma ? `<span class="chip az">${esc(IDIOMAS_K[i.idioma] || i.idioma)}</span> ` : ''}${i.web && i.web.usada ? '<span class="chip mor">🌐 internet</span> ' : ''}${i.web && i.web.fallo ? '<span class="chip ojo" title="Con internet no respondió: contestó sin internet">🌐 falló, respondió sin internet</span> ' : ''}${i.ejemplos ? `<span class="chip gris">🎓 ${i.ejemplos} ejemplo(s)</span> ` : ''}
         ${m.guardado ? '<span class="chip ok">✔ guardado como ejemplo</span>' : `<button class="btn-mini" data-k="ej-bien" data-n="${n}" title="Guardar como ejemplo de buena respuesta">👍</button><button class="btn-mini" data-k="ej-corregir" data-n="${n}" title="Escribir cómo debió responder">✏️ Corregir</button>`}
         <details><summary>Consultó ${(i.fuentes || []).length} cosa(s) · ${i.segundos ?? '?'} s${i.tokens ? ` · ${i.tokens.entrada + i.tokens.salida} tokens` : ''}${i.formato_ok === false ? ' · ⚠️ respondió sin formato' : ''}</summary>
         <ol>${(i.fuentes || []).map(f => `<li>${esc(f.titulo)} <span style="opacity:.7">(${esc(f.fuente)})</span></li>`).join('') || '<li>Nada: no encontró información sobre esto.</li>'}</ol>
+        ${i.diagnostico ? `<div style="color:var(--ambar)">🔧 ${esc(i.diagnostico)}</div>` : ''}
         ${i.web && (i.web.enlaces || []).length ? `<div>🌐 De internet:</div><ol>${i.web.enlaces.map(x => `<li><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.titulo || x.url)}</a></li>`).join('')}</ol>` : ''}</details></div>`;
   }).join('');
 }

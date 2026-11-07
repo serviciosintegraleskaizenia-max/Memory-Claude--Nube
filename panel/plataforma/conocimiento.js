@@ -528,35 +528,67 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       bienvenida: (sedeOk && aj.bienvenidas[sedeOk]) || aj.bienvenidas[''] || '', primera, web: usarWeb ? aj.web : null }) +
       `\n\nFECHA Y HORA EN ${sedeOk ? sedeOk.toUpperCase() : 'LA OFICINA'}: ${new Date().toLocaleString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zona })}` +
       textoEjemplos + `\n\nINFORMACIÓN\n${info}`;
-    const cuerpo = { model: aj.modelo, max_tokens: 900, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
-    if (usarWeb) cuerpo.plugins = [{ id: 'web', max_results: 3, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}):` }];
-    const control = new AbortController();
-    const reloj = setTimeout(() => control.abort(), 60000);
+    const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
+    if (usarWeb) cuerpo.plugins = [{ id: 'web', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
     const t0 = Date.now();
-    let datos;
-    try {
-      const r = await fetch(central.ayudantes.OPENROUTER + '/chat/completions', {
-        method: 'POST', signal: control.signal,
-        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json', 'X-Title': 'Kaizen IA - asistente de redes' },
-        body: JSON.stringify(cuerpo)
-      });
-      datos = await r.json().catch(() => ({}));
-      if (!r.ok || datos.error) {
-        const msg = (datos.error && (datos.error.message || JSON.stringify(datos.error))) || ('código ' + r.status);
-        throw error(`La IA respondió con error (${r.status}): ${msg}` + (r.status === 401 ? ' — revisa la clave de OpenRouter.' : r.status === 402 ? ' — sin saldo en OpenRouter.' : ''), 502);
+    // Llama a la IA. Si con internet no devuelve texto, se pregunta otra vez sin internet: el cliente siempre recibe respuesta.
+    async function pedir(c) {
+      const control = new AbortController();
+      const reloj = setTimeout(() => control.abort(), 60000);
+      try {
+        const r = await fetch(central.ayudantes.OPENROUTER + '/chat/completions', {
+          method: 'POST', signal: control.signal,
+          headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json', 'X-Title': 'Kaizen IA - asistente de redes' },
+          body: JSON.stringify(c)
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || d.error) {
+          const msg = (d.error && (d.error.message || JSON.stringify(d.error))) || ('código ' + r.status);
+          throw error(`La IA respondió con error (${r.status}): ${msg}` + (r.status === 401 ? ' — revisa la clave de OpenRouter.' : r.status === 402 ? ' — sin saldo en OpenRouter.' : ''), 502);
+        }
+        return d;
+      } catch (err) {
+        if (err.codigo) throw err;
+        throw error(err.name === 'AbortError' ? 'La IA tardó más de 60 segundos.' : 'No se pudo conectar con la IA: ' + err.message, 502);
+      } finally { clearTimeout(reloj); }
+    }
+    // El texto puede venir como cadena o como lista de partes ({ type: 'text', text }).
+    const textoDe = m => {
+      const c = m && m.content;
+      if (Array.isArray(c)) return c.map(p => (typeof p === 'string' ? p : (p && (p.text || (p.type === 'text' && p.content)) || ''))).join('');
+      return typeof c === 'string' ? c : '';
+    };
+    let datos, diagnostico = '', webFallo = false, usoTotal = { entrada: 0, salida: 0 };
+    const sumarUso = d => { if (d && d.usage) { usoTotal.entrada += d.usage.prompt_tokens || 0; usoTotal.salida += d.usage.completion_tokens || 0; } };
+    let fueConWeb = Boolean(cuerpo.plugins);
+    if (fueConWeb) {
+      try { datos = await pedir(cuerpo); sumarUso(datos); }
+      catch (err) { datos = null; diagnostico = 'Internet: ' + err.message; }
+      const ch = datos && (datos.choices || [])[0];
+      if (!datos || !textoDe(ch && ch.message).trim()) {
+        if (datos && !diagnostico) diagnostico = `Con internet la IA no devolvió texto (fin: ${(ch && (ch.native_finish_reason || ch.finish_reason)) || 'desconocido'}).`;
+        webFallo = true;
+        const sinWeb = { ...cuerpo };
+        delete sinWeb.plugins;
+        sinWeb.messages = [{ role: 'system', content: instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra,
+          bienvenida: (sedeOk && aj.bienvenidas[sedeOk]) || aj.bienvenidas[''] || '', primera, web: null }) + sistema.slice(sistema.indexOf('\n\nFECHA Y HORA')) }, ...historial];
+        datos = await pedir(sinWeb); sumarUso(datos);
+        fueConWeb = false;
       }
-    } catch (err) {
-      if (err.codigo) throw err;
-      throw error(err.name === 'AbortError' ? 'La IA tardó más de 60 segundos.' : 'No se pudo conectar con la IA: ' + err.message, 502);
-    } finally { clearTimeout(reloj); }
-    const msj = ((datos.choices || [])[0] || {}).message || {};
-    const contenido = msj.content || '';
+    } else { datos = await pedir(cuerpo); sumarUso(datos); }
+    const ch = (datos.choices || [])[0] || {};
+    const msj = ch.message || {};
+    const contenido = textoDe(msj);
     const j = leerJSON(contenido);
+    if (!contenido.trim() && !diagnostico) diagnostico = `La IA no devolvió texto (fin: ${ch.native_finish_reason || ch.finish_reason || 'desconocido'}).`;
+    else if (!j && contenido.trim() && !diagnostico) diagnostico = 'La IA respondió en texto libre (sin el formato JSON): se usa su texto tal cual.';
     const enlaces = [...new Map((msj.annotations || []).filter(a => a.type === 'url_citation' && a.url_citation && a.url_citation.url)
       .map(a => [a.url_citation.url, { url: a.url_citation.url, titulo: a.url_citation.title || '' }])).values()].slice(0, 5);
     const motivo = j && MOTIVOS[j.motivo] ? j.motivo : '';
+    // Si no vino en JSON, se limpia lo que la IA haya puesto alrededor (```json, "respuesta": ...).
+    const libre = contenido.replace(/```(?:json)?/gi, '').trim();
     return {
-      respuesta: String((j && j.respuesta) || contenido || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
+      respuesta: String((j && j.respuesta) || libre || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
       pasar_a_asesor: Boolean(j && j.pasar_a_asesor) || Boolean(motivo),
       motivo, motivo_texto: MOTIVOS[motivo] || '',
       resumen_para_asesor: String((j && j.resumen_para_asesor) || '').trim(),
@@ -564,10 +596,11 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       fuentes: encontrados.map(x => ({ titulo: x.titulo, fuente: x.fuente, puntaje: x.puntaje })),
       formato_ok: Boolean(j),
       idioma: String((j && j.idioma) || '').slice(0, 5).toLowerCase(),
-      web: { usada: usarWeb, enlaces },
+      web: { usada: fueConWeb, intentada: usarWeb, fallo: webFallo, enlaces },
+      diagnostico,
       ejemplos: elegidos.length,
       modelo: datos.model || aj.modelo, segundos: Math.round((Date.now() - t0) / 100) / 10,
-      tokens: datos.usage ? { entrada: datos.usage.prompt_tokens, salida: datos.usage.completion_tokens } : null
+      tokens: usoTotal.entrada || usoTotal.salida ? usoTotal : null
     };
   }
 
