@@ -5,3 +5,9 @@ config-actualizado.js
 *.env
 
 node_modules/
+
+# Tarifas y base de conocimiento (precios netos y comisiones): nunca al repositorio público
+panel/tarifas/conocimiento.json
+panel/tarifas/tarifas.json
+base-conocimiento/
+*.zip

@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
 const nodemailer = require('nodemailer');
 const config = require('./config');
+const cotizador = require('./cotizador');
 
 const client = new Client(config.db);
 
@@ -320,6 +321,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
       return archivo(res, path.join(CARPETA, 'index.html'), 'text/html; charset=utf-8');
     }
+    if (cotizador.servirScript(req, res)) return;
     if (req.method === 'GET' && url === '/inteligencia-artificial.png') {
       return archivo(res, path.join(CARPETA, 'inteligencia-artificial.png'), 'image/png');
     }
@@ -420,6 +422,7 @@ http.createServer(async (req, res) => {
 
     const permisos = permisosDe(u, await mapaGrupos());
     const puede = p => Boolean(permisos[p]);
+    if (await cotizador.atender(req, res, { client, puede, json, leerCuerpo })) return;
 
     if (req.method === 'POST' && url === '/api/cambiar-clave-propia') {
       const { actual, nueva } = await leerCuerpo(req);
