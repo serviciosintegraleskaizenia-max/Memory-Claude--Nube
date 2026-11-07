@@ -137,6 +137,12 @@
   .k-res .t { padding:8px 12px; font-size:13px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .k-clave { font-family:Consolas,monospace; font-size:12.5px; background:var(--hover); border:1px solid var(--borde); border-radius:8px; padding:6px 9px; overflow-wrap:anywhere; }
   .k-progreso { font-size:13px; color:var(--suave); margin-top:8px; min-height:18px; }
+  .k-chat { display:flex; flex-direction:column; gap:8px; background:var(--fondo); border-radius:12px; padding:12px; min-height:200px; max-height:520px; overflow-y:auto; margin:10px 0; }
+  .k-chat .burbuja.mia { background:#dcf8c6; color:#0f172a; } body.oscuro .k-chat .burbuja.mia { background:#14532d; color:#e2e8f0; }
+  .k-meta { align-self:flex-start; max-width:85%; font-size:11.5px; color:var(--suave); margin:-3px 0 4px 4px; }
+  .k-meta details summary { cursor:pointer; } .k-meta ol { margin:4px 0 0; padding-left:18px; }
+  .k-asesor { align-self:flex-start; max-width:85%; background:#fef3c7; color:#78350f; border:1px solid #fde68a; border-radius:10px; padding:7px 10px; font-size:12.5px; }
+  body.oscuro .k-asesor { background:#451a03; color:#fde68a; border-color:#92400e; }
   .menu-movil { display:none; }
   @media (max-width: 900px) {
     body { display:block; }
@@ -192,6 +198,8 @@ let filtroPagos = 'abiertos';
 let mesCal = '';
 let K = null;                 // base del asistente: { empresas, empresa, archivos }
 let kEmpresa = '';
+let kChat = [];               // chat de prueba: [{ rol: 'cliente'|'asistente', texto, info }]
+let kChatSede = '';
 const timers = {};
 
 /* ---------- Utilidades ---------- */
@@ -251,7 +259,9 @@ const AYUDA = {
     <li>Lo que subes queda <b>Por revisar</b>. Toca 👁 para ver cómo lo entendió el panel: en rojo sale lo que <b>se quitó</b> (comisión, neto, costo) y que el cliente final nunca verá.</li>
     <li>Si está bien, toca <b>Publicar</b>: desde ese momento el asistente lo usa. Si subes un archivo con el mismo nombre, reemplaza al anterior al publicarlo (y puedes volver a la versión anterior).</li>
     <li><b>Sede</b>: a qué oficina pertenece (ej. Punta Cana u Orlando). "Todas las sedes" vale para las dos. El panel la adivina por el nombre del archivo; cámbiala si no acierta.</li>
-    <li><b>Probar como el asistente</b>: escribe una pregunta de un cliente y mira qué información encontraría.</li>
+    <li><b>💬 Chat de prueba</b>: escribe como si fueras un cliente y la IA te contesta como lo hará en las redes. Abajo de cada respuesta ves qué consultó y, en amarillo, cuándo pasaría la conversación a un asesor.</li>
+    <li><b>🧠 Instrucciones</b>: cómo se presenta, el modelo de IA y reglas propias de la empresa o de cada sede.</li>
+    <li><b>Probar como el asistente</b>: muestra solo qué información encontraría (sin IA, no gasta).</li>
     <li><b>Clave del asistente</b>: la usa n8n para consultar esta base. Si n8n corre en Docker en esta PC, la dirección es <code>http://host.docker.internal:PUERTO</code> (el puerto del central).</li></ul>`,
   empresas: `Aquí está todo lo que antes estaba en Herramientas → Empresas: crear empresas, agregar una existente, módulos, cobro y recordatorio, anuncios, pausar, la <b>demo de ventas</b> con sus accesos de 48 horas y el banco de mensajes.`,
   herramientas: `Usuarios, grupos, auditoría, bloqueos y estado del sistema <b>del central</b> (tu Oficina).`
@@ -668,6 +678,13 @@ function vConocimiento() {
     <div class="caja"><div class="cab"><div><h2>Por revisar</h2><p class="sub">Toca 👁 para ver cómo lo entendió el panel. En rojo: lo interno que se quitó (comisión, neto, costo).</p></div>
       ${borr.length > 1 ? `<button class="btn" data-k="publicar-todo">✔ Publicar todo (${borr.length})</button>` : ''}</div>
       ${borr.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Contenido</th><th>Se quitó</th><th></th></tr></thead><tbody>${borr.map(filaBorr).join('')}</tbody></table>` : '<div class="vacio">Nada por revisar. Sube un archivo o una nota.</div>'}</div>
+    <div class="caja"><div class="cab"><div><h2>💬 Chat de prueba</h2><p class="sub">Escribe como si fueras un cliente: la IA contesta igual que lo hará en Facebook, Instagram y WhatsApp</p></div>
+        <div class="acciones"><select id="kChatSede" title="Sede de la conversación">${(e.sedes.length ? e.sedes : ['']).map(x => `<option value="${esc(x)}" ${x === kChatSede ? 'selected' : ''}>${x ? 'Chat de ' + esc(x) : 'Sin sede'}</option>`).join('')}</select>
+        <button class="btn-sec" data-k="instrucciones">🧠 Instrucciones</button><button class="btn-sec" data-k="chat-nuevo">↺ Nueva conversación</button></div></div>
+      ${e.tieneClaveIA ? '' : `<div class="k-avisos">⚠️ Esta empresa no tiene clave de IA. Ponla en <a href="#" data-ir="clientes">Clientes y cobros</a> → Editar → clave de OpenRouter.</div>`}
+      <div class="k-chat" id="kChat">${pintarChatK()}</div>
+      <div style="display:flex;gap:6px"><textarea id="kChatTexto" rows="2" style="flex:1;resize:vertical" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea><button class="btn" data-k="chat-enviar">Enviar</button></div>
+      <label style="font-size:12.5px;display:flex;gap:5px;align-items:center;margin-top:6px"><input type="checkbox" id="kChatBorr"> usar también lo que está por revisar</label></div>
     <div class="caja"><h2>Probar como el asistente</h2><p class="sub">Escribe lo que preguntaría un cliente y mira qué información encontraría el asistente</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="kPruebaSede">${opcionesSede('')}</select>
         <input id="kPregunta" placeholder="Ej: ¿cuánto cuesta Isla Saona para 2 adultos y un niño?" style="flex:1;min-width:220px">
@@ -678,6 +695,49 @@ function vConocimiento() {
       ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
       ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>
 `;
+}
+
+function pintarChatK() {
+  if (!kChat.length) return '<div class="vacio">Empieza la conversación como si fueras un cliente.</div>';
+  return kChat.map(m => {
+    if (m.rol === 'cliente') return `<div class="burbuja mia">${esc(m.texto)}</div>`;
+    if (m.error) return `<div class="k-asesor" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">⛔ ${esc(m.error)}</div>`;
+    const i = m.info || {};
+    return `<div class="burbuja otra">${esc(m.texto)}</div>` +
+      (i.pasar_a_asesor ? `<div class="k-asesor">👤 <b>Pasa a un asesor de ${esc(i.sede)}</b>${i.motivo_texto ? ' · ' + esc(i.motivo_texto) : ''}${i.resumen_para_asesor ? `<br>${esc(i.resumen_para_asesor)}` : ''}</div>` : '') +
+      `<div class="k-meta"><details><summary>Consultó ${(i.fuentes || []).length} cosa(s) · ${i.segundos ?? '?'} s${i.tokens ? ` · ${i.tokens.entrada + i.tokens.salida} tokens` : ''}${i.formato_ok === false ? ' · ⚠️ respondió sin formato' : ''}</summary>
+        <ol>${(i.fuentes || []).map(f => `<li>${esc(f.titulo)} <span style="opacity:.7">(${esc(f.fuente)})</span></li>`).join('') || '<li>Nada: no encontró información sobre esto.</li>'}</ol></details></div>`;
+  }).join('');
+}
+function repintarChatK() { const c = document.getElementById('kChat'); if (!c) return; c.innerHTML = pintarChatK(); c.scrollTop = c.scrollHeight; }
+async function enviarChatK() {
+  const caja = document.getElementById('kChatTexto');
+  const t = caja.value.trim(); if (!t || kChat.pensando) return;
+  kChatSede = document.getElementById('kChatSede').value;
+  kChat.push({ rol: 'cliente', texto: t }); caja.value = '';
+  kChat.pensando = true; repintarChatK();
+  const c = document.getElementById('kChat'); c.insertAdjacentHTML('beforeend', '<div class="burbuja otra" id="kPensando" style="opacity:.6">escribiendo…</div>'); c.scrollTop = c.scrollHeight;
+  const historial = kChat.filter(m => !m.error).map(m => ({ rol: m.rol, texto: m.texto }));
+  const r = await api('/api/oficina/conocimiento/chat', { empresa_id: kEmpresa, sede: kChatSede, mensajes: historial, borradores: document.getElementById('kChatBorr').checked });
+  kChat.pensando = false;
+  if (r.ok) kChat.push({ rol: 'asistente', texto: r.data.respuesta, info: r.data });
+  else kChat.push({ rol: 'asistente', error: r.data.error || 'No respondió.' });
+  repintarChatK(); document.getElementById('kChatTexto').focus();
+}
+function formInstrucciones() {
+  const e = K.empresa, a = e.ajustes || {};
+  abrirModal(`<h2>🧠 Instrucciones del asistente de ${esc(e.nombre)}</h2>
+    <p style="margin:-6px 0 12px;color:var(--suave);font-size:13px">Las reglas de siempre (solo precio de venta, nunca comisión ni neto, no inventar, pasar a un asesor) ya vienen puestas. Aquí agregas lo propio de esta empresa.</p>
+    <div class="fila2">${campo('iNombre', 'Cómo se presenta', `<input id="iNombre" value="${esc(a.nombre || '')}" placeholder="el asistente de ${esc(e.nombre)}">`)}
+    ${campo('iModelo', 'Modelo de IA', `<input id="iModelo" value="${esc(a.modelo || '')}" placeholder="anthropic/claude-haiku-5.5">`, 'El de OpenRouter. Vacío = Claude Haiku (rápido y económico).')}</div>
+    ${campo('iGeneral', 'Instrucciones para todas las sedes', `<textarea id="iGeneral" rows="5" placeholder="Ej: Si preguntan por hoteles, di que un asesor le arma la cotización. Horario de oficina: lunes a sábado de 8 a.m. a 6 p.m.">${esc(a.instrucciones || '')}</textarea>`)}
+    ${e.sedes.map((x, i) => campo('iSede' + i, 'Solo para ' + esc(x), `<textarea id="iSede${i}" data-sede="${esc(x)}" rows="4" placeholder="Ej: Para parques temáticos pide: nombre del pasajero principal, adultos, niños de 3 a 9 años, fechas, si quiere traslado hotel-parque y el tipo de entrada.">${esc((a.sedes || {})[x] || '')}</textarea>`)).join('')}
+    ${pieModal(false)}`);
+  document.getElementById('modal').classList.add('ancho');
+  document.getElementById('fGuardar').onclick = async () => {
+    const sedes = {}; document.querySelectorAll('#modal textarea[data-sede]').forEach(t => { sedes[t.dataset.sede] = t.value; });
+    await enviarForm('/api/oficina/conocimiento/instrucciones', { empresa_id: kEmpresa, nombre: document.getElementById('iNombre').value, modelo: document.getElementById('iModelo').value.trim(), instrucciones: document.getElementById('iGeneral').value, sedes }, 'Instrucciones guardadas. Pruébalas en el chat.');
+  };
 }
 function verArchivo(f) {
   const q = f.quitado || {};
@@ -778,9 +838,13 @@ document.addEventListener('click', async ev => {
   if (accion === 'copiar') { try { await navigator.clipboard.writeText(document.getElementById('kClave').dataset.clave); aviso('Clave copiada. Pégala en n8n, no en el chat.'); } catch (e) { aviso('No se pudo copiar.'); } return; }
   if (accion === 'ejemplo') return ejemploConexion();
   if (accion === 'probar') return probarConocimiento();
+  if (accion === 'chat-enviar') return enviarChatK();
+  if (accion === 'chat-nuevo') { kChat = []; return repintarChatK(); }
+  if (accion === 'instrucciones') return formInstrucciones();
 });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; return ir('conocimiento'); }
+  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; kChat = []; kChatSede = ''; return ir('conocimiento'); }
+  if (e.target.id === 'kChatSede') { kChatSede = e.target.value; if (kChat.length) { kChat = []; repintarChatK(); aviso('Nueva conversación en otra sede.'); } return; }
   if (e.target.id === 'kArchivos' || e.target.id === 'kCarpeta') { const l = [...e.target.files]; e.target.value = ''; if (l.length) await subirArchivos(l); return; }
   if (e.target.classList.contains('k-sede')) { await api('/api/oficina/conocimiento/sede', { id: e.target.dataset.id, sede: e.target.value }); aviso('Sede cambiada.'); return cargarConocimiento(); }
 });
@@ -789,7 +853,10 @@ document.addEventListener('input', e => {
   const q = e.target.value.trim().toLowerCase();
   document.querySelectorAll('tr[data-filtro]').forEach(tr => { tr.style.display = !q || tr.dataset.filtro.includes(q) ? '' : 'none'; });
 });
-document.addEventListener('keydown', e => { if (e.target.id === 'kPregunta' && e.key === 'Enter') { e.preventDefault(); probarConocimiento(); } });
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'kPregunta' && e.key === 'Enter') { e.preventDefault(); probarConocimiento(); }
+  if (e.target.id === 'kChatTexto' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatK(); }
+});
 
 /* ---------- Empresas y Herramientas (las pantallas de siempre, dentro de la Oficina) ---------- */
 function vEmpresas() { return cabecera('🏗️ Empresas y demo', 'Crear empresas, módulos, cobro y recordatorio, anuncios, pausa y demo de ventas') + `<iframe class="marco" src="/?incrustado=empresas" title="Empresas"></iframe>`; }

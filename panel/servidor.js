@@ -1607,7 +1607,7 @@ http.createServer(async (req, res) => {
 
     // Base de conocimiento para el chatbot (n8n): sin sesión, con la clave del asistente de cada empresa.
     if (url.startsWith('/api/conocimiento/')) {
-      return oficina.conocimiento.manejarPublico(req, res, url, { json });
+      return oficina.conocimiento.manejarPublico(req, res, url, { json, leerCuerpo });
     }
 
     const u = await usuarioDeSesion(req);

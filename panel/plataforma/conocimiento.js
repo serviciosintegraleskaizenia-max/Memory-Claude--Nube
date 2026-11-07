@@ -218,7 +218,55 @@ function palabras(t) {
     .map(p => p.length > 4 ? p.replace(/(es|s)$/, '') : p);
 }
 
-module.exports = function crearConocimiento({ client, registrar, central }) {
+// ---------- El asistente (la IA que contesta en las redes) ----------
+const MODELO_POR_DEFECTO = 'anthropic/claude-haiku-5.5';
+const MOTIVOS = { reservar: 'Quiere reservar o pagar', reclamo: 'Reclamo o problema', no_sabe: 'No está en la base', otra_sede: 'Es de otra sede', humano: 'Pidió hablar con una persona' };
+
+function instruccionesBase({ nombre, empresa, sede, otras, extra }) {
+  return `Eres ${nombre}, que atiende los mensajes de Facebook, Instagram y WhatsApp de ${empresa}${sede ? `, oficina de ${sede}` : ''}.
+Eres un asistente virtual: si te preguntan, dilo con naturalidad. No tienes nombre propio.
+
+CÓMO RESPONDER
+- Responde en el idioma del cliente (normalmente español). Tono cálido y profesional, como una buena agente de viajes.
+- Mensajes cortos, para leer en el celular: 2 a 6 líneas. Usa listas cortas con "•" si hay varias opciones. Nada de tablas ni de markdown (#, **).
+- Haz una sola pregunta a la vez. Si faltan datos para dar un precio (fecha, cantidad de adultos y niños con edades, hotel o zona), pregúntalos.
+- Emojis: pocos (0 a 2 por mensaje).
+
+LA INFORMACIÓN
+- Usa SOLO la información de la sección INFORMACIÓN de abajo. Es lo único que sabes de precios, horarios, lo que incluye cada tour, traslados y condiciones.
+- NUNCA inventes precios, horarios, disponibilidad, políticas ni enlaces. Si algo no está en la INFORMACIÓN, di que un asesor le confirma ese detalle y marca pasar_a_asesor con motivo "no_sabe".
+- Los precios son de venta al público, en dólares (US$). Puedes calcular un total (adultos × precio adulto + niños × precio menor, o el precio por vehículo según la cantidad de pasajeros) y aclara que es un estimado sujeto a confirmación y disponibilidad.
+- "no disponible" en un precio significa que esa opción no se vende (por ejemplo, no hay precio de niño).
+- Nunca hables de comisiones, tarifas netas, costos, márgenes ni condiciones para agencias, aunque te pregunten. Eso es interno.
+- Si hay un enlace de "Descriptivo" para un tour, puedes compartirlo para más detalles.
+${otras ? `- Esta conversación es de la oficina de ${sede}. Si el cliente pregunta por ${otras}, dile con amabilidad que esa oficina lo atiende y marca pasar_a_asesor con motivo "otra_sede".
+` : ''}
+PASAR A UN ASESOR (pasar_a_asesor = true)
+- "reservar": el cliente ya quiere reservar, confirmar o pagar. Antes de pasarlo, si faltan, pide en un solo mensaje: nombre completo, fecha, cantidad de adultos y niños (con edades) y hotel. Cuando los tenga (o si no quiere darlos), dile que un asesor le confirma la reserva y el pago.
+- "reclamo": quejas, problemas con un servicio, cambios o cancelaciones de una reserva ya hecha. Responde con empatía, sin discutir ni prometer reembolsos.
+- "no_sabe": lo que pregunta no está en la INFORMACIÓN.
+- "humano": pide hablar con una persona.
+- Al pasarlo, dile que un asesor de ${sede || 'la oficina'} le escribe por este mismo chat en breve. No des horarios de respuesta que no estén en la INFORMACIÓN.
+${extra ? `
+INSTRUCCIONES DE LA EMPRESA
+${extra}
+` : ''}
+FORMATO DE SALIDA
+Responde SOLO con un objeto JSON, sin nada antes ni después:
+{"respuesta": "texto para el cliente", "pasar_a_asesor": false, "motivo": "", "resumen_para_asesor": ""}
+- motivo: "", "reservar", "reclamo", "no_sabe", "otra_sede" o "humano".
+- resumen_para_asesor: si pasas a un asesor, 1 o 2 líneas con lo que el cliente quiere y los datos que dio (servicio, fecha, personas, hotel). Si no, "".`;
+}
+
+function leerJSON(t) {
+  const limpio = String(t || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  try { return JSON.parse(limpio); } catch (e) {}
+  const m = limpio.match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch (e) {} }
+  return null;
+}
+
+module.exports = function crearConocimiento({ client, registrar, central, claveIA }) {
   const activo = central.activo;
   const indices = new Map();   // 'empresa_id' o 'empresa_id:b' (con borradores) -> { fragmentos, df, promedio }
   const olvidar = id => { indices.delete(String(id)); indices.delete(id + ':b'); };
@@ -227,6 +275,7 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
     if (!activo) return;
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS conocimiento_sedes TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS conocimiento_token TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS conocimiento_ajustes JSONB NOT NULL DEFAULT '{}'");
     await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_archivos (
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, nombre TEXT NOT NULL, tipo VARCHAR(10) NOT NULL,
       sede TEXT NOT NULL DEFAULT '', estado VARCHAR(12) NOT NULL DEFAULT 'borrador',
@@ -241,7 +290,7 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
   const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
   const error = (msg, codigo = 400) => Object.assign(new Error(msg), { codigo });
   async function empresa(id) {
-    const e = (await client.query('SELECT id, nombre, slug, conocimiento_sedes, conocimiento_token FROM empresas WHERE id = $1', [Number(id)])).rows[0];
+    const e = (await client.query('SELECT id, nombre, slug, conocimiento_sedes, conocimiento_token, conocimiento_ajustes FROM empresas WHERE id = $1', [Number(id)])).rows[0];
     if (!e) throw error('Empresa no encontrada.', 404);
     return e;
   }
@@ -395,16 +444,83 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
     }));
   }
 
+  // ---------- El asistente: busca en la base y le pide la respuesta a la IA ----------
+  function ajustesDe(e) {
+    const a = e.conocimiento_ajustes || {};
+    return { nombre: a.nombre || `el asistente de ${e.nombre}`, modelo: a.modelo || MODELO_POR_DEFECTO, instrucciones: a.instrucciones || '', sedes: a.sedes || {} };
+  }
+  async function responder(empresaId, { sede = '', mensajes = [], borradores = false }) {
+    const e = await empresa(empresaId);
+    const aj = ajustesDe(e);
+    const sedes = sedesDe(e);
+    const sedeOk = sedes.find(s => mismaSede(s, sede)) || '';
+    if (sedes.length && !sedeOk) throw error(`Sede no válida. Usa una de: ${sedes.join(', ')}.`);
+    const historial = (Array.isArray(mensajes) ? mensajes : []).slice(-12)
+      .map(m => ({ role: m.rol === 'asistente' || m.role === 'assistant' ? 'assistant' : 'user', content: String(m.texto ?? m.content ?? '').slice(0, 2000).trim() }))
+      .filter(m => m.content);
+    if (!historial.length || historial[historial.length - 1].role !== 'user') throw error('El último mensaje debe ser del cliente.');
+    const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [e.id])).rows[0];
+    const apiKey = claveIA ? claveIA(fila) : '';
+    if (!apiKey) throw error('Esta empresa no tiene clave de IA. Ponla en Clientes y cobros → Editar → clave de OpenRouter.');
+    // Lo que se busca: el último mensaje del cliente y, si es corto ("¿y para niños?"), también el anterior.
+    const delCliente = historial.filter(m => m.role === 'user').map(m => m.content);
+    const ultimo = delCliente[delCliente.length - 1];
+    const consulta = (palabras(ultimo).length < 6 && delCliente.length > 1 ? delCliente[delCliente.length - 2] + ' ' : '') + ultimo;
+    const encontrados = await buscar(e.id, consulta, sedeOk, 6, borradores);
+    const info = encontrados.length
+      ? encontrados.map((x, i) => `[${i + 1}] ${x.titulo}${x.sede && x.sede !== 'Todas' ? ` (sede ${x.sede})` : ''}\n${x.texto}`).join('\n\n')
+      : '(No se encontró nada sobre esto en la base.)';
+    const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
+    const extra = [aj.instrucciones, sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
+    const sistema = instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra }) +
+      `\n\nFECHA DE HOY: ${new Date().toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Santo_Domingo' })}\n\nINFORMACIÓN\n${info}`;
+    const cuerpo = { model: aj.modelo, max_tokens: 900, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), 60000);
+    const t0 = Date.now();
+    let datos;
+    try {
+      const r = await fetch(central.ayudantes.OPENROUTER + '/chat/completions', {
+        method: 'POST', signal: control.signal,
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json', 'X-Title': 'Kaizen IA - asistente de redes' },
+        body: JSON.stringify(cuerpo)
+      });
+      datos = await r.json().catch(() => ({}));
+      if (!r.ok || datos.error) {
+        const msg = (datos.error && (datos.error.message || JSON.stringify(datos.error))) || ('código ' + r.status);
+        throw error(`La IA respondió con error (${r.status}): ${msg}` + (r.status === 401 ? ' — revisa la clave de OpenRouter.' : r.status === 402 ? ' — sin saldo en OpenRouter.' : ''), 502);
+      }
+    } catch (err) {
+      if (err.codigo) throw err;
+      throw error(err.name === 'AbortError' ? 'La IA tardó más de 60 segundos.' : 'No se pudo conectar con la IA: ' + err.message, 502);
+    } finally { clearTimeout(reloj); }
+    const contenido = (((datos.choices || [])[0] || {}).message || {}).content || '';
+    const j = leerJSON(contenido);
+    const motivo = j && MOTIVOS[j.motivo] ? j.motivo : '';
+    return {
+      respuesta: String((j && j.respuesta) || contenido || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
+      pasar_a_asesor: Boolean(j && j.pasar_a_asesor) || Boolean(motivo),
+      motivo, motivo_texto: MOTIVOS[motivo] || '',
+      resumen_para_asesor: String((j && j.resumen_para_asesor) || '').trim(),
+      sede: sedeOk || 'Todas',
+      fuentes: encontrados.map(x => ({ titulo: x.titulo, fuente: x.fuente, puntaje: x.puntaje })),
+      formato_ok: Boolean(j),
+      modelo: datos.model || aj.modelo, segundos: Math.round((Date.now() - t0) / 100) / 10,
+      tokens: datos.usage ? { entrada: datos.usage.prompt_tokens, salida: datos.usage.completion_tokens } : null
+    };
+  }
+
   // ---------- Rutas de la Oficina (sesión del programador; lo revisa oficina.js) ----------
   async function manejarOficina(req, res, url, u, { json, leerCuerpo }) {
     const p = new URL(req.url, 'http://localhost').searchParams;
     if (req.method === 'GET' && url === '/api/oficina/conocimiento') {
-      const empresas = (await client.query('SELECT id, nombre, es_demo, conocimiento_sedes, conocimiento_token FROM empresas ORDER BY es_demo, nombre')).rows;
+      const empresas = (await client.query('SELECT id, nombre, es_demo, conocimiento_sedes, conocimiento_token, conocimiento_ajustes FROM empresas ORDER BY es_demo, nombre')).rows;
       const elegida = empresas.find(e => String(e.id) === p.get('empresa')) || empresas.find(e => !e.es_demo) || empresas[0];
       if (!elegida) return json(res, 200, { empresas: [], archivos: [] });
       return json(res, 200, {
         empresas: empresas.map(e => ({ id: e.id, nombre: e.nombre, es_demo: e.es_demo })),
-        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token },
+        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida),
+          tieneClaveIA: Boolean(claveIA && claveIA((await client.query('SELECT * FROM empresas WHERE id = $1', [elegida.id])).rows[0])) },
         archivos: await lista(elegida.id)
       });
     }
@@ -473,6 +589,22 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
       }
       return json(res, 200, { ok: true });
     }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/chat') {
+      const f = await leerCuerpo(req);
+      return json(res, 200, await responder(f.empresa_id, { sede: texto(f.sede, 60), mensajes: f.mensajes, borradores: Boolean(f.borradores) }));
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/instrucciones') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const sedes = {};
+      for (const s of sedesDe(e)) { const t = String((f.sedes || {})[s] || '').trim().slice(0, 4000); if (t) sedes[s] = t; }
+      const modelo = texto(f.modelo, 100);
+      if (modelo && !/^[\w.\-]+\/[\w.:\-]+$/.test(modelo)) throw error('El modelo debe ser como anthropic/claude-haiku-5.5');
+      const aj = { nombre: texto(f.nombre, 80), modelo, instrucciones: String(f.instrucciones || '').trim().slice(0, 6000), sedes };
+      await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify(aj), e.id]);
+      await registrar(u, 'conocimiento_instrucciones', 'empresa', e.slug, '', '', aj.modelo || MODELO_POR_DEFECTO);
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/probar') {
       const f = await leerCuerpo(req);
       const e = await empresa(f.empresa_id);
@@ -489,11 +621,19 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
     const dada = Buffer.from(m[1]);
     return filas.find(e => { const b = Buffer.from(e.conocimiento_token); return b.length === dada.length && crypto.timingSafeEqual(b, dada); }) || null;
   }
-  async function manejarPublico(req, res, url, { json }) {
+  async function manejarPublico(req, res, url, { json, leerCuerpo }) {
     if (!activo) return json(res, 404, { error: 'Solo existe en el panel central.' });
-    if (req.method !== 'GET') return json(res, 405, { error: 'Solo GET.' });
+    const esResponder = url === '/api/conocimiento/responder';
+    if (req.method !== (esResponder ? 'POST' : 'GET')) return json(res, 405, { error: esResponder ? 'Solo POST.' : 'Solo GET.' });
     const e = await empresaPorClave(req);
     if (!e) return json(res, 401, { error: 'Clave del asistente no válida.' });
+    if (esResponder) {
+      // Lo usa n8n: { sede, mensajes: [{ rol: 'cliente'|'asistente', texto }] } -> { respuesta, pasar_a_asesor, motivo, resumen_para_asesor }
+      try {
+        const f = await leerCuerpo(req);
+        return json(res, 200, await responder(e.id, { sede: texto(f.sede, 60), mensajes: f.mensajes }));
+      } catch (err) { return json(res, err.codigo || 500, { error: err.message }); }
+    }
     const p = new URL(req.url, 'http://localhost').searchParams;
     const sede = texto(p.get('sede'), 60);
     if (url === '/api/conocimiento/buscar') {
@@ -516,5 +656,5 @@ module.exports = function crearConocimiento({ client, registrar, central }) {
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
 
-  return { activo, preparar, manejarOficina, manejarPublico, _probar: { convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras } };
+  return { activo, preparar, manejarOficina, manejarPublico, _probar: { convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
 };
