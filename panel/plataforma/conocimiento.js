@@ -222,6 +222,24 @@ function palabras(t) {
 const MODELO_POR_DEFECTO = 'anthropic/claude-haiku-5.5';
 const MOTIVOS = { reservar: 'Quiere reservar o pagar', reclamo: 'Reclamo o problema', no_sabe: 'No está en la base', otra_sede: 'Es de otra sede', humano: 'Pidió hablar con una persona' };
 
+// Idioma del cliente, detectado por palabras comunes (para ordenárselo a la IA sin dudas).
+const PALABRAS_IDIOMA = {
+  en: 'the what how much is are rides ride price prices hello hi want would like can could please thanks thank you transfer airport ticket tickets where when have has does do my we our there and of to from with need book booking any'.split(' '),
+  pt: 'olá ola oi quanto custa custam você voce vocês voces obrigado obrigada não nao gostaria preço preco ingresso ingressos aeroporto quero tem bom boa dia noite passeio passeios crianças criancas criança são sao está também tambem uma meu minha nós nos fazer reserva valor'.split(' '),
+  es: 'hola cuánto cuanto cuesta cuestan precio precios quiero gracias por favor qué niños ninos niño tienen tiene buenas buenos días dias aeropuerto traslado traslados usted están también tambien una mi nosotros hacer reservar entrada entradas el la los las del y es'.split(' ')
+};
+const NOMBRE_IDIOMA = { es: ['español', 'Spanish'], pt: ['portugués de Brasil', 'Brazilian Portuguese'], en: ['inglés', 'English'] };
+function detectarIdioma(texto) {
+  const p = String(texto || '').toLowerCase().split(/[^a-záéíóúâêôãõçñü]+/).filter(Boolean);
+  if (p.length < 2) return '';
+  const pts = {};
+  for (const [k, lista] of Object.entries(PALABRAS_IDIOMA)) pts[k] = p.filter(w => lista.includes(w)).length;
+  if (/[ãõç]|ção|ções/.test(String(texto).toLowerCase())) pts.pt += 2;
+  if (/[ñ¿¡]/.test(String(texto))) pts.es += 2;
+  const orden = Object.entries(pts).sort((a, b) => b[1] - a[1]);
+  return orden[0][1] >= 2 && orden[0][1] > orden[1][1] ? orden[0][0] : '';
+}
+
 function zonaDe(sede) {
   return /orlando|miami|florida|usa|estados unidos|new york|nueva york/i.test(sinTildes(sede || '')) ? 'America/New_York' : 'America/Santo_Domingo';
 }
@@ -523,11 +541,15 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const textoEjemplos = elegidos.length ? '\n\nEJEMPLOS DE CÓMO RESPONDER (aprobados por la empresa: imita el estilo, el tono y el criterio; los precios sácalos siempre de la INFORMACIÓN)\n' +
       elegidos.map(x => `Cliente: ${x.cliente}\nRespuesta ideal: ${x.ideal}`).join('\n---\n') : '';
     const primera = !historial.some(m => m.role === 'assistant');
+    // Idioma: el del último mensaje del cliente; si es muy corto ("ok"), el del anterior.
+    const idiomaCliente = detectarIdioma(ultimo) || (delCliente.length > 1 ? detectarIdioma(delCliente[delCliente.length - 2]) : '');
     const zona = zonaDe(sedeOk);
     const sistema = instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra,
       bienvenida: (sedeOk && aj.bienvenidas[sedeOk]) || aj.bienvenidas[''] || '', primera, web: usarWeb ? aj.web : null }) +
       `\n\nFECHA Y HORA EN ${sedeOk ? sedeOk.toUpperCase() : 'LA OFICINA'}: ${new Date().toLocaleString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zona })}` +
-      textoEjemplos + `\n\nINFORMACIÓN\n${info}`;
+      textoEjemplos + `\n\nINFORMACIÓN\n${info}` +
+      (idiomaCliente && idiomaCliente !== 'es' ? `\n\nIDIOMA DE ESTA RESPUESTA: el cliente escribe en ${NOMBRE_IDIOMA[idiomaCliente][0]}. Escribe el campo "respuesta" COMPLETO en ${NOMBRE_IDIOMA[idiomaCliente][0]}, saludo incluido, y pon "idioma": "${idiomaCliente}". ` +
+        `IMPORTANT: the customer is writing in ${NOMBRE_IDIOMA[idiomaCliente][1]}. Write the whole "respuesta" in ${NOMBRE_IDIOMA[idiomaCliente][1]} (only resumen_para_asesor stays in Spanish).` : '');
     const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
     if (usarWeb) cuerpo.plugins = [{ id: 'web', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
     const t0 = Date.now();
@@ -595,7 +617,8 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       sede: sedeOk || 'Todas',
       fuentes: encontrados.map(x => ({ titulo: x.titulo, fuente: x.fuente, puntaje: x.puntaje })),
       formato_ok: Boolean(j),
-      idioma: String((j && j.idioma) || '').slice(0, 5).toLowerCase(),
+      idioma: String((j && j.idioma) || idiomaCliente || '').slice(0, 5).toLowerCase(),
+      idioma_cliente: idiomaCliente,
       web: { usada: fueConWeb, intentada: usarWeb, fallo: webFallo, enlaces },
       diagnostico,
       ejemplos: elegidos.length,
@@ -847,5 +870,5 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
 
-  return { activo, preparar, manejarOficina, manejarPublico, _probar: { convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
+  return { activo, preparar, manejarOficina, manejarPublico, _probar: { detectarIdioma, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
 };
