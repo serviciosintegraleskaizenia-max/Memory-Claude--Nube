@@ -551,7 +551,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       (idiomaCliente && idiomaCliente !== 'es' ? `\n\nIDIOMA DE ESTA RESPUESTA: el cliente escribe en ${NOMBRE_IDIOMA[idiomaCliente][0]}. Escribe el campo "respuesta" COMPLETO en ${NOMBRE_IDIOMA[idiomaCliente][0]}, saludo incluido, y pon "idioma": "${idiomaCliente}". ` +
         `IMPORTANT: the customer is writing in ${NOMBRE_IDIOMA[idiomaCliente][1]}. Write the whole "respuesta" in ${NOMBRE_IDIOMA[idiomaCliente][1]} (only resumen_para_asesor stays in Spanish).` : '');
     const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
-    if (usarWeb) cuerpo.plugins = [{ id: 'web', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
+    if (usarWeb) cuerpo.plugins = [{ id: 'web', engine: 'exa', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
     const t0 = Date.now();
     // Llama a la IA. Si con internet no devuelve texto, se pregunta otra vez sin internet: el cliente siempre recibe respuesta.
     async function pedir(c) {
