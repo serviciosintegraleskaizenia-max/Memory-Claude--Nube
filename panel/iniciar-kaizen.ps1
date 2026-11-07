@@ -7,6 +7,7 @@
 #    3. Panel de Somos Viajes                -> http://localhost:3001
 #    4. Panel central de pruebas (si existe) -> http://localhost:3090
 #    5. Tunel de Cloudflare (si esta instalado)
+#    6. Chatwoot (redes sociales)            -> http://localhost:3000
 #  Y al final abre cada uno en el navegador.
 #
 #  Los registros quedan en C:\panel-correos\logs\
@@ -16,6 +17,8 @@ param(
   [string]$Panel = 'C:\panel-correos',
   [string]$Central = 'C:\kaizen-pruebas',
   [string]$ContenedorBase = 'chatwoot-postgres-1',
+  [string]$CarpetaChatwoot = 'C:\chatwoot',
+  [int]$PuertoChatwoot = 3000,
   [switch]$SinNavegador
 )
 
@@ -44,7 +47,7 @@ function Esperar($url, $maximo) {
 }
 
 # ---------------------------------------------------------------- 1. Docker
-Paso '1/5 Docker (base de datos y Chatwoot)'
+Paso '1/6 Docker (base de datos y Chatwoot)'
 $dockerListo = $false
 docker info *> $null
 if ($LASTEXITCODE -eq 0) { $dockerListo = $true }
@@ -60,8 +63,17 @@ else {
     }
   } else { Info "No encontre Docker Desktop en $exe" }
 }
+$composeChatwoot = @('docker-compose.yaml', 'docker-compose.yml', 'compose.yaml', 'compose.yml') | ForEach-Object { Join-Path $CarpetaChatwoot $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($dockerListo -and $composeChatwoot) {
+  # Chatwoot completo (web, sidekiq, redis y la base de datos) con su docker compose. Lo que ya esta encendido no se toca.
+  Info 'Encendiendo Chatwoot y la base de datos (docker compose)...'
+  Push-Location $CarpetaChatwoot
+  docker compose -f $composeChatwoot up -d *> (Join-Path $logs 'chatwoot.log')
+  if ($LASTEXITCODE -ne 0) { Info "docker compose dio un aviso. Revisa $logs\chatwoot.log" }
+  Pop-Location
+}
 if ($dockerListo) {
-  # Se encienden los contenedores de Chatwoot (incluye la base de datos) que esten apagados.
+  # Por si quedo algun contenedor de Chatwoot apagado fuera del compose.
   $apagados = docker ps -a --filter 'status=exited' --filter 'name=chatwoot' --format '{{.Names}}'
   foreach ($c in $apagados) { if ($c) { docker start $c | Out-Null; Info "Encendido: $c" } }
   $listaBase = $false
@@ -74,7 +86,7 @@ if ($dockerListo) {
 } else { Mal 'Docker no encendio. Abre Docker Desktop a mano y vuelve a dar doble clic.' }
 
 # ---------------------------------------------------------------- 2. n8n
-Paso '2/5 n8n'
+Paso '2/6 n8n'
 if (Escucha 5678) { Bien 'n8n ya estaba encendido' }
 else {
   Start-Process -FilePath 'cmd.exe' -WindowStyle Hidden -ArgumentList '/c', "n8n start > `"$logs\n8n.log`" 2>&1"
@@ -82,7 +94,7 @@ else {
 }
 
 # ---------------------------------------------------------------- 3. Panel de Somos Viajes
-Paso '3/5 Panel de Somos Viajes'
+Paso '3/6 Panel de Somos Viajes'
 if (Escucha 3001) { Bien 'El panel ya estaba encendido' }
 elseif (-not (Test-Path (Join-Path $Panel 'servidor.js'))) { Mal "No encontre $Panel\servidor.js" }
 else {
@@ -93,7 +105,7 @@ else {
 }
 
 # ---------------------------------------------------------------- 4. Panel central de pruebas
-Paso '4/5 Panel central de pruebas'
+Paso '4/6 Panel central de pruebas'
 $configCentral = Join-Path $Central 'config-central.js'
 if (-not (Test-Path $configCentral)) { Info 'No esta instalado (C:\kaizen-pruebas). Se omite.' }
 elseif (Escucha 3090) { Bien 'El central ya estaba encendido' }
@@ -106,7 +118,7 @@ else {
 }
 
 # ---------------------------------------------------------------- 5. Tunel de Cloudflare
-Paso '5/5 Tunel de Cloudflare'
+Paso '5/6 Tunel de Cloudflare'
 $tunel = Get-Service -Name 'cloudflared' -ErrorAction SilentlyContinue
 if (-not $tunel) { Info 'No esta instalado todavia (guia del tunel). Se omite.' }
 elseif ($tunel.Status -eq 'Running') { Bien 'Tunel activo: somosviajes.kaizenia.app' }
@@ -115,13 +127,23 @@ else {
   catch { Mal 'El tunel esta apagado y Windows no dejo encenderlo (dale doble clic al icono como administrador una vez).' }
 }
 
+# ---------------------------------------------------------------- 6. Chatwoot
+Paso '6/6 Chatwoot (redes sociales)'
+$chatwootListo = $false
+if (-not $dockerListo) { Mal 'Chatwoot no encendio porque Docker no esta encendido.' }
+elseif (-not $composeChatwoot -and -not (docker ps -a --filter 'name=chatwoot-rails' --format '{{.Names}}')) { Info "No esta instalado ($CarpetaChatwoot). Se omite." }
+else {
+  Info 'Esperando a que Chatwoot responda (la primera vez tarda 1 o 2 minutos)...'
+  if (Esperar "http://localhost:$PuertoChatwoot/" 180) { $chatwootListo = $true; Bien "Chatwoot encendido: http://localhost:$PuertoChatwoot  (redes.kaizenia.app)" }
+  else { Mal "Chatwoot todavia no responde. Espera 2 minutos y abre http://localhost:$PuertoChatwoot . Si sigue sin abrir, revisa $logs\chatwoot.log" }
+}
+
 # ---------------------------------------------------------------- Navegador
 if (-not $SinNavegador) {
   $paginas = @('http://localhost:3001')
   if (Test-Path $configCentral) { $paginas += 'http://localhost:3090' }
   $paginas += 'http://localhost:5678'
-  $chatwoot = docker ps --filter 'name=chatwoot' --format '{{.Ports}}' 2>$null | Select-String -Pattern '0\.0\.0\.0:(\d+)->3000' | Select-Object -First 1
-  if ($chatwoot) { $paginas += 'http://localhost:' + $chatwoot.Matches[0].Groups[1].Value }
+  if ($chatwootListo) { $paginas += "http://localhost:$PuertoChatwoot" }
   foreach ($p in $paginas) { Start-Process $p; Start-Sleep -Milliseconds 400 }
 }
 
