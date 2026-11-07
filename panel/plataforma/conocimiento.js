@@ -222,15 +222,24 @@ function palabras(t) {
 const MODELO_POR_DEFECTO = 'anthropic/claude-haiku-5.5';
 const MOTIVOS = { reservar: 'Quiere reservar o pagar', reclamo: 'Reclamo o problema', no_sabe: 'No está en la base', otra_sede: 'Es de otra sede', humano: 'Pidió hablar con una persona' };
 
-function instruccionesBase({ nombre, empresa, sede, otras, extra }) {
+function zonaDe(sede) {
+  return /orlando|miami|florida|usa|estados unidos|new york|nueva york/i.test(sinTildes(sede || '')) ? 'America/New_York' : 'America/Santo_Domingo';
+}
+function instruccionesBase({ nombre, empresa, sede, otras, extra, bienvenida, primera, web }) {
   return `Eres ${nombre}, que atiende los mensajes de Facebook, Instagram y WhatsApp de ${empresa}${sede ? `, oficina de ${sede}` : ''}.
 Eres un asistente virtual: si te preguntan, dilo con naturalidad. No tienes nombre propio.
 
+IDIOMA
+- Escribe tu respuesta en el idioma del ÚLTIMO mensaje del cliente: español, portugués (Brasil), inglés u otro. Si cambia de idioma, cambia tú también.
+- La INFORMACIÓN está en español: tradúcela al idioma del cliente, pero deja tal cual los precios, los nombres de tours, hoteles, zonas y los enlaces.
+- El resumen_para_asesor va SIEMPRE en español (los asesores hablan español).
+
 CÓMO RESPONDER
-- Responde en el idioma del cliente (normalmente español). Tono cálido y profesional, como una buena agente de viajes.
+- Tono cálido y profesional, como una buena agente de viajes.
 - Mensajes cortos, para leer en el celular: 2 a 6 líneas. Usa listas cortas con "•" si hay varias opciones. Nada de tablas ni de markdown (#, **).
 - Haz una sola pregunta a la vez. Si faltan datos para dar un precio (fecha, cantidad de adultos y niños con edades, hotel o zona), pregúntalos.
 - Emojis: pocos (0 a 2 por mensaje).
+${primera ? `- Este es el PRIMER mensaje de la conversación: empieza saludando${bienvenida ? ` con esta bienvenida (adaptada al idioma del cliente y a la hora: buenos días / buenas tardes / buenas noches): "${bienvenida}"` : ' con un saludo breve según la hora (buenos días / buenas tardes / buenas noches)'}, y en el mismo mensaje responde lo que preguntó.` : '- Ya saludaste antes: NO vuelvas a saludar ni a presentarte, ve directo a la respuesta.'}
 
 LA INFORMACIÓN
 - Usa SOLO la información de la sección INFORMACIÓN de abajo. Es lo único que sabes de precios, horarios, lo que incluye cada tour, traslados y condiciones.
@@ -239,7 +248,8 @@ LA INFORMACIÓN
 - "no disponible" en un precio significa que esa opción no se vende (por ejemplo, no hay precio de niño).
 - Nunca hables de comisiones, tarifas netas, costos, márgenes ni condiciones para agencias, aunque te pregunten. Eso es interno.
 - Si hay un enlace de "Descriptivo" para un tour, puedes compartirlo para más detalles.
-${otras ? `- Esta conversación es de la oficina de ${sede}. Si el cliente pregunta por ${otras}, dile con amabilidad que esa oficina lo atiende y marca pasar_a_asesor con motivo "otra_sede".
+${web ? `- Puedes usar los RESULTADOS DE INTERNET solo para información general (atracciones, horarios de parques, cómo llegar, recomendaciones, requisitos).${web.sitios ? ` Prefiere los sitios oficiales: ${web.sitios}.` : ''} NUNCA tomes precios de internet: los precios de ${empresa} son solo los de la INFORMACIÓN. Si piden un precio que no está en la INFORMACIÓN (por ejemplo entradas a parques), toma los datos y pásalo a un asesor. No pongas enlaces de otras agencias.
+` : ''}${otras ? `- Esta conversación es de la oficina de ${sede}. Si el cliente pregunta por ${otras}, dile con amabilidad que esa oficina lo atiende y marca pasar_a_asesor con motivo "otra_sede".
 ` : ''}
 PASAR A UN ASESOR (pasar_a_asesor = true)
 - "reservar": el cliente ya quiere reservar, confirmar o pagar. Antes de pasarlo, si faltan, pide en un solo mensaje: nombre completo, fecha, cantidad de adultos y niños (con edades) y hotel. Cuando los tenga (o si no quiere darlos), dile que un asesor le confirma la reserva y el pago.
@@ -253,7 +263,8 @@ ${extra}
 ` : ''}
 FORMATO DE SALIDA
 Responde SOLO con un objeto JSON, sin nada antes ni después:
-{"respuesta": "texto para el cliente", "pasar_a_asesor": false, "motivo": "", "resumen_para_asesor": ""}
+{"respuesta": "texto para el cliente", "idioma": "es", "pasar_a_asesor": false, "motivo": "", "resumen_para_asesor": ""}
+- idioma: código del idioma en que respondiste ("es", "pt", "en", "fr"...).
 - motivo: "", "reservar", "reclamo", "no_sabe", "otra_sede" o "humano".
 - resumen_para_asesor: si pasas a un asesor, 1 o 2 líneas con lo que el cliente quiere y los datos que dio (servicio, fecha, personas, hotel). Si no, "".`;
 }
@@ -266,7 +277,7 @@ function leerJSON(t) {
   return null;
 }
 
-module.exports = function crearConocimiento({ client, registrar, central, claveIA }) {
+module.exports = function crearConocimiento({ client, config = {}, registrar, central, claveIA }) {
   const activo = central.activo;
   const indices = new Map();   // 'empresa_id' o 'empresa_id:b' (con borradores) -> { fragmentos, df, promedio }
   const olvidar = id => { indices.delete(String(id)); indices.delete(id + ':b'); };
@@ -283,6 +294,12 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       crudo JSONB, original BYTEA, tamano INTEGER NOT NULL DEFAULT 0,
       subido TIMESTAMPTZ NOT NULL DEFAULT NOW(), subido_por TEXT NOT NULL DEFAULT '', publicado TIMESTAMPTZ)`);
     await client.query('CREATE INDEX IF NOT EXISTS conocimiento_archivos_empresa ON conocimiento_archivos (empresa_id, estado)');
+    await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_ejemplos (
+      id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, sede TEXT NOT NULL DEFAULT '', cliente TEXT NOT NULL,
+      contexto JSONB NOT NULL DEFAULT '[]', respuesta TEXT NOT NULL DEFAULT '', ideal TEXT NOT NULL DEFAULT '',
+      voto VARCHAR(5) NOT NULL DEFAULT '', nota TEXT NOT NULL DEFAULT '', estado VARCHAR(12) NOT NULL DEFAULT 'nuevo',
+      autor TEXT NOT NULL DEFAULT '', origen VARCHAR(10) NOT NULL DEFAULT 'oficina', creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), revisado TIMESTAMPTZ)`);
+    await client.query('CREATE INDEX IF NOT EXISTS conocimiento_ejemplos_empresa ON conocimiento_ejemplos (empresa_id, estado)');
     await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_cabeceras (
       empresa_id INTEGER NOT NULL, linea TEXT NOT NULL, PRIMARY KEY (empresa_id, linea))`);
   }
@@ -444,10 +461,21 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
     }));
   }
 
+  async function panelConectado(empresaId) {
+    try {
+      const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [empresaId])).rows[0];
+      return await central.ayudantes.conEmpresa(fila, async db => {
+        const r = await db.query('SELECT actualizado FROM asistente_conexion WHERE id = 1').catch(() => ({ rows: [] }));
+        return r.rows[0] ? { conectado: true, desde: r.rows[0].actualizado } : { conectado: false };
+      });
+    } catch (err) { return { conectado: false, error: 'Sin conexión con su base' }; }
+  }
+
   // ---------- El asistente: busca en la base y le pide la respuesta a la IA ----------
   function ajustesDe(e) {
     const a = e.conocimiento_ajustes || {};
-    return { nombre: a.nombre || `el asistente de ${e.nombre}`, modelo: a.modelo || MODELO_POR_DEFECTO, instrucciones: a.instrucciones || '', sedes: a.sedes || {} };
+    return { nombre: a.nombre || `el asistente de ${e.nombre}`, modelo: a.modelo || MODELO_POR_DEFECTO, instrucciones: a.instrucciones || '', sedes: a.sedes || {},
+      bienvenidas: a.bienvenidas || {}, web: { sedes: (a.web && a.web.sedes) || [], palabras: (a.web && a.web.palabras) || '', sitios: (a.web && a.web.sitios) || '' } };
   }
   async function responder(empresaId, { sede = '', mensajes = [], borradores = false }) {
     const e = await empresa(empresaId);
@@ -472,9 +500,29 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       : '(No se encontró nada sobre esto en la base.)';
     const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
     const extra = [aj.instrucciones, sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
-    const sistema = instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra }) +
-      `\n\nFECHA DE HOY: ${new Date().toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Santo_Domingo' })}\n\nINFORMACIÓN\n${info}`;
+    // Búsqueda en internet: solo en las sedes elegidas, y solo si la pregunta es de los temas elegidos o la base no tiene la respuesta.
+    const webSede = aj.web.sedes.some(x => mismaSede(x, sedeOk || ''));
+    const temas = aj.web.palabras.split(',').map(x => palabras(x).join(' ')).filter(Boolean);
+    const planoConsulta = ' ' + palabras(consulta).join(' ') + ' ';
+    const porTema = temas.some(t => planoConsulta.includes(' ' + t + ' '));
+    const mejor = encontrados.length ? encontrados[0].puntaje : 0;
+    const usarWeb = webSede && (porTema || (palabras(consulta).length >= 3 && mejor < 5));
+    // Ejemplos aprobados (entrenamiento): los más parecidos a la pregunta.
+    const ejemplos = (await client.query("SELECT sede, cliente, ideal FROM conocimiento_ejemplos WHERE empresa_id = $1 AND estado = 'aprobado' ORDER BY revisado DESC NULLS LAST, id DESC LIMIT 200", [e.id])).rows
+      .filter(x => !x.sede || !sedeOk || mismaSede(x.sede, sedeOk));
+    const pq = new Set(palabras(consulta));
+    const elegidos = ejemplos.map((x, i) => ({ x, n: palabras(x.cliente).filter(w => pq.has(w)).length, i }))
+      .sort((a, b) => b.n - a.n || a.i - b.i).slice(0, 6).map(y => y.x);
+    const textoEjemplos = elegidos.length ? '\n\nEJEMPLOS DE CÓMO RESPONDER (aprobados por la empresa: imita el estilo, el tono y el criterio; los precios sácalos siempre de la INFORMACIÓN)\n' +
+      elegidos.map(x => `Cliente: ${x.cliente}\nRespuesta ideal: ${x.ideal}`).join('\n---\n') : '';
+    const primera = !historial.some(m => m.role === 'assistant');
+    const zona = zonaDe(sedeOk);
+    const sistema = instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra,
+      bienvenida: (sedeOk && aj.bienvenidas[sedeOk]) || aj.bienvenidas[''] || '', primera, web: usarWeb ? aj.web : null }) +
+      `\n\nFECHA Y HORA EN ${sedeOk ? sedeOk.toUpperCase() : 'LA OFICINA'}: ${new Date().toLocaleString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zona })}` +
+      textoEjemplos + `\n\nINFORMACIÓN\n${info}`;
     const cuerpo = { model: aj.modelo, max_tokens: 900, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
+    if (usarWeb) cuerpo.plugins = [{ id: 'web', max_results: 3, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}):` }];
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), 60000);
     const t0 = Date.now();
@@ -494,8 +542,11 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       if (err.codigo) throw err;
       throw error(err.name === 'AbortError' ? 'La IA tardó más de 60 segundos.' : 'No se pudo conectar con la IA: ' + err.message, 502);
     } finally { clearTimeout(reloj); }
-    const contenido = (((datos.choices || [])[0] || {}).message || {}).content || '';
+    const msj = ((datos.choices || [])[0] || {}).message || {};
+    const contenido = msj.content || '';
     const j = leerJSON(contenido);
+    const enlaces = [...new Map((msj.annotations || []).filter(a => a.type === 'url_citation' && a.url_citation && a.url_citation.url)
+      .map(a => [a.url_citation.url, { url: a.url_citation.url, titulo: a.url_citation.title || '' }])).values()].slice(0, 5);
     const motivo = j && MOTIVOS[j.motivo] ? j.motivo : '';
     return {
       respuesta: String((j && j.respuesta) || contenido || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
@@ -505,9 +556,30 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       sede: sedeOk || 'Todas',
       fuentes: encontrados.map(x => ({ titulo: x.titulo, fuente: x.fuente, puntaje: x.puntaje })),
       formato_ok: Boolean(j),
+      idioma: String((j && j.idioma) || '').slice(0, 5).toLowerCase(),
+      web: { usada: usarWeb, enlaces },
+      ejemplos: elegidos.length,
       modelo: datos.model || aj.modelo, segundos: Math.round((Date.now() - t0) / 100) / 10,
       tokens: datos.usage ? { entrada: datos.usage.prompt_tokens, salida: datos.usage.completion_tokens } : null
     };
+  }
+
+  // ---------- Entrenamiento: calificaciones y ejemplos ----------
+  function textoContexto(mensajes) {
+    return (Array.isArray(mensajes) ? mensajes : []).slice(-8).map(m => ({ rol: m.rol === 'asistente' ? 'asistente' : 'cliente', texto: String(m.texto || '').slice(0, 1500) }));
+  }
+  async function calificar(empresaId, f, autor, origen) {
+    const contexto = textoContexto(f.mensajes);
+    const cliente = texto(f.cliente || ([...contexto].reverse().find(m => m.rol === 'cliente') || {}).texto, 1500);
+    if (!cliente) throw error('Falta el mensaje del cliente.');
+    const voto = f.voto === 'bien' ? 'bien' : f.voto === 'mal' ? 'mal' : '';
+    const ideal = String(f.ideal || '').trim().slice(0, 3000);
+    const estado = f.aprobar ? 'aprobado' : 'nuevo';
+    if (estado === 'aprobado' && !ideal) throw error('Escribe la respuesta ideal.');
+    const r = (await client.query(`INSERT INTO conocimiento_ejemplos (empresa_id, sede, cliente, contexto, respuesta, ideal, voto, nota, estado, autor, origen, revisado)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    [empresaId, texto(f.sede, 60), cliente, JSON.stringify(contexto), String(f.respuesta || '').slice(0, 3000), ideal, voto, texto(f.nota, 500), estado, texto(autor, 80), origen, estado === 'aprobado' ? new Date() : null])).rows[0];
+    return r.id;
   }
 
   // ---------- Rutas de la Oficina (sesión del programador; lo revisa oficina.js) ----------
@@ -521,7 +593,12 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
         empresas: empresas.map(e => ({ id: e.id, nombre: e.nombre, es_demo: e.es_demo })),
         empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida),
           tieneClaveIA: Boolean(claveIA && claveIA((await client.query('SELECT * FROM empresas WHERE id = $1', [elegida.id])).rows[0])) },
-        archivos: await lista(elegida.id)
+        archivos: await lista(elegida.id),
+        ejemplos: (await client.query(`SELECT id, sede, cliente, contexto, respuesta, ideal, voto, nota, estado, autor, origen, creado, revisado
+          FROM conocimiento_ejemplos WHERE empresa_id = $1 AND estado <> 'descartado' ORDER BY (estado = 'nuevo') DESC, creado DESC LIMIT 300`, [elegida.id])).rows,
+        votos: (await client.query(`SELECT COUNT(*) FILTER (WHERE voto = 'bien')::int AS bien, COUNT(*) FILTER (WHERE voto = 'mal')::int AS mal
+          FROM conocimiento_ejemplos WHERE empresa_id = $1`, [elegida.id])).rows[0],
+        panelConectado: await panelConectado(elegida.id)
       });
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/subir') {
@@ -593,6 +670,46 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       const f = await leerCuerpo(req);
       return json(res, 200, await responder(f.empresa_id, { sede: texto(f.sede, 60), mensajes: f.mensajes, borradores: Boolean(f.borradores) }));
     }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/ejemplo') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      if (f.id) {
+        const accion = f.accion;
+        if (accion === 'aprobar' || accion === 'editar') {
+          const ideal = String(f.ideal || '').trim().slice(0, 3000);
+          if (!ideal) throw error('Escribe la respuesta ideal.');
+          await client.query("UPDATE conocimiento_ejemplos SET ideal = $1, cliente = COALESCE(NULLIF($2, ''), cliente), sede = $3, estado = 'aprobado', revisado = NOW() WHERE id = $4 AND empresa_id = $5",
+            [ideal, texto(f.cliente, 1500), texto(f.sede, 60), Number(f.id), e.id]);
+        } else if (accion === 'descartar') {
+          await client.query("UPDATE conocimiento_ejemplos SET estado = 'descartado', revisado = NOW() WHERE id = $1 AND empresa_id = $2", [Number(f.id), e.id]);
+        } else if (accion === 'borrar') {
+          await client.query('DELETE FROM conocimiento_ejemplos WHERE id = $1 AND empresa_id = $2', [Number(f.id), e.id]);
+        } else throw error('Acción no válida.');
+        await registrar(u, 'conocimiento_ejemplo_' + accion, 'empresa', e.slug, '', '', String(f.id));
+        return json(res, 200, { ok: true });
+      }
+      const id = await calificar(e.id, { ...f, aprobar: f.aprobar !== false }, u.usuario, 'oficina');
+      await registrar(u, 'conocimiento_ejemplo_nuevo', 'empresa', e.slug, '', '', String(id));
+      return json(res, 200, { ok: true, id });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/conectar-panel') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [e.id])).rows[0];
+      let clave = e.conocimiento_token;
+      if (!f.quitar && !clave) {
+        clave = 'kc_' + crypto.randomBytes(24).toString('hex');
+        await client.query('UPDATE empresas SET conocimiento_token = $1 WHERE id = $2', [clave, e.id]);
+      }
+      await central.ayudantes.conEmpresa(fila, async db => {
+        await db.query(`CREATE TABLE IF NOT EXISTS asistente_conexion (id INTEGER PRIMARY KEY DEFAULT 1, url TEXT NOT NULL, clave TEXT NOT NULL, actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+        if (f.quitar) await db.query('DELETE FROM asistente_conexion');
+        else await db.query(`INSERT INTO asistente_conexion (id, url, clave) VALUES (1, $1, $2)
+          ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url, clave = EXCLUDED.clave, actualizado = NOW()`, [`http://127.0.0.1:${config.puerto}`, clave]);
+      });
+      await registrar(u, f.quitar ? 'conocimiento_panel_quitar' : 'conocimiento_panel_conectar', 'empresa', e.slug, '', '', '');
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/instrucciones') {
       const f = await leerCuerpo(req);
       const e = await empresa(f.empresa_id);
@@ -600,7 +717,11 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
       for (const s of sedesDe(e)) { const t = String((f.sedes || {})[s] || '').trim().slice(0, 4000); if (t) sedes[s] = t; }
       const modelo = texto(f.modelo, 100);
       if (modelo && !/^[\w.\-]+\/[\w.:\-]+$/.test(modelo)) throw error('El modelo debe ser como anthropic/claude-haiku-5.5');
-      const aj = { nombre: texto(f.nombre, 80), modelo, instrucciones: String(f.instrucciones || '').trim().slice(0, 6000), sedes };
+      const bienvenidas = {};
+      for (const [k, v] of Object.entries(f.bienvenidas || {})) { const t = String(v || '').trim().slice(0, 600); if (t && (k === '' || sedesDe(e).includes(k))) bienvenidas[k] = t; }
+      const w = f.web || {};
+      const web = { sedes: (Array.isArray(w.sedes) ? w.sedes : []).filter(x => sedesDe(e).includes(x) || x === ''), palabras: texto(w.palabras, 600), sitios: texto(w.sitios, 600) };
+      const aj = { nombre: texto(f.nombre, 80), modelo, instrucciones: String(f.instrucciones || '').trim().slice(0, 6000), sedes, bienvenidas, web };
       await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify(aj), e.id]);
       await registrar(u, 'conocimiento_instrucciones', 'empresa', e.slug, '', '', aj.modelo || MODELO_POR_DEFECTO);
       return json(res, 200, { ok: true });
@@ -623,10 +744,23 @@ module.exports = function crearConocimiento({ client, registrar, central, claveI
   }
   async function manejarPublico(req, res, url, { json, leerCuerpo }) {
     if (!activo) return json(res, 404, { error: 'Solo existe en el panel central.' });
+    const esPost = url === '/api/conocimiento/responder' || url === '/api/conocimiento/calificar';
     const esResponder = url === '/api/conocimiento/responder';
-    if (req.method !== (esResponder ? 'POST' : 'GET')) return json(res, 405, { error: esResponder ? 'Solo POST.' : 'Solo GET.' });
+    if (req.method !== (esPost ? 'POST' : 'GET')) return json(res, 405, { error: esPost ? 'Solo POST.' : 'Solo GET.' });
     const e = await empresaPorClave(req);
     if (!e) return json(res, 401, { error: 'Clave del asistente no válida.' });
+    if (url === '/api/conocimiento/calificar') {
+      // Lo usa el panel de la empresa (gerente, IT...): 👍 / 👎 con sugerencia. Queda "nuevo" hasta que el programador lo apruebe.
+      try {
+        const f = await leerCuerpo(req);
+        const id = await calificar(e.id, { ...f, aprobar: false }, f.autor, 'panel');
+        return json(res, 200, { ok: true, id });
+      } catch (err) { return json(res, err.codigo || 500, { error: err.message }); }
+    }
+    if (url === '/api/conocimiento/info') {
+      const fila = await empresa(e.id);
+      return json(res, 200, { empresa: e.nombre, sedes: sedesDe(fila), nombre: ajustesDe(fila).nombre });
+    }
     if (esResponder) {
       // Lo usa n8n: { sede, mensajes: [{ rol: 'cliente'|'asistente', texto }] } -> { respuesta, pasar_a_asesor, motivo, resumen_para_asesor }
       try {

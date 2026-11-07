@@ -311,6 +311,7 @@
     <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
     <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
     <button class="btn-tema" id="btnControl" style="display:none;" title="Tiempos y gráficas de los asesores">Control</button>
+    <button class="btn-tema" id="btnAsistente" style="display:none;" title="Probar el asistente de redes sociales">🤖 Asistente</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
     <button class="btn-tema" id="btnTema">Modo oscuro</button>
@@ -515,7 +516,8 @@ const PERMISOS = [
   ['guardar_copia', 'Guardar copia de correos'],
   ['recibir_reservas', 'Recibir reservas del reparto automático (ve solo las suyas)'],
   ['supervisar', 'Supervisar: ver todas las reservas y reasignarlas'],
-  ['ver_control', 'Pantalla de Control: tiempos, reservas por asesor y gráficas']
+  ['ver_control', 'Pantalla de Control: tiempos, reservas por asesor y gráficas'],
+  ['probar_asistente', 'Probar el asistente de redes sociales (chat de prueba y calificar respuestas)']
 ];
 
 // Sedes de la empresa: llegan con la sesión (cada empresa tiene las suyas).
@@ -771,6 +773,7 @@ function mostrarApp(s) {
   const mod = s.modulos || {};
   if (Array.isArray(s.sedes) && s.sedes.length) EMPRESAS = s.sedes;
   document.getElementById('btnControl').style.display = puede('ver_control') && mod.control !== false ? 'inline-block' : 'none';
+  document.getElementById('btnAsistente').style.display = puede('probar_asistente') && s.asistente ? 'inline-block' : 'none';
   document.getElementById('filtroAsesor').style.display = puede('supervisar') ? 'inline-block' : 'none';
   document.getElementById('btnHerramientas').style.display =
     (puede('administrar_usuarios') || puede('configurar_empresa') || puede('ver_auditoria')) ? 'inline-block' : 'none';
@@ -3684,6 +3687,7 @@ document.getElementById('buscarHistorico').addEventListener('input', () => {
   timerBusqueda = vistaActual === 'historico' ? setTimeout(() => cargarReservas(true), 500) : setTimeout(pintar, 150);
 });
 document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
+document.getElementById('btnAsistente').addEventListener('click', () => window.open('/asistente', '_blank'));
 document.getElementById('alertasSistema').addEventListener('click', e => { if (e.target.dataset.verEstado) abrirHerramientas('estado'); });
 document.getElementById('franjas').addEventListener('click', async e => {
   const id = e.target.dataset.cerrarAnuncio;

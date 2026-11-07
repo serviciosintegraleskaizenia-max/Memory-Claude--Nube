@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probar el asistente</title>
+<style>
+  :root { --fondo:#eef2f7; --tarjeta:#fff; --texto:#1e293b; --suave:#64748b; --borde:#e2e8f0; --enc:#0b4f8a; --enc2:#1679c2; --azul:#1679c2; }
+  body.oscuro { --fondo:#0f172a; --tarjeta:#1e293b; --texto:#e2e8f0; --suave:#94a3b8; --borde:#334155; --enc:#0b1f3a; --enc2:#134e8a; }
+  * { box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:var(--fondo); color:var(--texto); margin:0; }
+  header { background:linear-gradient(135deg,var(--enc),var(--enc2)); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:19px; } header p { margin:3px 0 0; font-size:13px; opacity:.85; }
+  .btn-tema { background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.35); padding:7px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
+  main { max-width:860px; margin:0 auto; padding:16px 16px 30px; }
+  .caja { background:var(--tarjeta); border-radius:14px; padding:14px 16px; box-shadow:0 1px 3px #0f172a14; margin-bottom:14px; }
+  .ayuda { font-size:13.5px; line-height:1.5; color:var(--suave); margin:0; }
+  .ayuda b { color:var(--texto); }
+  .barra { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  select, textarea { font-family:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--borde); border-radius:8px; background:var(--tarjeta); color:var(--texto); }
+  .btn, .btn-sec, .mini { border-radius:8px; cursor:pointer; font-size:13.5px; border:1px solid var(--borde); font-family:inherit; }
+  .btn { background:var(--azul); color:#fff; border-color:var(--azul); padding:9px 16px; font-weight:600; }
+  .btn-sec { background:var(--tarjeta); color:var(--texto); padding:8px 12px; }
+  .mini { background:var(--tarjeta); color:var(--texto); padding:3px 9px; font-size:12.5px; }
+  .mini.elegido { background:var(--azul); color:#fff; border-color:var(--azul); }
+  .chat { display:flex; flex-direction:column; gap:8px; background:var(--fondo); border-radius:12px; padding:12px; min-height:300px; max-height:calc(100vh - 330px); overflow-y:auto; }
+  .burbuja { max-width:80%; padding:9px 12px; border-radius:12px; font-size:14.5px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .cliente { align-self:flex-end; background:#dcf8c6; color:#0f172a; border-bottom-right-radius:4px; }
+  body.oscuro .cliente { background:#14532d; color:#e2e8f0; }
+  .bot { align-self:flex-start; background:var(--tarjeta); border:1px solid var(--borde); border-bottom-left-radius:4px; }
+  .meta { align-self:flex-start; font-size:12px; color:var(--suave); display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:-3px 0 4px 2px; }
+  .chip { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11.5px; font-weight:600; background:#dbeafe; color:#1e40af; }
+  body.oscuro .chip { background:#172554; color:#bfdbfe; }
+  .asesor { align-self:flex-start; max-width:80%; background:#fef3c7; color:#78350f; border:1px solid #fde68a; border-radius:10px; padding:7px 10px; font-size:13px; }
+  body.oscuro .asesor { background:#451a03; color:#fde68a; border-color:#92400e; }
+  .error { align-self:flex-start; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:10px; padding:7px 10px; font-size:13px; }
+  .sugerir { align-self:flex-start; width:min(560px,90%); background:var(--tarjeta); border:1px solid var(--borde); border-radius:10px; padding:10px; }
+  .sugerir textarea { width:100%; resize:vertical; }
+  .escribir { display:flex; gap:8px; margin-top:10px; }
+  .escribir textarea { flex:1; resize:none; height:62px; }
+  .vacio { text-align:center; color:var(--suave); padding:40px 10px; font-size:14px; }
+  .toast { position:fixed; right:16px; bottom:16px; background:#0f172a; color:#fff; padding:10px 15px; border-radius:10px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.visible { opacity:1; }
+  @media (max-width:600px) { .burbuja, .asesor { max-width:92%; } .chat { max-height:none; } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🤖 Probar el asistente</h1><p id="sub">Asistente de redes sociales</p></div>
+  <div><button class="btn-tema" id="btnTema">Modo oscuro</button></div>
+</header>
+<main>
+  <div class="caja">
+    <p class="ayuda"><b>Escribe como si fueras un cliente</b> de Facebook, Instagram o WhatsApp, en el idioma que quieras (español, portugués, inglés…). El asistente contesta igual que lo hará con los clientes reales.
+      Debajo de cada respuesta: <b>👍</b> si estuvo bien, o <b>👎</b> y escribe cómo debió responder. Kaizen IA revisa tus sugerencias y entrena al asistente con ellas.
+      <br>Esto es solo una prueba: no le llega a ningún cliente.</p>
+  </div>
+  <div class="caja">
+    <div class="barra">
+      <select id="sede" title="Oficina"></select>
+      <button class="btn-sec" id="nueva">↺ Nueva conversación</button>
+    </div>
+    <div class="chat" id="chat"><div class="vacio">Cargando…</div></div>
+    <div class="escribir">
+      <textarea id="texto" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea>
+      <button class="btn" id="enviar">Enviar</button>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const IDIOMAS = { es: 'Español', pt: 'Portugués', en: 'Inglés', fr: 'Francés', it: 'Italiano', de: 'Alemán' };
+let mensajes = [];   // { rol: 'cliente'|'asistente', texto, info, voto, abierto }
+let pensando = false;
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function aviso(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('visible'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('visible'), 3000); }
+async function api(url, cuerpo) {
+  try {
+    const r = await fetch(url, cuerpo === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+    let d = {}; try { d = await r.json(); } catch (e) {}
+    if (r.status === 401) location.href = '/';
+    return { ok: r.ok, data: d };
+  } catch (e) { return { ok: false, data: { error: 'No hay conexión con el panel.' } }; }
+}
+function pintar() {
+  const c = document.getElementById('chat');
+  if (!mensajes.length) { c.innerHTML = '<div class="vacio">Empieza la conversación como si fueras un cliente.</div>'; return; }
+  c.innerHTML = mensajes.map((m, i) => {
+    if (m.rol === 'cliente') return `<div class="burbuja cliente">${esc(m.texto)}</div>`;
+    if (m.error) return `<div class="error">⛔ ${esc(m.error)}</div>`;
+    const x = m.info || {};
+    return `<div class="burbuja bot">${esc(m.texto)}</div>` +
+      (x.pasar_a_asesor ? `<div class="asesor">👤 <b>Aquí pasaría a un asesor de ${esc(x.sede)}</b>${x.motivo_texto ? ' · ' + esc(x.motivo_texto) : ''}${x.resumen_para_asesor ? `<br>${esc(x.resumen_para_asesor)}` : ''}</div>` : '') +
+      `<div class="meta">${x.idioma ? `<span class="chip">${esc(IDIOMAS[x.idioma] || x.idioma)}</span>` : ''}${x.web && x.web.usada ? '<span class="chip">🌐 buscó en internet</span>' : ''}
+        <button class="mini ${m.voto === 'bien' ? 'elegido' : ''}" data-bien="${i}" title="Estuvo bien">👍</button>
+        <button class="mini ${m.voto === 'mal' ? 'elegido' : ''}" data-mal="${i}" title="Estuvo mal: sugerir cómo debió responder">👎</button>
+        ${m.voto ? '<span>¡Gracias! Enviado a Kaizen IA.</span>' : ''}</div>` +
+      (m.abierto ? `<div class="sugerir"><b style="font-size:13px">¿Cómo debió responder?</b>
+        <textarea id="sug${i}" rows="4" placeholder="Escribe la respuesta ideal, o qué estuvo mal (ej. el precio del niño es otro, faltó ofrecer el traslado…)">${esc(m.borrador || '')}</textarea>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn-sec" data-cancelar="${i}">Cancelar</button><button class="btn" data-mandar="${i}">Enviar sugerencia</button></div></div>` : '');
+  }).join('') + (pensando ? '<div class="burbuja bot" style="opacity:.6">escribiendo…</div>' : '');
+  c.scrollTop = c.scrollHeight;
+}
+const historial = hasta => mensajes.slice(0, hasta).filter(m => !m.error).map(m => ({ rol: m.rol, texto: m.texto }));
+async function enviar() {
+  const caja = document.getElementById('texto');
+  const t = caja.value.trim(); if (!t || pensando) return;
+  mensajes.push({ rol: 'cliente', texto: t }); caja.value = ''; pensando = true; pintar();
+  const r = await api('/api/asistente/chat', { sede: document.getElementById('sede').value, mensajes: historial(mensajes.length) });
+  pensando = false;
+  mensajes.push(r.ok ? { rol: 'asistente', texto: r.data.respuesta, info: r.data } : { rol: 'asistente', error: r.data.error || 'No respondió.' });
+  pintar(); caja.focus();
+}
+async function calificar(i, voto, ideal) {
+  const m = mensajes[i];
+  const r = await api('/api/asistente/calificar', { sede: document.getElementById('sede').value, mensajes: historial(i), respuesta: m.texto, voto, ideal: ideal || '' });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo enviar.');
+  m.voto = voto; m.abierto = false; pintar(); aviso(voto === 'bien' ? 'Gracias 👍' : 'Sugerencia enviada. Gracias.');
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  const d = t.dataset;
+  if (t.id === 'enviar') return enviar();
+  if (t.id === 'nueva') { mensajes = []; return pintar(); }
+  if (d.bien) { const m = mensajes[d.bien]; if (!m.voto) calificar(Number(d.bien), 'bien'); return; }
+  if (d.mal) { const m = mensajes[d.mal]; if (!m.voto) { m.abierto = true; pintar(); const ta = document.getElementById('sug' + d.mal); if (ta) ta.focus(); } return; }
+  if (d.cancelar) { mensajes[d.cancelar].abierto = false; return pintar(); }
+  if (d.mandar) { const ta = document.getElementById('sug' + d.mandar); const v = ta.value.trim(); if (!v) { aviso('Escribe cómo debió responder.'); return; } return calificar(Number(d.mandar), 'mal', v); }
+  if (t.id === 'btnTema') { const o = document.body.classList.toggle('oscuro'); t.textContent = o ? 'Modo claro' : 'Modo oscuro'; try { localStorage.setItem('tema', o ? 'oscuro' : 'claro'); } catch (er) {} }
+});
+document.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('sug')) mensajes[e.target.id.slice(3)].borrador = e.target.value; });
+document.getElementById('texto').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); } });
+document.getElementById('sede').addEventListener('change', () => { if (mensajes.length) { mensajes = []; pintar(); aviso('Nueva conversación en la otra oficina.'); } });
+(async () => {
+  try { if (localStorage.getItem('tema') === 'oscuro') { document.body.classList.add('oscuro'); document.getElementById('btnTema').textContent = 'Modo claro'; } } catch (e) {}
+  const s = await api('/api/sesion');
+  if (!s.ok) return;
+  if (!s.data.permisos || !s.data.permisos.probar_asistente) { document.getElementById('chat').innerHTML = '<div class="vacio">No tienes permiso para probar el asistente. Pídeselo al gerente o a Kaizen IA.</div>'; return; }
+  const i = await api('/api/asistente/info');
+  if (!i.ok) { document.getElementById('chat').innerHTML = `<div class="vacio">${esc(i.data.error || 'El asistente no está disponible.')}</div>`; return; }
+  document.getElementById('sub').textContent = `${i.data.empresa} · ${i.data.nombre}`;
+  const sel = document.getElementById('sede');
+  sel.innerHTML = (i.data.sedes.length ? i.data.sedes : ['']).map(x => `<option value="${esc(x)}">${x ? 'Oficina de ' + esc(x) : 'General'}</option>`).join('');
+  pintar();
+  setInterval(() => api('/api/latido', { activo: true }), 60000);
+})();
+</script>
+</body>
+</html>

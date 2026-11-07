@@ -31,7 +31,7 @@ const central = crearCentral({ client, config, registrar: (...a) => registrar(..
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
 const oficina = crearOficina({ client, config, registrar: (...a) => registrar(...a), central });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente'];
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
 // Sedes de la empresa (para separar usuarios por oficina). Sin ajuste: las de Somos Viajes.
@@ -296,6 +296,9 @@ async function inicializarTablas() {
     grupo VARCHAR(40) NOT NULL DEFAULT '',
     estado VARCHAR(12) NOT NULL DEFAULT 'en linea',
     visto TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  // Conexión con el asistente de redes (la escribe la Oficina del central): para el chat de prueba del asistente.
+  await client.query(`CREATE TABLE IF NOT EXISTS asistente_conexion (
+    id INTEGER PRIMARY KEY DEFAULT 1, url TEXT NOT NULL, clave TEXT NOT NULL, actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await client.query(`CREATE TABLE IF NOT EXISTS tiempo_aviso (
     reserva_id INTEGER PRIMARY KEY,
     creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -922,6 +925,15 @@ function archivo(res, ruta, tipo) {
   });
 }
 
+// Conexión con el asistente de redes (url del central + clave). La escribe la Oficina; se lee de la base.
+async function conexionAsistente() {
+  try {
+    const r = await client.query('SELECT url, clave FROM asistente_conexion WHERE id = 1');
+    return r.rows[0] && r.rows[0].url && r.rows[0].clave ? r.rows[0] : null;
+  } catch (e) { return null; }
+}
+function f_sede(cuerpo) { try { return String(JSON.parse(cuerpo).sede || '').slice(0, 40); } catch (e) { return ''; } }
+
 async function mapaGrupos() {
   const r = await client.query('SELECT nombre, permisos FROM grupos');
   return new Map(r.rows.map(g => [g.nombre, { ...NINGUNO, ...g.permisos }]));
@@ -1540,6 +1552,9 @@ http.createServer(async (req, res) => {
       if (!central.activo) { res.writeHead(302, { Location: '/' }); return res.end(); }
       return archivo(res, path.join(CARPETA, 'oficina.html'), 'text/html; charset=utf-8');
     }
+    if (req.method === 'GET' && url === '/asistente') {
+      return archivo(res, path.join(CARPETA, 'asistente.html'), 'text/html; charset=utf-8');
+    }
     if (req.method === 'GET' && url === '/control') {
       return archivo(res, path.join(CARPETA, 'control.html'), 'text/html; charset=utf-8');
     }
@@ -1619,7 +1634,7 @@ http.createServer(async (req, res) => {
         usuario: u.usuario, nombre: u.nombre, grupo: u.grupo,
         permisos, debe_cambiar: u.debe_cambiar,
         modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
-        vence: u.vence || null
+        vence: u.vence || null, asistente: Boolean(await conexionAsistente())
       });
     }
 
@@ -1690,6 +1705,33 @@ http.createServer(async (req, res) => {
 
     const permisos = permisosDe(u, await mapaGrupos());
     const puede = p => Boolean(permisos[p]);
+
+    // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
+    if (url.startsWith('/api/asistente/')) {
+      if (!puede('probar_asistente')) return json(res, 403, { error: 'No tienes permiso para probar el asistente.' });
+      const cx = await conexionAsistente();
+      if (!cx) return json(res, 400, { error: 'El asistente todavía no está conectado a este panel. Pídeselo a Kaizen IA.' });
+      const ruta = { '/api/asistente/info': ['GET', '/api/conocimiento/info'], '/api/asistente/chat': ['POST', '/api/conocimiento/responder'], '/api/asistente/calificar': ['POST', '/api/conocimiento/calificar'] }[url];
+      if (!ruta || req.method !== ruta[0]) return json(res, 404, { error: 'Ruta no encontrada' });
+      let cuerpo;
+      if (ruta[0] === 'POST') {
+        const f = await leerCuerpo(req);
+        cuerpo = JSON.stringify({ sede: f.sede, mensajes: f.mensajes, respuesta: f.respuesta, voto: f.voto, ideal: f.ideal, nota: f.nota, autor: `${u.nombre || u.usuario} (${u.grupo})` });
+      }
+      try {
+        const control = new AbortController();
+        const reloj = setTimeout(() => control.abort(), 75000);
+        const r = await fetch(cx.url.replace(/\/$/, '') + ruta[1], {
+          method: ruta[0], signal: control.signal, body: cuerpo,
+          headers: { Authorization: 'Bearer ' + cx.clave, ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) }
+        }).finally(() => clearTimeout(reloj));
+        const d = await r.json().catch(() => ({ error: 'Respuesta no válida del asistente.' }));
+        if (url === '/api/asistente/chat' && r.ok) await registrar(u, 'probar_asistente', 'asistente', f_sede(cuerpo), '', '', '');
+        return json(res, r.status === 401 ? 502 : r.status, r.status === 401 ? { error: 'La clave del asistente cambió. Pídele a Kaizen IA que lo vuelva a conectar.' } : d);
+      } catch (e) {
+        return json(res, 502, { error: e.name === 'AbortError' ? 'El asistente tardó demasiado en responder.' : 'No hay conexión con el asistente (¿está encendido el central?).' });
+      }
+    }
 
     if (req.method === 'POST' && url === '/api/cambiar-clave-propia') {
       const { actual, nueva } = await leerCuerpo(req);

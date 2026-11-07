@@ -41,7 +41,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const activo = central.activo;
   const A = central.ayudantes;
   // Base de conocimiento del asistente de redes (tarifarios, fichas y notas de cada empresa).
-  const conocimiento = crearConocimiento({ client, registrar, central, claveIA: e => claveDe(e) });
+  const conocimiento = crearConocimiento({ client, config, registrar, central, claveIA: e => claveDe(e) });
 
   async function preparar() {
     if (!activo) return;
