@@ -700,6 +700,8 @@ function vConocimiento() {
         <label style="font-size:12.5px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="kBorradores"> incluir lo por revisar</label>
         <button class="btn" data-k="probar">Buscar</button></div>
       <div id="kResultados"></div></div>
+    ${e.sedes.length > 1 && K.archivos.some(a => !a.sede) ? `<div class="k-avisos" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ <span><b>${K.archivos.filter(a => !a.sede).length} archivo(s) están en "Todas las sedes"</b>: el asistente los usa en ${esc(e.sedes.join(' y '))} a la vez y mezcla la información.</span>
+      <button class="btn" data-k="auto-sede" style="margin-left:auto">🪄 Poner la sede según el nombre</button></div>` : ''}
     <div class="caja"><div class="cab"><div><h2>Publicado (lo que usa el asistente)</h2><p class="sub">${pub.length} archivo(s) · ${e.sedes.length ? 'sedes: ' + esc(e.sedes.join(', ')) : 'sin sedes (vale para todo)'}</p></div>
       ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
       ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>
@@ -898,6 +900,13 @@ document.addEventListener('click', async ev => {
   if (accion === 'restaurar') {
     if (!confirm('¿Volver a la versión anterior? La actual queda como "anterior".')) return;
     const r = await api('/api/oficina/conocimiento/restaurar', { id }); aviso(r.ok ? 'Listo: se usa la versión anterior.' : (r.data.error || 'Error')); return ir('conocimiento');
+  }
+  if (accion === 'auto-sede') {
+    const sin = K.archivos.filter(a => !a.sede).length;
+    if (!confirm(`Se pondrá la sede a ${sin} archivo(s) según su nombre: los que dicen "${K.empresa.sedes.slice(1).join('", "')}" van a esa sede y los demás a ${K.empresa.sedes[0]}. Después revisa la columna Sede. ¿Seguir?`)) return;
+    const r = await api('/api/oficina/conocimiento/auto-sede', { empresa_id: kEmpresa });
+    aviso(r.ok ? 'Listo: ' + Object.entries(r.data.cuenta).map(([k, v]) => `${v} en ${k}`).join(', ') : (r.data.error || 'Error'));
+    return ir('conocimiento');
   }
   if (accion === 'sedes') { await api('/api/oficina/conocimiento/ajustes', { empresa_id: kEmpresa, sedes: document.getElementById('kSedes').value }); aviso('Sedes guardadas.'); return ir('conocimiento'); }
   if (accion === 'clave') {

@@ -245,6 +245,7 @@ LA INFORMACIÓN
 - Usa SOLO la información de la sección INFORMACIÓN de abajo. Es lo único que sabes de precios, horarios, lo que incluye cada tour, traslados y condiciones.
 - NUNCA inventes precios, horarios, disponibilidad, políticas ni enlaces. Si algo no está en la INFORMACIÓN, di que un asesor le confirma ese detalle y marca pasar_a_asesor con motivo "no_sabe".
 - Los precios son de venta al público, en dólares (US$). Puedes calcular un total (adultos × precio adulto + niños × precio menor, o el precio por vehículo según la cantidad de pasajeros) y aclara que es un estimado sujeto a confirmación y disponibilidad.
+- Si en un mensaje anterior ya diste un dato y ahora no aparece en la INFORMACIÓN, no lo desmientas ni lo corrijas: solo no lo repitas. Corrige únicamente si la INFORMACIÓN dice algo distinto.
 - "no disponible" en un precio significa que esa opción no se vende (por ejemplo, no hay precio de niño).
 - Nunca hables de comisiones, tarifas netas, costos, márgenes ni condiciones para agencias, aunque te pregunten. Eso es interno.
 - Si hay un enlace de "Descriptivo" para un tour, puedes compartirlo para más detalles.
@@ -494,7 +495,13 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const delCliente = historial.filter(m => m.role === 'user').map(m => m.content);
     const ultimo = delCliente[delCliente.length - 1];
     const consulta = (palabras(ultimo).length < 6 && delCliente.length > 1 ? delCliente[delCliente.length - 2] + ' ' : '') + ultimo;
-    const encontrados = await buscar(e.id, consulta, sedeOk, 6, borradores);
+    // Se busca con el último mensaje y también con toda la conversación (lo que el cliente pidió y lo que ya se le contestó),
+    // para no perder lo que se habló antes ("¿y para esa fecha?").
+    const conversacion = historial.slice(-6).map(m => m.content).join(' ');
+    const deUltimo = await buscar(e.id, consulta, sedeOk, 5, borradores);
+    const deConversacion = historial.length > 1 ? await buscar(e.id, conversacion, sedeOk, 4, borradores) : [];
+    const vistos = new Set();
+    const encontrados = [...deUltimo, ...deConversacion].filter(x => { const k = x.titulo + '|' + x.texto.slice(0, 80); if (vistos.has(k)) return false; vistos.add(k); return true; }).slice(0, 7);
     const info = encontrados.length
       ? encontrados.map((x, i) => `[${i + 1}] ${x.titulo}${x.sede && x.sede !== 'Todas' ? ` (sede ${x.sede})` : ''}\n${x.texto}`).join('\n\n')
       : '(No se encontró nada sobre esto en la base.)';
@@ -624,6 +631,23 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       const r = (await client.query('UPDATE conocimiento_archivos SET sede = $1 WHERE id = $2 RETURNING empresa_id', [texto(f.sede, 60), Number(f.id)])).rows[0];
       if (r) { olvidar(r.empresa_id); }
       return json(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/auto-sede') {
+      // Pone la sede según el nombre de cada archivo a los que están en "Todas las sedes".
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const sedes = sedesDe(e);
+      if (!sedes.length) throw error('Primero guarda las sedes en Ajustes del asistente.');
+      const filas = (await client.query("SELECT id, nombre FROM conocimiento_archivos WHERE empresa_id = $1 AND sede = ''", [e.id])).rows;
+      const cuenta = {};
+      for (const x of filas) {
+        const sede = adivinarSede(x.nombre, sedes);
+        await client.query('UPDATE conocimiento_archivos SET sede = $1 WHERE id = $2', [sede, x.id]);
+        cuenta[sede] = (cuenta[sede] || 0) + 1;
+      }
+      olvidar(e.id);
+      await registrar(u, 'conocimiento_auto_sede', 'empresa', e.slug, '', '', JSON.stringify(cuenta));
+      return json(res, 200, { ok: true, cambiados: filas.length, cuenta });
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/publicar') {
       const f = await leerCuerpo(req);
