@@ -123,6 +123,20 @@
   .error-form { color:var(--rojo); font-size:13px; min-height:18px; }
   .toast { position:fixed; right:18px; bottom:18px; background:#0f172a; color:#fff; padding:11px 16px; border-radius:10px; font-size:13.5px; z-index:80; opacity:0; transition:opacity .2s; pointer-events:none; }
   .toast.visible { opacity:1; }
+  /* Base del asistente */
+  .modal.ancho { width:min(920px,100%); }
+  .k-doc { border:1px solid var(--borde); border-radius:10px; margin-bottom:10px; }
+  .k-doc summary { cursor:pointer; padding:9px 12px; font-weight:600; font-size:13.5px; }
+  .k-doc pre, .k-res pre { margin:0; padding:10px 12px; border-top:1px solid var(--borde); white-space:pre-wrap; overflow-wrap:anywhere; font-family:inherit; font-size:12.5px; line-height:1.45; max-height:420px; overflow-y:auto; background:var(--hover); }
+  .k-quitado { background:#fef2f2; border:1px solid #fecaca; color:#7f1d1d; border-radius:10px; padding:10px 12px; font-size:12.5px; margin-bottom:12px; }
+  body.oscuro .k-quitado { background:#450a0a; border-color:#7f1d1d; color:#fecaca; }
+  .k-quitado ul { margin:4px 0 0; padding-left:18px; } .k-quitado li { margin:2px 0; }
+  .k-avisos { background:#fffbeb; border:1px solid #fde68a; color:#78350f; border-radius:10px; padding:8px 12px; font-size:12.5px; margin-bottom:12px; }
+  body.oscuro .k-avisos { background:#451a03; border-color:#92400e; color:#fde68a; }
+  .k-res { border:1px solid var(--borde); border-radius:10px; margin-top:10px; }
+  .k-res .t { padding:8px 12px; font-size:13px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .k-clave { font-family:Consolas,monospace; font-size:12.5px; background:var(--hover); border:1px solid var(--borde); border-radius:8px; padding:6px 9px; overflow-wrap:anywhere; }
+  .k-progreso { font-size:13px; color:var(--suave); margin-top:8px; min-height:18px; }
   .menu-movil { display:none; }
   @media (max-width: 900px) {
     body { display:block; }
@@ -149,6 +163,7 @@
   <button class="nav" data-ir="calendario">📅 Calendario</button>
   <button class="nav" data-ir="chat">💬 Chat con los negocios <span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
+  <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
   <div class="sep">Administrar</div>
   <button class="nav" data-ir="empresas">🏗️ Empresas y demo</button>
   <button class="nav" data-ir="herramientas">🛠️ Herramientas</button>
@@ -175,6 +190,8 @@ let vista = 'inicio';
 let mes = '';
 let filtroPagos = 'abiertos';
 let mesCal = '';
+let K = null;                 // base del asistente: { empresas, empresa, archivos }
+let kEmpresa = '';
 const timers = {};
 
 /* ---------- Utilidades ---------- */
@@ -229,6 +246,13 @@ const AYUDA = {
   enlaces: `<b>Todas tus páginas y herramientas a un clic.</b>
     <ul><li><b>Mis clientes</b> se arma solo con los paneles de cada empresa.</li><li>Toca <b>+ Enlace</b> para agregar uno (Cloudflare, n8n, tus redes…). El ✏️ lo edita o lo borra.</li>
     <li>Si marcas <b>Vigilar</b>, la Oficina revisa cada minuto que responda y te avisa en Inicio si se cae.</li></ul>`,
+  conocimiento: `<b>Lo que sabe el asistente de redes de cada empresa</b> (precios, tours, traslados, condiciones). Solo tú lo ves y lo cambias: el cliente te manda los cambios y tú los subes aquí.
+    <ul><li><b>Subir archivos</b> o <b>Subir carpeta</b>: Excel (.xlsx) y PDF. <b>Nota escrita</b>: para algo que te mandaron por WhatsApp o correo (un precio nuevo, un recargo…).</li>
+    <li>Lo que subes queda <b>Por revisar</b>. Toca 👁 para ver cómo lo entendió el panel: en rojo sale lo que <b>se quitó</b> (comisión, neto, costo) y que el cliente final nunca verá.</li>
+    <li>Si está bien, toca <b>Publicar</b>: desde ese momento el asistente lo usa. Si subes un archivo con el mismo nombre, reemplaza al anterior al publicarlo (y puedes volver a la versión anterior).</li>
+    <li><b>Sede</b>: a qué oficina pertenece (ej. Punta Cana u Orlando). "Todas las sedes" vale para las dos. El panel la adivina por el nombre del archivo; cámbiala si no acierta.</li>
+    <li><b>Probar como el asistente</b>: escribe una pregunta de un cliente y mira qué información encontraría.</li>
+    <li><b>Clave del asistente</b>: la usa n8n para consultar esta base. Si n8n corre en Docker en esta PC, la dirección es <code>http://host.docker.internal:PUERTO</code> (el puerto del central).</li></ul>`,
   empresas: `Aquí está todo lo que antes estaba en Herramientas → Empresas: crear empresas, agregar una existente, módulos, cobro y recordatorio, anuncios, pausar, la <b>demo de ventas</b> con sus accesos de 48 horas y el banco de mensajes.`,
   herramientas: `Usuarios, grupos, auditoría, bloqueos y estado del sistema <b>del central</b> (tu Oficina).`
 };
@@ -279,12 +303,14 @@ async function ir(v, recargar = true) {
     if (v === 'inicio' || v === 'negocios') await cargarNegocios();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'chat') await cargarChatContactos();
+    if (v === 'conocimiento') await cargarConocimiento();
   }
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
+  if (vista === 'conocimiento' && !K) return;
   document.getElementById('vista').innerHTML = f();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
@@ -572,6 +598,199 @@ function vEnlaces() {
     Object.entries(grupos).map(([g, l]) => `<div class="caja"><h2>${esc(g)}</h2><p class="sub">&nbsp;</p><div class="enlaces">${l.map(tarjeta).join('')}</div></div>`).join('');
 }
 
+
+/* ---------- Base del asistente (tarifarios, fichas y notas por empresa) ---------- */
+const TIPO_K = { tarifario: '📊 Tarifario', ficha: '📄 Ficha', nota: '✍️ Nota' };
+async function cargarConocimiento() {
+  if (!kEmpresa) { try { kEmpresa = localStorage.getItem('oficinaEmpresaK') || ''; } catch (e) {} }
+  const r = await api('/api/oficina/conocimiento' + (kEmpresa ? '?empresa=' + encodeURIComponent(kEmpresa) : ''));
+  if (!r.ok) { document.getElementById('vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar.')}</div>`; return; }
+  K = r.data;
+  if (K.empresa) { kEmpresa = String(K.empresa.id); try { localStorage.setItem('oficinaEmpresaK', kEmpresa); } catch (e) {} }
+  const n = (K.archivos || []).filter(a => a.estado === 'borrador').length;
+  const el = document.getElementById('numConocimiento'); el.textContent = n; el.style.display = n ? '' : 'none';
+}
+function opcionesSede(elegida) {
+  const sedes = [...K.empresa.sedes]; if (elegida && !sedes.includes(elegida)) sedes.push(elegida);
+  return `<option value="" ${!elegida ? 'selected' : ''}>Todas las sedes</option>` + sedes.map(s => `<option ${s === elegida ? 'selected' : ''}>${esc(s)}</option>`).join('');
+}
+function quitadoTexto(a) {
+  const p = [];
+  if (a.columnasQuitadas) p.push(`${a.columnasQuitadas} columna(s)`);
+  if (a.lineasQuitadas) p.push(`${a.lineasQuitadas} línea(s)`);
+  return p.length ? `<span class="chip mal" title="Datos internos que el asistente no verá">🔒 ${p.join(' · ')}</span>` : '<span class="chip gris">nada</span>';
+}
+function contenidoTexto(a) { return `${a.documentos} ${a.tipo === 'tarifario' ? 'hoja(s)' : 'doc.'} · ${a.lineas} líneas`; }
+function vConocimiento() {
+  if (!K.empresa) return cabecera('📚 Base del asistente', 'Primero crea una empresa en Empresas y demo') + '<div class="vacio">No hay empresas.</div>';
+  const e = K.empresa;
+  const selEmp = `<select id="kEmpresa" title="Empresa">${K.empresas.map(x => `<option value="${x.id}" ${String(x.id) === kEmpresa ? 'selected' : ''}>${esc(x.nombre)}${x.es_demo ? ' (demo)' : ''}</option>`).join('')}</select>`;
+  const borr = K.archivos.filter(a => a.estado === 'borrador');
+  const pub = K.archivos.filter(a => a.estado === 'publicado');
+  const ant = K.archivos.filter(a => a.estado === 'anterior');
+  const caracteres = pub.reduce((s, a) => s + a.caracteres, 0);
+  const ultima = pub.map(a => a.publicado).sort().pop();
+  const filaBorr = a => `<tr>
+      <td class="envolver"><b>${esc(a.nombre)}</b>${(a.avisos || []).length ? `<br><span class="chip ojo" title="${esc(a.avisos.join('\n'))}">⚠️ ${a.avisos.length} aviso(s)</span>` : ''}</td>
+      <td>${TIPO_K[a.tipo] || a.tipo}</td>
+      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
+      <td>${contenidoTexto(a)}</td><td>${quitadoTexto(a)}</td>
+      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button><button class="btn-mini p" data-k="publicar" data-id="${a.id}">Publicar</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : ''}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Descartar">✕</button></td></tr>`;
+  const filaPub = a => {
+    const vieja = ant.find(x => x.nombre.toLowerCase() === a.nombre.toLowerCase());
+    return `<tr data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + (a.sede || 'todas')).toLowerCase())}">
+      <td class="envolver"><b>${esc(a.nombre)}</b>${vieja ? `<br><small style="color:var(--suave)">Versión anterior del ${fechaCorta(vieja.publicado || vieja.subido)} · <a href="#" data-k="restaurar" data-id="${vieja.id}">volver a esa</a></small>` : ''}</td>
+      <td>${TIPO_K[a.tipo] || a.tipo}</td>
+      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
+      <td>${fechaCorta(a.publicado)}</td><td>${contenidoTexto(a)}</td>
+      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Quitar del asistente">✕</button></td></tr>`;
+  };
+  const base = location.origin;
+  return cabecera('📚 Base del asistente', 'Precios y fichas que usa el asistente de redes · solo tú lo ves y lo cambias', selEmp) +
+    `<div class="kpis">
+      <div class="kpi"><div class="e">Publicado</div><div class="n">${pub.length}</div><div class="d">archivo(s) que usa el asistente</div></div>
+      <div class="kpi" style="border-left-color:var(--ambar)"><div class="e">Por revisar</div><div class="n">${borr.length}</div><div class="d">${borr.length ? 'revisa y publica' : 'nada pendiente'}</div></div>
+      <div class="kpi" style="border-left-color:var(--verde)"><div class="e">Tamaño</div><div class="n">~${Math.round(caracteres / 4 / 1000)}k</div><div class="d">tokens si se mandara todo</div></div>
+      <div class="kpi" style="border-left-color:#7c3aed"><div class="e">Última publicación</div><div class="n" style="font-size:18px">${ultima ? fechaCorta(ultima) : '—'}</div><div class="d">${ultima ? haceCuanto(ultima) : 'todavía nada'}</div></div>
+    </div>
+    <div class="rej r21">
+      <div class="caja"><div class="cab"><div><h2>Subir</h2><p class="sub">Excel (.xlsx) y PDF de ${esc(e.nombre)}. Quedan "por revisar" hasta que los publiques.</p></div></div>
+        <div class="acciones"><button class="btn" data-k="subir">📄 Subir archivos</button><button class="btn-sec" data-k="carpeta">📁 Subir carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota escrita</button></div>
+        <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
+        <div class="k-progreso" id="kProgreso"></div></div>
+      <div class="caja"><h2>Ajustes del asistente</h2><p class="sub">Sedes (separadas por coma) y clave para n8n</p>
+        <div style="display:flex;gap:6px;margin-bottom:10px"><input id="kSedes" value="${esc(e.sedes.join(', '))}" placeholder="Ej: Punta Cana, Orlando" style="flex:1"><button class="btn-sec" data-k="sedes">Guardar</button></div>
+        ${e.token ? `<div class="k-clave" id="kClave" data-clave="${esc(e.token)}">${esc(e.token.slice(0, 7))}••••••••••••${esc(e.token.slice(-4))}</div>
+          <div class="acciones" style="margin-top:6px"><button class="btn-mini" data-k="copiar">📋 Copiar clave</button><button class="btn-mini" data-k="ejemplo">Cómo conectarlo</button><button class="btn-mini peligro" data-k="clave">Cambiar clave</button></div>`
+        : `<button class="btn-sec" data-k="clave">🔑 Crear clave del asistente</button>`}
+      </div>
+    </div>
+    <div class="caja"><div class="cab"><div><h2>Por revisar</h2><p class="sub">Toca 👁 para ver cómo lo entendió el panel. En rojo: lo interno que se quitó (comisión, neto, costo).</p></div>
+      ${borr.length > 1 ? `<button class="btn" data-k="publicar-todo">✔ Publicar todo (${borr.length})</button>` : ''}</div>
+      ${borr.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Contenido</th><th>Se quitó</th><th></th></tr></thead><tbody>${borr.map(filaBorr).join('')}</tbody></table>` : '<div class="vacio">Nada por revisar. Sube un archivo o una nota.</div>'}</div>
+    <div class="caja"><h2>Probar como el asistente</h2><p class="sub">Escribe lo que preguntaría un cliente y mira qué información encontraría el asistente</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="kPruebaSede">${opcionesSede('')}</select>
+        <input id="kPregunta" placeholder="Ej: ¿cuánto cuesta Isla Saona para 2 adultos y un niño?" style="flex:1;min-width:220px">
+        <label style="font-size:12.5px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="kBorradores"> incluir lo por revisar</label>
+        <button class="btn" data-k="probar">Buscar</button></div>
+      <div id="kResultados"></div></div>
+    <div class="caja"><div class="cab"><div><h2>Publicado (lo que usa el asistente)</h2><p class="sub">${pub.length} archivo(s) · ${e.sedes.length ? 'sedes: ' + esc(e.sedes.join(', ')) : 'sin sedes (vale para todo)'}</p></div>
+      ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
+      ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>
+`;
+}
+function verArchivo(f) {
+  const q = f.quitado || {};
+  const quitado = (q.columnas || []).length || (q.lineas || []).length ? `<div class="k-quitado"><b>🔒 Se quitó (el cliente final nunca lo verá):</b><ul>
+      ${(q.columnas || []).length ? `<li>Columnas: ${q.columnas.map(esc).join(' · ')}</li>` : ''}${(q.lineas || []).map(l => `<li>${esc(l.replace(/^#+\s*/, ''))}</li>`).join('')}</ul></div>` : '';
+  const avisos = (f.avisos || []).length ? `<div class="k-avisos">${f.avisos.map(a => '⚠️ ' + esc(a)).join('<br>')}</div>` : '';
+  abrirModal(`<h2>${TIPO_K[f.tipo] || ''} ${esc(f.nombre)}</h2><p style="margin:-6px 0 12px;color:var(--suave);font-size:13px">Sede: ${esc(f.sede || 'Todas las sedes')} · ${f.estado === 'borrador' ? 'por revisar' : f.estado}</p>
+    ${avisos}${quitado}
+    ${f.documentos.map((d, i) => `<details class="k-doc" ${i === 0 ? 'open' : ''}><summary>${esc(d.titulo)} <span style="color:var(--suave);font-weight:400">· ${d.lineas.length} líneas</span></summary><pre>${esc(d.lineas.join('\n'))}</pre></details>`).join('') || '<div class="vacio">No quedó nada que el asistente pueda usar.</div>'}
+    <div class="pie">${f.estado === 'borrador' ? `<button class="btn-sec izq" data-k="quitar" data-id="${f.id}" style="color:var(--rojo)">Descartar</button>` : ''}<button class="btn-sec" data-cerrar-modal>Cerrar</button>${f.estado === 'borrador' ? `<button class="btn" data-k="publicar" data-id="${f.id}">Publicar</button>` : ''}</div>`);
+  document.getElementById('modal').classList.add('ancho');
+}
+function formNota(n = {}) {
+  abrirModal(`<h2>✍️ Nota escrita</h2>
+    ${campo('nTitulo', 'Título', `<input id="nTitulo" value="${esc(n.nombre || '')}" placeholder="Ej: Recargo nocturno Orlando">`, 'Si ya existe una nota con este título, la reemplaza al publicar.')}
+    ${campo('nSede', 'Sede', `<select id="nSede">${opcionesSede(n.sede ?? (K.empresa.sedes[0] || ''))}</select>`)}
+    ${campo('nTexto', 'Texto', `<textarea id="nTexto" rows="10" placeholder="Pega aquí lo que te mandó el cliente. Ej: Traslados entre 10:00 p.m. y 6:00 a.m. tienen un recargo de US$ 20.">${esc(n.texto || '')}</textarea>`, 'Una idea por línea. Las líneas con comisión o neto se quitan solas.')}
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const nombre = document.getElementById('nTitulo').value.trim();
+    if (!nombre) { document.getElementById('errForm').textContent = 'Ponle un título.'; return; }
+    await enviarForm('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre, sede: document.getElementById('nSede').value, nota: document.getElementById('nTexto').value }, 'Nota guardada. Revísala y publícala.');
+  };
+}
+function base64De(archivo) {
+  return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => mal(r.error); r.readAsDataURL(archivo); });
+}
+async function subirArchivos(lista) {
+  const validos = [...lista].filter(f => /\.(xlsx|xlsm|pdf|xls)$/i.test(f.name) && !f.name.startsWith('~$'));
+  const omitidos = lista.length - validos.length;
+  const prog = document.getElementById('kProgreso');
+  const errores = [];
+  for (let i = 0; i < validos.length; i++) {
+    const f = validos[i];
+    if (prog) prog.textContent = `Subiendo ${i + 1} de ${validos.length}: ${f.name}…`;
+    if (f.size > 15 * 1024 * 1024) { errores.push(`${f.name}: pesa más de 15 MB`); continue; }
+    const r = await api('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre: f.name, datos: await base64De(f) });
+    if (!r.ok) errores.push(`${f.name}: ${r.data.error || 'error'}`);
+  }
+  await ir('conocimiento');
+  const p = document.getElementById('kProgreso');
+  if (p) p.innerHTML = `${validos.length - errores.length} archivo(s) subido(s)${omitidos ? ` · ${omitidos} ignorado(s) (no son Excel ni PDF)` : ''}.` + (errores.length ? `<br><span style="color:var(--rojo)">${errores.map(esc).join('<br>')}</span>` : '');
+}
+async function probarConocimiento() {
+  const q = document.getElementById('kPregunta').value.trim();
+  const caja = document.getElementById('kResultados');
+  if (!q) { caja.innerHTML = '<div class="vacio">Escribe una pregunta.</div>'; return; }
+  caja.innerHTML = '<div class="vacio">Buscando…</div>';
+  const r = await api('/api/oficina/conocimiento/probar', { empresa_id: kEmpresa, q, sede: document.getElementById('kPruebaSede').value, borradores: document.getElementById('kBorradores').checked });
+  if (!r.ok) { caja.innerHTML = `<div class="vacio">${esc(r.data.error || 'Error')}</div>`; return; }
+  caja.innerHTML = r.data.resultados.length ? r.data.resultados.map((x, i) => `<div class="k-res"><div class="t"><b>${i + 1}. ${esc(x.titulo)}</b><span class="chip az">${esc(x.sede)}</span><span class="chip gris">${esc(x.fuente)}</span><span style="margin-left:auto;color:var(--suave);font-size:12px">parecido ${x.puntaje}</span></div><pre>${esc(x.texto)}</pre></div>`).join('')
+    : '<div class="vacio">No encontró nada. Prueba con otras palabras o revisa que esté publicado.</div>';
+}
+function ejemploConexion() {
+  const puerto = location.port || (location.protocol === 'https:' ? '443' : '80');
+  const local = `http://host.docker.internal:${location.hostname === 'localhost' ? puerto : 'PUERTO_DEL_CENTRAL'}`;
+  abrirModal(`<h2>Cómo lo consulta el asistente (n8n)</h2>
+    <p style="font-size:13.5px">En n8n, un nodo <b>HTTP Request</b>:</p>
+    <ul style="font-size:13.5px;line-height:1.6"><li>Método: <b>GET</b></li><li>URL: <code>${esc(local)}/api/conocimiento/buscar</code></li>
+      <li>Parámetros: <code>q</code> = la pregunta del cliente · <code>sede</code> = ${esc(K.empresa.sedes.join(' / ') || 'la sede')} · <code>n</code> = 4</li>
+      <li>Cabecera: <code>Authorization</code> = <code>Bearer TU_CLAVE</code> (guárdala como credencial "Header Auth" en n8n, no en el texto del flujo)</li></ul>
+    <p style="font-size:13px;color:var(--suave)">También: <code>/api/conocimiento/indice?sede=…</code> (lista de lo cargado) y <code>/api/conocimiento/todo?sede=…</code> (todo el texto).
+    Si n8n NO está en Docker, usa <code>http://localhost:${esc(location.hostname === 'localhost' ? puerto : 'PUERTO')}</code>.</p>
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
+}
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-k]');
+  if (!t) return;
+  ev.preventDefault();
+  const accion = t.dataset.k, id = t.dataset.id;
+  if (accion === 'subir') return document.getElementById('kArchivos').click();
+  if (accion === 'carpeta') return document.getElementById('kCarpeta').click();
+  if (accion === 'nota') return formNota();
+  if (accion === 'ver') { const r = await api('/api/oficina/conocimiento/ver?id=' + id); return r.ok ? verArchivo(r.data) : aviso(r.data.error || 'Error'); }
+  if (accion === 'editar-nota') {
+    const r = await api('/api/oficina/conocimiento/ver?id=' + id); if (!r.ok) return;
+    return formNota({ nombre: r.data.nombre, sede: r.data.sede, texto: (r.data.documentos[0] || { lineas: [] }).lineas.join('\n') });
+  }
+  if (accion === 'publicar' || accion === 'publicar-todo') {
+    const ids = accion === 'publicar' ? [id] : K.archivos.filter(a => a.estado === 'borrador').map(a => a.id);
+    const r = await api('/api/oficina/conocimiento/publicar', { ids });
+    cerrarModal(); aviso(r.ok ? `Publicado (${r.data.publicados}). El asistente ya lo usa.` : (r.data.error || 'Error')); return ir('conocimiento');
+  }
+  if (accion === 'quitar') {
+    const a = K.archivos.find(x => String(x.id) === String(id));
+    if (!confirm(a && a.estado === 'publicado' ? `¿Quitar "${a.nombre}" del asistente? Dejará de usarlo.` : '¿Descartar este archivo?')) return;
+    await api('/api/oficina/conocimiento/quitar', { id }); cerrarModal(); aviso('Listo.'); return ir('conocimiento');
+  }
+  if (accion === 'restaurar') {
+    if (!confirm('¿Volver a la versión anterior? La actual queda como "anterior".')) return;
+    const r = await api('/api/oficina/conocimiento/restaurar', { id }); aviso(r.ok ? 'Listo: se usa la versión anterior.' : (r.data.error || 'Error')); return ir('conocimiento');
+  }
+  if (accion === 'sedes') { await api('/api/oficina/conocimiento/ajustes', { empresa_id: kEmpresa, sedes: document.getElementById('kSedes').value }); aviso('Sedes guardadas.'); return ir('conocimiento'); }
+  if (accion === 'clave') {
+    if (K.empresa.token && !confirm('¿Cambiar la clave? La clave vieja deja de funcionar: hay que poner la nueva en n8n.')) return;
+    await api('/api/oficina/conocimiento/ajustes', { empresa_id: kEmpresa, nuevaClave: true }); aviso('Clave lista. Cópiala y ponla en n8n.'); return ir('conocimiento');
+  }
+  if (accion === 'copiar') { try { await navigator.clipboard.writeText(document.getElementById('kClave').dataset.clave); aviso('Clave copiada. Pégala en n8n, no en el chat.'); } catch (e) { aviso('No se pudo copiar.'); } return; }
+  if (accion === 'ejemplo') return ejemploConexion();
+  if (accion === 'probar') return probarConocimiento();
+});
+document.addEventListener('change', async e => {
+  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; return ir('conocimiento'); }
+  if (e.target.id === 'kArchivos' || e.target.id === 'kCarpeta') { const l = [...e.target.files]; e.target.value = ''; if (l.length) await subirArchivos(l); return; }
+  if (e.target.classList.contains('k-sede')) { await api('/api/oficina/conocimiento/sede', { id: e.target.dataset.id, sede: e.target.value }); aviso('Sede cambiada.'); return cargarConocimiento(); }
+});
+document.addEventListener('input', e => {
+  if (e.target.id !== 'kFiltro') return;
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('tr[data-filtro]').forEach(tr => { tr.style.display = !q || tr.dataset.filtro.includes(q) ? '' : 'none'; });
+});
+document.addEventListener('keydown', e => { if (e.target.id === 'kPregunta' && e.key === 'Enter') { e.preventDefault(); probarConocimiento(); } });
+
 /* ---------- Empresas y Herramientas (las pantallas de siempre, dentro de la Oficina) ---------- */
 function vEmpresas() { return cabecera('🏗️ Empresas y demo', 'Crear empresas, módulos, cobro y recordatorio, anuncios, pausa y demo de ventas') + `<iframe class="marco" src="/?incrustado=empresas" title="Empresas"></iframe>`; }
 function vHerramientas() { return cabecera('🛠️ Herramientas', 'Usuarios, grupos, auditoría, bloqueos y estado del sistema del central') + `<iframe class="marco" src="/?incrustado=herramientas" title="Herramientas"></iframe>`; }
@@ -583,7 +802,7 @@ function opcionesEmpresa(elegida, vacio = 'Ninguno (general)') {
 function opciones(obj, elegida) { return Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === elegida ? 'selected' : ''}>${esc(v)}</option>`).join(''); }
 function campo(id, etiqueta, control, ayuda = '') { return `<div class="campo"><label for="${id}">${etiqueta}</label>${control}${ayuda ? `<div class="ay">${ayuda}</div>` : ''}</div>`; }
 const v = id => (document.getElementById(id) || {}).value || '';
-function abrirModal(html) { document.getElementById('modal').innerHTML = html; document.getElementById('fondoModal').classList.add('abierto'); const p = document.querySelector('#modal input, #modal select, #modal textarea'); if (p) p.focus(); }
+function abrirModal(html) { document.getElementById('modal').classList.remove('ancho'); document.getElementById('modal').innerHTML = html; document.getElementById('fondoModal').classList.add('abierto'); const p = document.querySelector('#modal input, #modal select, #modal textarea'); if (p) p.focus(); }
 function cerrarModal() { document.getElementById('fondoModal').classList.remove('abierto'); }
 function pieModal(borrar) { return `<div class="error-form" id="errForm"></div><div class="pie">${borrar ? `<button class="btn-sec izq" id="fBorrar" style="color:var(--rojo)">Borrar</button>` : ''}<button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar</button></div>`; }
 async function enviarForm(url, cuerpo, ok) {
@@ -733,7 +952,7 @@ document.getElementById('btnTema').onclick = () => { const o = document.body.cla
   let inicial = 'inicio';
   try { inicial = localStorage.getItem('oficinaVista') || 'inicio'; } catch (e) {}
   const pedida = new URLSearchParams(location.search).get('ir'); if (pedida) inicial = pedida;
-  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'empresas', 'herramientas'].includes(inicial) ? inicial : 'inicio');
+  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'empresas', 'herramientas'].includes(inicial) ? inicial : 'inicio');
   cargarChatContactos();
   // Se mantiene al día solo: lo de la pantalla cada minuto, el chat cada pocos segundos.
   setInterval(async () => {

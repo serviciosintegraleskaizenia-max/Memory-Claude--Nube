@@ -1605,6 +1605,11 @@ http.createServer(async (req, res) => {
       return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; Path=/; Max-Age=0${cookieSegura(req)}` });
     }
 
+    // Base de conocimiento para el chatbot (n8n): sin sesión, con la clave del asistente de cada empresa.
+    if (url.startsWith('/api/conocimiento/')) {
+      return oficina.conocimiento.manejarPublico(req, res, url, { json });
+    }
+
     const u = await usuarioDeSesion(req);
 
     if (req.method === 'GET' && url === '/api/sesion') {

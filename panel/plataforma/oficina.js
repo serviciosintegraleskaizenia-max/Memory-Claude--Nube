@@ -5,6 +5,7 @@
 // Todo se guarda en la base del central. De cada empresa solo se LEE su base (y se escribe el chat y el "pagado").
 
 const { hoyLocal } = require('./cuenta');
+const crearConocimiento = require('./conocimiento');
 
 const CATEGORIAS = {
   servidor: 'Servidor', dominio: 'Dominio', ia: 'IA (tokens)', redes: 'Redes sociales', automatizacion: 'Automatizaciones',
@@ -39,9 +40,12 @@ const pad = n => String(n).padStart(2, '0');
 module.exports = function crearOficina({ client, config, registrar, central }) {
   const activo = central.activo;
   const A = central.ayudantes;
+  // Base de conocimiento del asistente de redes (tarifarios, fichas y notas de cada empresa).
+  const conocimiento = crearConocimiento({ client, registrar, central });
 
   async function preparar() {
     if (!activo) return;
+    await conocimiento.preparar();
     for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
@@ -370,6 +374,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     try {
       const p = new URL(req.url, 'http://localhost').searchParams;
 
+      if (url === '/api/oficina/conocimiento' || url.startsWith('/api/oficina/conocimiento/')) {
+        return await conocimiento.manejarOficina(req, res, url, u, { json, leerCuerpo });
+      }
       if (req.method === 'GET' && url === '/api/oficina/datos') {
         const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
         return json(res, 200, await datos(mes));
@@ -482,5 +489,5 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
   }
 
-  return { activo, preparar, manejar };
+  return { activo, preparar, manejar, conocimiento };
 };
