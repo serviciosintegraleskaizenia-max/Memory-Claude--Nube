@@ -146,7 +146,38 @@
   #cuerpo td.col-srv .srv-nota { display: block; margin-top: 2px; }
   #cuerpo td.col-hotel { max-width: 170px; white-space: normal; }
   #cuerpo td.nowrap { white-space: nowrap; }
-  #cuerpo td.col-estado { min-width: 150px; }
+  #tablaReservas { table-layout: fixed; min-width: 0; }
+  #tablaReservas th { white-space: normal; padding: 9px 7px; overflow-wrap: anywhere; }
+  #cuerpo td * { max-width: 100%; }
+  #cuerpo td [class] { white-space: normal; }
+  #cuerpo td .etq, #cuerpo td .revision, #cuerpo td .srv-tipo { white-space: normal; }
+  #cuerpo td.recortar { max-width: none; }
+  .lista-columnas { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; margin: 8px 0 4px; }
+  .col-opcion { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 6px 4px; cursor: pointer; }
+  .col-opcion input { width: 18px; height: 18px; }
+  .col-opcion small { color: var(--texto-suave); }
+  #cuerpo td .sub { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
+  #cuerpo td.col-srv .sub { margin: 0 0 2px; font-weight: 600; color: var(--texto); }
+  #cuerpo td { overflow-wrap: break-word; word-break: normal; }
+  .tarjeta-reserva { border-bottom: 2px solid var(--borde); padding: 12px 14px; cursor: pointer; }
+  .tarjeta-reserva:hover { background: var(--hover); }
+  .t-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; margin-bottom: 6px; }
+  .t-fila { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
+  .t-dato small { display: block; font-size: 10.5px; color: var(--texto-suave); text-transform: uppercase; letter-spacing: .3px; }
+  .t-dato .srv-hora small { display: inline; text-transform: none; letter-spacing: 0; margin-left: 4px; font-size: 11px; }
+  .t-srv { border-top: 1px dashed var(--borde); margin-top: 8px; padding-top: 8px; }
+  .t-srv .srv-nota { display: block; margin-top: 3px; }
+  @media (max-width: 1100px) {
+    #cuerpo td .etq { font-size: 10.5px; padding: 2px 6px; }
+    #cuerpo td, #tablaReservas th { padding: 6px 4px; font-size: 12px; }
+    #tablaReservas th { font-size: 10px; letter-spacing: 0; }
+    .srv-tipo { font-size: 10px; padding: 1px 4px; }
+  }
+  @media (pointer: coarse) {
+    .col-opcion { padding: 10px 6px; font-size: 15px; }
+    .col-opcion input { width: 22px; height: 22px; }
+    .barra .btn, .barra .btn-sec, .barra select { min-height: 40px; }
+  }
   @media (max-width: 1500px) {
     #cuerpo td, .tabla-wrap thead th { padding-left: 6px; padding-right: 6px; }
     #cuerpo td { font-size: 12.5px; }
@@ -402,17 +433,17 @@
     </select>
     <label><input type="checkbox" id="soloCompletos" checked> Ocultar pruebas sin datos</label>
     <button class="btn-sec" id="btnCorreoNuevo" style="display:none;">Correo nuevo</button>
+    <button class="btn-sec" id="btnColumnas" title="Elegir qué columnas ver y exportar">☰ Columnas</button>
     <button class="btn" id="btnExcel">Exportar a Excel</button>
   </div>
 
   <div class="tabla-wrap">
-    <table>
-      <thead><tr>
-        <th>Fecha de recibido</th><th>Intención</th><th>Agencia</th><th>Clientes</th><th>PAX</th>
-        <th>Aeropuerto</th><th>Servicio</th><th>Fecha servicio</th><th>Hora</th><th>Aerolínea</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
-      </tr></thead>
+    <table id="tablaReservas">
+      <colgroup id="colsReservas"></colgroup>
+      <thead><tr id="cabeceraReservas"></tr></thead>
       <tbody id="cuerpo"></tbody>
     </table>
+    <div id="tarjetasReservas"></div>
   </div>
 </main>
 
@@ -1123,10 +1154,10 @@ function sedeDeServicios(g) {
 function clientesDe(g) {
   return [...new Set(g.map(s => String(s.nombre_cliente || '').split(/\s*,\s*/)).flat().map(x => x.trim()).filter(Boolean))].join(', ');
 }
-function paxReserva(g) {
+function paxReserva(g, corto) {
   const tot = { adultos: 0, ninos: 0, infantes: 0 };
   for (const s of g) for (const k of Object.keys(tot)) tot[k] = Math.max(tot[k], Number(s[k]) || 0);
-  return paxDe(tot);
+  return corto ? paxCorto(tot) : paxDe(tot);
 }
 function horaServicio(s) {
   const t = tipoServicio(s);
@@ -1199,8 +1230,128 @@ function actualizarContadores() {
   document.getElementById('cnt-registradas').textContent = registradas;
 }
 
+/* ---------- Columnas de la tabla de reservas: cada usuario elige cuáles ve (y exporta) ---------- */
+// peso = ancho relativo. La tabla reparte el ancho de la pantalla entre las columnas elegidas: nunca sale barra de lado.
+const COLUMNAS = [
+  { k: 'recibido', t: 'Fecha de recibido', peso: 9, fija: true },
+  { k: 'intencion', t: 'Intención', peso: 10 },
+  { k: 'agencia', t: 'Agencia', peso: 10 },
+  { k: 'clientes', t: 'Clientes', peso: 11 },
+  { k: 'telefono', t: 'Teléfono', peso: 9, oculta: true },
+  { k: 'pax', t: 'PAX', peso: 6 },
+  { k: 'aeropuerto', t: 'Aeropuerto', peso: 6 },
+  { k: 'servicio', t: 'Servicio', peso: 13 },
+  { k: 'fecha', t: 'Fecha servicio', peso: 8 },
+  { k: 'hora', t: 'Hora', peso: 6 },
+  { k: 'aerolinea', t: 'Aerolínea', peso: 9 },
+  { k: 'vuelo', t: 'Vuelo', peso: 7 },
+  { k: 'hotel', t: 'Hotel', peso: 11 },
+  { k: 'estado', t: 'Estado', peso: 12 }
+];
+const COLUMNAS_INICIALES = COLUMNAS.filter(c => !c.oculta).map(c => c.k);
+function columnasVisibles() {
+  const p = sesionActual && sesionActual.preferencias && Array.isArray(sesionActual.preferencias.columnas)
+    ? sesionActual.preferencias.columnas : COLUMNAS_INICIALES;
+  const v = COLUMNAS.filter(c => c.fija || p.includes(c.k));
+  return v.length > 1 ? v : COLUMNAS.filter(c => !c.oculta);
+}
+// En pantallas chicas (portátil pequeño, tablet) algunas columnas se juntan con su vecina para que nada se corte.
+const UNIDAS = { aeropuerto: 'servicio', hora: 'fecha', aerolinea: 'vuelo' };
+const TITULO_UNIDO = { servicio: 'Servicio · aeropuerto', fecha: 'Fecha · hora', vuelo: 'Vuelo · aerolínea' };
+function columnasEnPantalla() {
+  const vis = columnasVisibles(), claves = vis.map(c => c.k);
+  const compacto = window.innerWidth < 1200;
+  const unidas = new Set(compacto ? Object.keys(UNIDAS).filter(k => claves.includes(k) && claves.includes(UNIDAS[k])) : []);
+  const cols = vis.filter(c => !unidas.has(c.k)).map(c => {
+    const suma = Object.keys(UNIDAS).filter(k => UNIDAS[k] === c.k && unidas.has(k));
+    return suma.length ? { ...c, t: TITULO_UNIDO[c.k], peso: c.peso + 3, con: suma } : c;
+  });
+  return cols;
+}
+function pintarCabecera(cols) {
+  const total = cols.reduce((a, c) => a + c.peso, 0);
+  document.getElementById('colsReservas').innerHTML = cols.map(c => `<col style="width:${(c.peso * 100 / total).toFixed(2)}%">`).join('');
+  document.getElementById('cabeceraReservas').innerHTML = cols.map(c => `<th>${esc(c.t)}</th>`).join('');
+}
+let anchoPintado = window.innerWidth;
+window.addEventListener('resize', () => {
+  clearTimeout(window._reloj_cols);
+  window._reloj_cols = setTimeout(() => {
+    const modo = w => (w < 900 ? 2 : w < 1200 ? 1 : 0);
+    if (modo(anchoPintado) !== modo(window.innerWidth)) { anchoPintado = window.innerWidth; pintar(); }
+  }, 200);
+});
+async function guardarColumnas(lista) {
+  if (!sesionActual) return;
+  sesionActual.preferencias = Object.assign({}, sesionActual.preferencias, { columnas: lista });
+  pintar();
+  const r = await api('/api/preferencias', { columnas: lista });
+  if (!r.ok) mostrarAviso(r.data.error || 'No se pudieron guardar tus columnas.', false);
+}
+function abrirColumnas() {
+  const vis = columnasVisibles().map(c => c.k);
+  abrirVentana(`
+    <div class="barra-ventana">
+      <h2>☰ Columnas</h2>
+      <div><button class="btn-sec" data-accion="cerrar">Listo</button></div>
+    </div>
+    <p class="etiqueta-sec">Marca lo que quieres ver. Se guarda en tu usuario (en cualquier PC) y el Excel sale con estas mismas columnas.</p>
+    <div class="pie-acciones"><button class="btn-sec" id="colTodo">Todo</button></div>
+    <div class="lista-columnas">${COLUMNAS.map(c => `
+      <label class="col-opcion"><input type="checkbox" value="${c.k}" ${vis.includes(c.k) ? 'checked' : ''} ${c.fija ? 'disabled' : ''}>
+        ${esc(c.t)}${c.fija ? ' <small>(siempre: trae el n.º de reserva)</small>' : ''}</label>`).join('')}
+    </div>
+    <div class="aviso" id="avisoV"></div>`);
+  const caja = document.getElementById('caja');
+  const leer = () => [...caja.querySelectorAll('.lista-columnas input:checked')].map(x => x.value);
+  caja.querySelectorAll('.lista-columnas input').forEach(x => x.addEventListener('change', () => guardarColumnas(leer())));
+  document.getElementById('colTodo').addEventListener('click', () => {
+    caja.querySelectorAll('.lista-columnas input').forEach(x => { x.checked = true; });
+    guardarColumnas(leer());
+  });
+}
+
+// Tablet vertical: cada reserva es una tarjeta con sus servicios. Muestra solo los datos que el usuario eligió.
+function pintarTarjetas(grupos, ks) {
+  const caja = document.getElementById('tarjetasReservas');
+  const tabla = document.getElementById('tablaReservas');
+  const tarjetas = window.innerWidth < 900;
+  tabla.style.display = tarjetas ? 'none' : '';
+  caja.style.display = tarjetas ? '' : 'none';
+  if (!tarjetas) { caja.innerHTML = ''; return; }
+  const ver = k => ks.includes(k);
+  const dato = (k, etiqueta, valor) => (ver(k) ? `<span class="t-dato"><small>${etiqueta}</small>${valor}</span>` : '');
+  caja.innerHTML = grupos.length ? grupos.map(g => {
+    const r = g[0];
+    const sede = sedeDeServicios(g);
+    const cabeza = `<div class="t-cabeza">
+        <span><b>#${r.id}</b> · ${fechaCorta(r.fecha)}${g.length > 1 ? ` · ${g.length} servicios` : ''}${sede ? ` · 📍 ${esc(sede)}` : ''}</span>
+        ${ver('intencion') ? `<span class="etq ${r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>` : ''}
+        ${ver('estado') ? etiquetaEstado(estadoReserva(g)) + marcaAsignado(r) + (g.map(marcaRevision).filter(Boolean)[0] || '') : ''}
+      </div>`;
+    const general = [dato('agencia', 'Agencia', esc(agenciaDe(r)) || falta('')), dato('clientes', 'Clientes', falta(clientesDe(g))),
+      dato('telefono', 'Teléfono', falta([...new Set(g.map(x => x.telefono).filter(Boolean))].join(', '))), dato('pax', 'PAX', falta(paxReserva(g)))].join('');
+    const servicios = g.map(s => {
+      const t = tipoServicio(s), nota = notaServicio(s);
+      return `<div class="t-srv">
+        ${ver('servicio') ? `<div><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</div>` : ''}
+        <div class="t-fila">${[dato('fecha', 'Fecha', falta(s.fecha_servicio)), dato('hora', 'Hora', `<span class="srv-hora">${horaServicio(s)}</span>`),
+          dato('vuelo', 'Vuelo', campoSrv(s, s.vuelo)), dato('aerolinea', 'Aerolínea', campoSrv(s, aerolineaDe(s.vuelo))),
+          dato('aeropuerto', 'Aeropuerto', campoSrv(s, s.aeropuerto)), dato('hotel', 'Hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))].join('')}</div>
+      </div>`;
+    }).join('');
+    return `<div class="tarjeta-reserva" data-id="${r.id}">${cabeza}${general ? `<div class="t-fila">${general}</div>` : ''}${servicios}</div>`;
+  }).join('') : '<p class="vacio-total">No hay registros con estos filtros.</p>';
+  caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
+}
+
 function pintar() {
   const lista = filtrar();
+  const cols = columnasEnPantalla();
+  anchoPintado = window.innerWidth;
+  const compacto = window.innerWidth < 1200;
+  const ETQ_CORTA = { MODIFICACION: 'MODIF.', PUBLICIDAD: 'PUBLIC.', SEGUIMIENTO: 'SEGUIM.', NO_ENTENDIDO: 'NO ENT.' };
+  pintarCabecera(cols);
   const cuerpo = document.getElementById('cuerpo');
 
   const grupos = agruparReservas(lista);
@@ -1217,30 +1368,36 @@ function pintar() {
         const n = g.length, rs = n > 1 ? ` rowspan="${n}"` : '';
         return g.map((s, i) => {
           const t = tipoServicio(s), nota = notaServicio(s);
-          const comun = i ? '' : `
-        <td${rs}>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${n > 1 ? ` · ${n} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}</td>
-        <td${rs}><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
-        <td${rs} class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
-        <td${rs} class="recortar" title="${esc(clientesDe(g))}">${falta(clientesDe(g))}</td>`;
-          const pax = variosPax ? `<td>${falta(paxCorto(s))}</td>` : (i ? '' : `<td${rs}>${falta(paxReserva(g))}</td>`);
-          const estado = i ? '' : `<td${rs} class="col-estado">${etiquetaEstado(estadoReserva(g))}${marca}</td>`;
+          // Datos de la reserva: una sola celda para todos sus servicios. Datos del servicio: una por línea.
+          const reserva = (attrs, html) => (i ? '' : `<td${rs}${attrs}>${html}</td>`);
+          const celda = {
+            recibido: () => reserva('', `${compacto ? fechaCorta(r.fecha).replace(/\/(\d{2})(\d{2})$/, '/$2') : fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${n > 1 ? ` · ${n} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}`),
+            intencion: () => reserva('', `<span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : `<span title="${esc(r.categoria)}">${esc(compacto && ETQ_CORTA[r.categoria] || r.categoria)}</span>`}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}`),
+            agencia: () => reserva(` class="recortar" title="${esc(agenciaDe(r))}"`, `${esc(agenciaDe(r))}`),
+            clientes: () => reserva(` class="recortar" title="${esc(clientesDe(g))}"`, `${falta(clientesDe(g))}`),
+            telefono: () => reserva('', `${falta([...new Set(g.map(x => x.telefono).filter(Boolean))].join(', '))}`),
+            pax: () => variosPax ? `<td>${falta(paxCorto(s))}</td>` : reserva('', `${falta(paxReserva(g, compacto))}`),
+            aeropuerto: () => `<td>${campoSrv(s, s.aeropuerto)}</td>`,
+            servicio: c => `<td class="col-srv">${c.con ? `<div class="sub">${campoSrv(s, s.aeropuerto)}</div>` : ''}<span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>`,
+            fecha: c => `<td${c.con ? ' class="srv-hora"' : ''}>${falta(s.fecha_servicio)}${c.con ? `<div class="sub">${horaServicio(s)}</div>` : ''}</td>`,
+            hora: () => `<td class="srv-hora">${horaServicio(s)}</td>`,
+            aerolinea: () => `<td>${campoSrv(s, aerolineaDe(s.vuelo))}</td>`,
+            vuelo: c => `<td>${campoSrv(s, s.vuelo)}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo))}</div>` : ''}</td>`,
+            hotel: () => `<td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td>`,
+            estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}`)
+          };
           return `
-      <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}">${comun}${pax}
-        <td>${campoSrv(s, s.aeropuerto)}</td>
-        <td class="col-srv"><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>
-        <td class="nowrap">${falta(s.fecha_servicio)}</td>
-        <td class="srv-hora">${horaServicio(s)}</td>
-        <td class="recortar">${campoSrv(s, aerolineaDe(s.vuelo))}</td>
-        <td class="nowrap">${campoSrv(s, s.vuelo)}</td>
-        <td class="col-hotel">${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td>${estado}
+      <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}">${cols.map(c => celda[c.k](c)).join('')}
       </tr>`;
         }).join('');
       }).join('')
-    : `<tr><td colspan="13" class="vacio-total">${
+    : `<tr><td colspan="${cols.length}" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
         : vistaActual === 'historico' ? 'No hay correos del histórico con esta búsqueda. Escribe un nombre, asunto, hotel o vuelo, o cambia las fechas.'
         : 'No hay registros con estos filtros.'}</td></tr>`;
+
+  pintarTarjetas(grupos, columnasVisibles().map(c => c.k));
 
   cuerpo.querySelectorAll('tr[data-id]').forEach(tr => {
     tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id)));
@@ -1773,6 +1930,7 @@ async function abrirExportar() {
       <label>Usuario<select id="exUsuario"><option value="">Todos los correos recibidos</option>${usuarios}</select></label>
       <label>Intención<select id="exIntencion">${intenciones}</select></label>
     </div>
+    <p class="etiqueta-sec">Columnas: ${esc(columnasVisibles().map(c => c.t).join(', '))}. Una fila por servicio. Para cambiarlas usa ☰ Columnas.</p>
     <p class="etiqueta-sec">Con "Todos" se exportan los correos recibidos en esas fechas. Con un usuario se exporta lo que hizo en esas fechas: cambios de estado, agencias corregidas y respuestas enviadas, con la hora de cada acción.</p>
     <div class="pie-acciones"><button class="btn" data-accion="exp-descargar">Descargar Excel</button></div>
     <div class="aviso" id="avisoV"></div>`);
@@ -1800,13 +1958,30 @@ function aerolineaDe(vuelo) {
   return nombres.join(', ');
 }
 
-function filaExportar(x) {
-  return [
-    fechaCorta(x.fecha), x.categoria, agenciaDe(x), x.nombre_cliente || '', x.telefono || '', paxDe(x),
-    x.aeropuerto || '', x.actividad || x.tipo_servicio || '', x.fecha_servicio || '',
-    x.hora_servicio || '', aerolineaDe(x.vuelo), x.vuelo || '', x.hotel || '', x.estado || ''
-  ];
+// Excel: las mismas columnas que el usuario eligió para la tabla; una fila por servicio.
+const EXPORTAR = {
+  recibido: { t: ['Fecha de recibido', 'Reserva #'], v: (x, num) => [fechaCorta(x.fecha), num] },
+  intencion: { t: ['Intención'], v: x => [x.categoria || ''] },
+  agencia: { t: ['Agencia'], v: x => [agenciaDe(x)] },
+  clientes: { t: ['Clientes'], v: x => [x.nombre_cliente || ''] },
+  telefono: { t: ['Teléfono'], v: x => [x.telefono || ''] },
+  pax: { t: ['PAX'], v: x => [paxDe(x)] },
+  aeropuerto: { t: ['Aeropuerto'], v: x => [x.aeropuerto || ''] },
+  servicio: { t: ['Tipo de servicio', 'Servicio / actividad', 'Nota'], v: x => { const t = tipoServicio(x); return [t === 'OTRO' ? '' : TIPOS_SRV[t].replace(/^\S+\s/, ''), x.actividad || x.tipo_servicio || '', notaServicio(x)]; } },
+  fecha: { t: ['Fecha servicio'], v: x => [x.fecha_servicio || ''] },
+  hora: { t: ['Hora'], v: x => [x.hora_servicio || ''] },
+  aerolinea: { t: ['Aerolínea'], v: x => [aerolineaDe(x.vuelo)] },
+  vuelo: { t: ['Vuelo'], v: x => [x.vuelo || ''] },
+  hotel: { t: ['Hotel'], v: x => [x.hotel || (tipoServicio(x) === 'OUT' ? x.punto_partida : x.punto_llegada) || ''] },
+  estado: { t: ['Estado'], v: x => [(ESTADOS.find(e => e[0] === x.estado) || [null, x.estado || ''])[1]] }
+};
+function cabecerasExportar() { return columnasVisibles().map(c => EXPORTAR[c.k].t).flat(); }
+function numerosDeReserva(lista) {
+  const num = new Map();
+  for (const x of lista) { const k = claveReserva(x); if (!num.has(k) || x.id < num.get(k)) num.set(k, x.id); }
+  return x => '#' + num.get(claveReserva(x));
 }
+function filaExportar(x, numDe) { return columnasVisibles().map(c => EXPORTAR[c.k].v(x, numDe ? numDe(x) : '#' + x.id)).flat(); }
 
 async function descargarExportacion() {
   const desde = val('exDesde');
@@ -1820,10 +1995,12 @@ async function descargarExportacion() {
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo exportar.', false);
   const lista = r.data.map(sinEntidades).filter(x => !intencion || x.categoria === intencion);
   if (!lista.length) return mostrarAviso('No hay registros con esos filtros.', false);
-  const cabeceras = ['Fecha de recibido', 'Intención', 'Agencia', 'Clientes', 'Teléfono', 'PAX', 'Aeropuerto', 'Actividad', 'Fecha servicio', 'Hora', 'Aerolínea', 'Vuelo', 'Hotel', 'Estado'];
+  const cabeceras = cabecerasExportar();
+  const numDe = numerosDeReserva(lista);
+  lista.sort((a, b) => (numDe(a) === numDe(b) ? (a.numero_servicio || 0) - (b.numero_servicio || 0) : 0));
   const filas = usuario
-    ? lista.map(x => [x.accion_nombre || x.accion_usuario, NOMBRES_ACCION[x.accion] || x.accion, x.accion_fecha, x.anterior || '', x.nuevo || '', ...filaExportar(x)])
-    : lista.map(filaExportar);
+    ? lista.map(x => [x.accion_nombre || x.accion_usuario, NOMBRES_ACCION[x.accion] || x.accion, x.accion_fecha, x.anterior || '', x.nuevo || '', ...filaExportar(x, numDe)])
+    : lista.map(x => filaExportar(x, numDe));
   descargarCsv(usuario ? ['Usuario', 'Acción', 'Fecha y hora de la acción', 'Antes', 'Después', ...cabeceras] : cabeceras,
     filas, `reservas_${usuario || 'todos'}_${desde}_a_${hasta}.csv`);
   mostrarAviso(`Listo: se exportaron ${filas.length} filas.`, true);
@@ -3754,6 +3931,7 @@ document.getElementById('btnCancelarRespuesta').addEventListener('click', oculta
 document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRespuesta);
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
 document.getElementById('btnExcel').addEventListener('click', abrirExportar);
+document.getElementById('btnColumnas').addEventListener('click', abrirColumnas);
 document.getElementById('btnTema').addEventListener('click', alternarTema);
 document.getElementById('btnCampana').addEventListener('click', e => { e.stopPropagation(); alternarBandeja(); });
 document.getElementById('bandejaLista').addEventListener('click', e => {

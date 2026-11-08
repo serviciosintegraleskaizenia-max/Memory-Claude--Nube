@@ -134,6 +134,7 @@ async function inicializarTablas() {
   await client.query('CREATE INDEX IF NOT EXISTS mensajes_par ON mensajes (de, para)');
   await client.query('CREATE INDEX IF NOT EXISTS mensajes_destino ON mensajes (para, leido)');
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '{}'::jsonb");
+  await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb");
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
@@ -1511,7 +1512,7 @@ async function usuarioDeSesion(req) {
   }
   s.ultima = Date.now();
   const r = await client.query(
-    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence FROM usuarios WHERE usuario = $1',
+    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence, preferencias FROM usuarios WHERE usuario = $1',
     [s.usuario]
   );
   const u = r.rows[0];
@@ -1638,7 +1639,8 @@ http.createServer(async (req, res) => {
         usuario: u.usuario, nombre: u.nombre, grupo: u.grupo,
         permisos, debe_cambiar: u.debe_cambiar,
         modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
-        vence: u.vence || null, asistente: Boolean(await conexionAsistente())
+        vence: u.vence || null, asistente: Boolean(await conexionAsistente()),
+        preferencias: u.preferencias || {}
       });
     }
 
@@ -1735,6 +1737,18 @@ http.createServer(async (req, res) => {
       } catch (e) {
         return json(res, 502, { error: e.name === 'AbortError' ? 'El asistente tardó demasiado en responder.' : 'No hay conexión con el asistente (¿está encendido el central?).' });
       }
+    }
+
+    // Preferencias de cada usuario (por ahora, las columnas que ve en la tabla de reservas).
+    if (req.method === 'POST' && url === '/api/preferencias') {
+      const b = await leerCuerpo(req);
+      const columnas = Array.isArray(b.columnas)
+        ? [...new Set(b.columnas.map(x => String(x || '').replace(/[^a-z_]/g, '').slice(0, 30)).filter(Boolean))].slice(0, 30)
+        : null;
+      if (!columnas) return json(res, 400, { error: 'Faltan las columnas.' });
+      await client.query("UPDATE usuarios SET preferencias = COALESCE(preferencias, '{}'::jsonb) || $1::jsonb WHERE id = $2",
+        [JSON.stringify({ columnas }), u.id]);
+      return json(res, 200, { ok: true, columnas });
     }
 
     if (req.method === 'POST' && url === '/api/cambiar-clave-propia') {
@@ -2764,7 +2778,8 @@ http.createServer(async (req, res) => {
           return json(res, 400, { error: 'Elige un rango de fechas válido.' });
         }
         const columnas = `c.id, c.categoria, c.agencia, c.remitente, c.asunto, c.fecha, c.estado, c.aeropuerto, c.actividad,
-          c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel, c.adultos, c.ninos, c.infantes`;
+          c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel, c.adultos, c.ninos, c.infantes,
+          c.message_id, c.numero_servicio, c.motivo, c.error_ia, c.punto_partida, c.punto_llegada`;
         if (!usuario) {
           // Todos: correos recibidos en esas fechas.
           const r = await client.query(`SELECT ${columnas} FROM clasificacion c ORDER BY c.id`);
