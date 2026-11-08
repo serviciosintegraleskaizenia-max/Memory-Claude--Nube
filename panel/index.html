@@ -196,6 +196,9 @@
   body.oscuro .srv-IN { background: #14532d; color: #bbf7d0; } body.oscuro .srv-OUT { background: #172554; color: #bfdbfe; } body.oscuro .srv-INTERHOTEL { background: #451a03; color: #fde68a; } body.oscuro .srv-ACTIVIDAD { background: #2e1065; color: #ddd6fe; } body.oscuro .srv-OTRO { background: #1e293b; color: #94a3b8; }
   .srv-nota { font-size: 11px; color: #b45309; font-weight: 600; }
   .srv-nota.srv-cancelado { color: #b91c1c; }
+  .srv-nota.srv-extra { color: #6d28d9; }
+  body.oscuro .srv-nota.srv-extra { color: #c4b5fd; }
+  body.oscuro .srv-nota.srv-cancelado { color: #fca5a5; }
   .srv-hora small { display: block; font-size: 10.5px; color: var(--texto-suave); }
   .sede-chip { display: inline-block; font-size: 10.5px; border-radius: 999px; padding: 0 7px; background: var(--hover, #f1f5f9); color: var(--texto-suave); margin-top: 2px; }
   .tabla-servicios { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -1151,8 +1154,9 @@ function notaServicio(r) {
   return !r.error_ia && m && !/^(Histórico|Reanálisis)/.test(m) ? m : '';
 }
 const NOTA_CANCELADA = /^\s*(CANCELAD[OA]|EN ESPERA|STANDBY)\b/i;
-function claseNota(n) { return NOTA_CANCELADA.test(n) ? ' srv-cancelado' : ''; }
-function iconoNota(n) { return NOTA_CANCELADA.test(n) ? '⛔' : '⚠️'; }
+const NOTA_EXTRA = /^\s*EXTRAS?\s*:/i;
+function claseNota(n) { return NOTA_CANCELADA.test(n) ? ' srv-cancelado' : NOTA_EXTRA.test(n) ? ' srv-extra' : ''; }
+function iconoNota(n) { return NOTA_CANCELADA.test(n) ? '⛔' : NOTA_EXTRA.test(n) ? '➕' : '⚠️'; }
 function sedeDeServicios(g) {
   const ae = g.map(s => String(s.aeropuerto || '').toUpperCase().split(/[\s,;/]+/)).flat();
   const rd = ae.some(a => AEROPUERTOS_RD.includes(a)), orl = ae.some(a => AEROPUERTOS_ORL.includes(a));
