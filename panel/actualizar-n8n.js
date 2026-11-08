@@ -75,7 +75,11 @@ async function publicar(wf) {
   let r = await api('POST', `/workflows/${wf.id}/activate`);
   if (!r.ok && wf.active) {
     await api('POST', `/workflows/${wf.id}/deactivate`);
-    r = await api('POST', `/workflows/${wf.id}/activate`);
+    // Nunca dejar el flujo apagado: se reintenta varias veces antes de rendirse.
+    for (let i = 0; i < 4 && !r.ok; i++) {
+      if (i) await new Promise(ok => setTimeout(ok, 3000));
+      r = await api('POST', `/workflows/${wf.id}/activate`);
+    }
   }
   if (!r.ok) fallar('El código quedó guardado pero n8n no lo publicó (' + r.status + '): ' + (r.d.message || '') + '\nAbre el flujo en n8n y pulsa Publish.');
 }
