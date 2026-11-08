@@ -135,6 +135,18 @@
   body.oscuro .chip-revisar, body.oscuro .caja-revision { background: #451a03; color: #fde68a; border-color: #92400e; }
   body.oscuro .chip-urgente { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
   .num-reserva { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
+  .srv { min-height: 40px; padding: 3px 0; border-top: 1px dashed var(--borde); display: flex; flex-direction: column; justify-content: center; white-space: nowrap; }
+  .na { color: var(--texto-suave); }
+  .srv:first-child { border-top: none; }
+  .srv-tipo { display: inline-block; border-radius: 6px; padding: 1px 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .srv-IN { background: #dcfce7; color: #166534; } .srv-OUT { background: #dbeafe; color: #1e40af; } .srv-INTERHOTEL { background: #fef3c7; color: #92400e; } .srv-ACTIVIDAD { background: #ede9fe; color: #5b21b6; } .srv-OTRO { background: #f1f5f9; color: #475569; }
+  body.oscuro .srv-IN { background: #14532d; color: #bbf7d0; } body.oscuro .srv-OUT { background: #172554; color: #bfdbfe; } body.oscuro .srv-INTERHOTEL { background: #451a03; color: #fde68a; } body.oscuro .srv-ACTIVIDAD { background: #2e1065; color: #ddd6fe; } body.oscuro .srv-OTRO { background: #1e293b; color: #94a3b8; }
+  .srv-nota { font-size: 11px; color: #b45309; font-weight: 600; }
+  .srv-hora small { display: block; font-size: 10.5px; color: var(--texto-suave); }
+  .sede-chip { display: inline-block; font-size: 10.5px; border-radius: 999px; padding: 0 7px; background: var(--hover, #f1f5f9); color: var(--texto-suave); margin-top: 2px; }
+  .tabla-servicios { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tabla-servicios th, .tabla-servicios td { border-bottom: 1px solid var(--borde); padding: 5px 4px; text-align: left; vertical-align: top; }
+  .tabla-servicios th { font-size: 11px; color: var(--texto-suave); }
   .badge { background: #dc2626; color: white; border-radius: 999px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
 
   .fondo-modal, .overlay, .fondo-chat { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 50; padding: 16px; }
@@ -381,7 +393,7 @@
     <table>
       <thead><tr>
         <th>Fecha de recibido</th><th>Intención</th><th>Agencia</th><th>Clientes</th><th>PAX</th>
-        <th>Aeropuerto</th><th>Actividad</th><th>Fecha servicio</th><th>Hora</th><th>Aerolínea</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
+        <th>Aeropuerto</th><th>Servicio</th><th>Fecha servicio</th><th>Hora</th><th>Aerolínea</th><th>Vuelo</th><th>Hotel</th><th>Estado</th>
       </tr></thead>
       <tbody id="cuerpo"></tbody>
     </table>
@@ -1043,6 +1055,71 @@ function notificar(lista) {
   sonarAviso();
 }
 
+
+/* ---------- Una reserva = un correo con varios servicios (IN, OUT, interhotel, actividades) ---------- */
+const AEROPUERTOS_RD = ['PUJ', 'SDQ', 'JBQ', 'STI', 'LRM', 'POP', 'AZS', 'BRX', 'STO'];
+const AEROPUERTOS_ORL = ['MCO', 'SFB'];
+const TIPOS_SRV = { IN: '🛬 Llegada (IN)', OUT: '🛫 Salida (OUT)', INTERHOTEL: '🔁 Interhotel', ACTIVIDAD: '🎟 Actividad', OTRO: '—' };
+function paxCorto(r) {
+  const a = Number(r.adultos) || 0, n = Number(r.ninos) || 0, i = Number(r.infantes) || 0;
+  const p = []; if (a) p.push(a + ' ad'); if (n) p.push(n + ' niñ'); if (i) p.push(i + ' inf');
+  return p.join(' · ');
+}
+// En actividades e interhoteles el aeropuerto y el vuelo no aplican: se muestra "—" en vez de "Falta".
+function campoSrv(s, valor) { return valor ? esc(valor) : (['ACTIVIDAD', 'INTERHOTEL'].includes(tipoServicio(s)) ? '<span class="na">—</span>' : falta('')); }
+function tipoServicio(r) {
+  const t = String(r.tipo_servicio || '').trim().toUpperCase();
+  if (TIPOS_SRV[t] && t !== 'OTRO') return t;
+  const x = (String(r.tipo_servicio || '') + ' ' + String(r.actividad || '')).toLowerCase();
+  if (/inter ?hotel|entre hoteles|hotel a hotel/.test(x)) return 'INTERHOTEL';
+  if (/salida|check-?out|departure|\bout\b|regreso|return|hotel al aeropuerto|hotel - aeropuerto/.test(x)) return 'OUT';
+  if (/llegada|check-?in|arrival|\bin\b|entrada|aeropuerto al hotel|aeropuerto - hotel/.test(x)) return 'IN';
+  if (r.actividad && !/traslado/.test(x)) return 'ACTIVIDAD';
+  return 'OTRO';
+}
+function claveReserva(r) { return r.message_id ? r.message_id : 'id:' + r.id; }
+function serviciosDe(r) {
+  const k = claveReserva(r);
+  return datos.filter(x => claveReserva(x) === k).sort((a, b) => (a.numero_servicio || 0) - (b.numero_servicio || 0) || a.id - b.id);
+}
+function agruparReservas(lista) {
+  const vistos = new Set(), grupos = [];
+  for (const r of lista) {
+    const k = claveReserva(r);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    grupos.push(serviciosDe(r));
+  }
+  return grupos;
+}
+function notaServicio(r) {
+  const m = String(r.motivo || '');
+  return !r.error_ia && m && !/^(Histórico|Reanálisis)/.test(m) ? m : '';
+}
+function sedeDeServicios(g) {
+  const ae = g.map(s => String(s.aeropuerto || '').toUpperCase().split(/[\s,;/]+/)).flat();
+  const rd = ae.some(a => AEROPUERTOS_RD.includes(a)), orl = ae.some(a => AEROPUERTOS_ORL.includes(a));
+  return rd && orl ? 'Punta Cana + Orlando' : rd ? 'Punta Cana' : orl ? 'Orlando' : '';
+}
+function clientesDe(g) {
+  return [...new Set(g.map(s => String(s.nombre_cliente || '').split(/\s*,\s*/)).flat().map(x => x.trim()).filter(Boolean))].join(', ');
+}
+function paxReserva(g) {
+  const tot = { adultos: 0, ninos: 0, infantes: 0 };
+  for (const s of g) for (const k of Object.keys(tot)) tot[k] = Math.max(tot[k], Number(s[k]) || 0);
+  return paxDe(tot);
+}
+function horaServicio(s) {
+  const t = tipoServicio(s);
+  if (!s.hora_servicio) return falta('');
+  return `${esc(s.hora_servicio)}<small>${t === 'IN' ? 'llega' : t === 'OUT' ? 'sale' : ''}</small>`;
+}
+function lineas(g, fn) { return g.map(s => `<div class="srv">${fn(s)}</div>`).join(''); }
+function estadoReserva(g) {
+  const orden = ['pendiente de transcribir', 'revisar', 'actualizada', 'sin accion', 'registrada', 'historico'];
+  return g.map(s => s.estado).sort((a, b) => orden.indexOf(a) - orden.indexOf(b))[0];
+}
+
 function ordenar(lista) {
   const modo = document.getElementById('filtroOrden').value;
   if (modo === 'recibido') {
@@ -1096,9 +1173,9 @@ function filtrar() {
 
 function actualizarContadores() {
   const completos = datos.filter(esCompleto);
-  const enRevision = datos.filter(r => revisiones.has(r.id)).length;
-  const registradas = datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION')).length;
-  document.getElementById('cnt-todas').textContent = completos.filter(r => r.categoria === 'RESERVA' && r.estado !== 'registrada').length;
+  const enRevision = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
+  const registradas = agruparReservas(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION'))).length;
+  document.getElementById('cnt-todas').textContent = agruparReservas(completos.filter(r => r.categoria === 'RESERVA' && r.estado !== 'registrada')).length;
   document.getElementById('cnt-revision').textContent = enRevision;
   document.getElementById('cnt-registradas').textContent = registradas;
 }
@@ -1107,31 +1184,35 @@ function pintar() {
   const lista = filtrar();
   const cuerpo = document.getElementById('cuerpo');
 
-  cuerpo.innerHTML = lista.length
-    ? lista.map(r => {
-        const rev = revisiones.get(r.id);
+  const grupos = agruparReservas(lista);
+  cuerpo.innerHTML = grupos.length
+    ? grupos.map(g => {
+        const r = g[0];
+        const rev = revisiones.get(r.id) || g.map(s => revisiones.get(s.id)).find(Boolean);
         const tarde = rev && rev.segundos > rev.limite;
         const marca = (rev
           ? `<span class="revision ${tarde ? 'tarde' : ''}" title="${tarde ? 'Pasó el tiempo máximo por reserva' : ''}">En revisión: ${esc(rev.nombre || rev.usuario)} desde ${esc(horaCorta(rev.desde))}${rev.segundos ? ' · ⏱ ' + Math.floor(rev.segundos / 60) + ' min' : ''}${tarde ? ' ⚠' : ''}</span>`
-          : '') + marcaAsignado(r) + marcaRevision(r);
+          : '') + marcaAsignado(r) + g.map(marcaRevision).filter(Boolean).slice(0, 1).join('');
+        const sede = sedeDeServicios(g);
+        const variosPax = new Set(g.map(paxDe)).size > 1;
         return `
       <tr data-id="${r.id}">
-        <td>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}</div></td>
+        <td>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${g.length > 1 ? ` · ${g.length} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}</td>
         <td><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
         <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
-        <td class="recortar" title="${esc(r.nombre_cliente)}">${falta(r.nombre_cliente)}</td>
-        <td>${falta(paxDe(r))}</td>
-        <td>${falta(r.aeropuerto)}</td>
-        <td>${falta(r.actividad || r.tipo_servicio)}</td>
-        <td>${falta(r.fecha_servicio)}</td>
-        <td>${falta(r.hora_servicio)}</td>
-        <td class="recortar" title="${esc(aerolineaDe(r.vuelo))}">${falta(aerolineaDe(r.vuelo))}</td>
-        <td>${falta(r.vuelo)}</td>
-        <td>${falta(r.hotel)}</td>
-        <td>${etiquetaEstado(r.estado)}${marca}</td>
+        <td class="recortar" title="${esc(clientesDe(g))}">${falta(clientesDe(g))}</td>
+        <td>${variosPax ? lineas(g, s => falta(paxCorto(s))) : falta(paxReserva(g))}</td>
+        <td>${lineas(g, s => campoSrv(s, s.aeropuerto))}</td>
+        <td>${lineas(g, s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<span><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}</span>${nota ? `<span class="srv-nota">⚠️ ${esc(nota)}</span>` : ''}`; })}</td>
+        <td>${lineas(g, s => falta(s.fecha_servicio))}</td>
+        <td class="srv-hora">${lineas(g, horaServicio)}</td>
+        <td class="recortar">${lineas(g, s => campoSrv(s, aerolineaDe(s.vuelo)))}</td>
+        <td>${lineas(g, s => campoSrv(s, s.vuelo))}</td>
+        <td>${lineas(g, s => falta(s.hotel || (tipoServicio(s) === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td>
+        <td>${etiquetaEstado(estadoReserva(g))}${marca}</td>
       </tr>`;
       }).join('')
-    : `<tr><td colspan="12" class="vacio-total">${
+    : `<tr><td colspan="13" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
         : vistaActual === 'historico' ? 'No hay correos del histórico con esta búsqueda. Escribe un nombre, asunto, hotel o vuelo, o cambia las fechas.'
@@ -1140,13 +1221,15 @@ function pintar() {
   cuerpo.querySelectorAll('tr[data-id]').forEach(tr =>
     tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id))));
 
+  // Los números cuentan reservas (correos), no servicios sueltos.
+  const unaPor = l => agruparReservas(l).length;
   const completos = datos.filter(esCompleto);
-  document.getElementById('n-reservas').textContent = completos.filter(r => r.categoria === 'RESERVA').length;
-  document.getElementById('n-pendientes').textContent = datos.filter(r => r.estado === 'pendiente de transcribir').length;
-  document.getElementById('n-registradas').textContent = datos.filter(r => r.estado === 'registrada').length;
-  document.getElementById('n-revisar').textContent = datos.filter(r => r.estado === 'actualizada' || (r.estado === 'revisar'
-    && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.error_ia))).length;
-  document.getElementById('n-total').textContent = datos.length;
+  document.getElementById('n-reservas').textContent = unaPor(completos.filter(r => r.categoria === 'RESERVA'));
+  document.getElementById('n-pendientes').textContent = unaPor(datos.filter(r => r.estado === 'pendiente de transcribir'));
+  document.getElementById('n-registradas').textContent = unaPor(datos.filter(r => r.estado === 'registrada'));
+  document.getElementById('n-revisar').textContent = unaPor(datos.filter(r => r.estado === 'actualizada' || (r.estado === 'revisar'
+    && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.error_ia))));
+  document.getElementById('n-total').textContent = unaPor(datos);
   actualizarContadores();
 }
 
@@ -1399,16 +1482,16 @@ async function abrirModal(id) {
     : falta(agenciaDe(r));
   document.getElementById('mDatos').innerHTML = `
     <tr><td>Agencia</td><td>${celdaAgencia}</td></tr>
-    <tr><td>Clientes</td><td>${falta(r.nombre_cliente)}</td></tr>
+    <tr><td>Clientes</td><td>${falta(clientesDe(serviciosDe(r)))}</td></tr>
     <tr><td>Teléfono</td><td>${falta(r.telefono)}</td></tr>
-    <tr><td>PAX</td><td>${falta(paxDe(r))}</td></tr>
-    <tr><td>Aeropuerto</td><td>${falta(r.aeropuerto)}</td></tr>
-    <tr><td>Actividad</td><td>${falta(r.actividad || r.tipo_servicio)}</td></tr>
-    <tr><td>Fecha del servicio</td><td>${falta(r.fecha_servicio)}</td></tr>
-    <tr><td>Hora</td><td>${falta(r.hora_servicio)}</td></tr>
-    <tr><td>Aerolínea</td><td>${falta(aerolineaDe(r.vuelo))}</td></tr>
-    <tr><td>Vuelo</td><td>${falta(r.vuelo)}</td></tr>
-    <tr><td>Hotel</td><td>${falta(r.hotel)}</td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
+    <tr><td>PAX (total)</td><td>${falta(paxReserva(serviciosDe(r)))}</td></tr>
+    <tr><td>Sede</td><td>${falta(sedeDeServicios(serviciosDe(r)))}</td></tr>
+    <tr><td colspan="2"><b>Servicios de esta reserva (${serviciosDe(r).length})</b>
+      <table class="tabla-servicios"><thead><tr><th>Tipo</th><th>Fecha</th><th>Hora</th><th>Vuelo</th><th>Aeropuerto</th><th>Hotel / destino</th><th>Pax</th></tr></thead><tbody>
+      ${serviciosDe(r).map(s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<tr><td><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? '<br>' + esc(s.actividad) : ''}${nota ? `<br><span class="srv-nota">⚠️ ${esc(nota)}</span>` : ''}</td>
+        <td>${falta(s.fecha_servicio)}</td><td class="srv-hora">${horaServicio(s)}</td><td>${falta(s.vuelo)}${aerolineaDe(s.vuelo) ? '<br><small>' + esc(aerolineaDe(s.vuelo)) + '</small>' : ''}</td>
+        <td>${falta(s.aeropuerto)}</td><td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td><td>${falta(paxDe(s))}</td></tr>`; }).join('')}
+      </tbody></table></td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
 
   const puedeEstado = puede('cambiar_estado');
   document.getElementById('mEstado').disabled = !puedeEstado;
@@ -1599,8 +1682,10 @@ async function guardarEstado() {
     return;
   }
   seleccionado.estado = estado;
+  const ids = (r.data && r.data.servicios) || [];
+  for (const x of datos) if (ids.includes(x.id)) x.estado = estado;
   mensaje.style.color = '#16a34a';
-  mensaje.textContent = 'Estado guardado.';
+  mensaje.textContent = ids.length > 1 ? `Estado guardado en los ${ids.length} servicios de esta reserva.` : 'Estado guardado.';
   // Al registrarla el contador se detiene y muestra el tiempo total; si vuelve a abrirse, sigue contando.
   tomarRevision(seleccionado.id);
   pintar();

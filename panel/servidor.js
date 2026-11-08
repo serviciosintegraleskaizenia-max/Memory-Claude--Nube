@@ -1854,14 +1854,19 @@ http.createServer(async (req, res) => {
       if (!previa) return json(res, 404, { error: 'Reserva no encontrada' });
       const ajena = await asignadaAOtro(Number(id), u, puede);
       if (ajena) return json(res, 409, { error: `Esta reserva está asignada a ${ajena}.` });
-      await client.query('UPDATE clasificacion SET estado = $1 WHERE id = $2', [estado, Number(id)]);
+      // Una reserva es el correo completo: el estado cambia en todos sus servicios (IN, OUT, interhotel, actividades).
+      const servicios = (await client.query(
+        `UPDATE clasificacion SET estado = $1 WHERE id = $2
+           OR (COALESCE(message_id, '') <> '' AND message_id = (SELECT message_id FROM clasificacion WHERE id = $2)
+               AND categoria IN ('RESERVA', 'MODIFICACION'))
+         RETURNING id`, [estado, Number(id)])).rows.map(x => x.id);
       // El contador se detiene al registrarla (o al sacarla de los estados abiertos).
-      if (!ESTADOS_ABIERTOS.includes(estado)) await cerrarTramos(Number(id));
+      if (!ESTADOS_ABIERTOS.includes(estado)) for (const sid of servicios) await cerrarTramos(sid);
       await registrar(u, 'cambiar_estado', 'reserva', id, previa.estado, estado, previa.nombre_cliente || '');
       if (estado === 'registrada' && previa.estado !== 'registrada') {
         marcarLeidoSiCompleto(Number(id), u).catch(e => console.log('Error marcando como leído:', e.message));
       }
-      return json(res, 200, { ok: true });
+      return json(res, 200, { ok: true, servicios });
     }
 
     // El texto del correo se pide al abrir la reserva, no en la lista que se recarga cada 15 segundos.
