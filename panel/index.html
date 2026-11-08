@@ -142,6 +142,7 @@
   .srv-IN { background: #dcfce7; color: #166534; } .srv-OUT { background: #dbeafe; color: #1e40af; } .srv-INTERHOTEL { background: #fef3c7; color: #92400e; } .srv-ACTIVIDAD { background: #ede9fe; color: #5b21b6; } .srv-OTRO { background: #f1f5f9; color: #475569; }
   body.oscuro .srv-IN { background: #14532d; color: #bbf7d0; } body.oscuro .srv-OUT { background: #172554; color: #bfdbfe; } body.oscuro .srv-INTERHOTEL { background: #451a03; color: #fde68a; } body.oscuro .srv-ACTIVIDAD { background: #2e1065; color: #ddd6fe; } body.oscuro .srv-OTRO { background: #1e293b; color: #94a3b8; }
   .srv-nota { font-size: 11px; color: #b45309; font-weight: 600; }
+  .srv-nota.srv-cancelado { color: #b91c1c; }
   .srv-hora small { display: block; font-size: 10.5px; color: var(--texto-suave); }
   .sede-chip { display: inline-block; font-size: 10.5px; border-radius: 999px; padding: 0 7px; background: var(--hover, #f1f5f9); color: var(--texto-suave); margin-top: 2px; }
   .tabla-servicios { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -1096,6 +1097,9 @@ function notaServicio(r) {
   const m = String(r.motivo || '');
   return !r.error_ia && m && !/^(Histórico|Reanálisis)/.test(m) ? m : '';
 }
+const NOTA_CANCELADA = /^\s*(CANCELAD[OA]|EN ESPERA|STANDBY)\b/i;
+function claseNota(n) { return NOTA_CANCELADA.test(n) ? ' srv-cancelado' : ''; }
+function iconoNota(n) { return NOTA_CANCELADA.test(n) ? '⛔' : '⚠️'; }
 function sedeDeServicios(g) {
   const ae = g.map(s => String(s.aeropuerto || '').toUpperCase().split(/[\s,;/]+/)).flat();
   const rd = ae.some(a => AEROPUERTOS_RD.includes(a)), orl = ae.some(a => AEROPUERTOS_ORL.includes(a));
@@ -1203,7 +1207,7 @@ function pintar() {
         <td class="recortar" title="${esc(clientesDe(g))}">${falta(clientesDe(g))}</td>
         <td>${variosPax ? lineas(g, s => falta(paxCorto(s))) : falta(paxReserva(g))}</td>
         <td>${lineas(g, s => campoSrv(s, s.aeropuerto))}</td>
-        <td>${lineas(g, s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<span><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}</span>${nota ? `<span class="srv-nota">⚠️ ${esc(nota)}</span>` : ''}`; })}</td>
+        <td>${lineas(g, s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<span><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}</span>${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}`; })}</td>
         <td>${lineas(g, s => falta(s.fecha_servicio))}</td>
         <td class="srv-hora">${lineas(g, horaServicio)}</td>
         <td class="recortar">${lineas(g, s => campoSrv(s, aerolineaDe(s.vuelo)))}</td>
@@ -1488,7 +1492,7 @@ async function abrirModal(id) {
     <tr><td>Sede</td><td>${falta(sedeDeServicios(serviciosDe(r)))}</td></tr>
     <tr><td colspan="2"><b>Servicios de esta reserva (${serviciosDe(r).length})</b>
       <table class="tabla-servicios"><thead><tr><th>Tipo</th><th>Fecha</th><th>Hora</th><th>Vuelo</th><th>Aeropuerto</th><th>Hotel / destino</th><th>Pax</th></tr></thead><tbody>
-      ${serviciosDe(r).map(s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<tr><td><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? '<br>' + esc(s.actividad) : ''}${nota ? `<br><span class="srv-nota">⚠️ ${esc(nota)}</span>` : ''}</td>
+      ${serviciosDe(r).map(s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<tr><td><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? '<br>' + esc(s.actividad) : ''}${nota ? `<br><span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>
         <td>${falta(s.fecha_servicio)}</td><td class="srv-hora">${horaServicio(s)}</td><td>${falta(s.vuelo)}${aerolineaDe(s.vuelo) ? '<br><small>' + esc(aerolineaDe(s.vuelo)) + '</small>' : ''}</td>
         <td>${falta(s.aeropuerto)}</td><td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td><td>${falta(paxDe(s))}</td></tr>`; }).join('')}
       </tbody></table></td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
