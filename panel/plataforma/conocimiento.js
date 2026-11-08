@@ -30,16 +30,27 @@ function titulo(t) { return t.toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (m,
 function esMayuscula(t) { return /\p{Lu}/u.test(t) && !/\p{Ll}/u.test(t); }
 function usd(n) { return 'US$ ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\.00$/, ''); }
 
+// Un precio escrito como texto en el Excel ("359,00", "1.199,00", "US$ 45") vale como número.
+function comoNumero(t) {
+  const s = String(t).replace(/\s|US\$|USD|\$/gi, '');
+  if (!/^\d{1,3}([.,]\d{3})*([.,]\d{1,2})?$|^\d+([.,]\d{1,2})?$/.test(s)) return null;
+  const decimal = s.match(/[.,](\d{1,2})$/);
+  const entero = (decimal ? s.slice(0, -decimal[0].length) : s).replace(/[.,]/g, '');
+  return Number(entero + (decimal ? '.' + decimal[1] : ''));
+}
 function formato(cab, v) {
   const t = limpio(v);
   if (!t || ['N/A', 'X'].includes(t.toUpperCase())) return t ? 'no disponible' : '';
   const C = cab.toUpperCase();
+  if (typeof v === 'string' && comoNumero(t) !== null) v = comoNumero(t);
   if (typeof v === 'number') {
     if (DINERO.some(k => C.includes(k)) && !['DORMITORIOS', 'BAÑOS', 'OCUPACI'].some(k => C.includes(k))) return usd(v);
   }
   return t;
 }
-const esCabecera = f => f.length >= 3 && f.every(([, c]) => typeof c.v === 'string');
+// Cabecera: 3 o más celdas de texto que no son datos. Una fila con "X" o precios escritos como texto ("359,00") es una fila de datos.
+const esDato = v => /^(x|n\/a|na|-|—)$/i.test(limpio(v)) || comoNumero(limpio(v)) !== null;
+const esCabecera = f => f.length >= 3 && f.every(([, c]) => typeof c.v === 'string') && !f.slice(1).some(([, c]) => esDato(c.v));
 
 // Una hoja de Excel en líneas legibles: títulos, párrafos y una línea por fila con "Campo: valor".
 function hojaATexto(filasCrudas, quitado) {
@@ -57,11 +68,15 @@ function hojaATexto(filasCrudas, quitado) {
       previas = [];
       continue;
     }
+    // Fila de 2 títulos sobre la cabecera ("TARIFA REGULAR POR PAX | TARIFA PRIVADA POR RUTA"): nombra los grupos de columnas.
+    if (f.length === 2 && f.every(([, c]) => typeof c.v === 'string') && siguiente.length > 2 && esCabecera(siguiente)) {
+      previas.push(Object.assign(f, { grupo: true })); agregarTexto(f.map(([, x]) => limpio(x.v)).join(' | ')); continue;
+    }
     if (esCabecera(f)) {
       if (siguiente.length && esCabecera(siguiente) && siguiente.length >= f.length - 1) { previas.push(f); continue; }
       // Nombre de cada columna con las filas de cabecera de arriba (celdas combinadas: vale la última a la izquierda).
       cab = new Map();
-      const etiquetas = f.slice(0, 2).map(([c]) => c);
+      const etiquetas = f.slice(0, previas.some(p => p.grupo) ? 1 : 2).map(([c]) => c);
       for (const [col, x] of f) {
         const partes = [];
         for (const p of (etiquetas.includes(col) ? [] : previas.slice(-2))) {
@@ -70,7 +85,12 @@ function hojaATexto(filasCrudas, quitado) {
         }
         partes.push(limpio(x.v));
         const nombre = partes.filter(Boolean).join(' · ');
-        const interna = COLUMNA_INTERNA.test(sinTildes(nombre).toUpperCase());
+        // "Costo" solo es interno si la tabla tiene además un precio de venta (PVP, precio, tarifa, adulto...).
+        // En una lista como "Agregados · Costo por unidad" el costo ES el precio que se cobra.
+        const N = sinTildes(nombre).toUpperCase();
+        const soloCosto = /(^|[^A-Z])(COSTO|COSTOS|COST)([^A-Z]|$)/.test(N) && !/(^|[^A-Z])(COM|COMS|COMISION|COMISIONES|COMMISSION|NET|NETO|NETA|NETOS)([^A-Z]|$)/.test(N);
+        const hayVenta = f.some(([, y]) => /PVP|PRECIO|TARIFA|ADULT|CHILD|MENOR|ONE WAY|ROUND|PAX|PRICE/.test(sinTildes(limpio(y.v)).toUpperCase()) && !/COSTO|COST/.test(sinTildes(limpio(y.v)).toUpperCase()));
+        const interna = COLUMNA_INTERNA.test(N) && !(soloCosto && !hayVenta);
         if (interna && !quitado.columnas.includes(nombre)) quitado.columnas.push(nombre);
         cab.set(col, { nombre, interna });
       }
@@ -100,6 +120,11 @@ function nombreBase(archivo) {
   return archivo.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+(ESP|ENG|ES|EN)\s*$/i, '').replace(/\s+/g, ' ').trim();
 }
 
+// Sube cuando cambia cómo se lee un Excel: al arrancar, los Excel ya cargados se vuelven a leer desde el original.
+// 2: "Costo por unidad" es precio cuando la hoja no tiene otro precio de venta (por ejemplo la hoja Agregados).
+// 3: los títulos de grupo de 2 celdas sobre la cabecera se suman al nombre de cada columna.
+// 4: filas con "X" o precios escritos como texto ya no se toman por cabeceras (desordenaban los nombres de columna).
+const VERSION_EXCEL = 4;
 function convertirExcel(buf, archivo) {
   const quitado = { columnas: [], lineas: [] };
   const avisos = [];
@@ -113,6 +138,7 @@ function convertirExcel(buf, archivo) {
     documentos.push({ titulo: hojas.length > 1 ? `${base} · ${titulo(h.nombre)}` : base, hoja: h.nombre, lineas });
   }
   if (!documentos.length) avisos.push('No se encontró nada que leer en este Excel.');
+  quitado.version = VERSION_EXCEL;
   return { tipo: 'tarifario', documentos, quitado, avisos };
 }
 
@@ -213,6 +239,31 @@ function fragmentar(doc, tipo) {
 const VACIAS = new Set(('a al algo algun alguna como con cual cuales cuando de del desde donde el ella en entre es esa ese eso esta este esto ' +
   'hay la las le les lo los mas me mi mis muy no nos o para pero por que se sea si sin sobre su sus te tiene tienen tu un una unas unos ' +
   'y ya yo hola buenas buenos dias tardes noches quiero quisiera favor gracias saber informacion info the and of to for in is are').split(' '));
+// "coco bongo" también busca "cocobongo" (y al revés no hace falta: el texto se parte en palabras).
+function conPares(lista) {
+  const salida = new Set(lista);
+  for (let i = 0; i + 1 < lista.length; i++) if (lista[i].length >= 3 && lista[i + 1].length >= 3) salida.add(lista[i] + lista[i + 1]);
+  return [...salida];
+}
+// Las filas de los tarifarios que más se parecen a la pregunta (una fila = un trayecto, un tour o un agregado con sus precios).
+function filasParecidas(fragmentos, consulta, n = 8) {
+  const pq = new Set(conPares(palabras(consulta)));
+  if (!pq.size) return [];
+  const vistas = new Set(), filas = [];
+  for (const fr of fragmentos) {
+    for (const l of fr.texto.split('\n')) {
+      if (!/US\$|\|\s*\d/.test(l) || vistas.has(l)) continue;
+      vistas.add(l);
+      const pl = new Set(conPares(palabras(l)));
+      let s = 0;
+      // Una palabra larga y rara ("cocobongo", "nickelodeon") pesa el doble que una común.
+      for (const p of pq) if (pl.has(p)) s += /^\d/.test(p) ? 0.5 : p.length >= 7 ? 2 : 1;
+      if (s >= 2) filas.push({ s, l: l.replace(/^\s*-\s*/, ''), titulo: fr.titulo });
+    }
+  }
+  return filas.sort((a, b) => b.s - a.s).slice(0, n);
+}
+
 function palabras(t) {
   return sinTildes(String(t).toLowerCase()).split(/[^a-z0-9ñ]+/).filter(p => p && !VACIAS.has(p) && (p.length > 1 || /\d/.test(p)))
     .map(p => p.length > 4 ? p.replace(/(es|s)$/, '') : p);
@@ -224,6 +275,8 @@ const SINONIMOS = [
   [['aeropuerto', 'airport', 'aeroporto', 'aerop', 'apto'], ['aeropuerto', 'airport']],
   [['santo domingo', 'las americas', 'sdq', 'santo dgo'], ['santo', 'domingo', 'sdq']],
   [['punta cana', 'puj'], ['punta', 'cana', 'puj']],
+  // Zonas de Punta Cana que en el tarifario van como "HTL PUNTA CANA".
+  [['bavaro', 'arena gorda', 'cabeza de toro', 'cortecito', 'los corales', 'macao', 'white sands', 'friusa'], ['punta', 'cana', 'bavaro']],
   [['la romana', 'lrm'], ['romana', 'lrm']],
   [['puerto plata', 'pop'], ['puerto', 'plata', 'pop']],
   [['nino', 'nina', 'ninos', 'child', 'children', 'kid', 'kids', 'chd', 'crianca', 'criancas', 'menor'], ['nino', 'child', 'chd']],
@@ -384,6 +437,18 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     await client.query('CREATE INDEX IF NOT EXISTS conocimiento_ejemplos_empresa ON conocimiento_ejemplos (empresa_id, estado)');
     await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_cabeceras (
       empresa_id INTEGER NOT NULL, linea TEXT NOT NULL, PRIMARY KEY (empresa_id, linea))`);
+    // Excel cargados con una versión anterior del lector: se vuelven a leer desde el archivo original (mismo estado y sede).
+    const viejos = (await client.query(`SELECT id, nombre FROM conocimiento_archivos WHERE tipo = 'tarifario' AND original IS NOT NULL
+      AND COALESCE((quitado->>'version')::int, 1) < $1`, [VERSION_EXCEL])).rows;
+    for (const v of viejos) {
+      try {
+        const o = (await client.query('SELECT original FROM conocimiento_archivos WHERE id = $1', [v.id])).rows[0].original;
+        const r = convertirExcel(o, v.nombre);
+        await client.query('UPDATE conocimiento_archivos SET documentos = $1, quitado = $2, avisos = $3 WHERE id = $4',
+          [JSON.stringify(r.documentos), JSON.stringify(r.quitado), JSON.stringify(r.avisos), v.id]);
+      } catch (err) { console.error('Base del asistente: no se pudo volver a leer', v.nombre, err.message); }
+    }
+    if (viejos.length) console.log(`Base del asistente: ${viejos.length} Excel vueltos a leer con el lector nuevo.`);
   }
 
   const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -519,7 +584,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
 
   async function buscar(empresaId, q, sede, n = 4, conBorradores = false) {
     const ix = await indice(empresaId, conBorradores);
-    const pq = [...new Set(palabras(q))];
+    const pq = conPares(palabras(q));
     if (!pq.length) return [];
     const N = ix.fragmentos.length;
     const resultados = [];
@@ -591,7 +656,11 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const pistas = hoteles.length ? 'PISTAS (del listado de hoteles): ' + hoteles.map(h => `el hotel ${h.hotel} está en la zona ${h.zona}`).join('; ') +
       '. Para un traslado a ese hotel usa el trayecto que termina en esa zona (' + hoteles.map(h => h.zona.split(',').map(z => '"... - HTL ' + z.trim().toUpperCase() + '"').join(' o, si no existe, ')).join('; ') +
       '). El aeropuerto de salida lo dice el cliente (Santo Domingo = SDQ, Punta Cana = PUJ, La Romana = LRM).\n\n' : '';
-    const info = pistas + (encontrados.length
+    // Además de las hojas, las filas exactas más parecidas a la pregunta (por si la fila buscada quedó en otra parte de la hoja).
+    const filas = filasParecidas(ix.fragmentos.filter(fr => enSede(fr, sedeOk)), ampliarConsulta(consulta) + (zonas ? ' ' + zonas : ''));
+    const textoFilas = filas.length ? 'FILAS DE LOS TARIFARIOS MÁS PARECIDAS A LA PREGUNTA (precio de venta al público; cada una dice de qué hoja es):\n' +
+      filas.map(f => `• ${f.titulo}: ${f.l}`).join('\n') + '\n\n' : '';
+    const info = pistas + textoFilas + (encontrados.length
       ? encontrados.map((x, i) => `[${i + 1}] ${x.titulo}${x.sede && x.sede !== 'Todas' ? ` (sede ${x.sede})` : ''}\n${x.texto}`).join('\n\n')
       : '(No se encontró nada sobre esto en la base.)');
     const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
