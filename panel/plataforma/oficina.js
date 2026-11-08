@@ -6,6 +6,7 @@
 
 const { hoyLocal } = require('./cuenta');
 const crearConocimiento = require('./conocimiento');
+const crearRedes = require('./redes');
 
 const CATEGORIAS = {
   servidor: 'Servidor', dominio: 'Dominio', ia: 'IA (tokens)', redes: 'Redes sociales', automatizacion: 'Automatizaciones',
@@ -42,10 +43,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const A = central.ayudantes;
   // Base de conocimiento del asistente de redes (tarifarios, fichas y notas de cada empresa).
   const conocimiento = crearConocimiento({ client, config, registrar, central, claveIA: e => claveDe(e) });
+  // Conector con Chatwoot: el asistente sugiere (o responde) en Facebook, Instagram y WhatsApp.
+  const redes = crearRedes({ client, registrar, central, conocimiento });
 
   async function preparar() {
     if (!activo) return;
     await conocimiento.preparar();
+    await redes.preparar();
     for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
@@ -374,6 +378,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     try {
       const p = new URL(req.url, 'http://localhost').searchParams;
 
+      if (url === '/api/oficina/redes' || url.startsWith('/api/oficina/redes/')) {
+        return await redes.manejarOficina(req, res, url, u, { json, leerCuerpo });
+      }
       if (url === '/api/oficina/conocimiento' || url.startsWith('/api/oficina/conocimiento/')) {
         return await conocimiento.manejarOficina(req, res, url, u, { json, leerCuerpo });
       }
@@ -489,5 +496,5 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
   }
 
-  return { activo, preparar, manejar, conocimiento };
+  return { activo, preparar, manejar, conocimiento, redes };
 };

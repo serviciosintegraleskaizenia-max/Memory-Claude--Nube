@@ -870,5 +870,5 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
 
-  return { activo, preparar, manejarOficina, manejarPublico, _probar: { detectarIdioma, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
+  return { activo, preparar, manejarOficina, manejarPublico, responder, _probar: { detectarIdioma, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
 };

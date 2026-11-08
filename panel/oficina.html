@@ -200,6 +200,8 @@ let K = null;                 // base del asistente: { empresas, empresa, archiv
 let kEmpresa = '';
 let kChat = [];               // chat de prueba: [{ rol: 'cliente'|'asistente', texto, info }]
 let kChatSede = '';
+let R = null;                 // conector con Chatwoot: estado
+let rProbe = null;            // bandejas y equipos leídos de Chatwoot
 const timers = {};
 
 /* ---------- Utilidades ---------- */
@@ -619,6 +621,7 @@ async function cargarConocimiento() {
   const r = await api('/api/oficina/conocimiento' + (kEmpresa ? '?empresa=' + encodeURIComponent(kEmpresa) : ''));
   if (!r.ok) { document.getElementById('vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar.')}</div>`; return; }
   K = r.data;
+  if (K.empresa) { const rr = await api('/api/oficina/redes?empresa=' + K.empresa.id); R = rr.ok ? rr.data : null; }
   if (K.empresa) { kEmpresa = String(K.empresa.id); try { localStorage.setItem('oficinaEmpresaK', kEmpresa); } catch (e) {} }
   const n = (K.archivos || []).filter(a => a.estado === 'borrador').length + (K.ejemplos || []).filter(x => x.estado === 'nuevo').length;
   const el = document.getElementById('numConocimiento'); el.textContent = n; el.style.display = n ? '' : 'none';
@@ -693,6 +696,7 @@ function vConocimiento() {
       <div class="k-chat" id="kChat">${pintarChatK()}</div>
       <div style="display:flex;gap:6px"><textarea id="kChatTexto" rows="2" style="flex:1;resize:vertical" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea><button class="btn" data-k="chat-enviar">Enviar</button></div>
       <label style="font-size:12.5px;display:flex;gap:5px;align-items:center;margin-top:6px"><input type="checkbox" id="kChatBorr"> usar también lo que está por revisar</label></div>
+    ${cajaRedes()}
     ${cajaEntrenamiento()}
     <div class="caja"><h2>Probar como el asistente</h2><p class="sub">Escribe lo que preguntaría un cliente y mira qué información encontraría el asistente</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="kPruebaSede">${opcionesSede('')}</select>
@@ -811,6 +815,71 @@ function formInstrucciones() {
     await enviarForm('/api/oficina/conocimiento/instrucciones', { empresa_id: kEmpresa, nombre: document.getElementById('iNombre').value, modelo: document.getElementById('iModelo').value.trim(), instrucciones: document.getElementById('iGeneral').value, sedes, bienvenidas, web }, 'Instrucciones guardadas. Pruébalas en el chat.');
   };
 }
+
+/* ---------- Redes sociales (Chatwoot) ---------- */
+const RES_K = { igual: ['ok', 'Igual'], editada: ['ojo', 'Editada'], distinta: ['mal', 'Distinta'], pendiente: ['gris', 'Esperando asesor'], sin_respuesta: ['gris', 'Sin respuesta'], automatica: ['az', 'Enviada sola'], error: ['mal', 'Error'] };
+function cajaRedes() {
+  if (!R) return '';
+  const e = K.empresa;
+  const urlAviso = `http://host.docker.internal:${location.port || '3090'}/api/chatwoot/evento?clave=${R.clave || '(guarda la conexión primero)'}`;
+  const sedes = e.sedes.length ? e.sedes : [''];
+  const bandejas = rProbe ? rProbe.bandejas : Object.entries(R.bandejas).map(([id, b]) => ({ id, nombre: b.nombre, canal: '' }));
+  const filaBandeja = b => { const c = R.bandejas[String(b.id)] || {}; return `<tr><td><b>${esc(b.nombre || ('Bandeja ' + b.id))}</b><br><small style="color:var(--suave)">#${b.id}${b.canal ? ' · ' + esc(b.canal) : ''}</small></td>
+      <td><select data-r-sede="${b.id}" data-r-nombre="${esc(b.nombre || '')}">${sedes.map(x => `<option value="${esc(x)}" ${x === (c.sede || '') ? 'selected' : ''}>${x ? esc(x) : 'Sin sede'}</option>`).join('')}</select></td>
+      <td><select data-r-modo="${b.id}">${Object.entries(R.modos).map(([k, v]) => `<option value="${k}" ${k === (c.modo || 'apagado') ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></td></tr>`; };
+  const filaSede = x => { const elegido = R.equipos[x]; const eq = rProbe ? rProbe.equipos : (elegido ? [{ id: elegido, nombre: 'Equipo #' + elegido }] : []);
+    return `<tr><td><b>${esc(x)}</b></td><td><select data-r-equipo="${esc(x)}"><option value="">— sin equipo —</option>${eq.map(t => `<option value="${t.id}" ${String(t.id) === String(elegido || '') ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
+      ${rProbe && !rProbe.equipos.some(t => t.nombre.toLowerCase() === x.toLowerCase()) ? `<button class="btn-mini" data-k="r-crear-equipo" data-sede="${esc(x)}">+ Crear equipo "${esc(x)}"</button>` : ''}</td></tr>`; };
+  const tarjetas = Object.entries(R.porSede).map(([sd, x]) => `<div class="kpi" style="border-left-color:${x.acierto === null ? '#94a3b8' : x.acierto >= 90 ? 'var(--verde)' : x.acierto >= 70 ? 'var(--ambar)' : 'var(--rojo)'}">
+      <div class="e">${esc(sd)} · acierto</div><div class="n">${x.acierto === null ? '—' : x.acierto + '%'}</div>
+      <div class="d">${x.igual || 0} igual · ${x.editada || 0} editada · ${x.distinta || 0} distinta · ${x.total} sugerencias (30 días)</div></div>`).join('');
+  const conv = c => `${R.publico}/app/accounts/${R.cuenta}/conversations/${c}`;
+  const ult = R.ultimas.map(x => `<tr><td>${fechaCorta(x.creado)}<br><small style="color:var(--suave)">${new Date(x.creado).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</small></td>
+      <td>${esc(x.sede || '—')}</td><td class="envolver" style="max-width:260px">${esc((x.cliente || '').slice(0, 120))}</td>
+      <td class="envolver" style="max-width:320px"><small>${esc((x.sugerencia || x.error || '').slice(0, 180))}${(x.sugerencia || '').length > 180 ? '…' : ''}</small>${x.pasar_a_asesor ? '<br><span class="chip ojo">👤 asesor</span>' : ''}</td>
+      <td><span class="chip ${(RES_K[x.resultado] || ['gris'])[0]}" ${x.enviada ? `title="Envió: ${esc(x.enviada.slice(0, 300))}"` : ''}>${(RES_K[x.resultado] || ['', x.resultado])[1]}${x.parecido !== null && x.resultado !== 'automatica' ? ' · ' + Math.round(x.parecido * 100) + '%' : ''}</span></td>
+      <td><a class="btn-mini" style="text-decoration:none;display:inline-block" href="${esc(conv(x.conversacion))}" target="_blank" rel="noopener">Abrir</a></td></tr>`).join('');
+  return `<div class="caja"><div class="cab"><div><h2>📲 Redes sociales (Chatwoot)</h2><p class="sub">El asistente atiende los mensajes de Facebook, Instagram y WhatsApp que llegan a Chatwoot</p></div>
+      <button class="btn-sec" data-k="r-ayuda">Cómo conectarlo</button></div>
+    <div class="fila2" style="grid-template-columns:2fr 2fr 1fr 2fr;gap:8px">
+      ${campo('rUrl', 'Chatwoot (dirección interna)', `<input id="rUrl" value="${esc(R.url)}">`)}
+      ${campo('rPublico', 'Chatwoot (dirección pública)', `<input id="rPublico" value="${esc(R.publico)}">`)}
+      ${campo('rCuenta', 'N.º de cuenta', `<input id="rCuenta" value="${esc(R.cuenta)}" placeholder="2">`)}
+      ${campo('rToken', 'Token de acceso', `<input id="rToken" type="password" autocomplete="off" placeholder="${R.tieneToken ? '•••••• guardado (vacío = no cambiar)' : 'Pégalo aquí (Perfil → Token de acceso)'}">`)}
+    </div>
+    <div class="acciones"><button class="btn" data-k="r-guardar">Guardar y probar conexión</button>${R.tieneToken && R.cuenta ? '<button class="btn-sec" data-k="r-probar">Leer bandejas de Chatwoot</button>' : ''}</div>
+    ${R.clave ? `<div style="margin-top:12px;font-size:13px"><b>Dirección del aviso</b> (en Chatwoot → Ajustes → Integraciones → Webhooks, evento <b>Mensaje creado</b>):
+      <div class="k-clave" id="rAviso" style="margin-top:4px">${esc(urlAviso)}</div><button class="btn-mini" data-k="r-copiar" style="margin-top:4px">📋 Copiar dirección</button></div>` : ''}
+    ${bandejas.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Bandejas de entrada</h3><table><thead><tr><th>Bandeja</th><th>Sede</th><th>Qué hace el asistente</th></tr></thead><tbody>${bandejas.map(filaBandeja).join('')}</tbody></table>` : ''}
+    ${e.sedes.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Equipo de cada sede <small style="font-weight:400;color:var(--suave)">(a quién se asigna cuando hay que pasar a un asesor)</small></h3><table><tbody>${e.sedes.map(filaSede).join('')}</tbody></table>` : ''}
+    ${bandejas.length || e.sedes.length ? '<div class="acciones" style="margin-top:8px"><button class="btn" data-k="r-guardar-bandejas">Guardar bandejas y equipos</button></div>' : ''}
+    ${tarjetas ? `<h3 style="font-size:14px;margin:16px 0 6px">Tasa de acierto <small style="font-weight:400;color:var(--suave)">(cuántas sugerencias envió el asesor sin cambiarlas). Con 90% o más en ~200 conversaciones, se puede pasar esa bandeja a "Responde solo".</small></h3><div class="kpis">${tarjetas}</div>` : ''}
+    ${ult ? `<details><summary style="cursor:pointer;font-weight:600;font-size:14px;margin:8px 0">Últimas sugerencias (${R.ultimas.length})</summary><table><thead><tr><th>Cuándo</th><th>Sede</th><th>Cliente</th><th>Sugerencia</th><th>Resultado</th><th></th></tr></thead><tbody>${ult}</tbody></table></details>` : ''}
+  </div>`;
+}
+function ayudaRedes() {
+  abrirModal(`<h2>📲 Conectar el asistente con Chatwoot</h2>
+    <ol style="font-size:13.5px;line-height:1.7;padding-left:20px">
+      <li><b>Token:</b> en Chatwoot toca tu foto (abajo a la izquierda) → <b>Ajustes del perfil</b> → abajo, <b>Token de acceso</b> → Copiar. Pégalo aquí en "Token de acceso". <b>No lo mandes por chat.</b></li>
+      <li><b>N.º de cuenta:</b> es el número que sale en la dirección de Chatwoot: <code>/app/accounts/<b>2</b>/…</code></li>
+      <li>Toca <b>Guardar y probar conexión</b>: salen tus bandejas de entrada.</li>
+      <li>A cada bandeja ponle su <b>sede</b> y qué hace el asistente (empieza con <b>Nota privada</b>). Elige o crea el <b>equipo</b> de cada sede. <b>Guardar bandejas y equipos</b>.</li>
+      <li>En Chatwoot: <b>Ajustes → Integraciones → Webhooks → Configurar → Agregar nuevo webhook</b>. Pega la <b>Dirección del aviso</b> y marca solo <b>Mensaje creado</b> (message_created). Crear.</li>
+      <li>Manda un mensaje a la página de prueba: en unos segundos aparece en Chatwoot una <b>nota amarilla</b> con la sugerencia.</li></ol>
+    <p style="font-size:13px;color:var(--suave)">Las bandejas de las páginas reales déjalas en <b>Apagado</b> hasta el día del cambio.</p>
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
+}
+async function guardarRedes(extra = {}) {
+  const tok = document.getElementById('rToken');
+  const cuerpo = { empresa_id: kEmpresa, url: document.getElementById('rUrl').value, publico: document.getElementById('rPublico').value, cuenta: document.getElementById('rCuenta').value, ...extra };
+  if (tok && tok.value.trim()) cuerpo.token = tok.value.trim();
+  return api('/api/oficina/redes/guardar', cuerpo);
+}
+async function probarRedes() {
+  const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa });
+  if (!r.ok) { aviso(r.data.error || 'No se pudo conectar con Chatwoot.'); return false; }
+  rProbe = r.data; aviso(`Conectado: ${r.data.bandejas.length} bandeja(s) y ${r.data.equipos.length} equipo(s).`); return true;
+}
 function verArchivo(f) {
   const q = f.quitado || {};
   const quitado = (q.columnas || []).length || (q.lineas || []).length ? `<div class="k-quitado"><b>🔒 Se quitó (el cliente final nunca lo verá):</b><ul>
@@ -921,6 +990,16 @@ document.addEventListener('click', async ev => {
   if (accion === 'chat-nuevo') { kChat = []; return repintarChatK(); }
   if (accion === 'instrucciones') return formInstrucciones();
   if (accion === 'ej-nuevo') return formEjemplo({});
+  if (accion === 'r-ayuda') return ayudaRedes();
+  if (accion === 'r-guardar') { const g = await guardarRedes(); if (!g.ok) return aviso(g.data.error || 'Error'); await cargarConocimiento(); if (R.tieneToken && R.cuenta) await probarRedes(); return pintar(); }
+  if (accion === 'r-probar') { await probarRedes(); return pintar(); }
+  if (accion === 'r-copiar') { try { await navigator.clipboard.writeText(document.getElementById('rAviso').textContent); aviso('Dirección copiada. Pégala en Chatwoot → Webhooks.'); } catch (e) { aviso('No se pudo copiar.'); } return; }
+  if (accion === 'r-crear-equipo') { const r = await api('/api/oficina/redes/equipo', { empresa_id: kEmpresa, sede: t.dataset.sede }); if (!r.ok) return aviso(r.data.error || 'Error'); await probarRedes(); await cargarConocimiento(); aviso('Equipo creado en Chatwoot.'); return pintar(); }
+  if (accion === 'r-guardar-bandejas') {
+    const bandejas = {}; document.querySelectorAll('[data-r-sede]').forEach(sel => { const id = sel.dataset.rSede; bandejas[id] = { nombre: sel.dataset.rNombre, sede: sel.value, modo: document.querySelector(`[data-r-modo="${id}"]`).value }; });
+    const equipos = {}; document.querySelectorAll('[data-r-equipo]').forEach(sel => { if (sel.value) equipos[sel.dataset.rEquipo] = sel.value; });
+    const g = await guardarRedes({ bandejas, equipos }); aviso(g.ok ? 'Guardado. El asistente ya atiende esas bandejas.' : (g.data.error || 'Error')); await cargarConocimiento(); return pintar();
+  }
   if (accion === 'ej-abrir') { const x = (K.ejemplos || []).find(y => String(y.id) === String(id)); return x && formEjemplo(x); }
   if (accion === 'ej-bien' || accion === 'ej-corregir') {
     const n = Number(t.dataset.n), m = kChat[n];
@@ -938,7 +1017,7 @@ document.addEventListener('click', async ev => {
   }
 });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; kChat = []; kChatSede = ''; return ir('conocimiento'); }
+  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; kChat = []; kChatSede = ''; rProbe = null; return ir('conocimiento'); }
   if (e.target.id === 'kChatSede') { kChatSede = e.target.value; if (kChat.length) { kChat = []; repintarChatK(); aviso('Nueva conversación en otra sede.'); } return; }
   if (e.target.id === 'kArchivos' || e.target.id === 'kCarpeta') { const l = [...e.target.files]; e.target.value = ''; if (l.length) await subirArchivos(l); return; }
   if (e.target.classList.contains('k-sede')) { await api('/api/oficina/conocimiento/sede', { id: e.target.dataset.id, sede: e.target.value }); aviso('Sede cambiada.'); return cargarConocimiento(); }
