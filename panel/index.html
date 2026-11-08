@@ -8,10 +8,12 @@
   :root {
     --fondo: #eef2f7; --tarjeta: #ffffff; --texto: #1e293b; --texto-suave: #64748b;
     --borde: #e2e8f0; --encabezado: #0b4f8a; --encabezado2: #1679c2; --hover: #f8fafc;
+    --rayado: #f1f5f9; --separador: #94a3b8; --linea-srv: #d3dce7; --hover-reserva: #e3eefa;
   }
   body.oscuro {
     --fondo: #0f172a; --tarjeta: #1e293b; --texto: #e2e8f0; --texto-suave: #94a3b8;
     --borde: #334155; --encabezado: #0b1f3a; --encabezado2: #134e8a; --hover: #273449;
+    --rayado: #172236; --separador: #64748b; --linea-srv: #3b4a61; --hover-reserva: #2b3d5a;
   }
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--fondo); margin: 0; color: var(--texto); transition: background 0.3s, color 0.3s; }
@@ -139,9 +141,13 @@
   .na { color: var(--texto-suave); }
   .srv:first-child { border-top: none; }
   #cuerpo td { padding: 7px 9px; }
-  #cuerpo tr.srv-sig td { border-top: 1px dashed var(--borde); }
-  #cuerpo tr.srv-pri td { border-top: 2px solid var(--borde); }
-  #cuerpo tr:hover, #cuerpo tr.srv-hover { background: var(--hover); }
+  /* Cada reserva se distingue: fondo alterno (blanco / gris claro) y línea gruesa entre reservas; entre servicios, línea fina. */
+  #cuerpo td { border-bottom: none; }
+  #cuerpo tr.res-par { background: var(--rayado); }
+  #cuerpo tr.srv-sig td { border-top: 1px dashed var(--linea-srv); }
+  #cuerpo tr.srv-pri td { border-top: 2px solid var(--separador); }
+  #cuerpo tr:first-child td { border-top: none; }
+  #cuerpo tr:hover, #cuerpo tr.srv-hover { background: var(--hover-reserva); }
   #cuerpo td.col-srv { min-width: 130px; max-width: 240px; white-space: normal; }
   #cuerpo td.col-srv .srv-nota { display: block; margin-top: 2px; }
   #cuerpo td.col-hotel { max-width: 170px; white-space: normal; }
@@ -159,8 +165,9 @@
   #cuerpo td .sub { font-size: 11px; color: var(--texto-suave); margin-top: 2px; }
   #cuerpo td.col-srv .sub { margin: 0 0 2px; font-weight: 600; color: var(--texto); }
   #cuerpo td { overflow-wrap: break-word; word-break: normal; }
-  .tarjeta-reserva { border-bottom: 2px solid var(--borde); padding: 12px 14px; cursor: pointer; }
-  .tarjeta-reserva:hover { background: var(--hover); }
+  .tarjeta-reserva { border-bottom: 2px solid var(--separador); padding: 12px 14px; cursor: pointer; }
+  .tarjeta-reserva:nth-child(even) { background: var(--rayado); }
+  .tarjeta-reserva:hover { background: var(--hover-reserva); }
   .t-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; margin-bottom: 6px; }
   .t-fila { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; }
   .t-dato small { display: block; font-size: 10.5px; color: var(--texto-suave); text-transform: uppercase; letter-spacing: .3px; }
@@ -1356,7 +1363,7 @@ function pintar() {
 
   const grupos = agruparReservas(lista);
   cuerpo.innerHTML = grupos.length
-    ? grupos.map(g => {
+    ? grupos.map((g, gi) => {
         const r = g[0];
         const rev = revisiones.get(r.id) || g.map(s => revisiones.get(s.id)).find(Boolean);
         const tarde = rev && rev.segundos > rev.limite;
@@ -1387,7 +1394,7 @@ function pintar() {
             estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}`)
           };
           return `
-      <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}">${cols.map(c => celda[c.k](c)).join('')}
+      <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k](c)).join('')}
       </tr>`;
         }).join('');
       }).join('')
