@@ -218,6 +218,51 @@ function palabras(t) {
     .map(p => p.length > 4 ? p.replace(/(es|s)$/, '') : p);
 }
 
+// Sinónimos para buscar: el cliente dice "traslado", "transfer" o "translado"; el tarifario dice "Trayecto ... AIRPORT".
+const SINONIMOS = [
+  [['traslado', 'traslados', 'transfer', 'transfers', 'translado', 'shuttle', 'transporte', 'transportation', 'pickup', 'ride', 'taxi', 'trayecto'], ['traslado', 'transfer', 'trayecto']],
+  [['aeropuerto', 'airport', 'aeroporto', 'aerop', 'apto'], ['aeropuerto', 'airport']],
+  [['santo domingo', 'las americas', 'sdq', 'santo dgo'], ['santo', 'domingo', 'sdq']],
+  [['punta cana', 'puj'], ['punta', 'cana', 'puj']],
+  [['la romana', 'lrm'], ['romana', 'lrm']],
+  [['puerto plata', 'pop'], ['puerto', 'plata', 'pop']],
+  [['nino', 'nina', 'ninos', 'child', 'children', 'kid', 'kids', 'chd', 'crianca', 'criancas', 'menor'], ['nino', 'child', 'chd']],
+  [['excursion', 'excursiones', 'tour', 'tours', 'passeio', 'passeios', 'actividad', 'activity', 'trip', 'paseo'], ['excursion', 'tour']],
+  [['privado', 'private', 'privativo'], ['privado', 'private']],
+  [['compartido', 'shared', 'regular', 'compartilhado'], ['compartido', 'regular', 'shared']]
+];
+function ampliarConsulta(texto) {
+  const plano = ' ' + sinTildes(String(texto || '').toLowerCase()).replace(/[^a-z0-9ñ]+/g, ' ') + ' ';
+  const extra = new Set();
+  for (const [dice, agrega] of SINONIMOS) if (dice.some(d => plano.includes(' ' + d + ' '))) agrega.forEach(x => extra.add(x));
+  return extra.size ? texto + ' ' + [...extra].join(' ') : texto;
+}
+// Listado de hoteles con su zona (por ejemplo la hoja "Hotel": "NICKELODEON | UVERO ALTO, PUNTA CANA").
+// Sirve para que "de Santo Domingo al Nickelodeon" encuentre la tarifa "SDQ - HTL UVERO ALTO".
+// Palabras que no identifican a un hotel (genéricas o nombres de lugares): "de Santo Domingo al ..." no es el hotel W&P Santo Domingo.
+const GENERICAS_HOTEL = new Set(('hotel htl resort resorts spa beach all inclusive suites suite the by and punta cana bavaro santo domingo ' +
+  'romana puerto plata samana juan dolio boca chica bayahibe uvero alto cap macao arena gorda cabeza toro cortecito playa costa').split(' '));
+function hotelesYZonas(fragmentos) {
+  const lista = [];
+  for (const fr of fragmentos) {
+    if (!/hotel/i.test(fr.titulo + ' ' + fr.texto.slice(0, 200))) continue;
+    for (const l of fr.texto.split('\n')) {
+      const m = l.match(/^\s*-?\s*([^|;:\n]{3,60}?)\s*\|\s*([^|\n]{3,60})\s*$/);
+      if (!m || /^hotel$/i.test(m[1].trim())) continue;
+      const nombre = sinTildes(m[1].toLowerCase()).replace(/[^a-z0-9ñ ]+/g, ' ').trim();
+      const clave = nombre.split(/\s+/).filter(w => w.length > 2 && !GENERICAS_HOTEL.has(w));
+      if (clave.length) lista.push({ hotel: m[1].trim(), zona: m[2].trim(), clave });
+    }
+  }
+  return lista;
+}
+function hotelesEn(texto, lista) {
+  const plano = ' ' + sinTildes(String(texto || '').toLowerCase()).replace(/[^a-z0-9ñ]+/g, ' ') + ' ';
+  const hallados = lista.filter(h => h.clave.every(w => plano.includes(' ' + w + ' ')));
+  // Si "excellence" y "excellence el carmen" coinciden, se queda el más largo.
+  return hallados.filter(h => !hallados.some(o => o !== h && o.clave.length > h.clave.length && h.clave.every(w => o.clave.includes(w)))).slice(0, 3);
+}
+
 // ---------- El asistente (la IA que contesta en las redes) ----------
 const MODELO_POR_DEFECTO = 'anthropic/claude-haiku-5.5';
 const MOTIVOS = { reservar: 'Quiere reservar o pagar', reclamo: 'Reclamo o problema', no_sabe: 'No está en la base', otra_sede: 'Es de otra sede', humano: 'Pidió hablar con una persona' };
@@ -261,7 +306,9 @@ ${primera ? `- Este es el PRIMER mensaje de la conversación: empieza saludando$
 
 LA INFORMACIÓN
 - Usa SOLO la información de la sección INFORMACIÓN de abajo. Es lo único que sabes de precios, horarios, lo que incluye cada tour, traslados y condiciones.
-- NUNCA inventes precios, horarios, disponibilidad, políticas ni enlaces. Si algo no está en la INFORMACIÓN, di que un asesor le confirma ese detalle y marca pasar_a_asesor con motivo "no_sabe".
+- NUNCA inventes precios, horarios, disponibilidad, políticas ni enlaces de ${empresa}. Si te preguntan por un servicio de ${empresa} (un tour, un traslado, un precio) y no está en la INFORMACIÓN, di que un asesor le confirma ese detalle y marca pasar_a_asesor con motivo "no_sabe".
+- Traslados: el tarifario usa "Trayecto: AEROPUERTO - HTL ZONA" (por ejemplo "SANTO DOMINGO AIRPORT (SDQ) - HTL UVERO ALTO"). El cliente casi nunca lo dice así: "de Santo Domingo al Nickelodeon" es el trayecto del aeropuerto SDQ a la zona de ese hotel. Busca la zona del hotel en el listado de hoteles (y en las PISTAS) y usa la tarifa de esa zona. Llegar por Santo Domingo e ir a un hotel de Punta Cana es normal.
+- Palabras que significan lo mismo: traslado = transfer = translado = shuttle = transporte; aeropuerto = airport = aeroporto; niño = child = CHD = criança; tour = excursión = passeio; privado = private; compartido = regular = shared.
 - Los precios son de venta al público, en dólares (US$). Puedes calcular un total (adultos × precio adulto + niños × precio menor, o el precio por vehículo según la cantidad de pasajeros) y aclara que es un estimado sujeto a confirmación y disponibilidad.
 - Si en un mensaje anterior ya diste un dato y ahora no aparece en la INFORMACIÓN, no lo desmientas ni lo corrijas: solo no lo repitas. Corrige únicamente si la INFORMACIÓN dice algo distinto.
 - "no disponible" en un precio significa que esa opción no se vende (por ejemplo, no hay precio de niño).
@@ -270,10 +317,16 @@ LA INFORMACIÓN
 ${web ? `- Puedes usar los RESULTADOS DE INTERNET solo para información general (atracciones, horarios de parques, cómo llegar, recomendaciones, requisitos).${web.sitios ? ` Prefiere los sitios oficiales: ${web.sitios}.` : ''} NUNCA tomes precios de internet: los precios de ${empresa} son solo los de la INFORMACIÓN. Si piden un precio que no está en la INFORMACIÓN (por ejemplo entradas a parques), toma los datos y pásalo a un asesor. No pongas enlaces de otras agencias.
 ` : ''}${otras ? `- Esta conversación es de la oficina de ${sede}. Si el cliente pregunta por ${otras}, dile con amabilidad que esa oficina lo atiende y marca pasar_a_asesor con motivo "otra_sede".
 ` : ''}
+PREGUNTAS GENERALES (respóndelas tú, NUNCA las pases a un asesor)
+- Clima, temperatura, lluvias, temporada de huracanes, qué ropa llevar, moneda, propinas, enchufes, idioma, seguridad, documentos o visas, distancias y tiempos de viaje, qué hacer en el destino, playas, zonas: contesta con lo que sabes del destino (y con los RESULTADOS DE INTERNET si los hay), en 2 a 4 líneas, y ofrece después los traslados o excursiones de ${empresa}. Por ejemplo, el clima de Punta Cana es tropical todo el año, de 25 a 31 °C, con lluvias cortas sobre todo de mayo a noviembre.
+- Precios de vuelos o de hoteles que no están en la INFORMACIÓN: no los pases a un asesor. Explica con amabilidad que por este chat no das tarifas aéreas ni de hoteles, que puede consultarlas con su aerolínea o su agencia, y ofrece lo que sí tiene ${empresa} (traslados, excursiones).
+- Saludos, agradecimientos, "ok", bromas o preguntas que no tienen que ver con un servicio: responde breve y amable, sin pasar a un asesor.
+- Pasa a un asesor solo cuando hay una venta o un problema real (los motivos de abajo), nunca para quitarte una pregunta de encima.
+
 PASAR A UN ASESOR (pasar_a_asesor = true)
 - "reservar": el cliente ya quiere reservar, confirmar o pagar. Antes de pasarlo, si faltan, pide en un solo mensaje: nombre completo, fecha, cantidad de adultos y niños (con edades) y hotel. Cuando los tenga (o si no quiere darlos), dile que un asesor le confirma la reserva y el pago.
 - "reclamo": quejas, problemas con un servicio, cambios o cancelaciones de una reserva ya hecha. Responde con empatía, sin discutir ni prometer reembolsos.
-- "no_sabe": lo que pregunta no está en la INFORMACIÓN.
+- "no_sabe": pregunta por un servicio, precio o condición de ${empresa} que no está en la INFORMACIÓN (no por temas generales).
 - "humano": pide hablar con una persona.
 - Al pasarlo, dile que un asesor de ${sede || 'la oficina'} le escribe por este mismo chat en breve. No des horarios de respuesta que no estén en la INFORMACIÓN.
 ${extra ? `
@@ -286,6 +339,16 @@ Responde SOLO con un objeto JSON, sin nada antes ni después:
 - idioma: código del idioma en que respondiste ("es", "pt", "en", "fr"...).
 - motivo: "", "reservar", "reclamo", "no_sabe", "otra_sede" o "humano".
 - resumen_para_asesor: si pasas a un asesor, 1 o 2 líneas con lo que el cliente quiere y los datos que dio (servicio, fecha, personas, hotel). Si no, "".`;
+}
+
+// Si la IA no devolvió un JSON válido, se rescata solo el texto de "respuesta".
+function rescatarRespuesta(contenido) {
+  const c = String(contenido || '').replace(/```(?:json)?/gi, '').trim();
+  const m = c.match(/"respuesta"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+  if (m) { try { return JSON.parse('"' + m[1].replace(/\n/g, '\\n') + '"'); } catch (e) { return m[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'); } }
+  return c.split('\n')
+    .filter(l => !/resumen[_ ]para[_ ]asesor|pasar[_ ]a[_ ]asesor|"motivo"|"idioma"|^\s*[{}]\s*,?\s*$/i.test(l))
+    .join('\n').replace(/^\s*\{?\s*"?respuesta"?\s*:\s*"?/i, '').replace(/"?\s*,?\s*\}?\s*$/, '').trim();
 }
 
 function leerJSON(t) {
@@ -516,20 +579,28 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     // Se busca con el último mensaje y también con toda la conversación (lo que el cliente pidió y lo que ya se le contestó),
     // para no perder lo que se habló antes ("¿y para esa fecha?").
     const conversacion = historial.slice(-6).map(m => m.content).join(' ');
-    const deUltimo = await buscar(e.id, consulta, sedeOk, 5, borradores);
-    const deConversacion = historial.length > 1 ? await buscar(e.id, conversacion, sedeOk, 4, borradores) : [];
+    // Hotel nombrado por el cliente → su zona (del listado de hoteles), para encontrar la tarifa de esa zona.
+    const ix = await indice(e.id, borradores);
+    const listaHoteles = hotelesYZonas(ix.fragmentos.filter(fr => enSede(fr, sedeOk)));
+    const hoteles = hotelesEn(consulta, listaHoteles).length ? hotelesEn(consulta, listaHoteles) : hotelesEn(conversacion, listaHoteles);
+    const zonas = hoteles.map(h => h.zona.replace(/,/g, ' ')).join(' ');
+    const deUltimo = await buscar(e.id, ampliarConsulta(consulta) + (zonas ? ' ' + zonas + ' ' + zonas : ''), sedeOk, 5, borradores);
+    const deConversacion = historial.length > 1 ? await buscar(e.id, ampliarConsulta(conversacion), sedeOk, 4, borradores) : [];
     const vistos = new Set();
     const encontrados = [...deUltimo, ...deConversacion].filter(x => { const k = x.titulo + '|' + x.texto.slice(0, 80); if (vistos.has(k)) return false; vistos.add(k); return true; }).slice(0, 7);
-    const info = encontrados.length
+    const pistas = hoteles.length ? 'PISTAS (del listado de hoteles): ' + hoteles.map(h => `el hotel ${h.hotel} está en la zona ${h.zona}`).join('; ') +
+      '. Para un traslado a ese hotel usa el trayecto que termina en esa zona (' + hoteles.map(h => h.zona.split(',').map(z => '"... - HTL ' + z.trim().toUpperCase() + '"').join(' o, si no existe, ')).join('; ') +
+      '). El aeropuerto de salida lo dice el cliente (Santo Domingo = SDQ, Punta Cana = PUJ, La Romana = LRM).\n\n' : '';
+    const info = pistas + (encontrados.length
       ? encontrados.map((x, i) => `[${i + 1}] ${x.titulo}${x.sede && x.sede !== 'Todas' ? ` (sede ${x.sede})` : ''}\n${x.texto}`).join('\n\n')
-      : '(No se encontró nada sobre esto en la base.)';
+      : '(No se encontró nada sobre esto en la base.)');
     const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
     const extra = [aj.instrucciones, sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
     // Búsqueda en internet: solo en las sedes elegidas, y solo si la pregunta es de los temas elegidos o la base no tiene la respuesta.
     const webSede = aj.web.sedes.some(x => mismaSede(x, sedeOk || ''));
     const temas = aj.web.palabras.split(',').map(x => palabras(x).join(' ')).filter(Boolean);
     const planoConsulta = ' ' + palabras(consulta).join(' ') + ' ';
-    const porTema = temas.some(t => planoConsulta.includes(' ' + t + ' '));
+    const porTema = temas.some(t => planoConsulta.includes(' ' + t + ' ')) || /\b(clima|tiempo|lluvia|llueve|temperatura|huracan|weather|rain|temperature|forecast|chuva|previsao)\b/.test(sinTildes(consulta.toLowerCase()));
     const mejor = encontrados.length ? encontrados[0].puntaje : 0;
     const usarWeb = webSede && (porTema || (palabras(consulta).length >= 3 && mejor < 5));
     // Ejemplos aprobados (entrenamiento): los más parecidos a la pregunta.
@@ -608,7 +679,8 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       .map(a => [a.url_citation.url, { url: a.url_citation.url, titulo: a.url_citation.title || '' }])).values()].slice(0, 5);
     const motivo = j && MOTIVOS[j.motivo] ? j.motivo : '';
     // Si no vino en JSON, se limpia lo que la IA haya puesto alrededor (```json, "respuesta": ...).
-    const libre = contenido.replace(/```(?:json)?/gi, '').trim();
+    // Nunca se muestran al cliente los campos internos (resumen_para_asesor, motivo, pasar_a_asesor, idioma).
+    const libre = rescatarRespuesta(contenido);
     return {
       respuesta: String((j && j.respuesta) || libre || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
       pasar_a_asesor: Boolean(j && j.pasar_a_asesor) || Boolean(motivo),
@@ -870,5 +942,5 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
 
-  return { activo, preparar, manejarOficina, manejarPublico, responder, _probar: { detectarIdioma, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
+  return { activo, preparar, manejarOficina, manejarPublico, responder, _probar: { detectarIdioma, ampliarConsulta, hotelesYZonas, hotelesEn, rescatarRespuesta, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
 };

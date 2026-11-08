@@ -90,7 +90,7 @@ function pintar() {
     if (m.error) return `<div class="error">⛔ ${esc(m.error)}</div>`;
     const x = m.info || {};
     return `<div class="burbuja bot">${esc(m.texto)}</div>` +
-      (x.pasar_a_asesor ? `<div class="asesor">👤 <b>Aquí pasaría a un asesor de ${esc(x.sede)}</b>${x.motivo_texto ? ' · ' + esc(x.motivo_texto) : ''}${x.resumen_para_asesor ? `<br>${esc(x.resumen_para_asesor)}` : ''}</div>` : '') +
+      (x.pasar_a_asesor ? `<div class="asesor">👤 <b>Aquí pasaría a un asesor de ${esc(x.sede)}</b> <small>(este recuadro es solo para la prueba: el cliente no lo ve; en Messenger o Instagram le llega al asesor como nota privada)</small>${x.motivo_texto ? ' · ' + esc(x.motivo_texto) : ''}${x.resumen_para_asesor ? `<br>${esc(x.resumen_para_asesor)}` : ''}</div>` : '') +
       `<div class="meta">${x.idioma ? `<span class="chip">${esc(IDIOMAS[x.idioma] || x.idioma)}</span>` : ''}${x.web && x.web.usada ? '<span class="chip">🌐 buscó en internet</span>' : ''}
         <button class="mini ${m.voto === 'bien' ? 'elegido' : ''}" data-bien="${i}" title="Estuvo bien">👍</button>
         <button class="mini ${m.voto === 'mal' ? 'elegido' : ''}" data-mal="${i}" title="Estuvo mal: sugerir cómo debió responder">👎</button>
