@@ -1,7 +1,7 @@
 // Revisión automática de reservas: marca lo que una asesora apurada puede no ver.
 // No usa IA (es gratis e instantánea) y solo AVISA: no cambia estados ni datos.
 //
-// Revisa: datos que faltan, PAX que no cuadran con el asunto, aeropuerto lejos del hotel,
+// Revisa: datos que faltan, PAX que no cuadran con el asunto, vuelo incompleto, aeropuerto de otro país,
 // fechas que ya pasaron o salida antes que llegada, posible duplicado y servicio urgente (< 48 h).
 
 const ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
@@ -10,7 +10,10 @@ function normal(t) {
   return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-// Zonas de República Dominicana y los aeropuertos que tienen sentido para cada una.
+// Zonas de República Dominicana. Llegar por cualquier aeropuerto del país e ir a un hotel de otra zona es normal
+// (por ejemplo SDQ → Punta Cana): solo se avisa si el aeropuerto es de otro país.
+const AEROPUERTOS_RD = ['PUJ', 'SDQ', 'JBQ', 'STI', 'LRM', 'POP', 'AZS', 'BRX', 'STO'];
+const AEROPUERTOS_ORL = ['MCO', 'SFB'];
 const ZONAS = [
   { zona: 'Punta Cana', aeropuertos: ['PUJ'], claves: ['punta cana', 'bavaro', 'cap cana', 'uvero alto', 'macao', 'arena gorda', 'cabeza de toro', 'cortecito', 'los corales', 'playa blanca', ' puj'] },
   { zona: 'Santo Domingo', aeropuertos: ['SDQ', 'JBQ'], claves: ['santo domingo', 'boca chica', 'juan dolio', 'zona colonial', 'piantini', 'malecon', ' sdq'] },
@@ -25,16 +28,31 @@ function zonaDe(...textos) {
   return null;
 }
 
-// PAX que dice el asunto: "X 2", "X2", "PAX MEDINA X 09", "2 ADL + 1 INF".
+// PAX que dice el asunto: "X 2", "X2", "PAX MEDINA X 09", "2 ADL + 1 INF", "X 5 + CHD" (5 adultos y 1 niño).
+// CHD = child (niño), INF = infante, ADL/ADT = adulto. Sin número delante, "+ CHD" cuenta como 1.
 function paxDelAsunto(asunto) {
   const a = normal(asunto);
   const parte = (re) => { const m = a.match(re); return m ? Number(m[1]) : null; };
-  const adl = parte(/(\d{1,2})\s*(?:adl|adt|adult|adultos?|pax adultos?)\b/);
-  const chd = parte(/(\d{1,2})\s*(?:chd|ninos?|menores?|child)\b/);
-  const inf = parte(/(\d{1,2})\s*(?:inf|infantes?|bebes?)\b/);
-  if (adl !== null || chd !== null || inf !== null) return { detalle: true, adultos: adl, ninos: chd, infantes: inf };
+  const adl = parte(/(\d{1,2})\s*(?:adl|adt|adults?|adultos?|pax adultos?)\b/);
+  const chd = parte(/(\d{1,2})\s*(?:chd|chds|ninos?|menores?|child|children|kids?)\b/);
+  const inf = parte(/(\d{1,2})\s*(?:inf|infs|infantes?|infants?|bebes?|babies|baby)\b/);
   const x = a.match(/\bx\s*0?(\d{1,2})\b/);
+  // "+ CHD", "+CHD", "+ INF" sin número: uno de cada.
+  const sueltos = re => (a.match(re) || []).length;
+  const chdSuelto = sueltos(/\+\s*(?:chd|child|nino|menor)\b/g);
+  const infSuelto = sueltos(/\+\s*(?:inf|infante|infant|bebe|baby)\b/g);
+  if (x && (chdSuelto || infSuelto || chd !== null || inf !== null) && adl === null) {
+    return { detalle: true, adultos: Number(x[1]), ninos: (chd || 0) + chdSuelto, infantes: (inf || 0) + infSuelto };
+  }
+  if (adl !== null || chd !== null || inf !== null) return { detalle: true, adultos: adl, ninos: chd !== null ? chd + chdSuelto : (chdSuelto || null), infantes: inf !== null ? inf + infSuelto : (infSuelto || null) };
   return x ? { detalle: false, total: Number(x[1]) } : null;
+}
+
+// Vuelo completo: código de aerolínea de 2 caracteres + 1 a 4 números (CM 425, AA 2256, B6 1801, DM 6771),
+// o el nombre de la aerolínea con el número (Copa 425). "CM" o "Copa" solos están incompletos.
+function vueloIncompleto(vuelo) {
+  const partes = String(vuelo || '').split(/[,;/]+|\s+y\s+/i).map(x => x.trim()).filter(Boolean);
+  return partes.filter(p => !/^[A-Z0-9]{2}\s?-?\s?\d{1,4}[A-Z]?$/i.test(p) && !/[a-záéíóúñ]{3,}.*\d{1,4}[A-Z]?$/i.test(p));
 }
 
 const esTraslado = f => /traslad|transfer|shuttle|aeropuerto|airport|llegada|salida|in\/out|in-out/.test(normal([f.tipo_servicio, f.actividad, f.punto_partida, f.punto_llegada].join(' '))) || Boolean(f.aeropuerto);
@@ -72,10 +90,12 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
     if (!abiertos.length) continue;
     const primera = lista[0];
     const delCorreo = [];
+    // PAX de la reserva: el mayor de cada tipo entre sus servicios (un servicio puede ser solo para una parte del grupo).
+    const maxDe = k => Math.max(0, ...lista.map(f => Number(f[k]) || 0));
 
     // PAX del asunto contra los de la reserva.
     const pax = paxDelAsunto(primera.asunto);
-    const ad = Number(primera.adultos) || 0, ni = Number(primera.ninos) || 0, inf = Number(primera.infantes) || 0;
+    const ad = maxDe('adultos'), ni = maxDe('ninos'), inf = maxDe('infantes');
     if (pax && ad + ni + inf > 0) {
       if (pax.detalle) {
         const dif = [];
@@ -102,18 +122,23 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
       const traslado = esTraslado(f);
       if (!iso) puntos.push({ tipo: 'falta', texto: 'Falta la fecha del servicio.' });
       if (traslado && !String(f.vuelo || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el número de vuelo.' });
+      else if (traslado) {
+        const malos = vueloIncompleto(f.vuelo);
+        if (malos.length) puntos.push({ tipo: 'falta', texto: `El vuelo "${malos.join(', ')}" está incompleto: falta el número (2 letras y de 1 a 4 números, por ejemplo CM 425).` });
+      }
       if (traslado && !String(f.hora_servicio || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta la hora (del vuelo o de recogida).' });
       if (!f.hotel && !f.punto_llegada && !f.punto_partida) puntos.push({ tipo: 'falta', texto: 'Falta el hotel o el lugar del servicio.' });
-      if (ad + ni + inf === 0) puntos.push({ tipo: 'falta', texto: 'Falta la cantidad de pasajeros.' });
+      if ((Number(f.adultos) || 0) + (Number(f.ninos) || 0) + (Number(f.infantes) || 0) === 0 && ad + ni + inf === 0) puntos.push({ tipo: 'falta', texto: 'Falta la cantidad de pasajeros.' });
       if (!String(f.telefono || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el teléfono del pasajero.' });
 
-      // Aeropuerto que no corresponde con la zona del hotel.
-      // Puede traer varios aeropuertos separados por coma (escalas): basta con que uno sea de la zona del hotel.
+      // Aeropuerto de otro país para un hotel de República Dominicana (por ejemplo LIM o MCO con un hotel de Bávaro).
+      // Cualquier aeropuerto del país sirve para cualquier zona: SDQ → Punta Cana es un traslado común.
       const aeropuerto = String(f.aeropuerto || '').toUpperCase().trim();
       const codigos = aeropuerto.split(/[\s,;/]+/).filter(c => /^[A-Z]{3}$/.test(c));
-      const zona = zonaDe(f.hotel, f.punto_llegada, f.punto_partida, primera.asunto);
-      if (codigos.length && zona && !codigos.some(c => zona.aeropuertos.includes(c))) {
-        puntos.push({ tipo: 'contradiccion', texto: `El aeropuerto es ${aeropuerto} pero el hotel parece estar en ${zona.zona} (${zona.aeropuertos[0]}). Confírmalo con la agencia.` });
+      const zona = zonaDe(f.hotel, f.punto_llegada, f.punto_partida);
+      if (codigos.length && zona && !codigos.some(c => AEROPUERTOS_RD.includes(c))) {
+        const dondeEs = codigos.some(c => AEROPUERTOS_ORL.includes(c)) ? 'es de Orlando' : 'no es de República Dominicana';
+        puntos.push({ tipo: 'contradiccion', texto: `El aeropuerto ${aeropuerto} ${dondeEs}, pero el hotel está en ${zona.zona}. Revisa el vuelo que llega o sale del país.` });
       }
 
       let urgente = false;
@@ -133,4 +158,4 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
   return resultado;
 }
 
-module.exports = { revisarReservas, paxDelAsunto, zonaDe };
+module.exports = { revisarReservas, paxDelAsunto, zonaDe, vueloIncompleto };
