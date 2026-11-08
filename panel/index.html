@@ -138,6 +138,21 @@
   .srv { min-height: 40px; padding: 3px 0; border-top: 1px dashed var(--borde); display: flex; flex-direction: column; justify-content: center; white-space: nowrap; }
   .na { color: var(--texto-suave); }
   .srv:first-child { border-top: none; }
+  #cuerpo td { padding: 7px 9px; }
+  #cuerpo tr.srv-sig td { border-top: 1px dashed var(--borde); }
+  #cuerpo tr.srv-pri td { border-top: 2px solid var(--borde); }
+  #cuerpo tr:hover, #cuerpo tr.srv-hover { background: var(--hover); }
+  #cuerpo td.col-srv { min-width: 130px; max-width: 240px; white-space: normal; }
+  #cuerpo td.col-srv .srv-nota { display: block; margin-top: 2px; }
+  #cuerpo td.col-hotel { max-width: 170px; white-space: normal; }
+  #cuerpo td.nowrap { white-space: nowrap; }
+  #cuerpo td.col-estado { min-width: 150px; }
+  @media (max-width: 1500px) {
+    #cuerpo td, .tabla-wrap thead th { padding-left: 6px; padding-right: 6px; }
+    #cuerpo td { font-size: 12.5px; }
+    #cuerpo td.recortar { max-width: 110px; }
+    #cuerpo td.col-srv { max-width: 190px; }
+  }
   .srv-tipo { display: inline-block; border-radius: 6px; padding: 1px 6px; font-size: 11px; font-weight: 700; white-space: nowrap; }
   .srv-IN { background: #dcfce7; color: #166534; } .srv-OUT { background: #dbeafe; color: #1e40af; } .srv-INTERHOTEL { background: #fef3c7; color: #92400e; } .srv-ACTIVIDAD { background: #ede9fe; color: #5b21b6; } .srv-OTRO { background: #f1f5f9; color: #475569; }
   body.oscuro .srv-IN { background: #14532d; color: #bbf7d0; } body.oscuro .srv-OUT { background: #172554; color: #bfdbfe; } body.oscuro .srv-INTERHOTEL { background: #451a03; color: #fde68a; } body.oscuro .srv-ACTIVIDAD { background: #2e1065; color: #ddd6fe; } body.oscuro .srv-OTRO { background: #1e293b; color: #94a3b8; }
@@ -1073,8 +1088,8 @@ function tipoServicio(r) {
   if (TIPOS_SRV[t] && t !== 'OTRO') return t;
   const x = (String(r.tipo_servicio || '') + ' ' + String(r.actividad || '')).toLowerCase();
   if (/inter ?hotel|entre hoteles|hotel a hotel/.test(x)) return 'INTERHOTEL';
-  if (/salida|check-?out|departure|\bout\b|regreso|return|hotel al aeropuerto|hotel - aeropuerto/.test(x)) return 'OUT';
-  if (/llegada|check-?in|arrival|\bin\b|entrada|aeropuerto al hotel|aeropuerto - hotel/.test(x)) return 'IN';
+  if (/salida|check-?out|departure|\bout\b|regreso|return|hotel[^,;]{0,30}(-|–|\/|\ba\b|\bal\b)\s*(aeropuerto|apto|aerop)/.test(x)) return 'OUT';
+  if (/llegada|check-?in|arrival|\bin\b|entrada|(aeropuerto|apto|aerop)[^,;]{0,15}(-|–|\/|\ba\b|\bal\b)\s*hotel/.test(x)) return 'IN';
   if (r.actividad && !/traslado/.test(x)) return 'ACTIVIDAD';
   return 'OTRO';
 }
@@ -1199,22 +1214,27 @@ function pintar() {
           : '') + marcaAsignado(r) + g.map(marcaRevision).filter(Boolean).slice(0, 1).join('');
         const sede = sedeDeServicios(g);
         const variosPax = new Set(g.map(paxDe)).size > 1;
-        return `
-      <tr data-id="${r.id}">
-        <td>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${g.length > 1 ? ` · ${g.length} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}</td>
-        <td><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
-        <td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
-        <td class="recortar" title="${esc(clientesDe(g))}">${falta(clientesDe(g))}</td>
-        <td>${variosPax ? lineas(g, s => falta(paxCorto(s))) : falta(paxReserva(g))}</td>
-        <td>${lineas(g, s => campoSrv(s, s.aeropuerto))}</td>
-        <td>${lineas(g, s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<span><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}</span>${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}`; })}</td>
-        <td>${lineas(g, s => falta(s.fecha_servicio))}</td>
-        <td class="srv-hora">${lineas(g, horaServicio)}</td>
-        <td class="recortar">${lineas(g, s => campoSrv(s, aerolineaDe(s.vuelo)))}</td>
-        <td>${lineas(g, s => campoSrv(s, s.vuelo))}</td>
-        <td>${lineas(g, s => falta(s.hotel || (tipoServicio(s) === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td>
-        <td>${etiquetaEstado(estadoReserva(g))}${marca}</td>
+        const n = g.length, rs = n > 1 ? ` rowspan="${n}"` : '';
+        return g.map((s, i) => {
+          const t = tipoServicio(s), nota = notaServicio(s);
+          const comun = i ? '' : `
+        <td${rs}>${fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${n > 1 ? ` · ${n} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}</td>
+        <td${rs}><span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : esc(r.categoria)}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}</td>
+        <td${rs} class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r))}</td>
+        <td${rs} class="recortar" title="${esc(clientesDe(g))}">${falta(clientesDe(g))}</td>`;
+          const pax = variosPax ? `<td>${falta(paxCorto(s))}</td>` : (i ? '' : `<td${rs}>${falta(paxReserva(g))}</td>`);
+          const estado = i ? '' : `<td${rs} class="col-estado">${etiquetaEstado(estadoReserva(g))}${marca}</td>`;
+          return `
+      <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}">${comun}${pax}
+        <td>${campoSrv(s, s.aeropuerto)}</td>
+        <td class="col-srv"><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>
+        <td class="nowrap">${falta(s.fecha_servicio)}</td>
+        <td class="srv-hora">${horaServicio(s)}</td>
+        <td class="recortar">${campoSrv(s, aerolineaDe(s.vuelo))}</td>
+        <td class="nowrap">${campoSrv(s, s.vuelo)}</td>
+        <td class="col-hotel">${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td>${estado}
       </tr>`;
+        }).join('');
       }).join('')
     : `<tr><td colspan="13" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
@@ -1222,8 +1242,12 @@ function pintar() {
         : vistaActual === 'historico' ? 'No hay correos del histórico con esta búsqueda. Escribe un nombre, asunto, hotel o vuelo, o cambia las fechas.'
         : 'No hay registros con estos filtros.'}</td></tr>`;
 
-  cuerpo.querySelectorAll('tr[data-id]').forEach(tr =>
-    tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id))));
+  cuerpo.querySelectorAll('tr[data-id]').forEach(tr => {
+    tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id)));
+    const grupo = () => cuerpo.querySelectorAll(`tr[data-id="${tr.dataset.id}"]`);
+    tr.addEventListener('mouseenter', () => grupo().forEach(x => x.classList.add('srv-hover')));
+    tr.addEventListener('mouseleave', () => grupo().forEach(x => x.classList.remove('srv-hover')));
+  });
 
   // Los números cuentan reservas (correos), no servicios sueltos.
   const unaPor = l => agruparReservas(l).length;
