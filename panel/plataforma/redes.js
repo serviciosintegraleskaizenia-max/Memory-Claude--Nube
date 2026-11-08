@@ -296,11 +296,21 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       x.acierto = medidas ? Math.round((x.igual || 0) / medidas * 100) : null;
       x.medidas = medidas;
     }
+    const porBandeja = {};
+    for (const s of (await client.query(`SELECT bandeja, resultado, COUNT(*)::int AS n FROM redes_sugerencias
+      WHERE empresa_id = $1 AND creado > NOW() - INTERVAL '30 days' GROUP BY 1, 2`, [e.id])).rows) {
+      const x = porBandeja[s.bandeja] = porBandeja[s.bandeja] || { total: 0 };
+      x[s.resultado] = s.n; x.total += s.n;
+    }
+    for (const x of Object.values(porBandeja)) {
+      const medidas = (x.igual || 0) + (x.editada || 0) + (x.distinta || 0);
+      x.acierto = medidas ? Math.round((x.igual || 0) / medidas * 100) : null; x.medidas = medidas;
+    }
     const ultimas = (await client.query(`SELECT id, bandeja, conversacion, sede, modo, cliente, sugerencia, enviada, parecido, resultado, pasar_a_asesor, motivo, error, creado
       FROM redes_sugerencias WHERE empresa_id = $1 ORDER BY id DESC LIMIT 25`, [e.id])).rows;
     return {
       url: aj.url, publico: aj.publico, cuenta: aj.cuenta || '', tieneToken: Boolean(aj.token), clave: aj.clave,
-      bandejas: aj.bandejas, equipos: aj.equipos, porSede, ultimas, modos: MODOS,
+      bandejas: aj.bandejas, equipos: aj.equipos, porSede, porBandeja, ultimas, modos: MODOS,
       revision: ultimaRevision.has(e.id) ? { haceSeg: Math.round((Date.now() - ultimaRevision.get(e.id).cuando) / 1000), error: ultimaRevision.get(e.id).error } : null
     };
   }
@@ -330,7 +340,7 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
         nuevo.bandejas = {};
         for (const [id, b] of Object.entries(f.bandejas)) {
           if (!/^\d+$/.test(id)) continue;
-          nuevo.bandejas[id] = { nombre: texto(b.nombre, 80), sede: sedes.includes(b.sede) ? b.sede : '', modo: MODOS[b.modo] ? b.modo : 'apagado' };
+          nuevo.bandejas[id] = { nombre: texto(b.nombre, 80), canal: texto(b.canal, 40), sede: sedes.includes(b.sede) ? b.sede : '', modo: MODOS[b.modo] ? b.modo : 'apagado' };
         }
       }
       if (f.equipos && typeof f.equipos === 'object') {

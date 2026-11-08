@@ -136,6 +136,20 @@
   .k-res { border:1px solid var(--borde); border-radius:10px; margin-top:10px; }
   .k-res .t { padding:8px 12px; font-size:13px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .k-clave { font-family:Consolas,monospace; font-size:12.5px; background:var(--hover); border:1px solid var(--borde); border-radius:8px; padding:6px 9px; overflow-wrap:anywhere; }
+  .pestanas { display:flex; gap:4px; border-bottom:1px solid var(--borde); margin:-4px 0 16px; flex-wrap:wrap; }
+  .pestana { all:unset; cursor:pointer; padding:9px 14px; font-size:14px; border-bottom:3px solid transparent; color:var(--suave); border-radius:8px 8px 0 0; }
+  .pestana:hover { background:var(--hover); color:var(--texto); }
+  .pestana.activa { color:var(--azul); border-bottom-color:var(--azul); font-weight:600; }
+  .num-p { background:#d97706; color:#fff; border-radius:999px; font-size:11px; padding:0 7px; margin-left:3px; }
+  .rd-rejilla { display:grid; gap:16px; margin-bottom:16px; }
+  .rd-sede { margin:0 0 8px; font-size:15px; }
+  .rd-tarjeta { background:var(--tarjeta); border-radius:14px; box-shadow:0 1px 3px #0f172a14; margin-bottom:12px; border-left:4px solid #94a3b8; overflow:hidden; }
+  .rd-tarjeta.conectada { border-left-color:var(--azul); } .rd-tarjeta.activa { border-left-color:var(--verde); } .rd-tarjeta.proximo { opacity:.7; }
+  .rd-cab { padding:10px 14px; font-weight:700; font-size:14px; border-bottom:1px solid var(--borde); display:flex; gap:8px; align-items:center; }
+  .rd-bandeja { padding:10px 14px; border-bottom:1px solid var(--borde); font-size:13px; } .rd-bandeja:last-child { border-bottom:none; }
+  .rd-stats { font-size:12px; color:var(--suave); }
+  .rd-vacio { padding:12px 14px; font-size:13px; color:var(--suave); text-align:center; }
+  @media (max-width: 900px) { .rd-rejilla { grid-template-columns:minmax(0,1fr) !important; } }
   .k-progreso { font-size:13px; color:var(--suave); margin-top:8px; min-height:18px; }
   .k-chat { display:flex; flex-direction:column; gap:8px; background:var(--fondo); border-radius:12px; padding:12px; min-height:200px; max-height:520px; overflow-y:auto; margin:10px 0; }
   .k-chat .burbuja.mia { background:#dcf8c6; color:#0f172a; } body.oscuro .k-chat .burbuja.mia { background:#14532d; color:#e2e8f0; }
@@ -170,6 +184,7 @@
   <button class="nav" data-ir="chat">💬 Chat con los negocios <span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
+  <button class="nav" data-ir="redes">📲 Redes sociales</button>
   <div class="sep">Administrar</div>
   <button class="nav" data-ir="empresas">🏗️ Empresas y demo</button>
   <button class="nav" data-ir="herramientas">🛠️ Herramientas</button>
@@ -268,6 +283,11 @@ const AYUDA = {
     <li><b>Chat de prueba en el panel de la empresa</b>: en Ajustes toca <b>Conectar</b> y en su panel dale el permiso "Probar el asistente" al grupo que quieras.</li>
     <li><b>Probar como el asistente</b>: muestra solo qué información encontraría (sin IA, no gasta).</li>
     <li><b>Clave del asistente</b>: la usa n8n para consultar esta base. Si n8n corre en Docker en esta PC, la dirección es <code>http://host.docker.internal:PUERTO</code> (el puerto del central).</li></ul>`,
+  redes: `<b>Cada red social de cada sede</b>, con lo que hace el asistente en ella:
+    <ul><li><b>⏸ Apagado</b>: no hace nada. <b>📝 Nota</b>: deja su respuesta como nota privada para el asesor. <b>🤖 Responde</b>: le contesta solo al cliente.</li>
+    <li><b>Acierto</b>: cuántas sugerencias envió el asesor sin cambiarlas. Con 90% o más en ~200 conversaciones, se puede pasar a "Responde".</li>
+    <li><b>💬 Probar este canal</b>: chat de prueba con la sede de esa red (no le llega a nadie).</li>
+    <li>Las redes nuevas se conectan en Chatwoot; luego toca <b>↻ Actualizar</b>. La conexión con Chatwoot está en Base del asistente → ⚙️ Configuración.</li></ul>`,
   empresas: `Aquí está todo lo que antes estaba en Herramientas → Empresas: crear empresas, agregar una existente, módulos, cobro y recordatorio, anuncios, pausar, la <b>demo de ventas</b> con sus accesos de 48 horas y el banco de mensajes.`,
   herramientas: `Usuarios, grupos, auditoría, bloqueos y estado del sistema <b>del central</b> (tu Oficina).`
 };
@@ -318,14 +338,16 @@ async function ir(v, recargar = true) {
     if (v === 'inicio' || v === 'negocios') await cargarNegocios();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'chat') await cargarChatContactos();
-    if (v === 'conocimiento') await cargarConocimiento();
+    if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
+    if (v === 'redes' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
+    if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
   }
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, redes: vRedes, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
-  if (vista === 'conocimiento' && !K) return;
+  if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
   document.getElementById('vista').innerHTML = f();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
@@ -623,7 +645,7 @@ async function cargarConocimiento() {
   K = r.data;
   if (K.empresa) { const rr = await api('/api/oficina/redes?empresa=' + K.empresa.id); R = rr.ok ? rr.data : null; }
   if (K.empresa) { kEmpresa = String(K.empresa.id); try { localStorage.setItem('oficinaEmpresaK', kEmpresa); } catch (e) {} }
-  const n = (K.archivos || []).filter(a => a.estado === 'borrador').length + (K.ejemplos || []).filter(x => x.estado === 'nuevo').length;
+  const n = pendientesK();
   const el = document.getElementById('numConocimiento'); el.textContent = n; el.style.display = n ? '' : 'none';
 }
 function opcionesSede(elegida) {
@@ -637,80 +659,6 @@ function quitadoTexto(a) {
   return p.length ? `<span class="chip mal" title="Datos internos que el asistente no verá">🔒 ${p.join(' · ')}</span>` : '<span class="chip gris">nada</span>';
 }
 function contenidoTexto(a) { return `${a.documentos} ${a.tipo === 'tarifario' ? 'hoja(s)' : 'doc.'} · ${a.lineas} líneas`; }
-function vConocimiento() {
-  if (!K.empresa) return cabecera('📚 Base del asistente', 'Primero crea una empresa en Empresas y demo') + '<div class="vacio">No hay empresas.</div>';
-  const e = K.empresa;
-  const selEmp = `<select id="kEmpresa" title="Empresa">${K.empresas.map(x => `<option value="${x.id}" ${String(x.id) === kEmpresa ? 'selected' : ''}>${esc(x.nombre)}${x.es_demo ? ' (demo)' : ''}</option>`).join('')}</select>`;
-  const borr = K.archivos.filter(a => a.estado === 'borrador');
-  const pub = K.archivos.filter(a => a.estado === 'publicado');
-  const ant = K.archivos.filter(a => a.estado === 'anterior');
-  const caracteres = pub.reduce((s, a) => s + a.caracteres, 0);
-  const ultima = pub.map(a => a.publicado).sort().pop();
-  const filaBorr = a => `<tr>
-      <td class="envolver"><b>${esc(a.nombre)}</b>${(a.avisos || []).length ? `<br><span class="chip ojo" title="${esc(a.avisos.join('\n'))}">⚠️ ${a.avisos.length} aviso(s)</span>` : ''}</td>
-      <td>${TIPO_K[a.tipo] || a.tipo}</td>
-      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
-      <td>${contenidoTexto(a)}</td><td>${quitadoTexto(a)}</td>
-      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button><button class="btn-mini p" data-k="publicar" data-id="${a.id}">Publicar</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : ''}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Descartar">✕</button></td></tr>`;
-  const filaPub = a => {
-    const vieja = ant.find(x => x.nombre.toLowerCase() === a.nombre.toLowerCase());
-    return `<tr data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + (a.sede || 'todas')).toLowerCase())}">
-      <td class="envolver"><b>${esc(a.nombre)}</b>${vieja ? `<br><small style="color:var(--suave)">Versión anterior del ${fechaCorta(vieja.publicado || vieja.subido)} · <a href="#" data-k="restaurar" data-id="${vieja.id}">volver a esa</a></small>` : ''}</td>
-      <td>${TIPO_K[a.tipo] || a.tipo}</td>
-      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
-      <td>${fechaCorta(a.publicado)}</td><td>${contenidoTexto(a)}</td>
-      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Quitar del asistente">✕</button></td></tr>`;
-  };
-  const base = location.origin;
-  return cabecera('📚 Base del asistente', 'Precios y fichas que usa el asistente de redes · solo tú lo ves y lo cambias', selEmp) +
-    `<div class="kpis">
-      <div class="kpi"><div class="e">Publicado</div><div class="n">${pub.length}</div><div class="d">archivo(s) que usa el asistente</div></div>
-      <div class="kpi" style="border-left-color:var(--ambar)"><div class="e">Por revisar</div><div class="n">${borr.length}</div><div class="d">${borr.length ? 'revisa y publica' : 'nada pendiente'}</div></div>
-      <div class="kpi" style="border-left-color:var(--verde)"><div class="e">Tamaño</div><div class="n">~${Math.round(caracteres / 4 / 1000)}k</div><div class="d">tokens si se mandara todo</div></div>
-      <div class="kpi" style="border-left-color:#7c3aed"><div class="e">Última publicación</div><div class="n" style="font-size:18px">${ultima ? fechaCorta(ultima) : '—'}</div><div class="d">${ultima ? haceCuanto(ultima) : 'todavía nada'}</div></div>
-    </div>
-    <div class="rej r21">
-      <div class="caja"><div class="cab"><div><h2>Subir</h2><p class="sub">Excel (.xlsx) y PDF de ${esc(e.nombre)}. Quedan "por revisar" hasta que los publiques.</p></div></div>
-        <div class="acciones"><button class="btn" data-k="subir">📄 Subir archivos</button><button class="btn-sec" data-k="carpeta">📁 Subir carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota escrita</button></div>
-        <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
-        <div class="k-progreso" id="kProgreso"></div></div>
-      <div class="caja"><h2>Ajustes del asistente</h2><p class="sub">Sedes (separadas por coma) y clave para n8n</p>
-        <div style="display:flex;gap:6px;margin-bottom:10px"><input id="kSedes" value="${esc(e.sedes.join(', '))}" placeholder="Ej: Punta Cana, Orlando" style="flex:1"><button class="btn-sec" data-k="sedes">Guardar</button></div>
-        ${e.token ? `<div class="k-clave" id="kClave" data-clave="${esc(e.token)}">${esc(e.token.slice(0, 7))}••••••••••••${esc(e.token.slice(-4))}</div>
-          <div class="acciones" style="margin-top:6px"><button class="btn-mini" data-k="copiar">📋 Copiar clave</button><button class="btn-mini" data-k="ejemplo">Cómo conectarlo</button><button class="btn-mini peligro" data-k="clave">Cambiar clave</button></div>`
-        : `<button class="btn-sec" data-k="clave">🔑 Crear clave del asistente</button>`}
-        <div style="border-top:1px solid var(--borde);margin-top:10px;padding-top:10px;font-size:13px">
-          <b>Chat de prueba en el panel de ${esc(e.nombre)}</b><br>
-          ${(K.panelConectado || {}).conectado ? `<span class="chip ok">✔ Conectado</span> Quien tenga el permiso <b>"Probar el asistente"</b> ve el botón 🤖 Asistente. <button class="btn-mini peligro" data-k="panel-quitar">Desconectar</button>`
-            : (K.panelConectado || {}).error ? `<span class="chip mal">${esc(K.panelConectado.error)}</span>` : `<span style="color:var(--suave)">Para que el gerente o IT lo prueben y califiquen.</span> <button class="btn-mini p" data-k="panel-conectar">Conectar</button>`}
-        </div>
-      </div>
-    </div>
-    <div class="caja"><div class="cab"><div><h2>Por revisar</h2><p class="sub">Toca 👁 para ver cómo lo entendió el panel. En rojo: lo interno que se quitó (comisión, neto, costo).</p></div>
-      ${borr.length > 1 ? `<button class="btn" data-k="publicar-todo">✔ Publicar todo (${borr.length})</button>` : ''}</div>
-      ${borr.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Contenido</th><th>Se quitó</th><th></th></tr></thead><tbody>${borr.map(filaBorr).join('')}</tbody></table>` : '<div class="vacio">Nada por revisar. Sube un archivo o una nota.</div>'}</div>
-    <div class="caja"><div class="cab"><div><h2>💬 Chat de prueba</h2><p class="sub">Escribe como si fueras un cliente: la IA contesta igual que lo hará en Facebook, Instagram y WhatsApp</p></div>
-        <div class="acciones"><select id="kChatSede" title="Sede de la conversación">${(e.sedes.length ? e.sedes : ['']).map(x => `<option value="${esc(x)}" ${x === kChatSede ? 'selected' : ''}>${x ? 'Chat de ' + esc(x) : 'Sin sede'}</option>`).join('')}</select>
-        <button class="btn-sec" data-k="instrucciones">🧠 Instrucciones</button><button class="btn-sec" data-k="chat-nuevo">↺ Nueva conversación</button></div></div>
-      ${e.tieneClaveIA ? '' : `<div class="k-avisos">⚠️ Esta empresa no tiene clave de IA. Ponla en <a href="#" data-ir="clientes">Clientes y cobros</a> → Editar → clave de OpenRouter.</div>`}
-      <div class="k-chat" id="kChat">${pintarChatK()}</div>
-      <div style="display:flex;gap:6px"><textarea id="kChatTexto" rows="2" style="flex:1;resize:vertical" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea><button class="btn" data-k="chat-enviar">Enviar</button></div>
-      <label style="font-size:12.5px;display:flex;gap:5px;align-items:center;margin-top:6px"><input type="checkbox" id="kChatBorr"> usar también lo que está por revisar</label></div>
-    ${cajaRedes()}
-    ${cajaEntrenamiento()}
-    <div class="caja"><h2>Probar como el asistente</h2><p class="sub">Escribe lo que preguntaría un cliente y mira qué información encontraría el asistente</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="kPruebaSede">${opcionesSede('')}</select>
-        <input id="kPregunta" placeholder="Ej: ¿cuánto cuesta Isla Saona para 2 adultos y un niño?" style="flex:1;min-width:220px">
-        <label style="font-size:12.5px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="kBorradores"> incluir lo por revisar</label>
-        <button class="btn" data-k="probar">Buscar</button></div>
-      <div id="kResultados"></div></div>
-    ${e.sedes.length > 1 && K.archivos.some(a => !a.sede) ? `<div class="k-avisos" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ <span><b>${K.archivos.filter(a => !a.sede).length} archivo(s) están en "Todas las sedes"</b>: el asistente los usa en ${esc(e.sedes.join(' y '))} a la vez y mezcla la información.</span>
-      <button class="btn" data-k="auto-sede" style="margin-left:auto">🪄 Poner la sede según el nombre</button></div>` : ''}
-    <div class="caja"><div class="cab"><div><h2>Publicado (lo que usa el asistente)</h2><p class="sub">${pub.length} archivo(s) · ${e.sedes.length ? 'sedes: ' + esc(e.sedes.join(', ')) : 'sin sedes (vale para todo)'}</p></div>
-      ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
-      ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>
-`;
-}
 
 function pintarChatK() {
   if (!kChat.length) return '<div class="vacio">Empieza la conversación como si fueras un cliente.</div>';
@@ -777,86 +725,9 @@ function formEjemplo(x = {}) {
   const d = document.getElementById('eDescartar'); if (d) d.onclick = async () => { if (await accion('descartar')) { cerrarModal(); aviso('Descartada.'); ir('conocimiento'); } };
   const b = document.getElementById('eBorrar'); if (b) b.onclick = async () => { if (!confirm('¿Borrar este ejemplo?')) return; if (await accion('borrar')) { cerrarModal(); aviso('Borrado.'); ir('conocimiento'); } };
 }
-function cajaEntrenamiento() {
-  const lista = K.ejemplos || [];
-  const nuevos = lista.filter(x => x.estado === 'nuevo'), aprob = lista.filter(x => x.estado === 'aprobado');
-  const v = K.votos || {};
-  const fila = x => `<tr><td class="envolver" style="max-width:340px"><b>${esc(x.cliente)}</b>${x.estado === 'nuevo' && x.ideal ? `<br><small style="color:var(--suave)">💬 ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : x.estado === 'aprobado' ? `<br><small style="color:var(--suave)">→ ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : ''}</td>
-    <td>${x.voto === 'bien' ? '👍' : x.voto === 'mal' ? '👎' : '🎓'}</td><td>${esc(x.sede || 'Todas')}</td><td>${esc(x.autor || '')}<br><small style="color:var(--suave)">${x.origen === 'panel' ? 'desde su panel' : 'Oficina'} · ${fechaCorta(x.creado)}</small></td>
-    <td><button class="btn-mini ${x.estado === 'nuevo' ? 'p' : ''}" data-k="ej-abrir" data-id="${x.id}">${x.estado === 'nuevo' ? 'Revisar' : '✏️'}</button></td></tr>`;
-  return `<div class="caja"><div class="cab"><div><h2>🎓 Entrenamiento</h2><p class="sub">Ejemplos de cómo responder. Los aprobados se los muestra a la IA cuando le preguntan algo parecido. · 👍 ${v.bien || 0} · 👎 ${v.mal || 0}</p></div>
-      <button class="btn-sec" data-k="ej-nuevo">+ Ejemplo</button></div>
-    ${nuevos.length ? `<h3 style="font-size:14px;margin:6px 0">Sugerencias por revisar (${nuevos.length})</h3><table><thead><tr><th>Cliente / sugerencia</th><th></th><th>Sede</th><th>De</th><th></th></tr></thead><tbody>${nuevos.map(fila).join('')}</tbody></table>` : '<p class="sub">No hay sugerencias nuevas. El gerente o IT las mandan con 👍 / 👎 desde su panel.</p>'}
-    <details ${nuevos.length ? '' : 'open'}><summary style="cursor:pointer;font-weight:600;font-size:14px;margin:10px 0 6px">Ejemplos aprobados (${aprob.length})</summary>
-      ${aprob.length ? `<table><thead><tr><th>Cliente → respuesta ideal</th><th></th><th>Sede</th><th>De</th><th></th></tr></thead><tbody>${aprob.map(fila).join('')}</tbody></table>` : '<p class="sub">Todavía no hay ejemplos. En el chat de prueba toca 👍 o ✏️ Corregir debajo de una respuesta.</p>'}</details></div>`;
-}
-function formInstrucciones() {
-  const e = K.empresa, a = e.ajustes || {};
-  abrirModal(`<h2>🧠 Instrucciones del asistente de ${esc(e.nombre)}</h2>
-    <p style="margin:-6px 0 12px;color:var(--suave);font-size:13px">Las reglas de siempre (solo precio de venta, nunca comisión ni neto, no inventar, pasar a un asesor) ya vienen puestas. Aquí agregas lo propio de esta empresa.</p>
-    <div class="fila2">${campo('iNombre', 'Cómo se presenta', `<input id="iNombre" value="${esc(a.nombre || '')}" placeholder="el asistente de ${esc(e.nombre)}">`)}
-    ${campo('iModelo', 'Modelo de IA', `<input id="iModelo" value="${esc(a.modelo || '')}" placeholder="anthropic/claude-haiku-5.5">`, 'El de OpenRouter. Vacío = Claude Haiku (rápido y económico).')}</div>
-    ${campo('iGeneral', 'Instrucciones para todas las sedes', `<textarea id="iGeneral" rows="5" placeholder="Ej: Si preguntan por hoteles, di que un asesor le arma la cotización. Horario de oficina: lunes a sábado de 8 a.m. a 6 p.m.">${esc(a.instrucciones || '')}</textarea>`)}
-    ${e.sedes.map((x, i) => campo('iSede' + i, 'Solo para ' + esc(x), `<textarea id="iSede${i}" data-sede="${esc(x)}" rows="4" placeholder="Ej: Para parques temáticos pide: nombre del pasajero principal, adultos, niños de 3 a 9 años, fechas, si quiere traslado hotel-parque y el tipo de entrada.">${esc((a.sedes || {})[x] || '')}</textarea>`)).join('')}
-    <h3 style="margin:16px 0 6px;font-size:15px">👋 Bienvenida</h3>
-    <p style="margin:0 0 8px;color:var(--suave);font-size:12.5px">El saludo del primer mensaje. La IA lo adapta a la hora (buenos días / tardes / noches) y lo traduce al idioma del cliente. Después ya no vuelve a saludar.</p>
-    ${(e.sedes.length ? e.sedes : ['']).map((x, i) => campo('iBien' + i, x ? 'Bienvenida de ' + esc(x) : 'Bienvenida', `<textarea id="iBien${i}" data-bienvenida="${esc(x)}" rows="2" placeholder="Ej: ¡Hola! Bienvenido a Somos Viaje ${esc(x)} 🌴 Soy el asistente virtual, ¿en qué te puedo ayudar?">${esc((a.bienvenidas || {})[x] || '')}</textarea>`)).join('')}
-    <h3 style="margin:16px 0 6px;font-size:15px">🌐 Búsqueda en internet</h3>
-    <p style="margin:0 0 8px;color:var(--suave);font-size:12.5px">Para lo que no está en los archivos (parques, atracciones, horarios…). Busca solo en las sedes marcadas y solo si la pregunta es de los temas de abajo o la base no tiene la respuesta. Cuesta unos US$ 0.02 por búsqueda. <b>Nunca</b> toma precios de internet.</p>
-    <div class="campo">${(e.sedes.length ? e.sedes : ['']).map(x => `<label style="display:inline-flex;gap:6px;align-items:center;margin-right:14px;font-weight:500"><input type="checkbox" data-web="${esc(x)}" ${((a.web || {}).sedes || []).includes(x) ? 'checked' : ''}> ${x ? esc(x) : 'Activar'}</label>`).join('')}</div>
-    ${campo('iWebTemas', 'Temas que siempre buscan en internet (separados por coma)', `<input id="iWebTemas" value="${esc((a.web || {}).palabras || '')}" placeholder="Disney, Magic Kingdom, Epcot, Hollywood Studios, Animal Kingdom, Universal, Epic Universe, SeaWorld, Legoland, Kennedy Space Center">`)}
-    ${campo('iWebSitios', 'Sitios oficiales preferidos', `<input id="iWebSitios" value="${esc((a.web || {}).sitios || '')}" placeholder="disneyworld.disney.go.com, universalorlando.com, seaworld.com, legoland.com, kennedyspacecenter.com">`)}
-    ${pieModal(false)}`);
-  document.getElementById('modal').classList.add('ancho');
-  document.getElementById('fGuardar').onclick = async () => {
-    const sedes = {}; document.querySelectorAll('#modal textarea[data-sede]').forEach(t => { sedes[t.dataset.sede] = t.value; });
-    const bienvenidas = {}; document.querySelectorAll('#modal textarea[data-bienvenida]').forEach(t => { bienvenidas[t.dataset.bienvenida] = t.value; });
-    const web = { sedes: [...document.querySelectorAll('#modal input[data-web]:checked')].map(c => c.dataset.web), palabras: document.getElementById('iWebTemas').value, sitios: document.getElementById('iWebSitios').value };
-    await enviarForm('/api/oficina/conocimiento/instrucciones', { empresa_id: kEmpresa, nombre: document.getElementById('iNombre').value, modelo: document.getElementById('iModelo').value.trim(), instrucciones: document.getElementById('iGeneral').value, sedes, bienvenidas, web }, 'Instrucciones guardadas. Pruébalas en el chat.');
-  };
-}
 
 /* ---------- Redes sociales (Chatwoot) ---------- */
 const RES_K = { igual: ['ok', 'Igual'], editada: ['ojo', 'Editada'], distinta: ['mal', 'Distinta'], pendiente: ['gris', 'Esperando asesor'], sin_respuesta: ['gris', 'Sin respuesta'], automatica: ['az', 'Enviada sola'], error: ['mal', 'Error'] };
-function cajaRedes() {
-  if (!R) return '';
-  const e = K.empresa;
-  const sedes = e.sedes.length ? e.sedes : [''];
-  const bandejas = rProbe ? rProbe.bandejas : Object.entries(R.bandejas).map(([id, b]) => ({ id, nombre: b.nombre, canal: '' }));
-  const filaBandeja = b => { const c = R.bandejas[String(b.id)] || {}; return `<tr><td><b>${esc(b.nombre || ('Bandeja ' + b.id))}</b><br><small style="color:var(--suave)">#${b.id}${b.canal ? ' · ' + esc(b.canal) : ''}</small></td>
-      <td><select data-r-sede="${b.id}" data-r-nombre="${esc(b.nombre || '')}">${sedes.map(x => `<option value="${esc(x)}" ${x === (c.sede || '') ? 'selected' : ''}>${x ? esc(x) : 'Sin sede'}</option>`).join('')}</select></td>
-      <td><select data-r-modo="${b.id}">${Object.entries(R.modos).map(([k, v]) => `<option value="${k}" ${k === (c.modo || 'apagado') ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></td></tr>`; };
-  const filaSede = x => { const elegido = R.equipos[x]; const eq = rProbe ? rProbe.equipos : (elegido ? [{ id: elegido, nombre: 'Equipo #' + elegido }] : []);
-    return `<tr><td><b>${esc(x)}</b></td><td><select data-r-equipo="${esc(x)}"><option value="">— sin equipo —</option>${eq.map(t => `<option value="${t.id}" ${String(t.id) === String(elegido || '') ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
-      ${rProbe && !rProbe.equipos.some(t => t.nombre.toLowerCase() === x.toLowerCase()) ? `<button class="btn-mini" data-k="r-crear-equipo" data-sede="${esc(x)}">+ Crear equipo "${esc(x)}"</button>` : ''}</td></tr>`; };
-  const tarjetas = Object.entries(R.porSede).map(([sd, x]) => `<div class="kpi" style="border-left-color:${x.acierto === null ? '#94a3b8' : x.acierto >= 90 ? 'var(--verde)' : x.acierto >= 70 ? 'var(--ambar)' : 'var(--rojo)'}">
-      <div class="e">${esc(sd)} · acierto</div><div class="n">${x.acierto === null ? '—' : x.acierto + '%'}</div>
-      <div class="d">${x.igual || 0} igual · ${x.editada || 0} editada · ${x.distinta || 0} distinta · ${x.total} sugerencias (30 días)</div></div>`).join('');
-  const conv = c => `${R.publico}/app/accounts/${R.cuenta}/conversations/${c}`;
-  const ult = R.ultimas.map(x => `<tr><td>${fechaCorta(x.creado)}<br><small style="color:var(--suave)">${new Date(x.creado).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</small></td>
-      <td>${esc(x.sede || '—')}</td><td class="envolver" style="max-width:260px">${esc((x.cliente || '').slice(0, 120))}</td>
-      <td class="envolver" style="max-width:320px"><small>${esc((x.sugerencia || x.error || '').slice(0, 180))}${(x.sugerencia || '').length > 180 ? '…' : ''}</small>${x.pasar_a_asesor ? '<br><span class="chip ojo">👤 asesor</span>' : ''}</td>
-      <td><span class="chip ${(RES_K[x.resultado] || ['gris'])[0]}" ${x.enviada ? `title="Envió: ${esc(x.enviada.slice(0, 300))}"` : ''}>${(RES_K[x.resultado] || ['', x.resultado])[1]}${x.parecido !== null && x.resultado !== 'automatica' ? ' · ' + Math.round(x.parecido * 100) + '%' : ''}</span></td>
-      <td><a class="btn-mini" style="text-decoration:none;display:inline-block" href="${esc(conv(x.conversacion))}" target="_blank" rel="noopener">Abrir</a></td></tr>`).join('');
-  return `<div class="caja"><div class="cab"><div><h2>📲 Redes sociales (Chatwoot)</h2><p class="sub">El asistente atiende los mensajes de Facebook, Instagram y WhatsApp que llegan a Chatwoot</p></div>
-      <button class="btn-sec" data-k="r-ayuda">Cómo conectarlo</button></div>
-    <div class="fila2" style="grid-template-columns:2fr 2fr 1fr 2fr;gap:8px">
-      ${campo('rUrl', 'Chatwoot (dirección interna)', `<input id="rUrl" value="${esc(R.url)}">`)}
-      ${campo('rPublico', 'Chatwoot (dirección pública)', `<input id="rPublico" value="${esc(R.publico)}">`)}
-      ${campo('rCuenta', 'N.º de cuenta', `<input id="rCuenta" value="${esc(R.cuenta)}" placeholder="2">`)}
-      ${campo('rToken', 'Token de acceso', `<input id="rToken" type="password" autocomplete="off" placeholder="${R.tieneToken ? '•••••• guardado (vacío = no cambiar)' : 'Pégalo aquí (Perfil → Token de acceso)'}">`)}
-    </div>
-    <div class="acciones"><button class="btn" data-k="r-guardar">Guardar y probar conexión</button>${R.tieneToken && R.cuenta ? '<button class="btn-sec" data-k="r-probar">Leer bandejas de Chatwoot</button>' : ''}</div>
-    <div style="margin-top:12px;font-size:13px">${R.revision ? (R.revision.error ? `<span class="chip mal">⛔ Chatwoot no responde</span> ${esc(R.revision.error)}` : `<span class="chip ok">🔄 Revisando Chatwoot cada 5 segundos</span> <span style="color:var(--suave)">última revisión hace ${R.revision.haceSeg} s</span>`)
-      : (R.tieneToken && R.cuenta ? '<span class="chip gris">En pausa</span> <span style="color:var(--suave)">pon al menos una bandeja en "Nota privada" o "Responde solo"</span>' : '')}
-      <div style="color:var(--suave);margin-top:4px">No hace falta webhook en Chatwoot: el central revisa los mensajes nuevos solo. (Si creaste uno, puedes borrarlo.)</div></div>
-    ${bandejas.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Bandejas de entrada</h3><table><thead><tr><th>Bandeja</th><th>Sede</th><th>Qué hace el asistente</th></tr></thead><tbody>${bandejas.map(filaBandeja).join('')}</tbody></table>` : ''}
-    ${e.sedes.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Equipo de cada sede <small style="font-weight:400;color:var(--suave)">(a quién se asigna cuando hay que pasar a un asesor)</small></h3><table><tbody>${e.sedes.map(filaSede).join('')}</tbody></table>` : ''}
-    ${bandejas.length || e.sedes.length ? '<div class="acciones" style="margin-top:8px"><button class="btn" data-k="r-guardar-bandejas">Guardar bandejas y equipos</button></div>' : ''}
-    ${tarjetas ? `<h3 style="font-size:14px;margin:16px 0 6px">Tasa de acierto <small style="font-weight:400;color:var(--suave)">(cuántas sugerencias envió el asesor sin cambiarlas). Con 90% o más en ~200 conversaciones, se puede pasar esa bandeja a "Responde solo".</small></h3><div class="kpis">${tarjetas}</div>` : ''}
-    ${ult ? `<details><summary style="cursor:pointer;font-weight:600;font-size:14px;margin:8px 0">Últimas sugerencias (${R.ultimas.length})</summary><table><thead><tr><th>Cuándo</th><th>Sede</th><th>Cliente</th><th>Sugerencia</th><th>Resultado</th><th></th></tr></thead><tbody>${ult}</tbody></table></details>` : ''}
-  </div>`;
-}
 function ayudaRedes() {
   abrirModal(`<h2>📲 Conectar el asistente con Chatwoot</h2>
     <ol style="font-size:13.5px;line-height:1.7;padding-left:20px">
@@ -879,6 +750,228 @@ async function probarRedes() {
   const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa });
   if (!r.ok) { aviso(r.data.error || 'No se pudo conectar con Chatwoot.'); return false; }
   rProbe = r.data; aviso(`Conectado: ${r.data.bandejas.length} bandeja(s) y ${r.data.equipos.length} equipo(s).`); return true;
+}
+
+/* ---------- Base del asistente: 5 pestañas ---------- */
+const TABS_K = [['config', '⚙️ Configuración'], ['docs', '📚 Documentos'], ['revisar', '📝 Por revisar'], ['buscar', '🔎 Probar búsqueda'], ['chat', '💬 Chat de prueba']];
+let kTab = (() => { try { return localStorage.getItem('oficinaTabK') || 'docs'; } catch (e) { return 'docs'; } })();
+function selectorEmpresaK() {
+  return `<select id="kEmpresa" title="Empresa">${K.empresas.map(x => `<option value="${x.id}" ${String(x.id) === kEmpresa ? 'selected' : ''}>${esc(x.nombre)}${x.es_demo ? ' (demo)' : ''}</option>`).join('')}</select>`;
+}
+function pendientesK() { return (K.archivos || []).filter(a => a.estado === 'borrador').length + (K.ejemplos || []).filter(x => x.estado === 'nuevo').length; }
+function vConocimiento() {
+  if (!K.empresa) return cabecera('📚 Base del asistente', 'Primero crea una empresa en Empresas y demo') + '<div class="vacio">No hay empresas.</div>';
+  if (!TABS_K.some(t => t[0] === kTab)) kTab = 'docs';
+  const pend = pendientesK();
+  const barra = `<div class="pestanas">${TABS_K.map(([k, n]) => `<button class="pestana ${k === kTab ? 'activa' : ''}" data-k-tab="${k}">${n}${k === 'revisar' && pend ? ` <span class="num-p">${pend}</span>` : ''}</button>`).join('')}</div>`;
+  const cuerpo = { config: tabConfigK, docs: tabDocsK, revisar: tabRevisarK, buscar: tabBuscarK, chat: tabChatK }[kTab]();
+  return cabecera('📚 Base del asistente', 'Lo que sabe y cómo responde el asistente de redes · solo tú lo ves y lo cambias', selectorEmpresaK()) + barra + cuerpo;
+}
+function tabDocsK() {
+  const e = K.empresa;
+  const borr = K.archivos.filter(a => a.estado === 'borrador');
+  const pub = K.archivos.filter(a => a.estado === 'publicado');
+  const ant = K.archivos.filter(a => a.estado === 'anterior');
+  const caracteres = pub.reduce((s, a) => s + a.caracteres, 0);
+  const ultima = pub.map(a => a.publicado).sort().pop();
+  const filaPub = a => {
+    const vieja = ant.find(x => x.nombre.toLowerCase() === a.nombre.toLowerCase());
+    return `<tr data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + (a.sede || 'todas')).toLowerCase())}">
+      <td class="envolver"><b>${esc(a.nombre)}</b>${vieja ? `<br><small style="color:var(--suave)">Versión anterior del ${fechaCorta(vieja.publicado || vieja.subido)} · <a href="#" data-k="restaurar" data-id="${vieja.id}">volver a esa</a></small>` : ''}</td>
+      <td>${TIPO_K[a.tipo] || a.tipo}</td>
+      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
+      <td>${fechaCorta(a.publicado)}</td><td>${contenidoTexto(a)}</td>
+      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Quitar del asistente">✕</button></td></tr>`;
+  };
+  return `<div class="kpis">
+      <div class="kpi"><div class="e">Publicado</div><div class="n">${pub.length}</div><div class="d">archivo(s) que usa el asistente</div></div>
+      <div class="kpi" style="border-left-color:var(--ambar);cursor:pointer" data-k-tab="revisar"><div class="e">Por revisar</div><div class="n">${borr.length}</div><div class="d">${borr.length ? 'toca para revisar y publicar' : 'nada pendiente'}</div></div>
+      <div class="kpi" style="border-left-color:var(--verde)"><div class="e">Tamaño</div><div class="n">~${Math.round(caracteres / 4 / 1000)}k</div><div class="d">tokens si se mandara todo</div></div>
+      <div class="kpi" style="border-left-color:#7c3aed"><div class="e">Última publicación</div><div class="n" style="font-size:18px">${ultima ? fechaCorta(ultima) : '—'}</div><div class="d">${ultima ? haceCuanto(ultima) : 'todavía nada'}</div></div>
+    </div>
+    <div class="caja"><div class="cab"><div><h2>Subir</h2><p class="sub">Excel (.xlsx) y PDF de ${esc(e.nombre)}, o una nota escrita. Quedan en <a href="#" data-k-tab="revisar">📝 Por revisar</a> hasta que los publiques.</p></div></div>
+      <div class="acciones"><button class="btn" data-k="subir">📄 Subir archivos</button><button class="btn-sec" data-k="carpeta">📁 Subir carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota escrita</button></div>
+      <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
+      <div class="k-progreso" id="kProgreso"></div></div>
+    ${e.sedes.length > 1 && K.archivos.some(a => !a.sede) ? `<div class="k-avisos" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ <span><b>${K.archivos.filter(a => !a.sede).length} archivo(s) están en "Todas las sedes"</b>: el asistente los usa en ${esc(e.sedes.join(' y '))} a la vez y mezcla la información.</span>
+      <button class="btn" data-k="auto-sede" style="margin-left:auto">🪄 Poner la sede según el nombre</button></div>` : ''}
+    <div class="caja"><div class="cab"><div><h2>Publicado (lo que usa el asistente)</h2><p class="sub">${pub.length} archivo(s) · ${e.sedes.length ? 'sedes: ' + esc(e.sedes.join(', ')) : 'sin sedes (vale para todo)'}</p></div>
+      ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
+      ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>`;
+}
+function filaEjemplo(x) {
+  return `<tr><td class="envolver" style="max-width:340px"><b>${esc(x.cliente)}</b>${x.estado === 'nuevo' && x.ideal ? `<br><small style="color:var(--suave)">💬 ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : x.estado === 'aprobado' ? `<br><small style="color:var(--suave)">→ ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : ''}</td>
+    <td>${x.voto === 'bien' ? '👍' : x.voto === 'mal' ? '👎' : '🎓'}</td><td>${esc(x.sede || 'Todas')}</td><td>${esc(x.autor || '')}<br><small style="color:var(--suave)">${x.origen === 'panel' ? 'desde su panel' : 'Oficina'} · ${fechaCorta(x.creado)}</small></td>
+    <td><button class="btn-mini ${x.estado === 'nuevo' ? 'p' : ''}" data-k="ej-abrir" data-id="${x.id}">${x.estado === 'nuevo' ? 'Revisar' : '✏️'}</button></td></tr>`;
+}
+function tabRevisarK() {
+  const borr = K.archivos.filter(a => a.estado === 'borrador');
+  const nuevos = (K.ejemplos || []).filter(x => x.estado === 'nuevo');
+  const filaBorr = a => `<tr>
+      <td class="envolver"><b>${esc(a.nombre)}</b>${(a.avisos || []).length ? `<br><span class="chip ojo" title="${esc(a.avisos.join('\n'))}">⚠️ ${a.avisos.length} aviso(s)</span>` : ''}</td>
+      <td>${TIPO_K[a.tipo] || a.tipo}</td>
+      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
+      <td>${contenidoTexto(a)}</td><td>${quitadoTexto(a)}</td>
+      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button><button class="btn-mini p" data-k="publicar" data-id="${a.id}">Publicar</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : ''}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Descartar">✕</button></td></tr>`;
+  return `<div class="caja"><div class="cab"><div><h2>Archivos por publicar (${borr.length})</h2><p class="sub">Toca 👁 para ver cómo lo entendió el panel. En rojo: lo interno que se quitó (comisión, neto, costo).</p></div>
+      ${borr.length > 1 ? `<button class="btn" data-k="publicar-todo">✔ Publicar todo (${borr.length})</button>` : ''}</div>
+      ${borr.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Contenido</th><th>Se quitó</th><th></th></tr></thead><tbody>${borr.map(filaBorr).join('')}</tbody></table>` : '<div class="vacio">Nada por publicar. Sube archivos en <a href="#" data-k-tab="docs">📚 Documentos</a>.</div>'}</div>
+    <div class="caja"><h2>Sugerencias de entrenamiento (${nuevos.length})</h2><p class="sub">Lo que mandaron el gerente o IT con 👍 / 👎 desde su panel. Toca <b>Revisar</b>, corrige la respuesta ideal y <b>Aprobar</b>.</p>
+      ${nuevos.length ? `<table><thead><tr><th>Cliente / sugerencia</th><th></th><th>Sede</th><th>De</th><th></th></tr></thead><tbody>${nuevos.map(filaEjemplo).join('')}</tbody></table>` : '<div class="vacio">No hay sugerencias nuevas.</div>'}</div>`;
+}
+function tabBuscarK() {
+  return `<div class="caja"><h2>🔎 Probar búsqueda</h2><p class="sub">Escribe lo que preguntaría un cliente y mira qué información encontraría el asistente en los documentos (sin IA, no gasta)</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><select id="kPruebaSede">${opcionesSede('')}</select>
+        <input id="kPregunta" placeholder="Ej: ¿cuánto cuesta Isla Saona para 2 adultos y un niño?" style="flex:1;min-width:220px">
+        <label style="font-size:12.5px;display:flex;gap:5px;align-items:center"><input type="checkbox" id="kBorradores"> incluir lo por revisar</label>
+        <button class="btn" data-k="probar">Buscar</button></div>
+      <div id="kResultados"></div></div>`;
+}
+function htmlChatK(titulo, sub, sedeFija) {
+  const e = K.empresa;
+  return `<div class="cab"><div><h2>${titulo}</h2><p class="sub">${sub}</p></div>
+        <div class="acciones">${sedeFija !== undefined ? `<input type="hidden" id="kChatSede" value="${esc(sedeFija)}">` : `<select id="kChatSede" title="Sede de la conversación">${(e.sedes.length ? e.sedes : ['']).map(x => `<option value="${esc(x)}" ${x === kChatSede ? 'selected' : ''}>${x ? 'Chat de ' + esc(x) : 'Sin sede'}</option>`).join('')}</select>
+        <button class="btn-sec" data-k-tab="config">🧠 Instrucciones</button>`}<button class="btn-sec" data-k="chat-nuevo">↺ Nueva conversación</button></div></div>
+      ${e.tieneClaveIA ? '' : `<div class="k-avisos">⚠️ Esta empresa no tiene clave de IA. Ponla en <a href="#" data-ir="clientes">Clientes y cobros</a> → Editar → clave de OpenRouter.</div>`}
+      <div class="k-chat" id="kChat">${pintarChatK()}</div>
+      <div style="display:flex;gap:6px"><textarea id="kChatTexto" rows="2" style="flex:1;resize:vertical" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea><button class="btn" data-k="chat-enviar">Enviar</button></div>
+      <label style="font-size:12.5px;display:flex;gap:5px;align-items:center;margin-top:6px"><input type="checkbox" id="kChatBorr"> usar también lo que está por revisar</label>`;
+}
+function tabChatK() {
+  return `<div class="caja">${htmlChatK('💬 Chat de prueba', 'Escribe como si fueras un cliente: la IA contesta igual que en las redes. Debajo de cada respuesta: 👍 (buen ejemplo) o ✏️ Corregir.')}</div>`;
+}
+function tabConfigK() {
+  const e = K.empresa, a = e.ajustes || {};
+  const aprob = (K.ejemplos || []).filter(x => x.estado === 'aprobado');
+  const nuevos = (K.ejemplos || []).filter(x => x.estado === 'nuevo');
+  const v = K.votos || {};
+  const sedesLista = e.sedes.length ? e.sedes : [''];
+  return `<div class="rej r2">
+    <div class="caja"><h2>Ajustes del asistente</h2><p class="sub">Sedes (separadas por coma) y clave para n8n</p>
+      <div style="display:flex;gap:6px;margin-bottom:10px"><input id="kSedes" value="${esc(e.sedes.join(', '))}" placeholder="Ej: Punta Cana, Orlando" style="flex:1"><button class="btn-sec" data-k="sedes">Guardar</button></div>
+      ${e.token ? `<div class="k-clave" id="kClave" data-clave="${esc(e.token)}">${esc(e.token.slice(0, 7))}••••••••••••${esc(e.token.slice(-4))}</div>
+        <div class="acciones" style="margin-top:6px"><button class="btn-mini" data-k="copiar">📋 Copiar clave</button><button class="btn-mini" data-k="ejemplo">Cómo conectarlo</button><button class="btn-mini peligro" data-k="clave">Cambiar clave</button></div>`
+      : `<button class="btn-sec" data-k="clave">🔑 Crear clave del asistente</button>`}
+      <div style="border-top:1px solid var(--borde);margin-top:10px;padding-top:10px;font-size:13px">
+        <b>Chat de prueba en el panel de ${esc(e.nombre)}</b><br>
+        ${(K.panelConectado || {}).conectado ? `<span class="chip ok">✔ Conectado</span> Quien tenga el permiso <b>"Probar el asistente"</b> ve el botón 🤖 Asistente. <button class="btn-mini peligro" data-k="panel-quitar">Desconectar</button>`
+          : (K.panelConectado || {}).error ? `<span class="chip mal">${esc(K.panelConectado.error)}</span>` : `<span style="color:var(--suave)">Para que el gerente o IT lo prueben y califiquen.</span> <button class="btn-mini p" data-k="panel-conectar">Conectar</button>`}
+      </div></div>
+    ${cajaChatwootConfig()}
+  </div>
+  <div class="caja" id="kInstr"><div class="cab"><div><h2>🧠 Instrucciones</h2><p class="sub">Las reglas de siempre (solo precio de venta, nunca comisión ni neto, no inventar, pasar a un asesor, idioma del cliente) ya vienen puestas. Aquí agregas lo propio de ${esc(e.nombre)}.</p></div>
+      <button class="btn" data-k="instr-guardar">Guardar instrucciones</button></div>
+    <div class="fila2">${campo('iNombre', 'Cómo se presenta', `<input id="iNombre" value="${esc(a.nombre || '')}" placeholder="el asistente de ${esc(e.nombre)}">`)}
+    ${campo('iModelo', 'Modelo de IA', `<input id="iModelo" value="${esc(a.modelo || '')}" placeholder="anthropic/claude-haiku-5.5">`, 'El de OpenRouter. Vacío = Claude Haiku (rápido y económico).')}</div>
+    ${campo('iGeneral', 'Instrucciones para todas las sedes', `<textarea id="iGeneral" rows="4" placeholder="Ej: Si preguntan por hoteles, di que un asesor le arma la cotización. Horario de oficina: lunes a sábado de 8 a.m. a 6 p.m.">${esc(a.instrucciones || '')}</textarea>`)}
+    <div class="fila2">${e.sedes.map((x, i) => campo('iSede' + i, 'Solo para ' + esc(x), `<textarea id="iSede${i}" data-sede="${esc(x)}" rows="4" placeholder="Ej: Para parques temáticos pide: nombre del pasajero principal, adultos, niños de 3 a 9 años, fechas y el tipo de entrada.">${esc((a.sedes || {})[x] || '')}</textarea>`)).join('')}</div>
+    <h3 style="margin:12px 0 4px;font-size:14px">👋 Bienvenida</h3>
+    <p style="margin:0 0 8px;color:var(--suave);font-size:12.5px">El saludo del primer mensaje. Se adapta a la hora y al idioma del cliente; después no vuelve a saludar.</p>
+    <div class="fila2">${sedesLista.map((x, i) => campo('iBien' + i, x ? 'Bienvenida de ' + esc(x) : 'Bienvenida', `<textarea id="iBien${i}" data-bienvenida="${esc(x)}" rows="2" placeholder="Ej: ¡Hola! Bienvenido a Somos Viaje ${esc(x)} 🌴 Soy el asistente virtual, ¿en qué te puedo ayudar?">${esc((a.bienvenidas || {})[x] || '')}</textarea>`)).join('')}</div>
+    <h3 style="margin:12px 0 4px;font-size:14px">🌐 Búsqueda en internet</h3>
+    <p style="margin:0 0 8px;color:var(--suave);font-size:12.5px">Para lo que no está en los documentos (parques, atracciones, horarios…). Solo en las sedes marcadas. ~US$ 0.02 por búsqueda. <b>Nunca</b> toma precios de internet.</p>
+    <div class="campo">${sedesLista.map(x => `<label style="display:inline-flex;gap:6px;align-items:center;margin-right:14px;font-weight:500"><input type="checkbox" data-web="${esc(x)}" ${((a.web || {}).sedes || []).includes(x) ? 'checked' : ''}> ${x ? esc(x) : 'Activar'}</label>`).join('')}</div>
+    <div class="fila2">${campo('iWebTemas', 'Temas que siempre buscan en internet (separados por coma)', `<input id="iWebTemas" value="${esc((a.web || {}).palabras || '')}" placeholder="Disney, Magic Kingdom, Epcot, Universal, Epic Universe, SeaWorld, Legoland">`)}
+    ${campo('iWebSitios', 'Sitios oficiales preferidos', `<input id="iWebSitios" value="${esc((a.web || {}).sitios || '')}" placeholder="disneyworld.disney.go.com, universalorlando.com, seaworld.com">`)}</div>
+  </div>
+  <div class="caja"><div class="cab"><div><h2>🎓 Entrenamiento</h2><p class="sub">Ejemplos aprobados de cómo responder: la IA los usa cuando le preguntan algo parecido · 👍 ${v.bien || 0} · 👎 ${v.mal || 0}${nuevos.length ? ` · <a href="#" data-k-tab="revisar">${nuevos.length} sugerencia(s) por revisar</a>` : ''}</p></div>
+      <button class="btn-sec" data-k="ej-nuevo">+ Ejemplo</button></div>
+    ${aprob.length ? `<table><thead><tr><th>Cliente → respuesta ideal</th><th></th><th>Sede</th><th>De</th><th></th></tr></thead><tbody>${aprob.map(filaEjemplo).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay ejemplos. En 💬 Chat de prueba toca 👍 o ✏️ Corregir debajo de una respuesta.</div>'}</div>`;
+}
+async function guardarInstrucciones() {
+  const caja = document.getElementById('kInstr');
+  const sedes = {}; caja.querySelectorAll('textarea[data-sede]').forEach(t => { sedes[t.dataset.sede] = t.value; });
+  const bienvenidas = {}; caja.querySelectorAll('textarea[data-bienvenida]').forEach(t => { bienvenidas[t.dataset.bienvenida] = t.value; });
+  const web = { sedes: [...caja.querySelectorAll('input[data-web]:checked')].map(c => c.dataset.web), palabras: document.getElementById('iWebTemas').value, sitios: document.getElementById('iWebSitios').value };
+  const r = await api('/api/oficina/conocimiento/instrucciones', { empresa_id: kEmpresa, nombre: document.getElementById('iNombre').value, modelo: document.getElementById('iModelo').value.trim(), instrucciones: document.getElementById('iGeneral').value, sedes, bienvenidas, web });
+  aviso(r.ok ? 'Instrucciones guardadas. Pruébalas en 💬 Chat de prueba.' : (r.data.error || 'No se pudo guardar.'));
+  if (r.ok) await cargarConocimiento();
+}
+
+/* ---------- Conexión con Chatwoot (pestaña Configuración) ---------- */
+function cajaChatwootConfig() {
+  if (!R) return '<div class="caja"><h2>📲 Conexión con Chatwoot</h2><div class="vacio">Cargando…</div></div>';
+  const e = K.empresa;
+  const eq = rProbe ? rProbe.equipos : [];
+  const filaSede = x => { const elegido = R.equipos[x]; const lista = [...eq]; if (elegido && !lista.some(t => String(t.id) === String(elegido))) lista.push({ id: elegido, nombre: 'Equipo #' + elegido + (eq.length ? ' (ya no está en Chatwoot)' : '') });
+    return `<tr><td><b>${esc(x)}</b></td><td><select data-r-equipo="${esc(x)}"><option value="">— sin equipo —</option>${lista.map(t => `<option value="${t.id}" ${String(t.id) === String(elegido || '') ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select>
+      ${rProbe && !eq.some(t => t.nombre.toLowerCase() === x.toLowerCase()) ? `<button class="btn-mini" data-k="r-crear-equipo" data-sede="${esc(x)}">+ Crear "${esc(x)}"</button>` : ''}</td></tr>`; };
+  const estado = R.revision ? (R.revision.error ? `<span class="chip mal">⛔ Chatwoot no responde</span> <small>${esc(R.revision.error)}</small>` : `<span class="chip ok">🔄 Revisando cada 5 s</span> <small style="color:var(--suave)">hace ${R.revision.haceSeg} s</small>`)
+    : (R.tieneToken && R.cuenta ? '<span class="chip gris">En pausa</span> <small style="color:var(--suave)">ninguna red está en "Nota privada" o "Responde solo"</small>' : '<span class="chip gris">Sin conectar</span>');
+  return `<div class="caja"><div class="cab"><div><h2>📲 Conexión con Chatwoot</h2><p class="sub">${estado}</p></div><button class="btn-sec" data-k="r-ayuda">Cómo conectarlo</button></div>
+    <div class="fila2">${campo('rUrl', 'Dirección interna', `<input id="rUrl" value="${esc(R.url)}">`)}${campo('rPublico', 'Dirección pública', `<input id="rPublico" value="${esc(R.publico)}">`)}</div>
+    <div class="fila2">${campo('rCuenta', 'N.º de cuenta', `<input id="rCuenta" value="${esc(R.cuenta)}" placeholder="2">`)}${campo('rToken', 'Token de acceso', `<input id="rToken" type="password" autocomplete="off" placeholder="${R.tieneToken ? '•••••• guardado (vacío = no cambiar)' : 'Perfil → Token de acceso'}">`)}</div>
+    <div class="acciones"><button class="btn" data-k="r-guardar">Guardar y probar</button><button class="btn-sec" data-ir="redes">📲 Ir a Redes sociales</button></div>
+    ${e.sedes.length ? `<h3 style="font-size:14px;margin:12px 0 4px">Equipo de cada sede <small style="font-weight:400;color:var(--suave)">(a quién se asigna al pasar a un asesor)</small></h3><table><tbody>${e.sedes.map(filaSede).join('')}</tbody></table>
+      <div class="acciones" style="margin-top:6px"><button class="btn-sec" data-k="r-guardar-equipos">Guardar equipos</button></div>` : ''}
+  </div>`;
+}
+
+/* ---------- Redes sociales: una tarjeta por canal y sede ---------- */
+const CANALES = [
+  { k: 'messenger', n: 'Messenger', i: '💬', tipos: ['FacebookPage'], como: 'En Chatwoot: <b>Ajustes → Entradas → Agregar → Facebook</b> → Continuar con Facebook → elige la página de esa sede. (En Meta, la página debe tener las suscripciones <code>messages</code>, <code>messaging_postbacks</code>, <code>message_deliveries</code>, <code>message_reads</code> y <code>message_echoes</code>.)' },
+  { k: 'instagram', n: 'Instagram', i: '📷', tipos: ['Instagram'], como: 'Necesita la configuración de Instagram en la app de Meta (pendiente). Cuando esté: en Chatwoot <b>Ajustes → Entradas → Agregar → Instagram</b> y elige la cuenta de esa sede.' },
+  { k: 'whatsapp', n: 'WhatsApp', i: '📱', tipos: ['Whatsapp'], como: 'Va al final, un número a la vez: un número solo puede estar en una plataforma (hoy está en ManyChat). Se conecta en Chatwoot <b>Ajustes → Entradas → Agregar → WhatsApp</b> el día del cambio.' },
+  { k: 'web', n: 'Página web', i: '🌐', tipos: ['WebWidget'], como: 'En Chatwoot: <b>Ajustes → Entradas → Agregar → Sitio web</b>. Te da un código que se pega en la página web de esa sede: aparece una burbuja de chat que llega a Chatwoot.' }
+];
+function canalDe(tipo) { return (CANALES.find(c => c.tipos.includes(String(tipo || ''))) || { k: 'otro' }).k; }
+function bandejasRedes() {
+  const base = rProbe ? rProbe.bandejas : Object.entries(R.bandejas).map(([id, b]) => ({ id: Number(id), nombre: b.nombre, canal: b.canal || '' }));
+  return base.map(b => ({ ...b, cfg: R.bandejas[String(b.id)] || {}, tipo: canalDe(b.canal || (R.bandejas[String(b.id)] || {}).canal) }));
+}
+function vRedes() {
+  if (!K || !K.empresa) return cabecera('📲 Redes sociales', '') + '<div class="vacio">Cargando…</div>';
+  const e = K.empresa;
+  const selEmp = selectorEmpresaK();
+  if (!R || !R.tieneToken || !R.cuenta) return cabecera('📲 Redes sociales', 'Facebook, Instagram, WhatsApp y página web de ' + esc(e.nombre), selEmp) +
+    `<div class="caja"><div class="vacio">Primero conecta Chatwoot en <a href="#" data-ir="conocimiento" data-k-tab-ir="config">📚 Base del asistente → ⚙️ Configuración</a>.</div></div>`;
+  const bandejas = bandejasRedes();
+  const sedes = e.sedes.length ? e.sedes : [''];
+  const tarjeta = (canal, sede) => {
+    const mias = bandejas.filter(b => b.tipo === canal.k && (b.cfg.sede || '') === sede);
+    const libres = bandejas.filter(b => b.tipo === canal.k && !b.cfg.sede);
+    const cuerpo = mias.length ? mias.map(b => { const st = (R.porBandeja || {})[b.id] || {}; const modo = b.cfg.modo || 'apagado';
+      return `<div class="rd-bandeja"><div style="display:flex;justify-content:space-between;gap:6px;align-items:center"><b>${esc(b.nombre || 'Bandeja ' + b.id)}</b><span class="chip ${modo === 'apagado' ? 'gris' : modo === 'nota' ? 'ojo' : 'ok'}">${modo === 'apagado' ? '⏸ Apagado' : modo === 'nota' ? '📝 Nota' : '🤖 Responde'}</span></div>
+        <select data-r-modo-b="${b.id}" style="width:100%;margin:6px 0">${Object.entries(R.modos).map(([k, v]) => `<option value="${k}" ${k === modo ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>
+        <div class="rd-stats">${st.total ? `Acierto <b>${st.acierto === null ? '—' : st.acierto + '%'}</b> · ${st.igual || 0} igual · ${st.editada || 0} editada · ${st.distinta || 0} distinta · ${st.total} en 30 días` : 'Sin sugerencias todavía'}</div>
+        <div class="acciones" style="margin-top:6px"><button class="btn-mini p" data-k="r-probar-canal" data-sede="${esc(sede)}" data-canal="${esc(canal.n)}">💬 Probar este canal</button><button class="btn-mini" data-k="r-sede-b" data-id="${b.id}" title="Cambiar de sede">↔ Sede</button></div></div>`; }).join('')
+      : `<div class="rd-vacio">⚪ No conectado${libres.length ? `<br><small>Hay ${libres.length} bandeja(s) de ${canal.n} sin sede: <a href="#" data-k="r-asignar" data-canal="${canal.k}" data-sede="${esc(sede)}">asignar aquí</a></small>` : ''}<div class="acciones" style="justify-content:center;margin-top:6px"><button class="btn-mini" data-k="r-como" data-canal="${canal.k}">Cómo conectarlo</button><button class="btn-mini" data-k="r-probar-canal" data-sede="${esc(sede)}" data-canal="${esc(canal.n)}">💬 Probar</button></div></div>`;
+    return `<div class="rd-tarjeta ${mias.some(b => (b.cfg.modo || 'apagado') !== 'apagado') ? 'activa' : mias.length ? 'conectada' : ''}"><div class="rd-cab">${canal.i} ${canal.n}</div>${cuerpo}</div>`;
+  };
+  const otras = bandejas.filter(b => b.tipo === 'otro');
+  const conv = c => `${R.publico}/app/accounts/${R.cuenta}/conversations/${c}`;
+  const ult = (R.ultimas || []).map(x => { const b = bandejas.find(y => String(y.id) === String(x.bandeja)); return `<tr><td>${fechaCorta(x.creado)}<br><small style="color:var(--suave)">${new Date(x.creado).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</small></td>
+      <td>${esc(b ? b.nombre : '#' + x.bandeja)}<br><small style="color:var(--suave)">${esc(x.sede || '—')}</small></td><td class="envolver" style="max-width:240px">${esc((x.cliente || '').slice(0, 120))}</td>
+      <td class="envolver" style="max-width:320px"><small>${esc((x.sugerencia || x.error || '').slice(0, 180))}${(x.sugerencia || '').length > 180 ? '…' : ''}</small>${x.pasar_a_asesor ? '<br><span class="chip ojo">👤 asesor</span>' : ''}</td>
+      <td><span class="chip ${(RES_K[x.resultado] || ['gris'])[0]}" ${x.enviada ? `title="Envió: ${esc(x.enviada.slice(0, 300))}"` : ''}>${(RES_K[x.resultado] || ['', x.resultado])[1]}${x.parecido !== null && x.resultado !== 'automatica' ? ' · ' + Math.round(x.parecido * 100) + '%' : ''}</span></td>
+      <td><a class="btn-mini" style="text-decoration:none;display:inline-block" href="${esc(conv(x.conversacion))}" target="_blank" rel="noopener">Abrir</a></td></tr>`; }).join('');
+  const tarjetasSede = Object.entries(R.porSede || {}).map(([sd, x]) => `<div class="kpi" style="border-left-color:${x.acierto === null ? '#94a3b8' : x.acierto >= 90 ? 'var(--verde)' : x.acierto >= 70 ? 'var(--ambar)' : 'var(--rojo)'}">
+      <div class="e">${esc(sd)} · acierto</div><div class="n">${x.acierto === null ? '—' : x.acierto + '%'}</div><div class="d">${x.medidas} medidas · ${x.total} sugerencias (30 días)</div></div>`).join('');
+  const estado = R.revision ? (R.revision.error ? `<span class="chip mal">⛔ Chatwoot no responde: ${esc(R.revision.error)}</span>` : `<span class="chip ok">🔄 Revisando Chatwoot cada 5 s</span>`) : '<span class="chip gris">⏸ Todas las redes apagadas</span>';
+  return cabecera('📲 Redes sociales', 'Cada red de cada sede: si está conectada, qué hace el asistente y cómo le va · ' + estado, selEmp + `<button class="btn-sec" data-k="r-probar">↻ Actualizar</button>`) +
+    `${tarjetasSede ? `<div class="kpis">${tarjetasSede}</div>` : ''}
+    <div class="rd-rejilla" style="grid-template-columns:repeat(${sedes.length},minmax(0,1fr))">
+      ${sedes.map(sd => `<div><h3 class="rd-sede">${sd ? '📍 ' + esc(sd) : 'Sin sede'}</h3>${CANALES.map(c => tarjeta(c, sd)).join('')}</div>`).join('')}
+    </div>
+    <div class="rd-tarjeta proximo"><div class="rd-cab">🎵 TikTok <span class="chip gris">Próximamente</span></div><div class="rd-vacio">Chatwoot todavía no recibe mensajes directos de TikTok. Cuando haya forma de conectarlo, se activa aquí.</div></div>
+    ${otras.length ? `<div class="caja"><h2>Otras bandejas de Chatwoot</h2><table><tbody>${otras.map(b => `<tr><td><b>${esc(b.nombre)}</b><br><small style="color:var(--suave)">${esc(b.canal || '')}</small></td><td>${esc(b.cfg.sede || 'Sin sede')}</td><td>${esc(R.modos[b.cfg.modo || 'apagado'])}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${ult ? `<div class="caja"><h2>Últimas sugerencias (todas las redes)</h2><table><thead><tr><th>Cuándo</th><th>Red</th><th>Cliente</th><th>Sugerencia</th><th>Resultado</th><th></th></tr></thead><tbody>${ult}</tbody></table></div>` : ''}
+    <p class="sub" style="margin-top:8px">Con 90% de acierto o más en ~200 conversaciones, una red se puede pasar a "Responde solo". Las redes de las páginas reales déjalas en <b>Apagado</b> hasta el día del cambio.</p>`;
+}
+async function guardarBandeja(id, cambios) {
+  const b = bandejasRedes().find(x => String(x.id) === String(id));
+  const todas = {};
+  for (const x of bandejasRedes()) todas[x.id] = { nombre: x.nombre || x.cfg.nombre || '', canal: x.canal || x.cfg.canal || '', sede: x.cfg.sede || '', modo: x.cfg.modo || 'apagado' };
+  todas[id] = { ...todas[id], ...cambios, nombre: (b && b.nombre) || '', canal: (b && b.canal) || '' };
+  const r = await api('/api/oficina/redes/guardar', { empresa_id: kEmpresa, bandejas: todas });
+  aviso(r.ok ? 'Guardado.' : (r.data.error || 'Error'));
+  const rr = await api('/api/oficina/redes?empresa=' + kEmpresa); if (rr.ok) R = rr.data;
+  pintar();
+}
+function probarCanal(sede, canal) {
+  kChat = []; kChatSede = sede;
+  abrirModal(`<div class="caja" style="box-shadow:none;padding:0;margin:0">${htmlChatK(`💬 Probar ${esc(canal)}${sede ? ' · ' + esc(sede) : ''}`, 'Escribe como si fueras un cliente por este canal. Es una prueba: no le llega a nadie.', sede)}</div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
+  document.getElementById('modal').classList.add('ancho');
 }
 function verArchivo(f) {
   const q = f.quitado || {};
@@ -945,6 +1038,10 @@ function ejemploConexion() {
     <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
 }
 document.addEventListener('click', async ev => {
+  const tb = ev.target.closest('[data-k-tab]');
+  if (tb && vista === 'conocimiento') { ev.preventDefault(); kTab = tb.dataset.kTab; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} if (kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; } pintar(); if (tb.closest('#modal')) cerrarModal(); return; }
+  const ti = ev.target.closest('[data-k-tab-ir]');
+  if (ti) { kTab = ti.dataset.kTabIr; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} }
   const t = ev.target.closest('[data-k]');
   if (!t) return;
   ev.preventDefault();
@@ -988,14 +1085,29 @@ document.addEventListener('click', async ev => {
   if (accion === 'probar') return probarConocimiento();
   if (accion === 'chat-enviar') return enviarChatK();
   if (accion === 'chat-nuevo') { kChat = []; return repintarChatK(); }
-  if (accion === 'instrucciones') return formInstrucciones();
+  if (accion === 'instrucciones') { kTab = 'config'; return ir('conocimiento'); }
+  if (accion === 'instr-guardar') return guardarInstrucciones();
+  if (accion === 'r-probar-canal') return probarCanal(t.dataset.sede || '', t.dataset.canal || '');
+  if (accion === 'r-como') { const c = CANALES.find(x => x.k === t.dataset.canal); return abrirModal(`<h2>${c.i} Conectar ${c.n}</h2><p style="font-size:13.5px;line-height:1.6">${c.como}</p><p style="font-size:13px;color:var(--suave)">Cuando la bandeja exista en Chatwoot, toca <b>↻ Actualizar</b> aquí y aparece en su tarjeta (si no tiene sede, sale "asignar aquí").</p><div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`); }
+  if (accion === 'r-asignar') { const libre = bandejasRedes().find(b => b.tipo === t.dataset.canal && !b.cfg.sede); if (libre) return guardarBandeja(libre.id, { sede: t.dataset.sede, modo: libre.cfg.modo || 'apagado' }); return; }
+  if (accion === 'r-sede-b') {
+    const b = bandejasRedes().find(x => String(x.id) === String(t.dataset.id)); if (!b) return;
+    const sedes = K.empresa.sedes;
+    abrirModal(`<h2>↔ Sede de ${esc(b.nombre)}</h2>${campo('rSedeNueva', 'Sede', `<select id="rSedeNueva"><option value="">Sin sede</option>${sedes.map(x => `<option ${x === (b.cfg.sede || '') ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`)}${pieModal(false)}`);
+    document.getElementById('fGuardar').onclick = async () => { cerrarModal(); await guardarBandeja(b.id, { sede: document.getElementById('rSedeNueva').value }); };
+    return;
+  }
+  if (accion === 'r-guardar-equipos') {
+    const equipos = {}; document.querySelectorAll('[data-r-equipo]').forEach(sel => { if (sel.value) equipos[sel.dataset.rEquipo] = sel.value; });
+    const g = await guardarRedes({ equipos }); aviso(g.ok ? 'Equipos guardados.' : (g.data.error || 'Error')); await cargarConocimiento(); return pintar();
+  }
   if (accion === 'ej-nuevo') return formEjemplo({});
   if (accion === 'r-ayuda') return ayudaRedes();
   if (accion === 'r-guardar') { const g = await guardarRedes(); if (!g.ok) return aviso(g.data.error || 'Error'); await cargarConocimiento(); if (R.tieneToken && R.cuenta) await probarRedes(); return pintar(); }
   if (accion === 'r-probar') { await probarRedes(); return pintar(); }
   if (accion === 'r-copiar') { try { await navigator.clipboard.writeText(document.getElementById('rAviso').textContent); aviso('Dirección copiada. Pégala en Chatwoot → Webhooks.'); } catch (e) { aviso('No se pudo copiar.'); } return; }
   if (accion === 'r-crear-equipo') { const r = await api('/api/oficina/redes/equipo', { empresa_id: kEmpresa, sede: t.dataset.sede }); if (!r.ok) return aviso(r.data.error || 'Error'); await probarRedes(); await cargarConocimiento(); aviso('Equipo creado en Chatwoot.'); return pintar(); }
-  if (accion === 'r-guardar-bandejas') {
+  if (accion === 'r-guardar-bandejas-viejo') {
     const bandejas = {}; document.querySelectorAll('[data-r-sede]').forEach(sel => { const id = sel.dataset.rSede; bandejas[id] = { nombre: sel.dataset.rNombre, sede: sel.value, modo: document.querySelector(`[data-r-modo="${id}"]`).value }; });
     const equipos = {}; document.querySelectorAll('[data-r-equipo]').forEach(sel => { if (sel.value) equipos[sel.dataset.rEquipo] = sel.value; });
     const g = await guardarRedes({ bandejas, equipos }); aviso(g.ok ? 'Guardado. El asistente ya atiende esas bandejas.' : (g.data.error || 'Error')); await cargarConocimiento(); return pintar();
@@ -1017,7 +1129,8 @@ document.addEventListener('click', async ev => {
   }
 });
 document.addEventListener('change', async e => {
-  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; kChat = []; kChatSede = ''; rProbe = null; return ir('conocimiento'); }
+  if (e.target.id === 'kEmpresa') { kEmpresa = e.target.value; kChat = []; kChatSede = ''; rProbe = null; return ir(vista); }
+  if (e.target.dataset && e.target.dataset.rModoB) { const id = e.target.dataset.rModoB, modo = e.target.value; if (modo === 'responder' && !confirm('En "Responde solo" el asistente le contesta directo al cliente, sin que un asesor lo revise. ¿Seguro?')) { pintar(); return; } return guardarBandeja(id, { modo }); }
   if (e.target.id === 'kChatSede') { kChatSede = e.target.value; if (kChat.length) { kChat = []; repintarChatK(); aviso('Nueva conversación en otra sede.'); } return; }
   if (e.target.id === 'kArchivos' || e.target.id === 'kCarpeta') { const l = [...e.target.files]; e.target.value = ''; if (l.length) await subirArchivos(l); return; }
   if (e.target.classList.contains('k-sede')) { await api('/api/oficina/conocimiento/sede', { id: e.target.dataset.id, sede: e.target.value }); aviso('Sede cambiada.'); return cargarConocimiento(); }
@@ -1193,7 +1306,7 @@ document.getElementById('btnTema').onclick = () => { const o = document.body.cla
   let inicial = 'inicio';
   try { inicial = localStorage.getItem('oficinaVista') || 'inicio'; } catch (e) {}
   const pedida = new URLSearchParams(location.search).get('ir'); if (pedida) inicial = pedida;
-  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'empresas', 'herramientas'].includes(inicial) ? inicial : 'inicio');
+  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'empresas', 'herramientas'].includes(inicial) ? inicial : 'inicio');
   cargarChatContactos();
   // Se mantiene al día solo: lo de la pantalla cada minuto, el chat cada pocos segundos.
   setInterval(async () => {
