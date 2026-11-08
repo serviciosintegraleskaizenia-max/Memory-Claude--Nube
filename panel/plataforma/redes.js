@@ -6,12 +6,15 @@
 // Si hay que pasar a un asesor, asigna la conversación al equipo de la sede y le pone la etiqueta "asesor".
 // Mide la tasa de acierto: compara cada sugerencia con lo que el asesor envió de verdad.
 //
-// Chatwoot -> Ajustes -> Integraciones -> Webhooks -> URL: http://host.docker.internal:PUERTO/api/chatwoot/evento?clave=...  (evento: Mensaje creado)
+// Cómo se entera: el central le pregunta a Chatwoot cada 5 segundos si hay mensajes nuevos (no hace falta webhook:
+// Chatwoot no acepta webhooks hacia direcciones internas). El webhook /api/chatwoot/evento sigue disponible si algún día
+// el central tiene una dirección pública.
 
 const crypto = require('crypto');
 
 const MODOS = { apagado: 'Apagado', nota: 'Nota privada para el asesor', responder: 'Responde solo al cliente' };
 const ESPERA_MS = 4000;          // se espera a que el cliente termine de escribir ("hola" "hola" "precio?")
+const REVISAR_MS = 5000;         // cada cuánto se le pregunta a Chatwoot si hay mensajes nuevos
 const ETIQUETA_ASESOR = 'asesor';
 
 function normal(t) {
@@ -38,6 +41,7 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
   const esperas = new Map();      // conversación -> temporizador (espera a que el cliente termine)
   const vistos = new Set();       // mensajes ya procesados (Chatwoot puede repetir el aviso)
   const propios = new Set();      // mensajes que mandó el asistente (para no contarlos como del asesor)
+  const respondido = new Map();   // conversación -> último mensaje del cliente que ya se atendió
 
   async function preparar() {
     if (!activo) return;
@@ -48,6 +52,79 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       pasar_a_asesor BOOLEAN NOT NULL DEFAULT FALSE, motivo VARCHAR(20) NOT NULL DEFAULT '', enviada TEXT, parecido NUMERIC(4,3),
       resultado VARCHAR(14) NOT NULL DEFAULT 'pendiente', error TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), respondido TIMESTAMPTZ)`);
     await client.query('CREATE INDEX IF NOT EXISTS redes_sugerencias_conv ON redes_sugerencias (empresa_id, conversacion, resultado)');
+    // Hasta qué mensaje se revisó cada conversación (para no contestar dos veces ni contestar historial viejo).
+    await client.query(`CREATE TABLE IF NOT EXISTS redes_visto (
+      empresa_id INTEGER NOT NULL, conversacion INTEGER NOT NULL, ultimo_id BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (empresa_id, conversacion))`);
+    // La clave del aviso se cambia una vez (la anterior pudo quedar a la vista en un registro de error).
+    for (const e of (await client.query("SELECT id, chatwoot FROM empresas WHERE chatwoot->>'clave' IS NOT NULL AND COALESCE(chatwoot->>'clave2', '') = ''")).rows) {
+      await client.query('UPDATE empresas SET chatwoot = $1 WHERE id = $2', [JSON.stringify({ ...e.chatwoot, clave: crypto.randomBytes(20).toString('hex'), clave2: '1' }), e.id]);
+    }
+    setInterval(revisarTodo, REVISAR_MS).unref();
+    setTimeout(revisarTodo, 3000).unref();
+  }
+
+  // ---------- Revisión periódica de Chatwoot (cada 5 s) ----------
+  const ultimaRevision = new Map();   // empresa -> { cuando, error }
+  let revisando = false;
+  async function revisarTodo() {
+    if (revisando) return;
+    revisando = true;
+    try {
+      const filas = (await client.query("SELECT id, nombre, slug, chatwoot, conocimiento_sedes FROM empresas WHERE chatwoot->>'token' IS NOT NULL AND (chatwoot->>'cuenta')::int > 0")).rows;
+      for (const e of filas) {
+        const aj = ajustes(e);
+        const activas = Object.entries(aj.bandejas).filter(([, b]) => b.modo && b.modo !== 'apagado').map(([id]) => Number(id));
+        if (!activas.length) { ultimaRevision.delete(e.id); continue; }
+        try {
+          await revisarEmpresa(e, aj, activas);
+          ultimaRevision.set(e.id, { cuando: Date.now(), error: '' });
+        } catch (err) {
+          ultimaRevision.set(e.id, { cuando: Date.now(), error: err.message });
+        }
+      }
+    } catch (err) { /* la base no responde: se intenta en la próxima vuelta */ }
+    finally { revisando = false; }
+  }
+  async function revisarEmpresa(e, aj, activas) {
+    const d = await cw(aj, 'GET', '/conversations?status=all&assignee_type=all&page=1');
+    const convs = lista(d).filter(c => activas.includes(Number(c.inbox_id)));
+    if (!convs.length) return;
+    const vistos = new Map((await client.query('SELECT conversacion, ultimo_id FROM redes_visto WHERE empresa_id = $1 AND conversacion = ANY($2)',
+      [e.id, convs.map(c => Number(c.id))])).rows.map(r => [Number(r.conversacion), Number(r.ultimo_id)]));
+    for (const c of convs) {
+      const conv = Number(c.id);
+      const ultimoLista = Number((c.last_non_activity_message && c.last_non_activity_message.id) || (Array.isArray(c.messages) && c.messages.length && c.messages[c.messages.length - 1].id) || 0);
+      const visto = vistos.get(conv);
+      if (visto === undefined) {
+        // Conversación vista por primera vez: si su último mensaje es del cliente y es reciente (menos de 2 min), se atiende;
+        // si no, solo se marca (no se contesta historial viejo).
+        const reciente = Number(c.last_activity_at || c.timestamp || 0) * 1000 > Date.now() - 120000;
+        await client.query('INSERT INTO redes_visto (empresa_id, conversacion, ultimo_id) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [e.id, conv, reciente ? 0 : ultimoLista]);
+        if (!reciente) continue;
+      } else if (ultimoLista && ultimoLista <= visto) continue;
+      const msgs = lista(await cw(aj, 'GET', `/conversations/${conv}/messages`)).sort((a, b) => a.id - b.id);
+      const desde = vistos.get(conv) || 0;
+      let max = desde, hayCliente = false, maxCliente = 0;
+      for (const m of msgs) {
+        if (Number(m.id) <= desde) continue;
+        max = Math.max(max, Number(m.id));
+        if (m.private || !String(m.content || '').trim()) continue;
+        const entrante = m.message_type === 0 || m.message_type === 'incoming';
+        const saliente = m.message_type === 1 || m.message_type === 'outgoing';
+        if (entrante) { hayCliente = true; maxCliente = Math.max(maxCliente, Number(m.id)); }
+        else if (saliente && !propios.has(String(m.id))) {
+          const quien = m.sender && String(m.sender.type || '').toLowerCase();
+          if (!quien || quien === 'user' || quien === 'agent') await medir(e.id, conv, m.content);
+        }
+      }
+      if (max > desde) await client.query('INSERT INTO redes_visto (empresa_id, conversacion, ultimo_id) VALUES ($1,$2,$3) ON CONFLICT (empresa_id, conversacion) DO UPDATE SET ultimo_id = GREATEST(redes_visto.ultimo_id, EXCLUDED.ultimo_id)', [e.id, conv, max]);
+      // Mensaje nuevo del cliente: se espera a que termine de escribir y se atiende una sola vez.
+      const k = e.id + ':' + conv;
+      if (hayCliente && maxCliente > (respondido.get(k) || 0)) {
+        clearTimeout(esperas.get(k));
+        esperas.set(k, setTimeout(() => { esperas.delete(k); atender(e.id, Number(c.inbox_id), conv); }, ESPERA_MS));
+      }
+    }
   }
 
   const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -84,9 +161,14 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
   }
   const lista = d => Array.isArray(d) ? d : Array.isArray(d.payload) ? d.payload : Array.isArray(d.data) ? d.data : (d.data && Array.isArray(d.data.payload) ? d.data.payload : []);
 
-  async function historial(aj, conv) {
+  async function historial(aj, conv, k) {
     const d = await cw(aj, 'GET', `/conversations/${conv}/messages`);
-    return lista(d)
+    const todos = lista(d);
+    if (k) {
+      const maxCliente = Math.max(0, ...todos.filter(m => !m.private && (m.message_type === 0 || m.message_type === 'incoming')).map(m => Number(m.id) || 0));
+      respondido.set(k, Math.max(respondido.get(k) || 0, maxCliente));
+    }
+    return todos
       .filter(m => !m.private && (m.message_type === 0 || m.message_type === 1 || m.message_type === 'incoming' || m.message_type === 'outgoing') && String(m.content || '').trim())
       .sort((a, b) => (a.created_at || 0) - (b.created_at || 0) || a.id - b.id)
       .map(m => ({ rol: (m.message_type === 0 || m.message_type === 'incoming') ? 'cliente' : 'asistente', texto: String(m.content) }))
@@ -111,7 +193,7 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
     const sede = b.sede || '';
     let fila;
     try {
-      const mensajes = await historial(aj, conv);
+      const mensajes = await historial(aj, conv, e.id + ':' + conv);
       if (!mensajes.length || mensajes[mensajes.length - 1].rol !== 'cliente') return;
       // La sugerencia anterior que nadie respondió queda "sin respuesta".
       await client.query("UPDATE redes_sugerencias SET resultado = 'sin_respuesta' WHERE empresa_id = $1 AND conversacion = $2 AND resultado = 'pendiente'", [e.id, conv]);
@@ -218,7 +300,8 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       FROM redes_sugerencias WHERE empresa_id = $1 ORDER BY id DESC LIMIT 25`, [e.id])).rows;
     return {
       url: aj.url, publico: aj.publico, cuenta: aj.cuenta || '', tieneToken: Boolean(aj.token), clave: aj.clave,
-      bandejas: aj.bandejas, equipos: aj.equipos, porSede, ultimas, modos: MODOS
+      bandejas: aj.bandejas, equipos: aj.equipos, porSede, ultimas, modos: MODOS,
+      revision: ultimaRevision.has(e.id) ? { haceSeg: Math.round((Date.now() - ultimaRevision.get(e.id).cuando) / 1000), error: ultimaRevision.get(e.id).error } : null
     };
   }
 
@@ -281,5 +364,5 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
 
-  return { activo, preparar, manejarPublico, manejarOficina, _probar: { parecido, resultadoDe } };
+  return { activo, preparar, manejarPublico, manejarOficina, revisarTodo, _probar: { parecido, resultadoDe } };
 };

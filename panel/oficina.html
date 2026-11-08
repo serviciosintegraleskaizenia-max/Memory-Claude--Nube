@@ -821,7 +821,6 @@ const RES_K = { igual: ['ok', 'Igual'], editada: ['ojo', 'Editada'], distinta: [
 function cajaRedes() {
   if (!R) return '';
   const e = K.empresa;
-  const urlAviso = `http://host.docker.internal:${location.port || '3090'}/api/chatwoot/evento?clave=${R.clave || '(guarda la conexión primero)'}`;
   const sedes = e.sedes.length ? e.sedes : [''];
   const bandejas = rProbe ? rProbe.bandejas : Object.entries(R.bandejas).map(([id, b]) => ({ id, nombre: b.nombre, canal: '' }));
   const filaBandeja = b => { const c = R.bandejas[String(b.id)] || {}; return `<tr><td><b>${esc(b.nombre || ('Bandeja ' + b.id))}</b><br><small style="color:var(--suave)">#${b.id}${b.canal ? ' · ' + esc(b.canal) : ''}</small></td>
@@ -848,8 +847,9 @@ function cajaRedes() {
       ${campo('rToken', 'Token de acceso', `<input id="rToken" type="password" autocomplete="off" placeholder="${R.tieneToken ? '•••••• guardado (vacío = no cambiar)' : 'Pégalo aquí (Perfil → Token de acceso)'}">`)}
     </div>
     <div class="acciones"><button class="btn" data-k="r-guardar">Guardar y probar conexión</button>${R.tieneToken && R.cuenta ? '<button class="btn-sec" data-k="r-probar">Leer bandejas de Chatwoot</button>' : ''}</div>
-    ${R.clave ? `<div style="margin-top:12px;font-size:13px"><b>Dirección del aviso</b> (en Chatwoot → Ajustes → Integraciones → Webhooks, evento <b>Mensaje creado</b>):
-      <div class="k-clave" id="rAviso" style="margin-top:4px">${esc(urlAviso)}</div><button class="btn-mini" data-k="r-copiar" style="margin-top:4px">📋 Copiar dirección</button></div>` : ''}
+    <div style="margin-top:12px;font-size:13px">${R.revision ? (R.revision.error ? `<span class="chip mal">⛔ Chatwoot no responde</span> ${esc(R.revision.error)}` : `<span class="chip ok">🔄 Revisando Chatwoot cada 5 segundos</span> <span style="color:var(--suave)">última revisión hace ${R.revision.haceSeg} s</span>`)
+      : (R.tieneToken && R.cuenta ? '<span class="chip gris">En pausa</span> <span style="color:var(--suave)">pon al menos una bandeja en "Nota privada" o "Responde solo"</span>' : '')}
+      <div style="color:var(--suave);margin-top:4px">No hace falta webhook en Chatwoot: el central revisa los mensajes nuevos solo. (Si creaste uno, puedes borrarlo.)</div></div>
     ${bandejas.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Bandejas de entrada</h3><table><thead><tr><th>Bandeja</th><th>Sede</th><th>Qué hace el asistente</th></tr></thead><tbody>${bandejas.map(filaBandeja).join('')}</tbody></table>` : ''}
     ${e.sedes.length ? `<h3 style="font-size:14px;margin:16px 0 6px">Equipo de cada sede <small style="font-weight:400;color:var(--suave)">(a quién se asigna cuando hay que pasar a un asesor)</small></h3><table><tbody>${e.sedes.map(filaSede).join('')}</tbody></table>` : ''}
     ${bandejas.length || e.sedes.length ? '<div class="acciones" style="margin-top:8px"><button class="btn" data-k="r-guardar-bandejas">Guardar bandejas y equipos</button></div>' : ''}
@@ -864,7 +864,7 @@ function ayudaRedes() {
       <li><b>N.º de cuenta:</b> es el número que sale en la dirección de Chatwoot: <code>/app/accounts/<b>2</b>/…</code></li>
       <li>Toca <b>Guardar y probar conexión</b>: salen tus bandejas de entrada.</li>
       <li>A cada bandeja ponle su <b>sede</b> y qué hace el asistente (empieza con <b>Nota privada</b>). Elige o crea el <b>equipo</b> de cada sede. <b>Guardar bandejas y equipos</b>.</li>
-      <li>En Chatwoot: <b>Ajustes → Integraciones → Webhooks → Configurar → Agregar nuevo webhook</b>. Pega la <b>Dirección del aviso</b> y marca solo <b>Mensaje creado</b> (message_created). Crear.</li>
+      <li>Listo: el central revisa Chatwoot cada 5 segundos (arriba sale "🔄 Revisando…"). No hace falta webhook.</li>
       <li>Manda un mensaje a la página de prueba: en unos segundos aparece en Chatwoot una <b>nota amarilla</b> con la sugerencia.</li></ol>
     <p style="font-size:13px;color:var(--suave)">Las bandejas de las páginas reales déjalas en <b>Apagado</b> hasta el día del cambio.</p>
     <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
