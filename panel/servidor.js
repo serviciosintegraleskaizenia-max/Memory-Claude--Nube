@@ -167,6 +167,8 @@ async function inicializarTablas() {
   // Pantalla de inicio de sesión personalizable: foto de fondo, título, subtítulo y redes sociales.
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS fondo_login TEXT');
   await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS login_titulo VARCHAR(80) NOT NULL DEFAULT ''");
+  // Nombre que se ve junto a la marca Zentralia (ej. "Somos Viajes Punta Cana / Orlando"); vacío = el nombre de la empresa.
+  await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS marca_nombre VARCHAR(80) NOT NULL DEFAULT ''");
   await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS login_subtitulo VARCHAR(160) NOT NULL DEFAULT ''");
   await client.query("ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS redes JSONB NOT NULL DEFAULT '{}'::jsonb");
   await client.query('ALTER TABLE empresa_datos ADD COLUMN IF NOT EXISTS copia_automatica BOOLEAN NOT NULL DEFAULT TRUE');
@@ -1579,7 +1581,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/empresa') {
       const r = await client.query(
         `SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS "tieneLogo", banner IS NOT NULL AS "tieneBanner",
-                fondo_login IS NOT NULL AS "tieneFondo", login_titulo, login_subtitulo, redes,
+                fondo_login IS NOT NULL AS "tieneFondo", login_titulo, login_subtitulo, redes, marca_nombre,
                 EXTRACT(EPOCH FROM actualizado)::bigint AS version
          FROM empresa_datos WHERE id = 1`
       );
@@ -2179,6 +2181,7 @@ http.createServer(async (req, res) => {
         return json(res, 400, { error: 'La foto de fondo debe ser JPG, PNG o WEBP de menos de 4 MB.' });
       }
       const loginTitulo = String(b.login_titulo || '').trim().slice(0, 80);
+      const marcaNombre = String(b.marca_nombre || '').trim().slice(0, 80);
       const loginSubtitulo = String(b.login_subtitulo || '').trim().slice(0, 160);
       const redes = {};
       for (const red of REDES) {
@@ -2191,8 +2194,8 @@ http.createServer(async (req, res) => {
       const previa = (await client.query(
         'SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS logo, banner IS NOT NULL AS banner FROM empresa_datos WHERE id = 1'
       )).rows[0];
-      const valores = [nombre, rnc, direccion, enlace, loginTitulo, loginSubtitulo, redes];
-      const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'login_titulo = $5', 'login_subtitulo = $6', 'redes = $7', 'actualizado = NOW()'];
+      const valores = [nombre, rnc, direccion, enlace, loginTitulo, loginSubtitulo, redes, marcaNombre];
+      const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'login_titulo = $5', 'login_subtitulo = $6', 'redes = $7', 'marca_nombre = $8', 'actualizado = NOW()'];
       if (b.fondo !== undefined) {
         valores.push(b.fondo || null);
         cambios.push(`fondo_login = $${valores.length}`);
@@ -2208,7 +2211,7 @@ http.createServer(async (req, res) => {
         logo: b.logo === undefined ? 'sin cambio' : (b.logo ? 'nuevo' : 'quitado'),
         banner: b.banner === undefined ? 'sin cambio' : (b.banner ? 'nuevo' : 'quitado'),
         fondo: b.fondo === undefined ? 'sin cambio' : (b.fondo ? 'nuevo' : 'quitado'),
-        login_titulo: loginTitulo, login_subtitulo: loginSubtitulo, redes
+        login_titulo: loginTitulo, login_subtitulo: loginSubtitulo, redes, marca_nombre: marcaNombre
       });
       return json(res, 200, { ok: true });
     }

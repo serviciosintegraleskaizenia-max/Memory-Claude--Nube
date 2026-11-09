@@ -1019,11 +1019,12 @@ async function cargarEmpresa() {
   if (!r.ok) return;
   empresaActual = r.data;
   const v = encodeURIComponent(r.data.version || '');
-  const titulo = 'Zentralia App · ' + r.data.nombre;
-  document.getElementById('tituloEmpresa').innerHTML = marcaZentralia(r.data.nombre);
+  const nombreMarca = r.data.marca_nombre || r.data.nombre;
+  const titulo = 'Zentralia App · ' + nombreMarca;
+  document.getElementById('tituloEmpresa').innerHTML = marcaZentralia(nombreMarca);
   // Un título propio de la empresa (si lo configuró) va debajo de la marca.
   const propio = r.data.login_titulo && !/^reservas\s*-/i.test(r.data.login_titulo) ? r.data.login_titulo : '';
-  document.getElementById('tituloLogin').innerHTML = marcaZentralia(r.data.nombre) + (propio ? `<div class="zt-propio">${esc(propio)}</div>` : '');
+  document.getElementById('tituloLogin').innerHTML = marcaZentralia(nombreMarca) + (propio ? `<div class="zt-propio">${esc(propio)}</div>` : '');
   document.getElementById('subtituloLogin').textContent = r.data.login_subtitulo || 'Ingresa con tu usuario y contraseña.';
   const logoLogin = document.getElementById('logoLogin');
   logoLogin.style.display = r.data.tieneLogo ? 'block' : 'none';
@@ -3576,6 +3577,7 @@ function formEmpresa() {
 
     <div class="titulo-seccion">Pantalla de inicio de sesión</div>
     <div class="form-fila">
+      <label>Nombre junto a Zentralia (cabecera, inicio de sesión y pestaña)<input id="eMarcaNombre" maxlength="80" placeholder="${esc(e.nombre)}" value="${esc(e.marca_nombre || '')}"></label>
       <label>Texto debajo de la marca Zentralia (opcional)<input id="eLoginTitulo" maxlength="80" placeholder="Por ejemplo: Operaciones Punta Cana" value="${esc(e.login_titulo || '')}"></label>
       <label>Subtítulo<input id="eLoginSubtitulo" maxlength="160" placeholder="Ingresa con tu usuario y contraseña." value="${esc(e.login_subtitulo || '')}"></label>
     </div>
@@ -3630,7 +3632,7 @@ async function guardarEmpresa() {
   const r = await api('/api/empresa', {
     nombre: val('eNombre').trim(), rnc: val('eRnc').trim(), direccion: val('eDireccion').trim(),
     banner_enlace: val('eEnlace').trim(), logo, banner, fondo,
-    login_titulo: val('eLoginTitulo').trim(), login_subtitulo: val('eLoginSubtitulo').trim(),
+    login_titulo: val('eLoginTitulo').trim(), login_subtitulo: val('eLoginSubtitulo').trim(), marca_nombre: val('eMarcaNombre').trim(),
     redes: { instagram: val('eRedInstagram').trim(), facebook: val('eRedFacebook').trim(), whatsapp: val('eRedWhatsapp').trim(), tiktok: val('eRedTiktok').trim(), web: val('eRedWeb').trim() }
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
