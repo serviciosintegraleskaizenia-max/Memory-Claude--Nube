@@ -130,6 +130,9 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
       if (!f.hotel && !f.punto_llegada && !f.punto_partida) puntos.push({ tipo: 'falta', texto: 'Falta el hotel o el lugar del servicio.' });
       if ((Number(f.adultos) || 0) + (Number(f.ninos) || 0) + (Number(f.infantes) || 0) === 0 && ad + ni + inf === 0) puntos.push({ tipo: 'falta', texto: 'Falta la cantidad de pasajeros.' });
       if (!String(f.telefono || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el teléfono del pasajero.' });
+      // La IA avisa de qué datos no está segura (nota "[DUDA: vuelo, hora_servicio]").
+      const duda = String(f.error_ia ? '' : f.motivo || '').match(/\[DUDA:\s*([^\]]+)\]/i);
+      if (duda) puntos.push({ tipo: 'duda', texto: 'La IA no está segura de: ' + duda[1].replace(/_/g, ' ').replace(/ servicio/g, '') + '. Compáralo con el correo.' });
 
       // Aeropuerto de otro país para un hotel de República Dominicana (por ejemplo LIM o MCO con un hotel de Bávaro).
       // Cualquier aeropuerto del país sirve para cualquier zona: SDQ → Punta Cana es un traslado común.

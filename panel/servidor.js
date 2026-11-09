@@ -1660,6 +1660,32 @@ http.createServer(async (req, res) => {
       return json(res, panelListo ? 200 : 503, { listo: panelListo });
     }
 
+    // Lo pide n8n (en este mismo PC) antes de leer un correo: las correcciones que hicieron los asesores
+    // en correos anteriores del mismo remitente, para que la IA no repita el error.
+    if (req.method === 'GET' && url === '/api/ia/lecciones') {
+      if (!desdeEstePc(req)) return json(res, 403, { error: 'Solo desde este PC.' });
+      const p = new URL(req.url, 'http://localhost').searchParams;
+      const remitente = String(p.get('remitente') || '').toLowerCase().slice(0, 200);
+      const correo = (remitente.match(/[^\s<>"]+@[^\s<>"]+/) || [''])[0];
+      const dominio = (correo.split('@')[1] || '').replace(/[^a-z0-9.-]/g, '');
+      if (!dominio) return json(res, 200, { lecciones: [] });
+      const generico = /^(gmail|hotmail|outlook|live|yahoo|icloud|msn|aol|proton(mail)?)\./.test(dominio);
+      const filas = (await client.query(
+        `SELECT a.anterior, a.nuevo, a.detalle, c.asunto FROM auditoria a JOIN clasificacion c ON c.id::text = a.entidad_id
+         WHERE a.accion = 'editar_ia' AND a.fecha > NOW() - INTERVAL '120 days' AND ${generico ? 'LOWER(c.remitente) LIKE $1' : 'LOWER(c.remitente) LIKE $1'}
+         ORDER BY a.id DESC LIMIT 60`, [generico ? '%' + correo + '%' : '%@' + dominio + '%'])).rows;
+      const vistas = new Set(), lecciones = [];
+      for (const f of filas) {
+        const campo = String(f.detalle || '').replace(/\s*\(servicio #\d+\)/, '').trim();
+        const k = campo + '|' + f.anterior + '|' + f.nuevo;
+        if (vistas.has(k) || String(f.anterior) === String(f.nuevo)) continue;
+        vistas.add(k);
+        lecciones.push(`En un correo de este remitente (asunto "${String(f.asunto || '').slice(0, 80)}") pusiste en ${campo} "${String(f.anterior || '').slice(0, 80) || '(vacio)'}" y el asesor lo corrigio a "${String(f.nuevo || '').slice(0, 80) || '(vacio)'}".`);
+        if (lecciones.length >= 8) break;
+      }
+      return json(res, 200, { lecciones });
+    }
+
     // El panel central apaga este panel con su clave secreta (solo desde la misma máquina).
     if (req.method === 'POST' && url === '/api/interno/apagar') {
       // Solo desde esta misma máquina y sin pasar por el túnel o un proxy (esos traen la IP de afuera).

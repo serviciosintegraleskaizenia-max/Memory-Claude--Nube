@@ -204,6 +204,8 @@
   body.oscuro .srv-IN { background: #14532d; color: #bbf7d0; } body.oscuro .srv-OUT { background: #172554; color: #bfdbfe; } body.oscuro .srv-INTERHOTEL { background: #451a03; color: #fde68a; } body.oscuro .srv-ACTIVIDAD { background: #2e1065; color: #ddd6fe; } body.oscuro .srv-OTRO { background: #1e293b; color: #94a3b8; }
   .srv-nota { font-size: 11px; color: #b45309; font-weight: 600; }
   .srv-nota.srv-cancelado { color: #b91c1c; }
+  .dato-dudoso { background: #fef08a; color: #713f12; border-radius: 4px; padding: 0 4px; font-weight: 600; cursor: help; }
+  body.oscuro .dato-dudoso { background: #854d0e; color: #fef9c3; }
   .srv-nota.srv-extra { color: #6d28d9; }
   body.oscuro .srv-nota.srv-extra { color: #c4b5fd; }
   body.oscuro .srv-nota.srv-cancelado { color: #fca5a5; }
@@ -1283,8 +1285,17 @@ function agruparReservas(lista) {
   return grupos;
 }
 function notaServicio(r) {
-  const m = String(r.motivo || '');
+  const m = String(r.motivo || '').replace(/\s*\[DUDA:[^\]]*\]\s*/i, ' ').trim();
   return !r.error_ia && m && !/^(Histórico|Reanálisis)/.test(m) ? m : '';
+}
+// Datos de los que la IA no está segura: vienen al final de la nota como [DUDA: vuelo, hora_servicio].
+function dudasDe(r) {
+  const m = !r.error_ia && String(r.motivo || '').match(/\[DUDA:\s*([^\]]+)\]/i);
+  return new Set(m ? m[1].split(/[,\s]+/).map(x => x.trim()).filter(Boolean) : []);
+}
+// Marca en amarillo un dato dudoso (con un ? al pasar el ratón).
+function dudoso(s, campo, html) {
+  return dudasDe(s).has(campo) ? `<span class="dato-dudoso" title="La IA no está segura de este dato: compáralo con el correo">${html} ?</span>` : html;
 }
 const NOTA_CANCELADA = /^\s*(CANCELAD[OA]|EN ESPERA|STANDBY)\b/i;
 const NOTA_EXTRA = /^\s*EXTRAS?\s*:/i;
@@ -1544,13 +1555,13 @@ function pintar() {
             clientes: () => reserva(` class="recortar" title="${esc(clientesDe(g))}"`, `${falta(clientesDe(g))}`),
             telefono: () => reserva('', `${falta([...new Set(g.map(x => x.telefono).filter(Boolean))].join(', '))}`),
             pax: () => variosPax ? `<td>${falta(paxCorto(s))}</td>` : reserva('', `${falta(paxReserva(g, compacto))}`),
-            aeropuerto: () => `<td>${campoSrv(s, s.aeropuerto)}</td>`,
+            aeropuerto: () => `<td>${dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto))}</td>`,
             servicio: c => `<td class="col-srv">${c.con ? `<div class="sub">${campoSrv(s, s.aeropuerto)}</div>` : ''}<span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>`,
-            fecha: c => `<td${c.con ? ' class="srv-hora"' : ''}>${falta(s.fecha_servicio)}${c.con ? `<div class="sub">${horaServicio(s)}</div>` : ''}</td>`,
-            hora: () => `<td class="srv-hora">${horaServicio(s)}</td>`,
+            fecha: c => `<td${c.con ? ' class="srv-hora"' : ''}>${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio))}${c.con ? `<div class="sub">${dudoso(s, 'hora_servicio', horaServicio(s))}</div>` : ''}</td>`,
+            hora: () => `<td class="srv-hora">${dudoso(s, 'hora_servicio', horaServicio(s))}</td>`,
             aerolinea: () => `<td>${campoSrv(s, aerolineaDe(s.vuelo))}</td>`,
-            vuelo: c => `<td>${campoSrv(s, s.vuelo)}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo))}</div>` : ''}</td>`,
-            hotel: () => `<td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td>`,
+            vuelo: c => `<td>${dudoso(s, 'vuelo', campoSrv(s, s.vuelo))}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo))}</div>` : ''}</td>`,
+            hotel: () => `<td>${dudoso(s, 'hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td>`,
             estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}`)
           };
           return `
@@ -1884,8 +1895,8 @@ function pintarDatosModal(r) {
     <tr><td colspan="2"><b>Servicios de esta reserva (${serviciosDe(r).length})</b>
       <table class="tabla-servicios"><thead><tr><th>Tipo</th><th>Fecha</th><th>Hora</th><th>Vuelo</th><th>Aeropuerto</th><th>Hotel / destino</th><th>Pax</th></tr></thead><tbody>
       ${serviciosDe(r).map(s => { const t = tipoServicio(s); const nota = notaServicio(s); return `<tr><td><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? '<br>' + esc(s.actividad) : ''}${nota ? `<br><span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>
-        <td>${falta(s.fecha_servicio)}</td><td class="srv-hora">${horaServicio(s)}</td><td>${falta(s.vuelo)}${aerolineaDe(s.vuelo) ? '<br><small>' + esc(aerolineaDe(s.vuelo)) + '</small>' : ''}</td>
-        <td>${falta(s.aeropuerto)}</td><td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td><td>${falta(paxDe(s))}</td></tr>`; }).join('')}
+        <td>${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio))}</td><td class="srv-hora">${dudoso(s, 'hora_servicio', horaServicio(s))}</td><td>${dudoso(s, 'vuelo', falta(s.vuelo))}${aerolineaDe(s.vuelo) ? '<br><small>' + esc(aerolineaDe(s.vuelo)) + '</small>' : ''}</td>
+        <td>${dudoso(s, 'aeropuerto', falta(s.aeropuerto))}</td><td>${dudoso(s, 'hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td><td>${dudoso(s, 'pax', falta(paxDe(s)))}</td></tr>`; }).join('')}
       </tbody></table></td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cancelada_por ? `<tr><td>⛔ Cancelada</td><td><b style="color:#b91c1c">El correo #${r.cancelada_por} cancela esta reserva.</b> Cancélala también en el sistema de reservas y márcala como corresponde.</td></tr>` : r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
   pintarAsignacion(r);
 }
