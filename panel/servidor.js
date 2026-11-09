@@ -1391,6 +1391,40 @@ async function chequearN8n() {
   }
 }
 
+// ¿Está ENCENDIDO (publicado) el flujo "Correos - leer y clasificar"? n8n puede responder y tener el flujo apagado.
+// Usa la clave de la API de n8n: config.n8n.apiKey, o la que guardó el actualizador (cifrada con el usuario de Windows).
+let claveN8nCache = null;
+function claveApiN8n() {
+  if (config.n8n && config.n8n.apiKey) return config.n8n.apiKey;
+  if (claveN8nCache !== null) return claveN8nCache;
+  claveN8nCache = '';
+  const archivo = (config.n8n && config.n8n.archivoClave) || 'C:\\kaizen-actualizacion\\n8n-api.clave';
+  if (process.platform !== 'win32' || !fs.existsSync(archivo)) return '';
+  try {
+    const ps = `$s = Get-Content -LiteralPath '${archivo.replace(/'/g, "''")}' | ConvertTo-SecureString; ` +
+      '[Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))';
+    const r = require('child_process').spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+    claveN8nCache = r.status === 0 ? String(r.stdout || '').trim() : '';
+  } catch (e) { claveN8nCache = ''; }
+  return claveN8nCache;
+}
+async function chequearFlujoActivo() {
+  const base = { clave: 'n8n_flujo', nombre: 'Flujo de n8n encendido' };
+  const origen = origenN8n();
+  const clave = claveApiN8n();
+  if (!origen || !clave) return { ...base, estado: 'sin datos', detalle: 'Falta la clave de la API de n8n para revisar si el flujo está encendido.' };
+  try {
+    const r = await conTiempo(origen + '/api/v1/workflows?limit=100', { headers: { 'X-N8N-API-KEY': clave, Accept: 'application/json' } }, 10000);
+    if (r.status === 401 || r.status === 403) { claveN8nCache = null; return { ...base, estado: 'sin datos', detalle: 'n8n no aceptó la clave de la API.' }; }
+    if (!r.ok) return { ...base, estado: 'sin datos', detalle: 'n8n respondió ' + r.status + ' al pedir los flujos.' };
+    const d = await r.json();
+    const flujo = (d.data || []).find(w => /leer y clasificar/i.test(w.name || '') && !w.isArchived);
+    if (!flujo) return { ...base, estado: 'falla', detalle: 'No encuentro el flujo "Correos - leer y clasificar" en n8n.' };
+    return flujo.active ? { ...base, estado: 'bien', detalle: 'El flujo que lee los correos está encendido.' }
+      : { ...base, estado: 'falla', detalle: 'El flujo "Correos - leer y clasificar" está APAGADO: no entran correos nuevos. Ábrelo en n8n y pulsa Publish.' };
+  } catch (e) { return { ...base, estado: 'sin datos', detalle: 'No pude preguntar a n8n por el flujo: ' + e.message }; }
+}
+
 async function chequearFlujo() {
   const conMotor = config.motor && config.motor.activo && config.motor.sombra === false;
   const nombre = conMotor ? 'Lectura de correos (motor)' : 'Lectura de correos (n8n)';
@@ -1482,7 +1516,7 @@ async function revisarSalud() {
   if (revisandoSalud) return;
   revisandoSalud = true;
   try {
-    const chequeos = [await chequearN8n(), await chequearFlujo(), await chequearIa(), await chequearSaldo()];
+    const chequeos = [await chequearN8n(), await chequearFlujoActivo(), await chequearFlujo(), await chequearIa(), await chequearSaldo()];
     estadoSalud.revisado = new Date().toISOString();
     estadoSalud.chequeos = chequeos;
     // Las alertas del sistema son solo para el programador (Kaizen IA).
