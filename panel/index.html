@@ -24,7 +24,12 @@
   header h1 { margin: 0; font-size: 24px; font-weight: 600; }
   #tituloLogin { font-size: 26px; line-height: 1.3; }
   header p { margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
-  .encabezado-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .encabezado-der { display: flex; align-items: center; gap: 14px; }
+  .encabezado-columna { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .encabezado-botones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+  #redesEncabezado { justify-content: flex-end; }
+  #redesEncabezado:empty { display: none; }
+  @media (max-width: 760px) { .encabezado-der { flex-wrap: wrap; } .encabezado-columna { align-items: flex-start; } .encabezado-botones, #redesEncabezado { justify-content: flex-start; } }
   .logo-caja { background: white; border-radius: 10px; padding: 6px; display: flex; align-items: center; justify-content: center; }
   .logo-caja img { height: 40px; width: 40px; display: block; }
   .btn-tema { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
@@ -425,6 +430,8 @@
     <p id="datosEmpresa"></p>
   </div>
   <div class="encabezado-der">
+   <div class="encabezado-columna">
+    <div class="encabezado-botones">
     <span class="usuario-activo" id="usuarioActivo"></span>
     <button class="btn-tema campana" id="btnCampana" title="Notificaciones">🔔<span class="badge" id="badgeCampana" style="display:none;"></span></button>
     <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
@@ -435,7 +442,10 @@
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
     <button class="btn-tema" id="btnTema">Modo oscuro</button>
     <button class="btn-tema" id="btnSalir">Salir</button>
+    </div>
+    <!-- Las redes van debajo de los botones; el logo queda al lado de "Salir". -->
     <div class="redes" id="redesEncabezado"></div>
+   </div>
     <div class="logo-caja"><img id="logoEmpresa" src="/empresa/logo" alt="Logo"></div>
   </div>
 </header>
