@@ -237,7 +237,33 @@
   .cerrar { background: none; border: none; font-size: 26px; cursor: pointer; color: var(--texto-suave); line-height: 1; padding: 0 4px; }
   .modal-cuerpo { padding: 14px 20px; overflow-y: auto; flex: 1; }
   .correo-texto { background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-  .datos { width: 100%; margin-top: 14px; border-collapse: collapse; min-width: 0; }
+  .datos { width: 100%; margin-top: 6px; border-collapse: collapse; min-width: 0; }
+  .seccion-datos { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .ventana-flotante { position: fixed; right: 20px; bottom: 20px; width: 420px; height: 600px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px);
+    z-index: 900; display: flex; flex-direction: column; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(15,23,42,.28); overflow: hidden; resize: both; min-width: 300px; min-height: 44px; }
+  .ventana-flotante iframe { flex: 1; border: 0; width: 100%; background: var(--tarjeta); }
+  .vf-barra { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: linear-gradient(135deg, var(--encabezado), var(--encabezado2));
+    color: #fff; font-weight: 600; font-size: 14px; cursor: move; user-select: none; touch-action: none; }
+  .vf-botones button { background: rgba(255,255,255,.15); border: 0; color: #fff; width: 28px; height: 26px; border-radius: 6px; cursor: pointer; font-size: 15px; margin-left: 4px; }
+  .vf-botones button:hover { background: rgba(255,255,255,.3); }
+  .ventana-flotante.minimizada { height: 44px !important; width: 240px !important; resize: none; min-height: 0; }
+  .ventana-flotante.minimizada:not(.movida) { top: auto !important; left: auto !important; right: 20px; bottom: 20px; }
+  .ventana-flotante.minimizada .vf-barra { cursor: pointer; }
+  .ventana-flotante.minimizada iframe { display: none; }
+  .ventana-flotante.maxi { top: 12px !important; left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto !important; height: auto !important; max-width: none; resize: none; }
+  .barra-seleccion { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; font-weight: 600; }
+  body.oscuro .barra-seleccion { background: #422006; color: #fde68a; border-color: #92400e; }
+  .celda-sel { text-align: center; padding-left: 2px !important; padding-right: 2px !important; cursor: default; }
+  .celda-sel input { width: 17px; height: 17px; cursor: pointer; }
+  .nav-res { font-size: 18px; }
+  .nav-res:disabled { opacity: .3; cursor: default; }
+  .pos-res { font-size: 12px; color: var(--texto-suave); align-self: center; min-width: 52px; text-align: center; }
+  .edicion-servicios { display: grid; gap: 10px; margin-top: 8px; }
+  .edicion-srv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; padding: 10px; border: 1px solid var(--borde); border-radius: 10px; background: var(--hover); }
+  .edicion-srv label { display: flex; flex-direction: column; font-size: 11px; color: var(--texto-suave); gap: 3px; }
+  .edicion-srv input, .edicion-srv select { font-size: 13px; padding: 5px 6px; border: 1px solid var(--borde); border-radius: 6px; background: var(--tarjeta); color: var(--texto); }
+  .edicion-srv .ancho { grid-column: 1 / -1; }
   .datos td { padding: 6px 4px; font-size: 13px; border-bottom: 1px solid var(--borde); }
   .datos td:first-child { color: var(--texto-suave); width: 42%; }
   .modal-pie { padding: 12px 20px; border-top: 1px solid var(--borde); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -447,6 +473,11 @@
     <button class="btn" id="btnExcel">Exportar a Excel</button>
   </div>
 
+  <div class="barra-seleccion" id="barraSeleccion" style="display:none;">
+    <span id="nSeleccion"></span>
+    <button class="btn" id="btnHistoricoSel" title="Salen de la bandeja; no se borran y se pueden buscar en Histórico">📦 Pasar a Histórico</button>
+    <button class="btn-sec" id="btnQuitarSel">Quitar selección</button>
+  </div>
   <div class="tabla-wrap">
     <table id="tablaReservas">
       <colgroup id="colsReservas"></colgroup>
@@ -467,12 +498,18 @@
         <div id="mRevision" class="caja-revision" style="display:none;"></div>
       </div>
       <div class="ventana-botones">
+        <button class="cerrar nav-res" id="btnAnterior" title="Reserva anterior (Alt + ←)">&#8592;</button>
+        <span class="pos-res" id="mPosicion"></span>
+        <button class="cerrar nav-res" id="btnSiguiente" title="Siguiente reserva (Alt + →)">&#8594;</button>
         <button class="cerrar" id="btnMinimizar" title="Minimizar">&#8211;</button>
         <button class="cerrar" id="btnMaximizar" title="Maximizar">&#9633;</button>
         <button class="cerrar" id="btnCerrar" title="Cerrar">&times;</button>
       </div>
     </div>
     <div class="modal-cuerpo">
+      <div class="titulo-seccion seccion-datos"><span>Datos que leyó la IA</span><span id="mBotonesEdicion"></span></div>
+      <table class="datos" id="mDatos"></table>
+      <div class="titulo-seccion" style="margin-top:18px">Correo</div>
       <div id="mCompleto" style="display:none;">
         <div class="correo-barra">
           <span id="mOrigen"></span>
@@ -484,7 +521,6 @@
         <div class="adjuntos" id="mAdjuntos"></div>
       </div>
       <div class="correo-texto" id="mCorreo"></div>
-      <table class="datos" id="mDatos"></table>
       <div id="mHistorial"></div>
     </div>
     <div class="modal-cuerpo" id="mRespuesta" style="display:none; border-top:1px solid var(--borde);">
@@ -502,6 +538,7 @@
       <button class="btn-sec" id="btnResponder" style="display:none;">Responder</button>
       <button class="btn-sec" id="btnReanalizar" style="display:none;">Volver a analizar</button>
       <button class="btn" id="btnGuardar">Guardar estado</button>
+      <button class="btn-sec" id="btnGuardarSiguiente" title="Guarda el estado y abre la siguiente reserva de la tabla">Guardar y siguiente &#8594;</button>
       <div class="mensaje" id="mMensaje"></div>
     </div>
   </div>
@@ -509,6 +546,19 @@
 </div>
 
 <button class="chat-flotante" id="btnChatFlotante" style="display:none;">Chat</button>
+
+<!-- Asistente en ventana flotante: se mueve arrastrando la barra, se minimiza, se agranda y se cierra. -->
+<div class="ventana-flotante" id="ventanaAsistente" style="display:none;">
+  <div class="vf-barra" id="vfBarra" title="Arrastra para moverla">
+    <span>🤖 Asistente</span>
+    <span class="vf-botones">
+      <button id="vfMinimizar" title="Minimizar">&#8211;</button>
+      <button id="vfMaximizar" title="Agrandar">&#9633;</button>
+      <button id="vfCerrar" title="Cerrar">&times;</button>
+    </span>
+  </div>
+  <iframe id="vfMarco" title="Asistente"></iframe>
+</div>
 
 <div class="fondo-chat" id="fondoChat">
   <div class="modal chat-modal" role="dialog" aria-modal="true">
@@ -586,7 +636,8 @@ const PERMISOS = [
   ['recibir_reservas', 'Recibir reservas del reparto automático (ve solo las suyas)'],
   ['supervisar', 'Supervisar: ver todas las reservas y reasignarlas'],
   ['ver_control', 'Pantalla de Control: tiempos, reservas por asesor y gráficas'],
-  ['probar_asistente', 'Probar el asistente de redes sociales (chat de prueba y calificar respuestas)']
+  ['probar_asistente', 'Probar el asistente de redes sociales (chat de prueba y calificar respuestas)'],
+  ['editar_ia', 'Editar la información de la IA (clientes, teléfono y los datos de cada servicio; queda en el historial)']
 ];
 
 // Sedes de la empresa: llegan con la sesión (cada empresa tiene las suyas).
@@ -1282,7 +1333,27 @@ function columnasEnPantalla() {
 function pintarCabecera(cols) {
   const total = cols.reduce((a, c) => a + c.peso, 0);
   document.getElementById('colsReservas').innerHTML = cols.map(c => `<col style="width:${(c.peso * 100 / total).toFixed(2)}%">`).join('');
-  document.getElementById('cabeceraReservas').innerHTML = cols.map(c => `<th>${esc(c.t)}</th>`).join('');
+  document.getElementById('cabeceraReservas').innerHTML = cols.map(c => c.k === 'sel'
+    ? `<th class="celda-sel"><input type="checkbox" id="selTodas" title="Marcar todas las reservas de esta vista" ${ordenVisible.length && ordenVisible.every(id => seleccionadas.has(id)) ? 'checked' : ''}></th>`
+    : `<th>${esc(c.t)}</th>`).join('');
+}
+/* ---------- Selección múltiple (solo Programador): vaciar la bandeja pasando reservas a Histórico ---------- */
+const seleccionadas = new Set();
+const esProgramador = () => Boolean(sesionActual && sesionActual.grupo === 'Programador');
+function pintarBarraSeleccion() {
+  const n = seleccionadas.size;
+  document.getElementById('barraSeleccion').style.display = esProgramador() && n ? 'flex' : 'none';
+  document.getElementById('nSeleccion').textContent = `${n} reserva${n === 1 ? '' : 's'} seleccionada${n === 1 ? '' : 's'}`;
+}
+async function pasarSeleccionAHistorico() {
+  const ids = [...seleccionadas];
+  if (!ids.length) return;
+  if (!confirm(`¿Pasar ${ids.length} reserva(s) al Histórico?\n\nSalen de la bandeja con todos sus servicios. No se borran: se pueden buscar en la pestaña Histórico.`)) return;
+  const r = await api('/api/reservas/historico', { ids });
+  if (!r.ok) return alert(r.data.error || 'No se pudo pasar al histórico.');
+  seleccionadas.clear();
+  pintarBarraSeleccion();
+  await cargarReservas(true);
 }
 let anchoPintado = window.innerWidth;
 window.addEventListener('resize', () => {
@@ -1358,7 +1429,7 @@ function pintarTarjetas(grupos, ks) {
 
 function pintar() {
   const lista = filtrar();
-  const cols = columnasEnPantalla();
+  const cols = (esProgramador() && vistaActual !== 'historico' ? [{ k: 'sel', t: '', peso: 2.4 }] : []).concat(columnasEnPantalla());
   anchoPintado = window.innerWidth;
   const compacto = window.innerWidth < 1200;
   const ETQ_CORTA = { MODIFICACION: 'MODIF.', PUBLICIDAD: 'PUBLIC.', SEGUIMIENTO: 'SEGUIM.', NO_ENTENDIDO: 'NO ENT.' };
@@ -1366,6 +1437,8 @@ function pintar() {
   const cuerpo = document.getElementById('cuerpo');
 
   const grupos = agruparReservas(lista);
+  ordenVisible = grupos.map(g => g[0].id);
+  if (seleccionado) pintarPosicion();
   cuerpo.innerHTML = grupos.length
     ? grupos.map((g, gi) => {
         const r = g[0];
@@ -1382,6 +1455,7 @@ function pintar() {
           // Datos de la reserva: una sola celda para todos sus servicios. Datos del servicio: una por línea.
           const reserva = (attrs, html) => (i ? '' : `<td${rs}${attrs}>${html}</td>`);
           const celda = {
+            sel: () => reserva(' class="celda-sel"', `<input type="checkbox" class="sel-res" data-id="${r.id}" ${seleccionadas.has(r.id) ? 'checked' : ''} title="Seleccionar">`),
             recibido: () => reserva('', `${compacto ? fechaCorta(r.fecha).replace(/\/(\d{2})(\d{2})$/, '/$2') : fechaCorta(r.fecha)}<div class="num-reserva">#${r.id}${n > 1 ? ` · ${n} servicios` : ''}</div>${sede ? `<span class="sede-chip">📍 ${esc(sede)}</span>` : ''}`),
             intencion: () => reserva('', `<span class="etq ${porAnalizar(r) ? 'etq-historico' : r.error_ia ? 'etq-revisar' : 'etq-intencion'}">${porAnalizar(r) ? 'POR ANALIZAR' : enReanalisis(r) ? 'EN REANÁLISIS' : r.error_ia ? 'ERROR IA' : `<span title="${esc(r.categoria)}">${esc(compacto && ETQ_CORTA[r.categoria] || r.categoria)}</span>`}</span>${r.categoria === 'MODIFICACION' ? ` <span class="revision">${r.original_id ? 'Cambio a reserva #' + r.original_id + (r.original_historico ? ' (histórico)' : '') : 'Sin reserva original'}</span>` : ''}${r.cambio_id ? ` <span class="revision">Cambio recibido: correo #${r.cambio_id}</span>` : ''}`),
             agencia: () => reserva(` class="recortar" title="${esc(agenciaDe(r))}"`, `${esc(agenciaDe(r))}`),
@@ -1411,7 +1485,10 @@ function pintar() {
   pintarTarjetas(grupos, columnasVisibles().map(c => c.k));
 
   cuerpo.querySelectorAll('tr[data-id]').forEach(tr => {
-    tr.addEventListener('click', () => abrirModal(Number(tr.dataset.id)));
+    tr.addEventListener('click', e => {
+      if (e.target.closest('.celda-sel')) return; // marcar la casilla no abre la reserva
+      abrirModal(Number(tr.dataset.id));
+    });
     const grupo = () => cuerpo.querySelectorAll(`tr[data-id="${tr.dataset.id}"]`);
     tr.addEventListener('mouseenter', () => grupo().forEach(x => x.classList.add('srv-hover')));
     tr.addEventListener('mouseleave', () => grupo().forEach(x => x.classList.remove('srv-hover')));
@@ -1671,6 +1748,45 @@ async function abrirModal(id) {
         : 'Este correo se guardó antes de activar la vista del texto. Los correos nuevos sí lo muestran.';
   });
 
+  editandoIA = false;
+  pintarDatosModal(r);
+  pintarPosicion();
+
+  const puedeEstado = puede('cambiar_estado');
+  document.getElementById('mEstado').disabled = !puedeEstado;
+  document.getElementById('btnGuardar').disabled = !puedeEstado;
+  document.getElementById('btnGuardarSiguiente').style.display = puedeEstado ? 'inline-block' : 'none';
+  document.getElementById('mEstado').innerHTML = ESTADOS.map(([valor, nombre]) =>
+    `<option value="${valor}" ${valor === r.estado ? 'selected' : ''}>${nombre}</option>`).join('');
+
+  document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
+  document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
+  document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
+  // Una respuesta a medias (texto y adjuntos) nunca pasa de una reserva a otra.
+  ocultarRespuesta();
+  detenerCronometro();
+  document.getElementById('fondoModal').classList.add('abierto');
+  cargarHistorial(id);
+  cargarCorreoCompleto(r);
+
+  if (puedeEstado) {
+    const ok = await tomarRevision(id);
+    if (ok) {
+      clearInterval(timerRevision);
+      timerRevision = setInterval(() => tomarRevision(id), 60 * 1000);
+    }
+  }
+}
+
+/* ---------- Datos que leyó la IA (y su edición con el permiso "editar_ia") ---------- */
+let editandoIA = false;
+function pintarDatosModal(r) {
+  const g = serviciosDe(r);
+  const botones = document.getElementById('mBotonesEdicion');
+  botones.innerHTML = !puede('editar_ia') ? ''
+    : editandoIA ? '<button class="btn-mini" id="btnGuardarIA">💾 Guardar cambios</button> <button class="btn-mini" id="btnCancelarIA">Cancelar</button>'
+    : '<button class="btn-mini" id="btnEditarIA" title="Corregir lo que leyó la IA (queda en el historial)">✏️ Editar datos</button>';
+  if (editandoIA) return pintarEdicionIA(r, g);
   const celdaAgencia = puede('editar_reservas')
     ? `<input id="mAgencia" class="input-ancho" maxlength="150" value="${esc(r.agencia || '')}" placeholder="${esc(agenciaDe(r) || 'Nombre de la agencia')}">
        <label class="chk" style="margin-top:6px"><input type="checkbox" id="mRecordar" checked> Recordar para los próximos correos de este remitente</label>
@@ -1688,31 +1804,88 @@ async function abrirModal(id) {
         <td>${falta(s.fecha_servicio)}</td><td class="srv-hora">${horaServicio(s)}</td><td>${falta(s.vuelo)}${aerolineaDe(s.vuelo) ? '<br><small>' + esc(aerolineaDe(s.vuelo)) + '</small>' : ''}</td>
         <td>${falta(s.aeropuerto)}</td><td>${falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada))}</td><td>${falta(paxDe(s))}</td></tr>`; }).join('')}
       </tbody></table></td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
-
-  const puedeEstado = puede('cambiar_estado');
-  document.getElementById('mEstado').disabled = !puedeEstado;
-  document.getElementById('btnGuardar').disabled = !puedeEstado;
-  document.getElementById('mEstado').innerHTML = ESTADOS.map(([valor, nombre]) =>
-    `<option value="${valor}" ${valor === r.estado ? 'selected' : ''}>${nombre}</option>`).join('');
-
-  document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
-  document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
-  document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
-  // Una respuesta a medias (texto y adjuntos) nunca pasa de una reserva a otra.
-  ocultarRespuesta();
-  detenerCronometro();
   pintarAsignacion(r);
-  document.getElementById('fondoModal').classList.add('abierto');
-  cargarHistorial(id);
-  cargarCorreoCompleto(r);
+}
 
-  if (puedeEstado) {
-    const ok = await tomarRevision(id);
-    if (ok) {
-      clearInterval(timerRevision);
-      timerRevision = setInterval(() => tomarRevision(id), 60 * 1000);
-    }
+// Formulario para corregir lo que leyó la IA: datos generales y cada servicio.
+function pintarEdicionIA(r, g) {
+  const v = x => esc(x == null ? '' : x);
+  const opcionesTipo = t => ['IN', 'OUT', 'INTERHOTEL', 'ACTIVIDAD'].map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TIPOS_SRV[k]}</option>`).join('');
+  document.getElementById('mDatos').innerHTML = `
+    <tr><td>Clientes</td><td><input class="input-ancho" data-g="nombre_cliente" maxlength="500" value="${v(clientesDe(g))}"></td></tr>
+    <tr><td>Teléfono</td><td><input class="input-ancho" data-g="telefono" maxlength="120" value="${v(r.telefono)}"></td></tr>
+    <tr><td colspan="2"><b>Servicios (${g.length})</b>
+      <div class="edicion-servicios">${g.map(s => { const t = tipoServicio(s); return `
+        <div class="edicion-srv" data-sid="${s.id}">
+          <label>Tipo<select data-c="tipo_servicio">${opcionesTipo(t === 'OTRO' ? '' : t)}</select></label>
+          <label>Actividad / detalle<input data-c="actividad" maxlength="300" value="${v(s.actividad)}"></label>
+          <label>Fecha<input type="date" data-c="fecha_servicio" value="${v(s.fecha_servicio_iso || (/^\d{4}-\d{2}-\d{2}$/.test(s.fecha_servicio || '') ? s.fecha_servicio : ''))}"></label>
+          <label>Hora<input type="time" data-c="hora_servicio" value="${v(/^\d{2}:\d{2}$/.test(s.hora_servicio || '') ? s.hora_servicio : '')}"></label>
+          <label>Vuelo<input data-c="vuelo" maxlength="80" value="${v(s.vuelo)}" placeholder="CM 425"></label>
+          <label>Aeropuerto<input data-c="aeropuerto" maxlength="20" value="${v(s.aeropuerto)}" placeholder="PUJ"></label>
+          <label>Hotel<input data-c="hotel" maxlength="200" value="${v(s.hotel)}"></label>
+          <label>Desde<input data-c="punto_partida" maxlength="200" value="${v(s.punto_partida)}"></label>
+          <label>Hasta<input data-c="punto_llegada" maxlength="200" value="${v(s.punto_llegada)}"></label>
+          <label>Adultos<input type="number" min="0" max="999" data-c="adultos" value="${Number(s.adultos) || 0}"></label>
+          <label>Niños<input type="number" min="0" max="999" data-c="ninos" value="${Number(s.ninos) || 0}"></label>
+          <label>Infantes<input type="number" min="0" max="999" data-c="infantes" value="${Number(s.infantes) || 0}"></label>
+          <label class="ancho">Nota (CANCELADO:, EXTRA:, CAMBIO:...)<input data-c="motivo" maxlength="300" value="${v(s.error_ia ? '' : s.motivo)}"></label>
+        </div>`; }).join('')}</div></td></tr>`;
+}
+
+async function guardarEdicionIA() {
+  if (!seleccionado) return;
+  const caja = document.getElementById('mDatos');
+  const general = {};
+  caja.querySelectorAll('[data-g]').forEach(x => { general[x.dataset.g] = x.value; });
+  const servicios = [...caja.querySelectorAll('.edicion-srv')].map(div => {
+    const s = { id: Number(div.dataset.sid) };
+    div.querySelectorAll('[data-c]').forEach(x => { s[x.dataset.c] = x.type === 'number' ? Number(x.value || 0) : x.value; });
+    return s;
+  });
+  const mensaje = document.getElementById('mMensaje');
+  const r = await api('/api/reserva/editar-ia', { id: seleccionado.id, general, servicios });
+  if (!r.ok) { mensaje.style.color = '#dc2626'; mensaje.textContent = r.data.error || 'No se pudo guardar.'; return; }
+  // Se aplica en la pantalla sin recargar.
+  for (const x of datos) {
+    const s = servicios.find(y => y.id === x.id);
+    if (s) { Object.assign(x, s); if (s.fecha_servicio) x.fecha_servicio_iso = s.fecha_servicio; }
+    if (serviciosDe(seleccionado).some(y => y.id === x.id)) { x.nombre_cliente = general.nombre_cliente; x.telefono = general.telefono; }
   }
+  editandoIA = false;
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = r.data.cambios ? `Listo: ${r.data.cambios} dato(s) corregidos. Quedan en el historial.` : 'No había cambios.';
+  pintarDatosModal(seleccionado);
+  pintar();
+  cargarHistorial(seleccionado.id);
+}
+
+/* ---------- Anterior / siguiente reserva (en el orden y con los filtros de la tabla) ---------- */
+let ordenVisible = [];
+function indiceActual() {
+  if (!seleccionado) return -1;
+  const k = claveReserva(seleccionado);
+  return ordenVisible.findIndex(id => { const x = datos.find(y => y.id === id); return x && claveReserva(x) === k; });
+}
+function pintarPosicion() {
+  const i = indiceActual();
+  document.getElementById('mPosicion').textContent = i >= 0 ? `${i + 1} / ${ordenVisible.length}` : '';
+  document.getElementById('btnAnterior').disabled = i <= 0;
+  document.getElementById('btnSiguiente').disabled = i < 0 || i >= ordenVisible.length - 1;
+}
+function vecina(paso) {
+  const i = indiceActual();
+  return i < 0 ? null : ordenVisible[i + paso] || null;
+}
+async function irA(id) {
+  if (!id) return;
+  await cerrarModal();
+  abrirModal(id);
+}
+async function guardarYSiguiente() {
+  const destino = vecina(1);
+  const ok = await guardarEstado();
+  if (ok && destino) irA(destino);
 }
 
 /* ---------- Correo completo (Microsoft 365) ---------- */
@@ -1875,7 +2048,7 @@ async function guardarEstado() {
   if (!r.ok) {
     mensaje.style.color = '#dc2626';
     mensaje.textContent = r.data.error || 'No se pudo guardar.';
-    return;
+    return false;
   }
   seleccionado.estado = estado;
   const ids = (r.data && r.data.servicios) || [];
@@ -1886,6 +2059,7 @@ async function guardarEstado() {
   tomarRevision(seleccionado.id);
   pintar();
   cargarHistorial(seleccionado.id);
+  return true;
 }
 
 async function guardarAgencia() {
@@ -1907,7 +2081,7 @@ async function guardarAgencia() {
   cargarHistorial(seleccionado.id);
 }
 
-const NOMBRES_ACCION = { cambiar_estado: 'Cambió estado', editar_agencia: 'Corrigió agencia', responder_correo: 'Respondió correo' };
+const NOMBRES_ACCION = { cambiar_estado: 'Cambió estado', editar_agencia: 'Corrigió agencia', responder_correo: 'Respondió correo', editar_ia: 'Corrigió datos de la IA', pasar_historico: 'Pasó al histórico' };
 
 function diaMenos(dias) {
   const d = new Date();
@@ -3928,6 +4102,36 @@ document.getElementById('btnMaximizar').addEventListener('click', alternarMaximi
 document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') cerrarVentana(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarModal(); cerrarVentana(); cerrarChat(); } });
 document.getElementById('btnGuardar').addEventListener('click', guardarEstado);
+document.getElementById('btnGuardarSiguiente').addEventListener('click', guardarYSiguiente);
+document.getElementById('cuerpo').addEventListener('change', e => {
+  if (!e.target.classList.contains('sel-res')) return;
+  const id = Number(e.target.dataset.id);
+  if (e.target.checked) seleccionadas.add(id); else seleccionadas.delete(id);
+  const todas = document.getElementById('selTodas');
+  if (todas) todas.checked = ordenVisible.length > 0 && ordenVisible.every(x => seleccionadas.has(x));
+  pintarBarraSeleccion();
+});
+document.getElementById('cabeceraReservas').addEventListener('change', e => {
+  if (e.target.id !== 'selTodas') return;
+  for (const id of ordenVisible) { if (e.target.checked) seleccionadas.add(id); else seleccionadas.delete(id); }
+  document.querySelectorAll('#cuerpo .sel-res').forEach(x => { x.checked = e.target.checked; });
+  pintarBarraSeleccion();
+});
+document.getElementById('btnHistoricoSel').addEventListener('click', pasarSeleccionAHistorico);
+document.getElementById('btnQuitarSel').addEventListener('click', () => { seleccionadas.clear(); pintar(); pintarBarraSeleccion(); });
+document.getElementById('btnAnterior').addEventListener('click', () => irA(vecina(-1)));
+document.getElementById('btnSiguiente').addEventListener('click', () => irA(vecina(1)));
+document.addEventListener('keydown', e => {
+  if (!seleccionado || !e.altKey || !['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+  e.preventDefault();
+  irA(vecina(e.key === 'ArrowRight' ? 1 : -1));
+});
+document.getElementById('mBotonesEdicion').addEventListener('click', e => {
+  if (!seleccionado) return;
+  if (e.target.id === 'btnEditarIA') { editandoIA = true; pintarDatosModal(seleccionado); }
+  if (e.target.id === 'btnCancelarIA') { editandoIA = false; pintarDatosModal(seleccionado); }
+  if (e.target.id === 'btnGuardarIA') guardarEdicionIA();
+});
 document.getElementById('mDatos').addEventListener('click', e => {
   if (e.target.id === 'btnAgencia') guardarAgencia();
   if (e.target.id === 'btnAsignar') asignarReserva();
@@ -3989,7 +4193,38 @@ document.getElementById('buscarHistorico').addEventListener('input', () => {
   timerBusqueda = vistaActual === 'historico' ? setTimeout(() => cargarReservas(true), 500) : setTimeout(pintar, 150);
 });
 document.getElementById('btnControl').addEventListener('click', () => window.open('/control', '_blank'));
-document.getElementById('btnAsistente').addEventListener('click', () => window.open('/asistente', '_blank'));
+/* ---------- Ventana flotante del asistente ---------- */
+(function () {
+  const v = document.getElementById('ventanaAsistente'), barra = document.getElementById('vfBarra'), marco = document.getElementById('vfMarco');
+  const clase = (c, si) => v.classList.toggle(c, si);
+  document.getElementById('btnAsistente').addEventListener('click', () => {
+    if (!marco.src) marco.src = '/asistente';
+    v.style.display = 'flex';
+    clase('minimizada', false);
+  });
+  document.getElementById('vfCerrar').addEventListener('click', e => { e.stopPropagation(); v.style.display = 'none'; marco.removeAttribute('src'); clase('maxi', false); clase('minimizada', false); });
+  document.getElementById('vfMinimizar').addEventListener('click', e => { e.stopPropagation(); clase('maxi', false); clase('minimizada', !v.classList.contains('minimizada')); });
+  document.getElementById('vfMaximizar').addEventListener('click', e => { e.stopPropagation(); clase('minimizada', false); clase('maxi', !v.classList.contains('maxi')); });
+  // Minimizada: un clic en la barra la vuelve a abrir.
+  barra.addEventListener('click', e => { if (!e.target.closest('button') && v.classList.contains('minimizada') && !movio) clase('minimizada', false); });
+  let arrastrando = false, dx = 0, dy = 0, movio = false;
+  barra.addEventListener('pointerdown', e => {
+    if (e.target.closest('button') || v.classList.contains('maxi')) return;
+    arrastrando = true; movio = false;
+    const r = v.getBoundingClientRect();
+    dx = e.clientX - r.left; dy = e.clientY - r.top;
+    barra.setPointerCapture(e.pointerId);
+    marco.style.pointerEvents = 'none';
+  });
+  barra.addEventListener('pointermove', e => {
+    if (!arrastrando) return;
+    movio = true;
+    const x = Math.min(Math.max(0, e.clientX - dx), window.innerWidth - 120);
+    const y = Math.min(Math.max(0, e.clientY - dy), window.innerHeight - 40);
+    Object.assign(v.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+  });
+  barra.addEventListener('pointerup', () => { marco.style.pointerEvents = ''; setTimeout(() => { arrastrando = false; }, 0); if (movio) clase('movida', true); });
+})();
 document.getElementById('alertasSistema').addEventListener('click', e => { if (e.target.dataset.verEstado) abrirHerramientas('estado'); });
 document.getElementById('franjas').addEventListener('click', async e => {
   const id = e.target.dataset.cerrarAnuncio;

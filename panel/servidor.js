@@ -31,7 +31,16 @@ const central = crearCentral({ client, config, registrar: (...a) => registrar(..
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
 const oficina = crearOficina({ client, config, registrar: (...a) => registrar(...a), central });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia'];
+// Datos que la IA llena y que se pueden corregir a mano con el permiso "editar_ia".
+const CAMPOS_IA = {
+  nombre_cliente: { max: 500 }, telefono: { max: 120 },
+  tipo_servicio: { lista: ['IN', 'OUT', 'INTERHOTEL', 'ACTIVIDAD'] }, actividad: { max: 300 },
+  fecha_servicio: { re: /^(\d{4}-\d{2}-\d{2})?$/, ayuda: 'AAAA-MM-DD' }, hora_servicio: { re: /^(\d{2}:\d{2})?$/, ayuda: 'HH:MM' },
+  vuelo: { max: 80 }, aeropuerto: { re: /^([A-Za-z]{3}([ ,/]+[A-Za-z]{3})*)?$/, ayuda: 'código de 3 letras (PUJ, SDQ...)' },
+  hotel: { max: 200 }, punto_partida: { max: 200 }, punto_llegada: { max: 200 },
+  adultos: { numero: true }, ninos: { numero: true }, infantes: { numero: true }, motivo: { max: 300, nombre: 'nota' }
+};
 const TODOS = Object.fromEntries(PERMISOS.map(p => [p, true]));
 const NINGUNO = Object.fromEntries(PERMISOS.map(p => [p, false]));
 // Sedes de la empresa (para separar usuarios por oficina). Sin ajuste: las de Somos Viajes.
@@ -1915,6 +1924,72 @@ http.createServer(async (req, res) => {
       await registrar(u, 'editar_agencia', 'reserva', fila.id, fila.agencia || '', nueva,
         recordar && correo && nueva ? 'Recordada para ' + correo : '');
       return json(res, 200, { ok: true });
+    }
+
+    // Corregir a mano lo que leyó la IA (permiso "editar_ia"). Cada campo cambiado queda en el historial con antes y después.
+    // { id, general: { nombre_cliente, telefono }, servicios: [{ id, tipo_servicio, fecha_servicio, ... }] }
+    if (req.method === 'POST' && url === '/api/reserva/editar-ia') {
+      if (!puede('editar_ia')) return json(res, 403, { error: 'No tienes permiso para editar la información de la IA.' });
+      const b = await leerCuerpo(req);
+      const fila = (await client.query('SELECT id, message_id FROM clasificacion WHERE id = $1', [Number(b.id)])).rows[0];
+      if (!fila) return json(res, 404, { error: 'Reserva no encontrada' });
+      const delCorreo = (await client.query(
+        "SELECT * FROM clasificacion WHERE id = $1 OR (COALESCE(message_id, '') <> '' AND message_id = $2) ORDER BY id", [fila.id, fila.message_id || '']
+      )).rows;
+      const limpiar = (campo, v) => {
+        const def = CAMPOS_IA[campo];
+        if (def.numero) {
+          const n = Number(v);
+          if (!Number.isInteger(n) || n < 0 || n > 999) throw new Error(`La cantidad de ${campo} debe ser un número entero.`);
+          return n;
+        }
+        let t = String(v ?? '').replace(/\s+/g, ' ').trim();
+        if (campo === 'tipo_servicio' || campo === 'aeropuerto') t = t.toUpperCase();
+        if (def.lista && t && !def.lista.includes(t)) throw new Error('Tipo de servicio no válido.');
+        if (def.re && !def.re.test(t)) throw new Error(`El campo ${campo.replace('_', ' ')} debe ir como ${def.ayuda}.`);
+        if (def.max && t.length > def.max) throw new Error(`El campo ${campo.replace('_', ' ')} es muy largo.`);
+        return t;
+      };
+      const cambios = [];
+      try {
+        const general = b.general && typeof b.general === 'object' ? b.general : {};
+        for (const campo of ['nombre_cliente', 'telefono']) {
+          if (general[campo] === undefined) continue;
+          const nuevo = limpiar(campo, general[campo]);
+          for (const s of delCorreo) if (String(s[campo] ?? '') !== String(nuevo)) cambios.push({ id: s.id, campo, antes: s[campo] ?? '', nuevo });
+        }
+        for (const x of Array.isArray(b.servicios) ? b.servicios.slice(0, 30) : []) {
+          const s = delCorreo.find(y => y.id === Number(x.id));
+          if (!s) throw new Error('Ese servicio no es de esta reserva.');
+          for (const campo of Object.keys(CAMPOS_IA)) {
+            if (campo === 'nombre_cliente' || campo === 'telefono' || x[campo] === undefined) continue;
+            const nuevo = limpiar(campo, x[campo]);
+            if (String(s[campo] ?? '') !== String(nuevo)) cambios.push({ id: s.id, campo, antes: s[campo] ?? '', nuevo });
+          }
+        }
+      } catch (err) { return json(res, 400, { error: err.message }); }
+      for (const c of cambios) {
+        await client.query(`UPDATE clasificacion SET ${c.campo} = $1 WHERE id = $2`, [c.nuevo, c.id]);
+        // Se anota en la reserva que se abrió, para que salga en su historial aunque el cambio sea en otro servicio.
+        await registrar(u, 'editar_ia', 'reserva', fila.id, String(c.antes).slice(0, 300), String(c.nuevo).slice(0, 300),
+          (CAMPOS_IA[c.campo].nombre || c.campo.replace(/_/g, ' ')) + (delCorreo.length > 1 ? ` (servicio #${c.id})` : ''));
+      }
+      return json(res, 200, { ok: true, cambios: cambios.length });
+    }
+
+    // Vaciar la bandeja: pasar varias reservas a Histórico de una vez (solo el Programador). No se borran: se pueden buscar.
+    if (req.method === 'POST' && url === '/api/reservas/historico') {
+      if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede pasar reservas al histórico en bloque.' });
+      const b = await leerCuerpo(req);
+      const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Number.isInteger))].slice(0, 2000);
+      if (!ids.length) return json(res, 400, { error: 'No elegiste ninguna reserva.' });
+      const filas = (await client.query(
+        `UPDATE clasificacion SET estado = 'historico' WHERE estado <> 'historico' AND (id = ANY($1)
+           OR (COALESCE(message_id, '') <> '' AND message_id IN (SELECT message_id FROM clasificacion WHERE id = ANY($1))))
+         RETURNING id, estado`, [ids])).rows;
+      for (const f of filas) await cerrarTramos(f.id);
+      for (const id of ids) await registrar(u, 'pasar_historico', 'reserva', id, '', 'historico', 'En bloque desde la bandeja');
+      return json(res, 200, { ok: true, reservas: ids.length, servicios: filas.length });
     }
 
     if (req.method === 'POST' && url === '/api/reserva/reanalizar') {
