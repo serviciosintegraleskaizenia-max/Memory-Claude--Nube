@@ -144,6 +144,10 @@ async function inicializarTablas() {
   await client.query('CREATE INDEX IF NOT EXISTS mensajes_destino ON mensajes (para, leido)');
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '{}'::jsonb");
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb");
+  // Verificación en dos pasos por correo (Programador y Gerente): el correo de cada usuario y los equipos de confianza.
+  await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(200) NOT NULL DEFAULT ''");
+  await client.query(`CREATE TABLE IF NOT EXISTS equipos_confianza (
+    token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL, detalle TEXT NOT NULL DEFAULT '')`);
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
@@ -1502,6 +1506,44 @@ async function chequearSaldo() {
 }
 
 // Avisa por correo a las direcciones de config.alertas.correos: primero por Microsoft 365 (n8n) y, si no, por SMTP.
+// Correo del sistema a una dirección (por n8n/Microsoft o por SMTP, como las alertas).
+async function correoSistema(para, asunto, texto) {
+  const errores = [];
+  const ms = buzonesMicrosoftEnvio()[0];
+  if (ms && config.n8n && config.n8n.enviarCorreo) {
+    try { await llamarN8n('enviarCorreo', { accion: 'nuevo', buzon: ms, para, asunto, texto, adjuntos: [] }, 'Enviar correo'); return true; }
+    catch (e) { errores.push(e.message); }
+  }
+  for (const buzon of Object.keys(config.correo || {})) {
+    const salida = transporteDe(buzon);
+    if (!salida) continue;
+    try { await enviarPorSmtp(salida, { from: `"${salida.nombre}" <${buzon}>`, to: para, subject: asunto, text: texto }); return true; }
+    catch (e) { errores.push(e.message); }
+  }
+  throw new Error(errores.join(' | ') || 'no hay cuenta para enviar correos');
+}
+
+// ---------- Verificación en dos pasos por correo ----------
+const GRUPOS_DOS_PASOS = (config.dosPasos && config.dosPasos.grupos) || ['Programador', 'Gerente', 'Gerencia'];
+const COOKIE_EQUIPO = 'zentralia_equipo';
+const codigosPendientes = new Map(); // usuario -> { hash, vence, intentos, recordar }
+const hashCorto = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+const necesitaDosPasos = u => GRUPOS_DOS_PASOS.includes(u.grupo) || Boolean(u.permisos && u.permisos.dos_pasos);
+// En el mismo PC (sin pasar por el túnel) no se pide: así nunca te quedas fuera si el correo falla.
+const desdeEstePc = req => esLocal(req) && !req.headers['cf-connecting-ip'] && !req.headers['x-forwarded-for'];
+function ocultarCorreo(e) { const [a, d] = String(e).split('@'); return (a.slice(0, 2) + '•••@' + (d || '')); }
+async function equipoDeConfianza(req, usuario) {
+  const t = leerCookie(req, COOKIE_EQUIPO);
+  if (!t) return false;
+  const r = await client.query('SELECT 1 FROM equipos_confianza WHERE token_hash = $1 AND usuario = $2 AND vence > NOW()', [hashCorto(t), usuario]);
+  return r.rowCount > 0;
+}
+function abrirSesion(res, req, u, extraCookies = []) {
+  const token = crypto.randomBytes(32).toString('hex');
+  sesiones.set(token, { usuario: u.usuario, ultima: Date.now() });
+  return [`${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict${cookieSegura(req)}`, ...extraCookies];
+}
+
 async function correoDeAlerta(asunto, texto) {
   const para = (AJUSTES_ALERTAS.correos || []).filter(x => /@/.test(x));
   if (!para.length) return 'sin destinatarios';
@@ -1598,7 +1640,7 @@ async function usuarioDeSesion(req) {
   }
   s.ultima = Date.now();
   const r = await client.query(
-    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence, preferencias FROM usuarios WHERE usuario = $1',
+    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence, preferencias, email FROM usuarios WHERE usuario = $1',
     [s.usuario]
   );
   const u = r.rows[0];
@@ -1686,11 +1728,52 @@ http.createServer(async (req, res) => {
         await registrar(u, 'login_rechazado', 'sesion', u.usuario, '', '', bloqueoCuenta);
         return json(res, 403, { error: bloqueoCuenta });
       }
-      const token = crypto.randomBytes(32).toString('hex');
-      sesiones.set(token, { usuario: u.usuario, ultima: Date.now() });
       fallosLogin.delete('usuario:' + nombreIntento);
+      // Verificación en dos pasos: código de 6 dígitos al correo del usuario (salvo equipo de confianza o en este mismo PC).
+      if (necesitaDosPasos(u) && u.email && !desdeEstePc(req) && !(await equipoDeConfianza(req, u.usuario))) {
+        const codigo = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+        codigosPendientes.set(u.usuario, { hash: hashCorto(u.usuario + ':' + codigo), vence: Date.now() + 10 * 60 * 1000, intentos: 0 });
+        try {
+          await correoSistema(u.email, `Tu código para entrar a Zentralia: ${codigo}`,
+            `Hola ${u.nombre || u.usuario}:\n\nTu código para entrar a Zentralia App es:\n\n    ${codigo}\n\nVence en 10 minutos. Si no fuiste tú, cambia tu contraseña y avisa al programador.\n\nIP: ${ip}`);
+        } catch (e) {
+          codigosPendientes.delete(u.usuario);
+          await registrar(u, 'codigo_no_enviado', 'sesion', u.usuario, '', '', e.message);
+          return json(res, 503, { error: 'No se pudo enviar el código a tu correo. Entra desde el PC de la oficina o avisa al programador.' });
+        }
+        await registrar(u, 'codigo_enviado', 'sesion', u.usuario, '', '', 'Código de verificación enviado a ' + ocultarCorreo(u.email));
+        return json(res, 200, { necesita_codigo: true, correo: ocultarCorreo(u.email) });
+      }
       await registrar(u, 'login', 'sesion', u.usuario, '', '', 'Inicio de sesión');
-      return json(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict${cookieSegura(req)}` });
+      return json(res, 200, { ok: true }, { 'Set-Cookie': abrirSesion(res, req, u) });
+    }
+
+    // Segundo paso: el código que llegó al correo. { usuario, codigo, recordar }
+    if (req.method === 'POST' && url === '/api/login/codigo') {
+      const { usuario, codigo, recordar } = await leerCuerpo(req);
+      const nombreIntento = String(usuario || '').slice(0, 50);
+      const ip = ipCliente(req);
+      if (await bloqueoActivo('ip', ip) || await bloqueoActivo('usuario', nombreIntento)) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos.' });
+      const p = codigosPendientes.get(nombreIntento);
+      if (!p || Date.now() > p.vence) { codigosPendientes.delete(nombreIntento); return json(res, 400, { error: 'El código venció. Vuelve a escribir tu contraseña para recibir otro.', volver: true }); }
+      if (hashCorto(nombreIntento + ':' + String(codigo || '').replace(/\D/g, '')) !== p.hash) {
+        p.intentos++;
+        if (p.intentos >= 5) { codigosPendientes.delete(nombreIntento); await bloquear('usuario', nombreIntento, 'Demasiados códigos incorrectos'); }
+        await registrar({ usuario: nombreIntento, nombre: '' }, 'codigo_incorrecto', 'sesion', nombreIntento, '', '', 'Código de verificación incorrecto');
+        return json(res, 401, { error: p.intentos >= 5 ? 'Demasiados intentos: la cuenta queda bloqueada 15 minutos.' : 'Código incorrecto.' });
+      }
+      codigosPendientes.delete(nombreIntento);
+      const u = (await client.query('SELECT * FROM usuarios WHERE usuario = $1 AND activo = TRUE', [nombreIntento])).rows[0];
+      if (!u) return json(res, 401, { error: 'Usuario no encontrado' });
+      const extra = [];
+      if (recordar) {
+        const t = crypto.randomBytes(32).toString('hex');
+        await client.query("INSERT INTO equipos_confianza (token_hash, usuario, vence, detalle) VALUES ($1, $2, NOW() + INTERVAL '30 days', $3)",
+          [hashCorto(t), u.usuario, String(req.headers['user-agent'] || '').slice(0, 200)]);
+        extra.push(`${COOKIE_EQUIPO}=${t}; HttpOnly; Path=/; Max-Age=${30 * 86400}; SameSite=Strict${cookieSegura(req)}`);
+      }
+      await registrar(u, 'login', 'sesion', u.usuario, '', '', 'Inicio de sesión con código de verificación' + (recordar ? ' (equipo recordado 30 días)' : ''));
+      return json(res, 200, { ok: true }, { 'Set-Cookie': abrirSesion(res, req, u, extra) });
     }
 
     if (req.method === 'POST' && url === '/api/logout') {
@@ -1726,7 +1809,8 @@ http.createServer(async (req, res) => {
         permisos, debe_cambiar: u.debe_cambiar,
         modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
         vence: u.vence || null, asistente: Boolean(await conexionAsistente()),
-        preferencias: u.preferencias || {}
+        preferencias: u.preferencias || {},
+        dos_pasos: necesitaDosPasos(u) ? (u.email ? 'activa' : 'sin_correo') : 'no'
       });
     }
 
@@ -3210,12 +3294,14 @@ http.createServer(async (req, res) => {
       }
 
       if (req.method === 'GET' && url === '/api/usuarios') {
-        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos FROM usuarios ORDER BY id');
+        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos, email FROM usuarios ORDER BY id');
         return json(res, 200, r.rows);
       }
 
       if (req.method === 'POST' && url === '/api/usuarios') {
-        const { usuario, nombre, grupo, empresa, clave, permisos } = await leerCuerpo(req);
+        const { usuario, nombre, grupo, empresa, clave, permisos, email } = await leerCuerpo(req);
+        const correoU = String(email || '').trim().toLowerCase().slice(0, 200);
+        if (correoU && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correoU)) return json(res, 400, { error: 'El correo no es válido.' });
         if (!/^[a-z0-9._-]{3,30}$/.test(usuario || '')) {
           return json(res, 400, { error: 'Usuario: de 3 a 30 caracteres, solo minúsculas, números, punto, guion o guion bajo.' });
         }
@@ -3229,8 +3315,8 @@ http.createServer(async (req, res) => {
         if (!EMPRESAS.includes(empresa)) return json(res, 400, { error: 'Empresa no válida' });
         try {
           await client.query(
-            'INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos) VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, $6)',
-            [usuario, nombre, grupo, empresa, bcrypt.hashSync(clave, 10), JSON.stringify(filtrarPermisos(permisos))]
+            'INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos, email) VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, $6, $7)',
+            [usuario, nombre, grupo, empresa, bcrypt.hashSync(clave, 10), JSON.stringify(filtrarPermisos(permisos)), correoU]
           );
         } catch (e) {
           if (e.code === '23505') return json(res, 409, { error: 'Ese nombre de usuario ya existe.' });
@@ -3241,7 +3327,9 @@ http.createServer(async (req, res) => {
       }
 
       if (req.method === 'POST' && url === '/api/usuarios/editar') {
-        const { id, nombre, grupo, empresa, permisos } = await leerCuerpo(req);
+        const { id, nombre, grupo, empresa, permisos, email } = await leerCuerpo(req);
+        const correoU = email === undefined ? undefined : String(email || '').trim().toLowerCase().slice(0, 200);
+        if (correoU && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correoU)) return json(res, 400, { error: 'El correo no es válido.' });
         const destino = await buscarPorId(id);
         if (!destino) return json(res, 404, { error: 'Usuario no encontrado' });
         if (esIntocable(destino) && destino.id !== u.id) {
@@ -3256,8 +3344,9 @@ http.createServer(async (req, res) => {
         if (!nombre || !nombre.trim()) return json(res, 400, { error: 'El nombre es obligatorio.' });
         if (!(await grupoExiste(grupo))) return json(res, 400, { error: 'Grupo no válido' });
         if (!EMPRESAS.includes(empresa)) return json(res, 400, { error: 'Empresa no válida' });
-        await client.query('UPDATE usuarios SET nombre = $1, grupo = $2, empresa = $3, permisos = $5 WHERE id = $4',
-          [nombre.trim(), grupo, empresa, destino.id, JSON.stringify(filtrarPermisos(permisos))]);
+        await client.query('UPDATE usuarios SET nombre = $1, grupo = $2, empresa = $3, permisos = $5, email = COALESCE($6, email) WHERE id = $4',
+          [nombre.trim(), grupo, empresa, destino.id, JSON.stringify(filtrarPermisos(permisos)), correoU === undefined ? null : correoU]);
+        if (correoU !== undefined && correoU !== (destino.email || '')) await registrar(u, 'editar_correo_usuario', 'usuario', destino.id, destino.email || '', correoU, destino.usuario);
         await registrar(u, 'editar_usuario', 'usuario', destino.id,
           { nombre: destino.nombre, grupo: destino.grupo, empresa: destino.empresa },
           { nombre: nombre.trim(), grupo, empresa }, destino.usuario);

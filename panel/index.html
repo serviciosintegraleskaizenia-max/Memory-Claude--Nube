@@ -400,6 +400,13 @@
     <label for="password">Contraseña</label>
     <input type="password" id="password" autocomplete="current-password" required>
     <button class="btn" type="submit">Entrar</button>
+    <div id="pasoCodigo" style="display:none;">
+      <p id="textoCodigo" style="margin:16px 0 4px"></p>
+      <label for="codigo">Código de 6 dígitos</label>
+      <input type="text" id="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456">
+      <label class="chk" style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="recordarEquipo" style="width:auto"> Recordar este equipo 30 días</label>
+      <button class="btn" type="button" id="btnCodigo">Verificar</button>
+    </div>
     <div class="error-login" id="errorLogin"></div>
     <div class="redes redes-login" id="redesLogin"></div>
   </form>
@@ -912,6 +919,11 @@ const INCRUSTADO = ['empresas', 'herramientas'].includes(new URLSearchParams(loc
 
 function mostrarApp(s) {
   sesionActual = s;
+  // Programador o Gerente sin correo: la verificación en dos pasos no puede funcionar todavía.
+  if (s.dos_pasos === 'sin_correo' && !sessionStorage.getItem('avisoDosPasos')) {
+    try { sessionStorage.setItem('avisoDosPasos', '1'); } catch (e) {}
+    setTimeout(() => alert('🔒 Verificación en dos pasos: tu usuario (' + s.grupo + ') debe tener un correo para recibir el código al entrar desde fuera de la oficina.\n\nAgrégalo en Herramientas → Usuarios → Editar → Correo.'), 800);
+  }
   if (s.central && s.grupo === 'Programador' && !INCRUSTADO) { location.replace('/oficina'); return; }
   if (INCRUSTADO) {
     if (Array.isArray(s.sedes) && s.sedes.length) EMPRESAS = s.sedes;
@@ -3923,6 +3935,9 @@ function formUsuario(u) {
       <label>Grupo<select id="fGrupo" ${grupoBloqueado ? 'disabled' : ''}>${opcionesGrupo}</select></label>
       <label>Empresa<select id="fEmpresa">${opcionesEmpresa}</select></label>
     </div>
+    <div class="form-fila">
+      <label>Correo (para el código de verificación de Programador y Gerente)<input id="fEmail" type="email" maxlength="200" placeholder="nombre@empresa.com" value="${esc(u ? u.email || '' : '')}"></label>
+    </div>
     <p class="etiqueta-sec">Qué puede hacer esta persona</p>
     <div class="chks" id="uChecks">${checks(marcadosFormulario(u), grupoBloqueado)}</div>
     <div class="form-fila">
@@ -3961,6 +3976,7 @@ async function crearUsuario() {
     grupo: val('fGrupo'),
     empresa: val('fEmpresa'),
     clave: val('fClave'),
+    email: val('fEmail').trim(),
     permisos: leerChecks(document.getElementById('uChecks'))
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear el usuario.', false);
@@ -3973,6 +3989,7 @@ async function guardarUsuario(id) {
     nombre: val('fNombre'),
     grupo: val('fGrupo'),
     empresa: val('fEmpresa'),
+    email: val('fEmail').trim(),
     permisos: leerChecks(document.getElementById('uChecks'))
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los cambios.', false);
@@ -4155,7 +4172,36 @@ async function iniciarLogin(e) {
     error.textContent = r.data.error || 'No se pudo entrar.';
     return;
   }
+  if (r.data.necesita_codigo) {
+    // Segundo paso: el código que llegó al correo.
+    document.getElementById('pasoCodigo').style.display = 'block';
+    document.querySelector('#formLogin button[type=submit]').style.display = 'none';
+    document.getElementById('textoCodigo').textContent = `Te enviamos un código a ${r.data.correo}. Revisa tu correo (y la carpeta de spam).`;
+    document.getElementById('codigo').focus();
+    return;
+  }
   await comprobarSesion();
+}
+async function verificarCodigo() {
+  const error = document.getElementById('errorLogin');
+  error.textContent = '';
+  const r = await api('/api/login/codigo', {
+    usuario: document.getElementById('usuario').value.trim(),
+    codigo: document.getElementById('codigo').value.trim(),
+    recordar: document.getElementById('recordarEquipo').checked
+  });
+  if (!r.ok) {
+    error.textContent = r.data.error || 'No se pudo verificar.';
+    if (r.data.volver) volverAContrasena();
+    return;
+  }
+  volverAContrasena();
+  await comprobarSesion();
+}
+function volverAContrasena() {
+  document.getElementById('pasoCodigo').style.display = 'none';
+  document.getElementById('codigo').value = '';
+  document.querySelector('#formLogin button[type=submit]').style.display = '';
 }
 
 async function enviarClave(e) {
@@ -4198,6 +4244,8 @@ async function cerrarSesion() {
 document.getElementById('fecha').textContent = 'Hoy: ' +
   new Date().toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 document.getElementById('formLogin').addEventListener('submit', iniciarLogin);
+document.getElementById('btnCodigo').addEventListener('click', verificarCodigo);
+document.getElementById('codigo').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); verificarCodigo(); } });
 document.getElementById('formClave').addEventListener('submit', enviarClave);
 document.getElementById('btnCancelarClave').addEventListener('click', cancelarClave);
 document.getElementById('btnSalir').addEventListener('click', cerrarSesion);
