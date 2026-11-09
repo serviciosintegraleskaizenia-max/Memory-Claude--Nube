@@ -192,7 +192,8 @@ function limpiar(carpeta) {
     // 2. n8n (flujos, credenciales cifradas y su llave)
     if (!SIMULAR) {
       for (const [que, archivo] of [['workflow', 'flujos.json'], ['credentials', 'credenciales.json']]) {
-        try { correr('n8n', [`export:${que}`, '--all', `--output=${path.join(temporal, archivo)}`]); log('OK  n8n ' + archivo); }
+        // En Windows n8n es un .cmd (se corre con shell): la ruta va entre comillas por si tiene espacios.
+        try { correr('n8n', [`export:${que}`, '--all', WIN ? `--output="${path.join(temporal, archivo)}"` : `--output=${path.join(temporal, archivo)}`]); log('OK  n8n ' + archivo); }
         catch (e) { mal(`n8n ${archivo}: ${e.message}`); }
       }
       const llave = path.join(os.homedir(), '.n8n', 'config');
