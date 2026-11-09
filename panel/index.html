@@ -366,6 +366,13 @@
   .red-whatsapp { background: #25D366; }
   .red-tiktok { background: #111; }
   .red-web { background: #475569; }
+  .red-youtube { background: #FF0000; } .red-x { background: #000; } .red-linkedin { background: #0A66C2; } .red-telegram { background: #26A5E4; }
+  .red-threads { background: #000; } .red-pinterest { background: #E60023; } .red-maps { background: #fff; border: 1px solid #e2e8f0; } .red-tripadvisor { background: #34E0A1; }
+  .red-email { background: #0b4f8a; }
+  .redes a svg { width: 18px; height: 18px; }
+  .red-fila { display: grid; grid-template-columns: 34px 150px 1fr 1.4fr 38px; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .red-fila .redes a { width: 30px; height: 30px; }
+  @media (max-width: 760px) { .red-fila { grid-template-columns: 34px 1fr 38px; } .red-fila input { grid-column: 1 / -1; } }
   .caja-login { background: var(--tarjeta); color: var(--texto); padding: 30px; border-radius: 14px; width: min(360px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
   .caja-login h2 { margin: 0 0 6px; font-size: 18px; }
   .caja-login p { margin: 0 0 18px; font-size: 13px; color: var(--texto-suave); }
@@ -1050,19 +1057,45 @@ async function cargarEmpresa() {
 }
 
 // Íconos de redes sociales (solo se pega el enlace en Herramientas → Empresa).
+// Íconos de las redes (dibujos simples en blanco sobre el color oficial de cada red).
 const ICONOS_RED = {
-  instagram: ['Instagram', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="#fff" stroke="none"/></svg>'],
-  facebook: ['Facebook', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.5 21v-7.2h2.4l.4-2.9h-2.8V9.1c0-.8.3-1.4 1.4-1.4h1.5V5.1c-.3 0-1.1-.1-2.1-.1-2.1 0-3.6 1.3-3.6 3.7v2.2H8.3v2.9h2.4V21h2.8z"/></svg>'],
-  whatsapp: ['WhatsApp', '<svg viewBox="0 0 24 24"><path d="M12 3.6a8.4 8.4 0 0 0-7.3 12.6L3.6 20.4l4.3-1.1A8.4 8.4 0 1 0 12 3.6z" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M9.3 7.9c.3-.4.7-.4.9 0l.7 1.5c.1.3 0 .6-.2.8l-.5.5c.6 1.1 1.4 1.9 2.5 2.5l.5-.5c.2-.2.5-.3.8-.2l1.5.7c.4.2.4.6 0 .9-.6.6-1.6 1-2.5.6-2.1-.9-3.8-2.6-4.6-4.7-.3-.9 0-1.8.9-2.1z" fill="#fff"/></svg>'],
-  tiktok: ['TikTok', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M14.2 3.5h2.6c.2 1.7 1.3 3 3.1 3.2v2.7c-1.2 0-2.2-.3-3.1-.9v5.8a5 5 0 1 1-5-5h.6v2.8h-.6a2.2 2.2 0 1 0 2.4 2.2V3.5z"/></svg>'],
-  web: ['Página web', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.6" ry="8.5"/><path d="M3.5 12h17M5 7.5h14M5 16.5h14"/></svg>']
+  instagram: ['Instagram', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" fill="#fff" stroke="none"/></svg>', '@somosviajes o https://instagram.com/...'],
+  facebook: ['Facebook', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M13.6 21.5v-7.3h2.5l.4-2.9h-2.9V9.5c0-.8.3-1.4 1.5-1.4h1.5V5.5a19 19 0 0 0-2.2-.1c-2.2 0-3.7 1.3-3.7 3.8v2.1H8.2v2.9h2.5v7.3"/></svg>', 'https://facebook.com/...'],
+  whatsapp: ['WhatsApp', '<svg viewBox="0 0 24 24"><path d="M12 3.4a8.6 8.6 0 0 0-7.4 13l-1.2 4.2 4.4-1.1A8.6 8.6 0 1 0 12 3.4z" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M9.1 7.8c-.3 0-.6.1-.8.4-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.2.8 2.6.7 3.1.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.3-.1-1.1-.4-2-1.3-.8-.7-1.3-1.5-1.4-1.8-.2-.3 0-.4.1-.5l.4-.4.3-.4v-.4l-.8-1.8c-.2-.4-.4-.4-.5-.4h-.5z" fill="#fff"/></svg>', '+1 809 555 0000'],
+  tiktok: ['TikTok', '<svg viewBox="0 0 24 24"><path d="M14.6 3.5h2.6c.2 1.7 1.4 3 3.2 3.2v2.7c-1.2 0-2.3-.3-3.2-.9v5.9a5.1 5.1 0 1 1-5.1-5.1h.6V12h-.6a2.3 2.3 0 1 0 2.5 2.3V3.5z" fill="#25F4EE" transform="translate(-.6 -.4)"/><path d="M14.6 3.5h2.6c.2 1.7 1.4 3 3.2 3.2v2.7c-1.2 0-2.3-.3-3.2-.9v5.9a5.1 5.1 0 1 1-5.1-5.1h.6V12h-.6a2.3 2.3 0 1 0 2.5 2.3V3.5z" fill="#FE2C55" transform="translate(.6 .4)"/><path d="M14.6 3.5h2.6c.2 1.7 1.4 3 3.2 3.2v2.7c-1.2 0-2.3-.3-3.2-.9v5.9a5.1 5.1 0 1 1-5.1-5.1h.6V12h-.6a2.3 2.3 0 1 0 2.5 2.3V3.5z" fill="#fff"/></svg>', '@somosviajes'],
+  youtube: ['YouTube', '<svg viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="#fff"/><path d="M10 9v6l5.2-3z" fill="#FF0000"/></svg>', '@somosviajes o https://youtube.com/...'],
+  x: ['X', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M17.8 3.5h2.9l-6.4 7.3 7.5 9.7h-5.9l-4.6-6-5.3 6H3.1l6.8-7.8-7.2-9.2h6l4.2 5.5zm-1 15.3h1.6L7.9 5.1H6.2z"/></svg>', '@somosviajes'],
+  linkedin: ['LinkedIn', '<svg viewBox="0 0 24 24" fill="#fff"><rect x="4.5" y="9.5" width="3" height="10"/><circle cx="6" cy="6" r="1.8"/><path d="M10 9.5h2.9v1.4c.5-.9 1.6-1.7 3.2-1.7 3.1 0 3.7 2 3.7 4.6v5.7h-3v-5c0-1.2 0-2.7-1.7-2.7s-2 1.3-2 2.6v5.1H10z"/></svg>', 'https://linkedin.com/company/...'],
+  telegram: ['Telegram', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M20.7 4.3 3.4 11c-1.2.5-1.2 1.2-.2 1.5l4.4 1.4 1.7 5.2c.2.6.4.8.9.8.4 0 .6-.2.9-.4l2.2-2.1 4.5 3.3c.8.5 1.4.2 1.6-.8l2.9-13.8c.3-1.2-.4-1.8-1.3-1.4zM9.5 14.2l8.6-5.4c.4-.3.8-.1.5.2l-7.2 6.5-.3 3.1z"/></svg>', '@somosviajes'],
+  threads: ['Threads', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M16.8 10.5c-.5-3-2.6-4.3-5-4.3-3.1 0-5.4 2.3-5.4 5.8s2.2 5.8 5.5 5.8c2.6 0 4.8-1.4 4.8-3.9 0-3.2-4.4-3.6-6.2-2.7-1.3.6-1.4 2.6.4 3 1.9.4 3.6-.6 3.9-3.4"/></svg>', '@somosviajes'],
+  pinterest: ['Pinterest', '<svg viewBox="0 0 24 24" fill="#fff"><path d="M12.3 3.5c-5 0-7.6 3.4-7.6 6.3 0 1.7.7 3.3 2.1 3.9.2.1.4 0 .5-.2l.2-.8c.1-.3 0-.4-.1-.6-.4-.5-.7-1.2-.7-2.1 0-2.7 2-5.1 5.3-5.1 2.9 0 4.5 1.8 4.5 4.1 0 3.1-1.4 5.7-3.4 5.7-1.1 0-1.9-.9-1.7-2.1.3-1.4 1-2.9 1-3.9 0-.9-.5-1.6-1.5-1.6-1.2 0-2.1 1.2-2.1 2.8 0 1 .3 1.7.3 1.7l-1.4 5.9c-.4 1.7-.1 3.9 0 4.1 0 .1.2.2.3.1.1-.2 1.6-2 2.1-3.8l.8-3.1c.4.8 1.6 1.4 2.8 1.4 3.7 0 6.2-3.4 6.2-7.9 0-3.4-2.9-6.6-7.3-6.6z"/></svg>', 'https://pinterest.com/...'],
+  maps: ['Google Maps', '<svg viewBox="0 0 24 24"><path d="M12 2.8a6.6 6.6 0 0 0-6.6 6.6c0 4.9 6.6 12 6.6 12s6.6-7.1 6.6-12A6.6 6.6 0 0 0 12 2.8z" fill="#EA4335"/><circle cx="12" cy="9.4" r="2.5" fill="#fff"/></svg>', 'https://maps.app.goo.gl/...'],
+  tripadvisor: ['Tripadvisor', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="7.3" cy="13" r="3.4"/><circle cx="16.7" cy="13" r="3.4"/><circle cx="7.3" cy="13" r=".9" fill="#fff"/><circle cx="16.7" cy="13" r=".9" fill="#fff"/><path d="M3 9.2c2.6-2.3 5.8-3.2 9-3.2s6.4.9 9 3.2M12 16.4l-1.2-1.6M12 16.4l1.2-1.6"/></svg>', 'https://tripadvisor.com/...'],
+  email: ['Correo', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7 8 6 8-6"/></svg>', 'reservas@somosviaje.com'],
+  web: ['Página web', '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.6" ry="8.5"/><path d="M3.5 12h17M5 7.5h14M5 16.5h14"/></svg>', 'somosviaje.online']
 };
-
+// Lo guardado antes era { instagram: url, ... }; ahora es una lista [{ red, nombre, url }].
+function listaRedes(redes) {
+  if (Array.isArray(redes)) return redes.filter(x => x && ICONOS_RED[x.red] && x.url);
+  return Object.keys(ICONOS_RED).filter(k => redes && redes[k]).map(k => ({ red: k, nombre: '', url: redes[k] }));
+}
 function pintarRedes(redes) {
-  return Object.entries(ICONOS_RED)
-    .filter(([k]) => redes[k] && /^https?:\/\//i.test(redes[k]))
-    .map(([k, [nombre, svg]]) => `<a class="red-${k}" href="${esc(redes[k])}" target="_blank" rel="noopener" title="${nombre}">${svg}</a>`)
+  return listaRedes(redes).filter(x => /^(https?:|mailto:)/i.test(x.url))
+    .map(x => { const [nombre, svg] = ICONOS_RED[x.red]; const titulo = nombre + (x.nombre ? ' · ' + x.nombre : '');
+      return `<a class="red-${x.red}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(titulo)}" aria-label="${esc(titulo)}">${svg}</a>`; })
     .join('');
+}
+function filaRedForm(x = {}) {
+  const opciones = Object.entries(ICONOS_RED).map(([k, [n]]) => `<option value="${k}" ${k === x.red ? 'selected' : ''}>${n}</option>`).join('');
+  const muestra = ICONOS_RED[x.red || 'instagram'];
+  const valor = String(x.url || '').replace(/^mailto:/, '');
+  return `<div class="red-fila">
+    <span class="redes"><a class="red-${x.red || 'instagram'}">${muestra[1]}</a></span>
+    <select data-red="red">${opciones}</select>
+    <input data-red="nombre" maxlength="40" placeholder="Nombre (opcional): Punta Cana, Orlando..." value="${esc(x.nombre || '')}">
+    <input data-red="url" maxlength="200" placeholder="${esc(muestra[2])}" value="${esc(valor)}">
+    <button type="button" class="btn-mini" data-red-quitar title="Quitar">🗑</button>
+  </div>`;
 }
 
 function avisoEscritorio(texto) {
@@ -3591,16 +3624,9 @@ function formEmpresa() {
     </div>
 
     <div class="titulo-seccion">Redes sociales (salen en el inicio de sesión y arriba del panel)</div>
-    <div class="form-fila">
-      <label>Instagram<input id="eRedInstagram" maxlength="200" placeholder="@somosviajes o https://instagram.com/..." value="${esc((e.redes || {}).instagram || '')}"></label>
-      <label>Facebook<input id="eRedFacebook" maxlength="200" placeholder="https://facebook.com/..." value="${esc((e.redes || {}).facebook || '')}"></label>
-      <label>WhatsApp<input id="eRedWhatsapp" maxlength="200" placeholder="+1 809 555 0000" value="${esc((e.redes || {}).whatsapp || '')}"></label>
-    </div>
-    <div class="form-fila">
-      <label>TikTok<input id="eRedTiktok" maxlength="200" placeholder="@somosviajes" value="${esc((e.redes || {}).tiktok || '')}"></label>
-      <label>Página web<input id="eRedWeb" maxlength="200" placeholder="somosviaje.online" value="${esc((e.redes || {}).web || '')}"></label>
-    </div>
-    <p class="etiqueta-sec">Deja vacío lo que no uses. Los íconos son los oficiales: no hace falta subir imágenes.</p>
+    <div id="eRedes">${(listaRedes(e.redes).length ? listaRedes(e.redes) : [{ red: 'instagram' }, { red: 'facebook' }, { red: 'whatsapp' }]).map(filaRedForm).join('')}</div>
+    <button type="button" class="btn-sec" data-red-agregar style="margin-top:6px">+ Agregar red</button>
+    <p class="etiqueta-sec">Puedes poner varias cuentas de la misma red (por ejemplo dos Instagram: Punta Cana y Orlando). El nombre sale al pasar el ratón por el ícono. Las filas vacías no se guardan.</p>
     <div class="pie-acciones"><button class="btn" data-accion="guardar-empresa">Guardar datos de la empresa</button></div>`;
 }
 
@@ -3633,7 +3659,7 @@ async function guardarEmpresa() {
     nombre: val('eNombre').trim(), rnc: val('eRnc').trim(), direccion: val('eDireccion').trim(),
     banner_enlace: val('eEnlace').trim(), logo, banner, fondo,
     login_titulo: val('eLoginTitulo').trim(), login_subtitulo: val('eLoginSubtitulo').trim(), marca_nombre: val('eMarcaNombre').trim(),
-    redes: { instagram: val('eRedInstagram').trim(), facebook: val('eRedFacebook').trim(), whatsapp: val('eRedWhatsapp').trim(), tiktok: val('eRedTiktok').trim(), web: val('eRedWeb').trim() }
+    redes: [...document.querySelectorAll('#eRedes .red-fila')].map(f => ({ red: f.querySelector('[data-red=red]').value, nombre: f.querySelector('[data-red=nombre]').value.trim(), url: f.querySelector('[data-red=url]').value.trim() })).filter(x => x.url)
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
   await cargarEmpresa();
@@ -4174,6 +4200,23 @@ document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRe
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
 document.getElementById('btnExcel').addEventListener('click', abrirExportar);
 document.getElementById('btnColumnas').addEventListener('click', abrirColumnas);
+// Formulario de redes de la empresa: agregar, quitar y cambiar el tipo de red de cada fila.
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-red-agregar]')) {
+    const caja = document.getElementById('eRedes');
+    if (caja) caja.insertAdjacentHTML('beforeend', filaRedForm({ red: 'instagram' }));
+  }
+  const quitar = e.target.closest('[data-red-quitar]');
+  if (quitar) quitar.closest('.red-fila').remove();
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.red === 'red') {
+    const fila = e.target.closest('.red-fila');
+    const [, svg, ejemplo] = ICONOS_RED[e.target.value];
+    fila.querySelector('.redes').innerHTML = `<a class="red-${e.target.value}">${svg}</a>`;
+    fila.querySelector('[data-red=url]').placeholder = ejemplo;
+  }
+});
 document.getElementById('btnTema').addEventListener('click', alternarTema);
 document.getElementById('btnCampana').addEventListener('click', e => { e.stopPropagation(); alternarBandeja(); });
 document.getElementById('bandejaLista').addEventListener('click', e => {

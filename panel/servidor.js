@@ -661,7 +661,13 @@ function imagenValida(s, maximo = 3000000) {
 }
 // La foto de fondo del login puede pesar más (hasta ~4 MB).
 const MAX_FONDO = 5600000;
-const REDES = ['instagram', 'facebook', 'whatsapp', 'tiktok', 'web'];
+const REDES = ['instagram', 'facebook', 'whatsapp', 'tiktok', 'web', 'youtube', 'x', 'linkedin', 'telegram', 'threads', 'pinterest', 'maps', 'tripadvisor', 'email'];
+// Redes de la empresa: una lista [{ red, nombre, url }] (varias cuentas por red, ej. Instagram Punta Cana y Orlando).
+// Lo guardado con el formato viejo ({ instagram: url, ... }) se sigue leyendo.
+function listaRedes(r) {
+  if (Array.isArray(r)) return r;
+  return Object.entries(r || {}).filter(([k, v]) => REDES.includes(k) && v).map(([red, url]) => ({ red, nombre: '', url }));
+}
 // Convierte lo que escriba el usuario en un enlace válido (ej.: "@somosviajes", "8095550000", "somosviajes.com").
 function enlaceRed(red, valor) {
   const v = String(valor || '').trim().slice(0, 200);
@@ -670,7 +676,14 @@ function enlaceRed(red, valor) {
   if (red === 'whatsapp') { const n = v.replace(/\D/g, ''); return n.length >= 8 ? 'https://wa.me/' + n : ''; }
   if (red === 'instagram' && /^@?[\w.]{2,40}$/.test(v) && !/\.[a-z]{2,}$/i.test(v)) return 'https://instagram.com/' + v.replace(/^@/, '');
   if (red === 'tiktok' && /^@?[\w.]{2,40}$/.test(v) && !/\.[a-z]{2,}$/i.test(v)) return 'https://www.tiktok.com/@' + v.replace(/^@/, '');
-  if (red === 'facebook' && /^[\w]{2,60}$/.test(v)) return 'https://facebook.com/' + v;
+  if (red === 'facebook' && /^[\w.]{2,60}$/.test(v) && !/\.[a-z]{2,}$/i.test(v)) return 'https://facebook.com/' + v;
+  const usuario = /^@?[\w.-]{2,40}$/.test(v) && !/\.[a-z]{2,}$/i.test(v) ? v.replace(/^@/, '') : '';
+  if (usuario && red === 'youtube') return 'https://www.youtube.com/@' + usuario;
+  if (usuario && red === 'x') return 'https://x.com/' + usuario;
+  if (usuario && red === 'telegram') return 'https://t.me/' + usuario;
+  if (usuario && red === 'threads') return 'https://www.threads.net/@' + usuario;
+  if (usuario && red === 'pinterest') return 'https://www.pinterest.com/' + usuario;
+  if (red === 'email') return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v) ? 'mailto:' + v : '';
   if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(v)) return 'https://' + v;
   return '';
 }
@@ -2183,18 +2196,19 @@ http.createServer(async (req, res) => {
       const loginTitulo = String(b.login_titulo || '').trim().slice(0, 80);
       const marcaNombre = String(b.marca_nombre || '').trim().slice(0, 80);
       const loginSubtitulo = String(b.login_subtitulo || '').trim().slice(0, 160);
-      const redes = {};
-      for (const red of REDES) {
-        const valor = b.redes && b.redes[red];
-        if (!valor) continue;
-        const enlaceValido = enlaceRed(red, valor);
-        if (!enlaceValido) return json(res, 400, { error: `No entendí el enlace de ${red}. Pega la dirección completa (https://...).` });
-        redes[red] = enlaceValido;
+      const redes = [];
+      for (const x of listaRedes(b.redes).slice(0, 40)) {
+        const red = String(x.red || '').toLowerCase();
+        if (!REDES.includes(red) || !String(x.url || '').trim()) continue;
+        const enlaceValido = enlaceRed(red, x.url);
+        const nombreRed = String(x.nombre || '').trim().slice(0, 40);
+        if (!enlaceValido) return json(res, 400, { error: `No entendí el enlace de ${red}${nombreRed ? ' (' + nombreRed + ')' : ''}. Pega la dirección completa (https://...).` });
+        redes.push({ red, nombre: nombreRed, url: enlaceValido });
       }
       const previa = (await client.query(
         'SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS logo, banner IS NOT NULL AS banner FROM empresa_datos WHERE id = 1'
       )).rows[0];
-      const valores = [nombre, rnc, direccion, enlace, loginTitulo, loginSubtitulo, redes, marcaNombre];
+      const valores = [nombre, rnc, direccion, enlace, loginTitulo, loginSubtitulo, JSON.stringify(redes), marcaNombre];
       const cambios = ['nombre = $1', 'rnc = $2', 'direccion = $3', 'banner_enlace = $4', 'login_titulo = $5', 'login_subtitulo = $6', 'redes = $7', 'marca_nombre = $8', 'actualizado = NOW()'];
       if (b.fondo !== undefined) {
         valores.push(b.fondo || null);
