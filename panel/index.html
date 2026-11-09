@@ -2856,6 +2856,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
     return marco('auditoria', aviso);
   }
   if (tab === 'estado') return marco('estado', aviso);
+  if (tab === 'extras') return marco('extras', aviso);
   if (tab === 'empresas') return marco('empresas', aviso);
   const configura = puede('configurar_empresa') || puede('administrar_usuarios');
   if (configura && tab === 'empresa') return marco('empresa', aviso);
@@ -2886,6 +2887,7 @@ function marco(tab, aviso) {
     (admin && esProg ? boton('grupos', 'Grupos') : '') +
     (esProg && mod.historial !== false ? boton('historico', 'Historial') : '') +
     (puedeVerSalud() ? boton('estado', 'Estado del sistema') : '') +
+    (puede('exportar_datos') || puede('supervisar') ? boton('extras', 'Extras para facturar') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
     `<button class="btn-sec" data-accion="cerrar">Cerrar</button>`;
@@ -2900,6 +2902,10 @@ function marco(tab, aviso) {
   else if (tab === 'reparto') cuerpo = '<div id="panelReparto">Cargando…</div>';
   else if (tab === 'historico') cuerpo = '<div id="panelHistorico">Cargando…</div>';
   else if (tab === 'estado') cuerpo = '<div id="panelEstado">Cargando…</div>';
+  else if (tab === 'extras') cuerpo = `<div class="form-fila"><label>Mes del servicio<input type="month" id="exMes" value="${hoyISO().slice(0, 7)}"></label>
+      <div style="align-self:end;display:flex;gap:8px"><button class="btn" data-accion="extras-ver">Ver</button><button class="btn-sec" data-accion="extras-excel">Descargar Excel</button></div></div>
+    <p class="etiqueta-sec">Salen los servicios con la nota "EXTRA: ..." (sillas de bebé, booster, silla de ruedas, botellas...) cuya fecha de servicio es de ese mes, agrupados por agencia.</p>
+    <div id="panelExtras"></div>`;
   else if (tab === 'empresas') cuerpo = '<div id="panelEmpresas">Cargando…</div>';
   else cuerpo = formAuditoria();
 
@@ -2914,7 +2920,36 @@ function marco(tab, aviso) {
   if (tab === 'reparto') cargarReparto();
   if (tab === 'historico') cargarHistorico();
   if (tab === 'estado') cargarEstadoSistema(false);
+  if (tab === 'extras') cargarExtras();
   if (tab === 'empresas') cargarEmpresas();
+}
+
+/* ---------- Extras para facturar ---------- */
+async function cargarExtras(excel) {
+  const mes = val('exMes');
+  const caja = document.getElementById('panelExtras');
+  caja.innerHTML = 'Cargando…';
+  const r = await api('/api/extras?mes=' + encodeURIComponent(mes));
+  if (!r.ok) { caja.innerHTML = ''; return mostrarAviso(r.data.error || 'No se pudo cargar.', false); }
+  const lista = r.data.extras;
+  if (excel) {
+    if (!lista.length) return mostrarAviso('No hay extras en ese mes.', false);
+    descargarCsv(['Agencia', 'Fecha servicio', 'Reserva #', 'Clientes', 'Servicio', 'Hotel', 'Extra', 'Cantidad', 'Estado'],
+      lista.map(x => [x.agencia, x.fecha_servicio, '#' + x.reserva, x.clientes, x.servicio, x.hotel, x.extra, x.cantidad, (ESTADOS.find(e => e[0] === x.estado) || [0, x.estado])[1]]),
+      `extras_${mes}.csv`);
+    return mostrarAviso(`Listo: ${lista.length} extras.`, true);
+  }
+  if (!lista.length) { caja.innerHTML = '<div class="vacio-total">No hay extras con servicio en ese mes.</div>'; return; }
+  const porAgencia = new Map();
+  for (const x of lista) { if (!porAgencia.has(x.agencia)) porAgencia.set(x.agencia, []); porAgencia.get(x.agencia).push(x); }
+  caja.innerHTML = [...porAgencia].map(([agencia, xs]) => {
+    const resumen = new Map();
+    for (const x of xs) { const k = x.extra.toLowerCase().replace(/([a-záéíóúñ]{3,})s\b/g, '$1'); resumen.set(k, (resumen.get(k) || 0) + x.cantidad); }
+    return `<div class="titulo-seccion">${esc(agencia)} · ${[...resumen].map(([k, n]) => n + ' ' + esc(k)).join(' · ')}</div>
+      <div class="tabla-wrap tabla-chica"><table><thead><tr><th>Fecha</th><th>Reserva</th><th>Clientes</th><th>Servicio</th><th>Extra</th><th>Cant.</th><th>Estado</th></tr></thead><tbody>
+      ${xs.map(x => `<tr><td>${esc(x.fecha_servicio)}</td><td>#${x.reserva}</td><td>${esc(x.clientes)}</td><td>${esc(x.servicio)}</td><td>${esc(x.extra)}</td><td>${x.cantidad}</td><td>${etiquetaEstado(x.estado)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }).join('');
 }
 
 /* ---------- Empresas (solo en el panel central de Kaizen IA, solo el programador) ---------- */
@@ -4051,6 +4086,9 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-auditoria') return abrirHerramientas('auditoria');
   if (a === 'tab-empresa') return abrirHerramientas('empresa');
   if (a === 'tab-cache') return abrirHerramientas('cache');
+  if (a === 'tab-extras') return abrirHerramientas('extras');
+  if (a === 'extras-ver') return cargarExtras();
+  if (a === 'extras-excel') return cargarExtras(true);
   if (a === 'cache-guardar') return guardarAjustesCache();
   if (a === 'tab-reparto') return abrirHerramientas('reparto');
   if (a === 'tab-historico') return abrirHerramientas('historico');

@@ -1946,6 +1946,37 @@ http.createServer(async (req, res) => {
       }));
     }
 
+    // Extras para facturar: las notas "EXTRA: ..." de los servicios de un mes, por agencia.
+    if (req.method === 'GET' && url === '/api/extras') {
+      if (!puede('exportar_datos') && !puede('supervisar')) return json(res, 403, { error: 'No tienes permiso para ver los extras.' });
+      const mes = new URL(req.url, 'http://localhost').searchParams.get('mes') || '';
+      if (!/^\d{4}-\d{2}$/.test(mes)) return json(res, 400, { error: 'Elige un mes.' });
+      const filas = (await client.query(
+        `SELECT id, message_id, agencia, remitente, nombre_cliente, tipo_servicio, actividad, fecha_servicio, fecha, estado, motivo, hotel
+         FROM clasificacion WHERE categoria IN ('RESERVA', 'MODIFICACION') AND error_ia IS NOT TRUE AND motivo ~* '\\mEXTRAS?\\s*:'
+         ORDER BY id`)).rows;
+      const conocidas = new Map((await client.query('SELECT remitente, agencia FROM agencias_conocidas')).rows.map(x => [x.remitente, x.agencia]));
+      const primeros = new Map();
+      for (const x of (await client.query("SELECT message_id, MIN(id) AS id FROM clasificacion WHERE COALESCE(message_id, '') <> '' GROUP BY message_id")).rows) primeros.set(x.message_id, x.id);
+      const lista = [];
+      for (const x of filas) {
+        const iso = fechaServicioISO(x.fecha_servicio, x.fecha);
+        if (!iso || iso.slice(0, 7) !== mes) continue;
+        const texto = (String(x.motivo).match(/\bEXTRAS?\s*:\s*(.*)$/i) || [])[1] || '';
+        for (const parte of texto.split(/[,;+]|\s+y\s+/i).map(t => t.trim()).filter(Boolean)) {
+          const m = parte.match(/^(\d{1,3})\s*x?\s*(.+)$/i);
+          lista.push({
+            reserva: primeros.get(x.message_id) || x.id, servicio_id: x.id, fecha_servicio: iso, estado: x.estado,
+            agencia: x.agencia || conocidas.get((emailDeRemitente(x.remitente) || '').toLowerCase()) || '(sin agencia)',
+            clientes: x.nombre_cliente || '', servicio: x.tipo_servicio || x.actividad || '', hotel: x.hotel || '',
+            extra: (m ? m[2] : parte).trim(), cantidad: m ? Number(m[1]) : 1
+          });
+        }
+      }
+      lista.sort((a, b) => a.agencia.localeCompare(b.agencia) || a.fecha_servicio.localeCompare(b.fecha_servicio));
+      return json(res, 200, { mes, extras: lista });
+    }
+
     if (req.method === 'GET' && url === '/api/avisos') {
       const r = await client.query(
         'UPDATE avisos SET leido = TRUE WHERE para = $1 AND leido = FALSE RETURNING id, texto, reserva_id, creado',
