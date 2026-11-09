@@ -729,13 +729,38 @@ function fechaOrden(x) {
 }
 
 // Reservas agrupadas por nombre de cliente, para encontrar rápido la original de un cambio.
+// Pistas para unir un cambio o una cancelación con su reserva original, de la más segura a la menos:
+// 1) el mismo código de reserva en el asunto (Viator "SOM-T152685098", "VIA-108634504", localizadores);
+// 2) el mismo hilo de correo (el asunto sin RE:/RV:/Fwd:); 3) el mismo cliente (aunque el nombre venga al revés).
+function codigosReserva(asunto) {
+  return [...new Set((String(asunto || '').toUpperCase().match(/\b(?:SOM-T|VIA-|BR-|GYG|BKG)[A-Z0-9-]{6,}\b|\b[A-Z]{2,4}-?\d{7,}\b/g) || []))];
+}
+function asuntoBase(asunto) {
+  let t = sinAcentos(String(asunto || '')).toLowerCase();
+  for (let i = 0; i < 5; i++) t = t.replace(/^\s*(re|rv|fw|fwd|reenviado|respuesta|aw|tr)\s*:\s*/i, '');
+  t = t.replace(/^\s*(new|cancelled|canceled|amended|modified)\s+booking\s*:?\s*/i, '');
+  return t.replace(/\s+/g, ' ').trim();
+}
+function claveNombre(s) {
+  return normalizarNombre(s).replace(/[^a-z0-9ñ ]+/g, ' ').split(/\s+/).filter(w => w.length > 1).sort().join(' ');
+}
+// ¿El correo cancela la reserva? (asunto "Cancelled booking", "cancelación", o todas sus notas dicen CANCELADO)
+function esCancelacion(servicios) {
+  const a = sinAcentos(String(servicios[0] && servicios[0].asunto || '')).toLowerCase();
+  if (/\bcancel(led|ed|ado|ada|acion|ar)\b|\banulad[oa]\b/.test(a)) return true;
+  const notas = servicios.map(s => sinAcentos(String(s.error_ia ? '' : (s.motivo || '')) + ' ' + String(s.actividad || '')).toLowerCase());
+  return notas.length > 0 && notas.every(n => /\bcancelad[oa]\b|^\s*cancelado\s*:/.test(n));
+}
 function indiceReservas(reservas) {
   const indice = new Map();
+  indice.porCodigo = new Map();
+  indice.porAsunto = new Map();
+  const meter = (mapa, clave, x) => { if (!clave) return; if (!mapa.has(clave)) mapa.set(clave, []); mapa.get(clave).push(x); };
   for (const x of reservas) {
-    const clave = normalizarNombre(x.nombre_cliente);
-    if (!clave) continue;
-    if (!indice.has(clave)) indice.set(clave, []);
-    indice.get(clave).push(x);
+    meter(indice, claveNombre(x.nombre_cliente), x);
+    for (const c of codigosReserva(x.asunto)) meter(indice.porCodigo, c, x);
+    const b = asuntoBase(x.asunto);
+    if (b.length >= 12) meter(indice.porAsunto, b, x);
   }
   return indice;
 }
@@ -743,7 +768,10 @@ function indiceReservas(reservas) {
 // La reserva original de una modificación: la última RESERVA del mismo cliente recibida antes.
 // Se ordena por fecha de recibido (no por número), porque el historial importado tiene números más altos.
 function originalDe(mod, indice) {
-  const lista = indice.get(normalizarNombre(mod.nombre_cliente));
+  const porCodigo = codigosReserva(mod.asunto).flatMap(c => (indice.porCodigo && indice.porCodigo.get(c)) || []);
+  const b = asuntoBase(mod.asunto);
+  const porHilo = b.length >= 12 && indice.porAsunto ? indice.porAsunto.get(b) || [] : [];
+  const lista = porCodigo.length ? porCodigo : porHilo.length ? porHilo : indice.get(claveNombre(mod.nombre_cliente));
   if (!lista) return null;
   const fm = fechaOrden(mod);
   let original = null;
@@ -782,11 +810,11 @@ async function procesarModificaciones() {
   procesandoModificaciones = true;
   try {
     const mods = (await client.query(
-      "SELECT id, nombre_cliente, message_id, fecha FROM clasificacion WHERE categoria = 'MODIFICACION' AND aviso_procesado = FALSE ORDER BY id"
+      "SELECT id, nombre_cliente, message_id, fecha, asunto FROM clasificacion WHERE categoria = 'MODIFICACION' AND aviso_procesado = FALSE ORDER BY id"
     )).rows;
     if (!mods.length) return;
     const reservas = (await client.query(
-      "SELECT id, nombre_cliente, message_id, estado, fecha FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
+      "SELECT id, nombre_cliente, message_id, estado, fecha, asunto FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
     )).rows;
     const indice = indiceReservas(reservas);
     const vistos = new Set();
@@ -1241,7 +1269,7 @@ async function repartir() {
       if (filas[0].categoria === 'MODIFICACION') {
         if (!indice) {
           indice = indiceReservas((await client.query(
-            "SELECT id, nombre_cliente, message_id, fecha, estado FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
+            "SELECT id, nombre_cliente, message_id, fecha, estado, asunto FROM clasificacion WHERE categoria = 'RESERVA' ORDER BY id DESC LIMIT 50000"
           )).rows);
         }
         const original = originalDe(filas[0], indice);
@@ -1885,16 +1913,22 @@ http.createServer(async (req, res) => {
       // La reserva original de un cambio puede estar en el historial.
       const reservas = filas.filter(x => x.categoria === 'RESERVA');
       const historicas = historico ? [] : (await client.query(
-        "SELECT id, nombre_cliente, message_id, fecha, TRUE AS historica FROM clasificacion WHERE categoria = 'RESERVA' AND estado = 'historico'"
+        "SELECT id, nombre_cliente, message_id, fecha, asunto, TRUE AS historica FROM clasificacion WHERE categoria = 'RESERVA' AND estado = 'historico'"
       )).rows;
       const indice = indiceReservas([...reservas, ...historicas]);
       const originales = new Map();
       const cambios = new Map();
+      const canceladas = new Map(); // reserva original -> correo que la cancela
+      const porCorreo = new Map();
+      for (const x of filas) { const k = claveDe(x); if (!porCorreo.has(k)) porCorreo.set(k, []); porCorreo.get(k).push(x); }
       for (const x of filas) {
         if (x.categoria !== 'MODIFICACION') continue;
         const original = originalDe(x, indice);
         originales.set(x.id, original);
-        if (original) cambios.set(claveDe(original), Math.max(cambios.get(claveDe(original)) || 0, x.id));
+        if (original) {
+          cambios.set(claveDe(original), Math.max(cambios.get(claveDe(original)) || 0, x.id));
+          if (esCancelacion(porCorreo.get(claveDe(x)) || [x])) canceladas.set(claveDe(original), Math.max(canceladas.get(claveDe(original)) || 0, x.id));
+        }
       }
       return json(res, 200, filas.map(x => {
         const base = { ...x, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
@@ -1906,6 +1940,8 @@ http.createServer(async (req, res) => {
           if (o && o.historica) base.original_historico = true;
         }
         if (x.categoria === 'RESERVA' && cambios.has(claveDe(x))) base.cambio_id = cambios.get(claveDe(x));
+        if (x.categoria === 'RESERVA' && canceladas.has(claveDe(x))) base.cancelada_por = canceladas.get(claveDe(x));
+        if (x.categoria === 'MODIFICACION' && esCancelacion(porCorreo.get(claveDe(x)) || [x])) base.es_cancelacion = true;
         return base;
       }));
     }
