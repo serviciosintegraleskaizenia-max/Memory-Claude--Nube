@@ -570,6 +570,7 @@
     <div class="modal-pie">
       <select id="mEstado"></select>
       <button class="btn-sec" id="btnResponder" style="display:none;">Responder</button>
+      <button class="btn-sec" id="btnPedirDatos" style="display:none;" title="Prepara la respuesta a la agencia con los datos que faltan">📩 Pedir datos que faltan</button>
       <button class="btn-sec" id="btnReanalizar" style="display:none;">Volver a analizar</button>
       <button class="btn" id="btnGuardar">Guardar estado</button>
       <button class="btn-sec" id="btnGuardarSiguiente" title="Guarda el estado y abre la siguiente reserva de la tabla">Guardar y siguiente &#8594;</button>
@@ -1830,6 +1831,7 @@ async function abrirModal(id) {
 
   document.getElementById('mMensaje').textContent = puedeEstado ? '' : 'No tienes permiso para cambiar el estado.';
   document.getElementById('btnResponder').style.display = puede('responder_correo') ? 'inline-block' : 'none';
+  document.getElementById('btnPedirDatos').style.display = puede('responder_correo') && ['RESERVA', 'MODIFICACION'].includes(r.categoria) && datosQueFaltan(r).length ? 'inline-block' : 'none';
   document.getElementById('btnReanalizar').style.display = puede('cambiar_estado') ? 'inline-block' : 'none';
   // Una respuesta a medias (texto y adjuntos) nunca pasa de una reserva a otra.
   ocultarRespuesta();
@@ -2564,6 +2566,44 @@ function cargarImagenDe(archivo) {
 }
 
 /* ---------- Correos: responder y correo nuevo ---------- */
+
+// Lo que le falta a una reserva para poder operarla (por servicio, más el teléfono de contacto).
+const VUELO_COMPLETO = /^[A-Z0-9]{2}\s?-?\s?\d{1,4}[A-Z]?$|[a-záéíóúñ]{3,}.*\d{1,4}[A-Z]?$/i;
+function datosQueFaltan(r) {
+  const lista = [];
+  const g = serviciosDe(r);
+  for (const s of g) {
+    const t = tipoServicio(s);
+    const nombre = (TIPOS_SRV[t] && t !== 'OTRO' ? TIPOS_SRV[t].replace(/^\S+\s/, '') : 'Servicio') + (s.fecha_servicio ? ' del ' + fechaBonita(s.fecha_servicio) : '') + (s.actividad && t === 'ACTIVIDAD' ? ' (' + s.actividad + ')' : '');
+    const falta = [];
+    const esAeropuerto = t === 'IN' || t === 'OUT';
+    if (!s.fecha_servicio) falta.push('la fecha');
+    const vuelos = String(s.vuelo || '').split(/[,;/]+/).map(x => x.trim()).filter(Boolean);
+    if (esAeropuerto && !vuelos.length) falta.push('el número de vuelo');
+    else if (esAeropuerto && vuelos.some(v => !VUELO_COMPLETO.test(v))) falta.push('el número de vuelo completo (solo vino "' + vuelos.filter(v => !VUELO_COMPLETO.test(v)).join(', ') + '")');
+    if (!s.hora_servicio) falta.push(t === 'IN' ? 'la hora de llegada del vuelo' : t === 'OUT' ? 'la hora de salida del vuelo' : 'la hora');
+    if (!s.hotel && !s.punto_llegada && !s.punto_partida) falta.push('el hotel');
+    if (!(Number(s.adultos) || Number(s.ninos) || Number(s.infantes))) falta.push('la cantidad de pasajeros (adultos, niños e infantes)');
+    if (falta.length) lista.push((g.length > 1 && !s.fecha_servicio ? nombre + ' ' + (g.indexOf(s) + 1) : nombre) + ': ' + falta.join(', '));
+  }
+  if (!g.some(s => String(s.telefono || '').trim())) lista.push('Teléfono de contacto del pasajero (con código de país), para coordinar el día del servicio');
+  return lista;
+}
+function fechaBonita(f) {
+  const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}` : f;
+}
+function pedirDatos() {
+  if (!seleccionado) return;
+  const faltan = datosQueFaltan(seleccionado);
+  if (!faltan.length) return;
+  const clientes = clientesDe(serviciosDe(seleccionado));
+  mostrarRespuesta();
+  const caja = document.getElementById('mTexto');
+  caja.value = `Buen día, estimados:\n\nPara confirmar y operar la reserva${clientes ? ' de ' + clientes : ''} necesitamos, por favor, los siguientes datos:\n\n` +
+    faltan.map(x => '• ' + x).join('\n') + '\n\nQuedamos atentos. Muchas gracias.\n\nSaludos cordiales,';
+  caja.setSelectionRange(0, 0);
+}
 
 function mostrarRespuesta() {
   if (!seleccionado) return;
@@ -4200,6 +4240,7 @@ document.getElementById('mDatos').addEventListener('click', e => {
   if (e.target.id === 'btnAsignar') asignarReserva();
 });
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
+document.getElementById('btnPedirDatos').addEventListener('click', pedirDatos);
 document.getElementById('btnReanalizar').addEventListener('click', reanalizar);
 document.getElementById('btnImagenes').addEventListener('click', mostrarImagenes);
 document.getElementById('btnCopia').addEventListener('click', guardarCopiaCorreo);
