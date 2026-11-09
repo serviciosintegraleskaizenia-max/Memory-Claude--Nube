@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel de reservas</title>
+<title>Zentralia App</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f97316'/%3E%3Cstop offset='1' stop-color='%23fbbf24'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='url(%23g)'/%3E%3Cpath d='M19 18h26v6L28 41h17v6H19v-6l17-17H19z' fill='%23fff'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap" rel="stylesheet">
 <style>
   :root {
     --fondo: #eef2f7; --tarjeta: #ffffff; --texto: #1e293b; --texto-suave: #64748b;
@@ -19,7 +21,8 @@
   body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--fondo); margin: 0; color: var(--texto); transition: background 0.3s, color 0.3s; }
 
   header { background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: white; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+  #tituloLogin { font-size: 26px; line-height: 1.3; }
   header p { margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
   .encabezado-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .logo-caja { background: white; border-radius: 10px; padding: 6px; display: flex; align-items: center; justify-content: center; }
@@ -239,6 +242,20 @@
   .correo-texto { background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
   .datos { width: 100%; margin-top: 6px; border-collapse: collapse; min-width: 0; }
   .seccion-datos { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  /* Marca Zentralia */
+  .zt { display: inline-flex; align-items: center; font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif; font-weight: 800; white-space: nowrap; }
+  .zt-z { display: inline-flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(135deg, #f97316, #fbbf24);
+    border-radius: .28em; padding: 0 .26em; margin-right: .12em; transform: rotate(-6deg); line-height: 1.25; box-shadow: 0 2px 6px rgba(249,115,22,.35); }
+  .zt-app { font-weight: 600; font-size: .55em; margin-left: .35em; padding: .1em .45em; border-radius: 999px; border: 1.5px solid currentColor; opacity: .85; align-self: center; }
+  .zt-emp { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 500; font-size: .62em; margin-left: .45em; opacity: .9; white-space: nowrap; }
+  #tituloEmpresa { display: flex; align-items: baseline; flex-wrap: wrap; row-gap: 2px; }
+  #tituloEmpresa .zt-resto, #tituloEmpresa .zt-app { color: #fff; }
+  #tituloLogin .zt-resto, #tituloLogin .zt-app { color: #0b4f8a; }
+  #tituloLogin { text-align: center; }
+  #tituloLogin .zt-emp { color: #64748b; display: block; margin: 6px 0 0; font-size: 17px; white-space: normal; }
+  #tituloLogin .zt-punto { display: none; }
+  #tituloLogin .zt-propio { font-size: 14px; font-weight: 500; color: #64748b; margin-top: 4px; }
+  body.oscuro #tituloLogin .zt-resto, body.oscuro #tituloLogin .zt-app { color: #e2e8f0; }
   .ventana-flotante { position: fixed; right: 20px; bottom: 20px; width: 420px; height: 600px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px);
     z-index: 900; display: flex; flex-direction: column; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
     box-shadow: 0 12px 40px rgba(15,23,42,.28); overflow: hidden; resize: both; min-width: 300px; min-height: 44px; }
@@ -991,14 +1008,22 @@ function actualizarTitulo() {
   document.title = n > 0 ? `(${n}) ${tituloBase}` : tituloBase;
 }
 
+// Marca del programa: Z blanca en un cuadrito naranja + "entralia" + App · nombre de la empresa.
+function marcaZentralia(empresa) {
+  return `<span class="zt" aria-label="Zentralia App"><span class="zt-z">Z</span><span class="zt-resto">entralia</span><span class="zt-app">App</span></span>` +
+    (empresa ? `<span class="zt-emp"><span class="zt-punto">· </span>${esc(empresa)}</span>` : '');
+}
+
 async function cargarEmpresa() {
   const r = await api('/api/empresa');
   if (!r.ok) return;
   empresaActual = r.data;
   const v = encodeURIComponent(r.data.version || '');
-  const titulo = 'Reservas - ' + r.data.nombre;
-  document.getElementById('tituloEmpresa').textContent = titulo;
-  document.getElementById('tituloLogin').textContent = r.data.login_titulo || titulo;
+  const titulo = 'Zentralia App · ' + r.data.nombre;
+  document.getElementById('tituloEmpresa').innerHTML = marcaZentralia(r.data.nombre);
+  // Un título propio de la empresa (si lo configuró) va debajo de la marca.
+  const propio = r.data.login_titulo && !/^reservas\s*-/i.test(r.data.login_titulo) ? r.data.login_titulo : '';
+  document.getElementById('tituloLogin').innerHTML = marcaZentralia(r.data.nombre) + (propio ? `<div class="zt-propio">${esc(propio)}</div>` : '');
   document.getElementById('subtituloLogin').textContent = r.data.login_subtitulo || 'Ingresa con tu usuario y contraseña.';
   const logoLogin = document.getElementById('logoLogin');
   logoLogin.style.display = r.data.tieneLogo ? 'block' : 'none';
@@ -3551,7 +3576,7 @@ function formEmpresa() {
 
     <div class="titulo-seccion">Pantalla de inicio de sesión</div>
     <div class="form-fila">
-      <label>Título (arriba de usuario y contraseña)<input id="eLoginTitulo" maxlength="80" placeholder="Reservas - ${esc(e.nombre)}" value="${esc(e.login_titulo || '')}"></label>
+      <label>Texto debajo de la marca Zentralia (opcional)<input id="eLoginTitulo" maxlength="80" placeholder="Por ejemplo: Operaciones Punta Cana" value="${esc(e.login_titulo || '')}"></label>
       <label>Subtítulo<input id="eLoginSubtitulo" maxlength="160" placeholder="Ingresa con tu usuario y contraseña." value="${esc(e.login_subtitulo || '')}"></label>
     </div>
     <div class="form-fila">

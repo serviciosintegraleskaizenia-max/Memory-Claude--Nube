@@ -1,5 +1,5 @@
 # =====================================================================
-#  INICIAR TODO - Kaizen IA (doble clic en el icono del escritorio)
+#  INICIAR TODO - Zentralia App (doble clic en el icono del escritorio "Iniciar Zentralia")
 #
 #  Enciende, en orden, lo que haga falta (lo que ya esta encendido no se toca):
 #    1. Docker Desktop y sus contenedores (base de datos y Chatwoot)
@@ -22,7 +22,7 @@ param(
   [switch]$SinNavegador
 )
 
-$Host.UI.RawUI.WindowTitle = 'Kaizen IA - Iniciando todo'
+$Host.UI.RawUI.WindowTitle = 'Zentralia App - Iniciando todo'
 $logs = Join-Path $Panel 'logs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $resumen = @()
