@@ -188,6 +188,7 @@
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
   <button class="nav" data-ir="redes">📲 Redes sociales</button>
+  <button class="nav" data-ir="respaldos">💾 Respaldos <span class="num" id="numRespaldo" style="display:none"></span></button>
   <div class="sep">Administrar</div>
   <button class="nav" data-ir="empresas">🏗️ Empresas y demo</button>
   <button class="nav" data-ir="herramientas">🛠️ Herramientas</button>
@@ -341,6 +342,7 @@ async function ir(v, recargar = true) {
     if (v === 'inicio' || v === 'negocios') await cargarNegocios();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'chat') await cargarChatContactos();
+    if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
     if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
     if (v === 'redes' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
     if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
@@ -348,12 +350,62 @@ async function ir(v, recargar = true) {
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, redes: vRedes, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
   if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
   document.getElementById('vista').innerHTML = f();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
+}
+
+/* ---------- Respaldos: USB, C:, D: y Google Drive (cifrado) ---------- */
+let RESP = null, relojResp = null;
+async function cargarRespaldo() {
+  const r = await api('/api/oficina/respaldo');
+  if (r.ok) RESP = r.data;
+  const u = RESP && RESP.ultimo;
+  const viejo = !u || Date.now() - Date.parse(u.fin) > 36 * 3600 * 1000;
+  const n = document.getElementById('numRespaldo');
+  n.textContent = '!'; n.style.display = RESP && RESP.disponible && (viejo || !u.algunoOk) ? '' : 'none';
+  clearTimeout(relojResp);
+  if (RESP && RESP.enCurso) relojResp = setTimeout(async () => { await cargarRespaldo(); if (vista === 'respaldos') pintar(); }, 4000);
+}
+function haceCuanto(iso) {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`;
+}
+function vRespaldos() {
+  const titulo = cabecera('💾 Respaldos', 'Copia de las bases de datos, n8n y los paneles en el USB, C:, D: y tu Google Drive (cifrado). Cada día a las 3:00 a. m. y cuando pulses el botón.');
+  if (!RESP) return titulo + '<div class="vacio">Cargando…</div>';
+  if (!RESP.disponible) return titulo + '<div class="caja"><div class="vacio">Falta instalar el respaldo (respaldo-zentralia.js). Instala el último paquete de actualización.</div></div>';
+  const u = RESP.ultimo;
+  const iconos = { 'USB': '🔌', 'Disco C:': '💽', 'Disco D:': '💽', 'Google Drive': '☁️' };
+  const boton = RESP.enCurso
+    ? `<button class="btn" disabled>⏳ Respaldando… (empezó ${haceCuanto(RESP.enCurso.inicio)})</button>`
+    : `<button class="btn" data-k="respaldar">💾 Respaldar ahora</button>`;
+  const aviso = !RESP.configurado ? `<div class="caja" style="border-left:4px solid #d97706"><b>⚠️ Falta la contraseña de la copia de Google Drive.</b><br>
+      En PowerShell como administrador: <code>powershell -ExecutionPolicy Bypass -File C:\\panel-correos\\configurar-respaldo.ps1</code><br>
+      <small>Hasta entonces se respalda en USB, C: y D:, pero no en Drive.</small></div>` : '';
+  const estado = !u ? '<div class="vacio">Todavía no hay ningún respaldo. Pulsa "Respaldar ahora".</div>' : `
+    <div class="caja">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><b style="font-size:16px">${u.ok ? '✅ Todo bien' : u.algunoOk ? '⚠️ Hecho, con avisos' : '⛔ Falló'}</b>
+          <div class="sub">Último respaldo ${u.automatico ? 'automático' : 'manual'}: ${esc(new Date(u.fin).toLocaleString('es-DO'))} (${haceCuanto(u.fin)}) · ${(u.tamano / 1048576).toFixed(1)} MB · ${u.archivos} archivos · ${u.segundos} s</div></div>
+        ${boton}
+      </div>
+      <table class="tabla" style="margin-top:12px"><thead><tr><th>Lugar</th><th>Resultado</th><th>Dónde quedó</th></tr></thead><tbody>
+      ${u.destinos.map(d => `<tr><td>${iconos[d.lugar] || '📁'} ${esc(d.lugar)}${d.cifrado ? ' <small>(cifrado)</small>' : ''}</td>
+        <td>${d.ok ? `✅ Guardado${d.copias ? ` · ${d.copias} copias` : ''}` : '⛔ ' + esc(d.error)}</td><td style="word-break:break-all"><small>${esc(d.ruta || '')}</small></td></tr>`).join('')}
+      </tbody></table>
+      ${u.problemas.length ? `<details style="margin-top:10px"><summary>Ver detalle (${u.problemas.length} aviso(s))</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(u.registro.join('\n'))}</pre></details>` : ''}
+    </div>`;
+  return titulo + aviso + (u ? '' : `<div class="caja">${boton}</div>`) + estado + `
+    <div class="caja"><b>Cómo funciona</b><ul style="margin:6px 0 0 18px;line-height:1.6">
+      <li>Se guardan las <b>7 últimas copias diarias</b> y <b>una por semana</b> de las 4 semanas anteriores. Lo más viejo se borra solo.</li>
+      <li>USB, C: y D: quedan como <b>.zip</b> normal. La de <b>Google Drive</b> va <b>cifrada</b> (.zip.cifrado): ni Google la puede abrir sin tu contraseña.</li>
+      <li>Para abrir una copia de Drive: <code>node C:\\panel-correos\\restaurar-respaldo.js "ruta\\del\\archivo.zip.cifrado"</code> y escribe la contraseña.</li>
+      <li>El respaldo de las 3:00 a. m. necesita el PC encendido con tu sesión abierta. Si estaba apagado, se hace en cuanto lo enciendas.</li>
+    </ul></div>`;
 }
 
 /* ---------- Inicio ---------- */
@@ -371,6 +423,12 @@ function alertas() {
   for (const x of D.enlaces) { const s = servicios.get(x.id); if (x.vigilar && s && !s.ok) lista.push(['🔌', `${x.nombre} no responde`, s.error || ('Código ' + s.codigo), `<a class="btn-mini" href="${esc(x.url)}" target="_blank" rel="noopener">Abrir</a>`, 1]); }
   for (const e of D.empresas) if (e.ia && e.ia.restante !== null && e.ia.restante !== undefined && e.ia.restante < 3) lista.push(['🪙', `${e.nombre}: a su clave de IA le quedan ${dinero(e.ia.restante)}`, 'Súbele el límite o recarga en OpenRouter', '', 2]);
   for (const ev of D.eventos) if (!ev.hecho && ev.fecha <= h) lista.push(['🛠️', `${ev.fecha < h ? 'Pendiente desde ' + fechaCorta(ev.fecha) : 'Hoy'}: ${ev.titulo}`, ev.empresa || ev.nota || '', `<button class="btn-mini" data-hecho="${ev.id}">Hecho ✔</button>`, 2]);
+  if (RESP && RESP.disponible) {
+    const u = RESP.ultimo;
+    if (!u) lista.push(['💾', 'Todavía no hay ningún respaldo', 'Haz el primero desde Respaldos', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 1]);
+    else if (Date.now() - Date.parse(u.fin) > 36 * 3600 * 1000) lista.push(['💾', `El último respaldo es de ${haceCuanto(u.fin)}`, 'El respaldo diario no se está haciendo', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 1]);
+    else if (!u.ok) lista.push(['💾', u.algunoOk ? 'El último respaldo tuvo avisos' : 'El último respaldo falló', u.problemas.slice(0, 2).join(' · '), '<button class="btn-mini" data-ir="respaldos">Ver</button>', u.algunoOk ? 2 : 0]);
+  }
   return lista.sort((a, b) => a[4] - b[4]);
 }
 function proximos(dias) {
@@ -1296,6 +1354,14 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'chatTexto' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); }
 });
 document.addEventListener('click', e => { if (e.target.id === 'chatEnviar') enviarChat(); if (e.target.id === 'fondoModal') cerrarModal(); });
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-k="respaldar"]');
+  if (!b) return;
+  b.disabled = true; b.textContent = '⏳ Empezando…';
+  const r = await api('/api/oficina/respaldo', {});
+  if (!r.ok) { alert(r.data.error || 'No se pudo empezar el respaldo.'); }
+  setTimeout(async () => { await cargarRespaldo(); if (vista === 'respaldos') pintar(); }, 1500);
+});
 document.getElementById('btnMenu').onclick = () => document.getElementById('lateral').classList.toggle('abierto');
 document.getElementById('btnSalir').onclick = async () => { await api('/api/logout', {}); location.href = '/'; };
 document.getElementById('btnTema').onclick = () => { const o = document.body.classList.toggle('oscuro'); try { localStorage.setItem('tema', o ? 'oscuro' : 'claro'); } catch (e) {} };

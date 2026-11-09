@@ -7,6 +7,23 @@
 const { hoyLocal } = require('./cuenta');
 const crearConocimiento = require('./conocimiento');
 const crearRedes = require('./redes');
+const fsR = require('fs');
+const pathR = require('path');
+const { spawn: spawnR } = require('child_process');
+
+// Respaldo (botón "Respaldar ahora"): corre respaldo-zentralia.js aparte y lee su estado.
+const CARPETA_RESPALDO = process.env.RESPALDO_BASE || 'C:\\Respaldos Zentralia';
+const SCRIPT_RESPALDO = pathR.join(__dirname, '..', 'respaldo-zentralia.js');
+function estadoRespaldo() {
+  const leer = f => { try { return JSON.parse(fsR.readFileSync(pathR.join(CARPETA_RESPALDO, f), 'utf8')); } catch (e) { return null; } };
+  const enCurso = leer('respaldo-en-curso.json');
+  return {
+    disponible: fsR.existsSync(SCRIPT_RESPALDO), windows: process.platform === 'win32',
+    configurado: fsR.existsSync(pathR.join(CARPETA_RESPALDO, 'clave-respaldo.dat')) || Boolean(process.env.RESPALDO_CLAVE),
+    enCurso: enCurso && Date.now() - Date.parse(enCurso.inicio) < 2 * 3600 * 1000 ? enCurso : null,
+    ultimo: leer('ultimo-respaldo.json')
+  };
+}
 
 const CATEGORIAS = {
   servidor: 'Servidor', dominio: 'Dominio', ia: 'IA (tokens)', redes: 'Redes sociales', automatizacion: 'Automatizaciones',
@@ -383,6 +400,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
       if (url === '/api/oficina/conocimiento' || url.startsWith('/api/oficina/conocimiento/')) {
         return await conocimiento.manejarOficina(req, res, url, u, { json, leerCuerpo });
+      }
+      if (req.method === 'GET' && url === '/api/oficina/respaldo') return json(res, 200, estadoRespaldo());
+      if (req.method === 'POST' && url === '/api/oficina/respaldo') {
+        const e = estadoRespaldo();
+        if (!e.disponible) return json(res, 400, { error: 'Falta respaldo-zentralia.js en la carpeta del panel.' });
+        if (e.enCurso) return json(res, 409, { error: 'Ya hay un respaldo en curso.' });
+        const hijo = spawnR(process.execPath, [SCRIPT_RESPALDO], { cwd: pathR.dirname(SCRIPT_RESPALDO), detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
+        hijo.unref();
+        await registrar(u, 'respaldo_manual', 'sistema', 0, '', '', 'Respaldo pedido desde la Oficina');
+        return json(res, 200, { ok: true });
       }
       if (req.method === 'GET' && url === '/api/oficina/datos') {
         const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
