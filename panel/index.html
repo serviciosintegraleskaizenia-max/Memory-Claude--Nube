@@ -276,6 +276,67 @@
   .ventana-flotante.minimizada .vf-barra { cursor: pointer; }
   .ventana-flotante.minimizada iframe { display: none; }
   .ventana-flotante.maxi { top: 12px !important; left: 12px !important; right: 12px !important; bottom: 12px !important; width: auto !important; height: auto !important; max-width: none; resize: none; }
+  /* Calendario */
+  .cal-barra { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .cal-titulo { font-size: 19px; font-weight: 700; margin: 0 6px; min-width: 170px; text-align: center; }
+  .cal-barra select { padding: 7px 9px; border: 1px solid var(--borde); border-radius: 8px; background: var(--tarjeta); color: var(--texto); font-size: 13px; }
+  .cal-leyenda { margin-left: auto; display: flex; gap: 12px; font-size: 12px; color: var(--texto-suave); flex-wrap: wrap; }
+  .cal-pt { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .cal-pt.IN { background: #16a34a; } .cal-pt.OUT { background: #2563eb; } .cal-pt.ACTIVIDAD { background: #7c3aed; } .cal-pt.INTERHOTEL { background: #d97706; }
+  .cal-cuerpo { display: grid; grid-template-columns: 1fr 430px; gap: 16px; align-items: start; }
+  .cal-cuerpo.solo-dia { grid-template-columns: 1fr; max-width: 820px; }
+  @media (max-width: 1200px) { .cal-cuerpo { grid-template-columns: 1fr; } }
+  .cal-mes, .cal-agenda, .cal-semana { background: var(--tarjeta); border-radius: 12px; box-shadow: 0 1px 3px rgba(15,23,42,.08); overflow: hidden; }
+  .cal-sem { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--hover); border-bottom: 1px solid var(--borde); }
+  .cal-sem div { padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--texto-suave); font-weight: 600; }
+  .cal-rejilla { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-dia { min-height: 104px; border-right: 1px solid var(--borde); border-bottom: 1px solid var(--borde); padding: 7px 8px; position: relative; cursor: pointer; }
+  .cal-dia:nth-child(7n) { border-right: none; }
+  .cal-dia:hover { background: var(--hover); }
+  .cal-dia.fuera { background: var(--fondo); opacity: .55; }
+  .cal-dia .n { font-weight: 700; font-size: 13px; }
+  .cal-dia.hoy .n { background: #1679c2; color: #fff; border-radius: 999px; padding: 1px 7px; }
+  .cal-dia.sel { outline: 2px solid #f97316; outline-offset: -2px; background: #fff7ed; }
+  body.oscuro .cal-dia.sel { background: #431407; }
+  .cal-total { position: absolute; top: 7px; right: 8px; font-size: 11px; color: var(--texto-suave); }
+  .cal-chips { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+  .cal-chip { font-size: 11px; border-radius: 5px; padding: 1px 6px; display: flex; justify-content: space-between; font-weight: 600; }
+  .cal-chip.IN { background: #dcfce7; color: #166534; } .cal-chip.OUT { background: #dbeafe; color: #1e40af; }
+  .cal-chip.ACTIVIDAD { background: #ede9fe; color: #5b21b6; } .cal-chip.INTERHOTEL { background: #fef3c7; color: #92400e; } .cal-chip.OTRO { background: #f1f5f9; color: #475569; }
+  .cal-carga { height: 4px; border-radius: 2px; background: var(--borde); margin-top: 6px; overflow: hidden; }
+  .cal-carga i { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444); }
+  .cal-avisos { margin-top: 5px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .cal-av { font-size: 10px; font-weight: 700; border-radius: 5px; padding: 0 5px; }
+  .cal-av.falta { background: #fef9c3; color: #854d0e; } .cal-av.cancel { background: #fee2e2; color: #991b1b; } .cal-av.extra { background: #f3e8ff; color: #6b21a8; }
+  .cal-agenda { padding: 14px 16px; }
+  .cal-agenda h3 { margin: 0; font-size: 17px; }
+  .cal-res { font-size: 12px; color: var(--texto-suave); margin: 3px 0 10px; }
+  .cal-tarjetas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+  .cal-tarjetas div { border-radius: 9px; padding: 7px 6px; text-align: center; }
+  .cal-tarjetas b { display: block; font-size: 18px; } .cal-tarjetas small { font-size: 10px; }
+  .cal-tarjetas .IN { background: #dcfce7; color: #166534; } .cal-tarjetas .OUT { background: #dbeafe; color: #1e40af; } .cal-tarjetas .ACTIVIDAD { background: #ede9fe; color: #5b21b6; } .cal-tarjetas .pax { background: var(--hover); color: var(--texto); }
+  .cal-franja { font-size: 11px; font-weight: 700; color: var(--texto-suave); text-transform: uppercase; margin: 10px 0 4px; letter-spacing: .4px; }
+  .cal-srv { display: grid; grid-template-columns: 54px 1fr auto; gap: 8px; align-items: center; border-left: 4px solid; border-radius: 8px; padding: 7px 9px; margin-bottom: 5px; background: var(--hover); cursor: pointer; }
+  .cal-srv:hover { filter: brightness(.97); }
+  .cal-srv.IN { border-color: #16a34a; } .cal-srv.OUT { border-color: #2563eb; } .cal-srv.ACTIVIDAD { border-color: #7c3aed; } .cal-srv.INTERHOTEL { border-color: #d97706; } .cal-srv.OTRO { border-color: #94a3b8; }
+  .cal-srv.cancelada { opacity: .6; text-decoration: line-through; }
+  .cal-cuerpo:not(.solo-dia) .cal-srv { grid-template-columns: 54px 1fr; }
+  .cal-cuerpo:not(.solo-dia) .cal-srv > div:last-child { grid-column: 2; }
+  .cal-srv .h { font-weight: 700; font-size: 14px; } .cal-srv .h small { display: block; font-weight: 500; font-size: 10px; color: var(--texto-suave); }
+  .cal-srv .d { font-size: 12.5px; line-height: 1.35; } .cal-srv .d span { color: var(--texto-suave); }
+  .cal-estado.can { background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 2px 6px; }
+  .cal-tag { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  .cal-tag.extra { background: #f3e8ff; color: #6b21a8; } .cal-tag.duda { background: #fef08a; color: #713f12; } .cal-tag.falta { background: #fef9c3; color: #854d0e; }
+  .cal-semana { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-col { border-right: 1px solid var(--borde); padding: 8px; min-height: 380px; cursor: pointer; }
+  .cal-col:last-child { border-right: none; }
+  .cal-col.sel { background: #fff7ed; } body.oscuro .cal-col.sel { background: #431407; }
+  .cal-col-t { font-size: 12px; text-transform: capitalize; margin-bottom: 6px; } .cal-col-t b { font-size: 15px; } .cal-col-t small { display: block; color: var(--texto-suave); }
+  .cal-col.hoy .cal-col-t b { color: #1679c2; }
+  .cal-mini { font-size: 11px; border-left: 3px solid; border-radius: 5px; padding: 3px 5px; margin-bottom: 3px; background: var(--hover); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-mini.IN { border-color: #16a34a; } .cal-mini.OUT { border-color: #2563eb; } .cal-mini.ACTIVIDAD { border-color: #7c3aed; } .cal-mini.INTERHOTEL { border-color: #d97706; }
+  .cal-mini.cancelada { opacity: .5; text-decoration: line-through; }
+  .cal-vacio { color: var(--texto-suave); font-size: 12px; }
   .barra-seleccion { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fef3c7; color: #78350f; border: 1px solid #fcd34d; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; font-weight: 600; }
   body.oscuro .barra-seleccion { background: #422006; color: #fde68a; border-color: #92400e; }
   .celda-sel { text-align: center; padding-left: 2px !important; padding-right: 2px !important; cursor: default; }
@@ -477,6 +538,7 @@
     <button class="pestana" data-vista="revision">En revisión ahora <span class="contador" id="cnt-revision">0</span></button>
     <button class="pestana" data-vista="registradas">Reservas registradas <span class="contador" id="cnt-registradas">0</span></button>
     <button class="pestana" data-vista="historico" title="Correos viejos importados de Microsoft 365">Histórico</button>
+    <button class="pestana" data-vista="calendario" title="Los servicios de cada día: llegadas, salidas, actividades e interhotel">📅 Calendario</button>
     <input type="search" id="buscarHistorico" class="buscar-historico" placeholder="🔍 Buscar cliente, # reserva, agencia, vuelo, hotel..." title="Busca por nombre del cliente, número de reserva (#123), agencia, vuelo, hotel, teléfono o asunto">
   </div>
 
@@ -529,6 +591,7 @@
     </table>
     <div id="tarjetasReservas"></div>
   </div>
+  <div id="calendario" style="display:none;"></div>
 </main>
 
 <div class="fondo-modal" id="fondoModal">
@@ -1587,6 +1650,8 @@ function pintar() {
     tr.addEventListener('mouseleave', () => grupo().forEach(x => x.classList.remove('srv-hover')));
   });
 
+  if (vistaActual === 'calendario') pintarCalendario();
+
   // Los números cuentan reservas (correos), no servicios sueltos.
   const unaPor = l => agruparReservas(l).length;
   const completos = datos.filter(esCompleto);
@@ -1602,6 +1667,13 @@ function pintar() {
 function cambiarVista(vista) {
   const antes = vistaActual;
   vistaActual = vista;
+  // El calendario reemplaza la tabla (y su barra de filtros) mientras está abierto.
+  const enCal = vista === 'calendario';
+  document.querySelector('main > .barra').style.display = enCal ? 'none' : '';
+  document.querySelector('main > .tabla-wrap').style.display = enCal ? 'none' : '';
+  document.getElementById('calendario').style.display = enCal ? '' : 'none';
+  if (enCal) document.getElementById('barraSeleccion').style.display = 'none';
+  else pintarBarraSeleccion();
   document.querySelectorAll('#pestanas .pestana').forEach(b =>
     b.classList.toggle('activa', b.dataset.vista === vista));
   document.getElementById('buscarHistorico').placeholder = vista === 'historico'
@@ -2946,6 +3018,160 @@ function marco(tab, aviso) {
   if (tab === 'extras') cargarExtras();
   if (tab === 'empresas') cargarEmpresas();
 }
+
+/* ---------- Calendario de servicios ---------- */
+const cal = { vista: 'mes', mes: null, dia: null, sede: '', tipo: '', agencia: '' };
+const NOMBRE_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const NOMBRE_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const isoDe = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const diaDe = iso => { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d); };
+// Los servicios que se operan: de cada reserva, la versión más nueva (si llegó un cambio, el cambio);
+// si llegó una cancelación, la reserva original queda marcada como cancelada.
+function serviciosCalendario() {
+  const conCambio = new Set(datos.filter(r => r.categoria === 'MODIFICACION' && !r.es_cancelacion && r.original_id).map(r => r.original_id));
+  const lista = [];
+  for (const r of datos) {
+    if (!['RESERVA', 'MODIFICACION'].includes(r.categoria) || r.error_ia || r.es_cancelacion || !r.fecha_servicio_iso) continue;
+    const g = serviciosDe(r);
+    if (r.categoria === 'RESERVA' && g.some(s => conCambio.has(s.id))) continue;
+    const principal = g[0] || r;
+    const cancelada = Boolean(principal.cancelada_por) || /^\s*(CANCELAD[OA]|EN ESPERA)/i.test(notaServicio(r));
+    const t = tipoServicio(r);
+    const sede = sedeDeServicios([r]) || sedeDeServicios(g);
+    if (cal.sede && sede && !sede.includes(cal.sede)) continue;
+    if (cal.tipo && t !== cal.tipo) continue;
+    if (cal.agencia && agenciaDe(principal) !== cal.agencia) continue;
+    lista.push({ r, t, reserva: principal.id, iso: r.fecha_servicio_iso, cancelada, sede,
+      pax: (Number(r.adultos) || 0) + (Number(r.ninos) || 0) + (Number(r.infantes) || 0) });
+  }
+  return lista;
+}
+function faltaEnServicio(x) {
+  const s = x.r;
+  if (x.t !== 'IN' && x.t !== 'OUT') return !s.hora_servicio;
+  return !s.vuelo || !VUELO_COMPLETO.test(String(s.vuelo).split(/[,;/]/)[0].trim()) || !s.hora_servicio;
+}
+function pintarCalendario() {
+  const caja = document.getElementById('calendario');
+  if (!caja) return;
+  const hoy = hoyISO();
+  if (!cal.dia) cal.dia = hoy;
+  if (!cal.mes) cal.mes = cal.dia.slice(0, 7);
+  const todos = serviciosCalendario();
+  const porDia = new Map();
+  for (const x of todos) { if (!porDia.has(x.iso)) porDia.set(x.iso, []); porDia.get(x.iso).push(x); }
+  const agencias = [...new Set(datos.filter(r => ['RESERVA', 'MODIFICACION'].includes(r.categoria)).map(agenciaDe).filter(Boolean))].sort();
+  const [ano, mes] = cal.mes.split('-').map(Number);
+  const opt = (v, t, sel) => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`;
+  const titulo = cal.vista === 'dia' ? (() => { const d = diaDe(cal.dia); return `${NOMBRE_DIA[d.getDay()]} ${d.getDate()} de ${NOMBRE_MES[d.getMonth()]}`; })()
+    : cal.vista === 'semana' ? (() => { const ini = inicioSemana(diaDe(cal.dia)); const fin = new Date(ini); fin.setDate(fin.getDate() + 6); return `${ini.getDate()} ${NOMBRE_MES[ini.getMonth()].slice(0, 3)} – ${fin.getDate()} ${NOMBRE_MES[fin.getMonth()].slice(0, 3)} ${fin.getFullYear()}`; })()
+    : `${NOMBRE_MES[mes - 1]} ${ano}`;
+  const tituloBonito = titulo.replace(/^./, c => c.toUpperCase());
+  const barra = `<div class="cal-barra">
+      <button class="btn-sec" data-cal="atras">‹</button><span class="cal-titulo">${esc(tituloBonito)}</span><button class="btn-sec" data-cal="adelante">›</button>
+      <button class="btn-sec" data-cal="hoy">Hoy</button>
+      ${['mes', 'semana', 'dia'].map(v => `<button class="${cal.vista === v ? 'btn' : 'btn-sec'}" data-cal-vista="${v}">${{ mes: 'Mes', semana: 'Semana', dia: 'Día' }[v]}</button>`).join('')}
+      <select data-cal-filtro="sede">${opt('', 'Todas las sedes', cal.sede)}${opt('Punta Cana', 'Punta Cana', cal.sede)}${opt('Orlando', 'Orlando', cal.sede)}</select>
+      <select data-cal-filtro="tipo">${opt('', 'Todos los servicios', cal.tipo)}${['IN', 'OUT', 'ACTIVIDAD', 'INTERHOTEL'].map(k => opt(k, TIPOS_SRV[k], cal.tipo)).join('')}</select>
+      <select data-cal-filtro="agencia">${opt('', 'Todas las agencias', cal.agencia)}${agencias.map(a => opt(a, a, cal.agencia)).join('')}</select>
+      <span class="cal-leyenda"><span><i class="cal-pt IN"></i>Llegadas</span><span><i class="cal-pt OUT"></i>Salidas</span><span><i class="cal-pt ACTIVIDAD"></i>Actividades</span><span><i class="cal-pt INTERHOTEL"></i>Interhotel</span></span>
+    </div>`;
+  let izquierda = '';
+  if (cal.vista === 'mes') {
+    const primero = new Date(ano, mes - 1, 1);
+    const ini = inicioSemana(primero);
+    const delMes = [...porDia.entries()].filter(([k]) => k.startsWith(cal.mes)).map(([, v]) => v.filter(x => !x.cancelada).length);
+    const maximo = Math.max(1, ...delMes);
+    let celdas = '';
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(ini); d.setDate(ini.getDate() + i);
+      const iso = isoDe(d);
+      if (i === 35 && d.getMonth() !== mes - 1) break;
+      const lista = porDia.get(iso) || [];
+      const activos = lista.filter(x => !x.cancelada);
+      const cuenta = k => activos.filter(x => x.t === k).length;
+      const faltan = activos.filter(faltaEnServicio).length, canceladas = lista.filter(x => x.cancelada).length;
+      const extras = activos.filter(x => /^\s*EXTRAS?\s*:/i.test(notaServicio(x.r))).length;
+      const chip = (k, nombre) => cuenta(k) ? `<span class="cal-chip ${k}"><span>${nombre}</span><b>${cuenta(k)}</b></span>` : '';
+      celdas += `<div class="cal-dia ${d.getMonth() !== mes - 1 ? 'fuera' : ''} ${iso === hoy ? 'hoy' : ''} ${iso === cal.dia ? 'sel' : ''}" data-cal-dia="${iso}">
+        <span class="n">${d.getDate()}</span>${activos.length ? `<span class="cal-total">${activos.length} serv.</span>` : ''}
+        <div class="cal-chips">${chip('IN', '🛬 Llegadas')}${chip('OUT', '🛫 Salidas')}${chip('ACTIVIDAD', '🎟 Actividades')}${chip('INTERHOTEL', '🔁 Interhotel')}${chip('OTRO', '📋 Otros')}</div>
+        ${activos.length ? `<div class="cal-carga"><i style="width:${Math.round(activos.length * 100 / maximo)}%"></i></div>` : ''}
+        <div class="cal-avisos">${faltan ? `<span class="cal-av falta">⚠ ${faltan} sin vuelo/hora</span>` : ''}${canceladas ? `<span class="cal-av cancel">⛔ ${canceladas}</span>` : ''}${extras ? `<span class="cal-av extra">➕ ${extras}</span>` : ''}</div>
+      </div>`;
+    }
+    izquierda = `<div class="cal-mes"><div class="cal-sem">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(x => `<div>${x}</div>`).join('')}</div><div class="cal-rejilla">${celdas}</div></div>`;
+  } else if (cal.vista === 'semana') {
+    const ini = inicioSemana(diaDe(cal.dia));
+    let cols = '';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(ini); d.setDate(ini.getDate() + i); const iso = isoDe(d);
+      const lista = ordenarAgenda(porDia.get(iso) || []);
+      cols += `<div class="cal-col ${iso === hoy ? 'hoy' : ''} ${iso === cal.dia ? 'sel' : ''}" data-cal-dia="${iso}"><div class="cal-col-t">${NOMBRE_DIA[d.getDay()].slice(0, 3)} <b>${d.getDate()}</b><small>${lista.filter(x => !x.cancelada).length} serv.</small></div>
+        ${lista.map(x => `<div class="cal-mini ${x.t}${x.cancelada ? ' cancelada' : ''}" data-cal-reserva="${x.reserva}" title="${esc(clientesDe([x.r]))}"><b>${esc(x.r.hora_servicio || '--:--')}</b> ${esc(etiquetaCorta(x))}</div>`).join('') || '<div class="cal-vacio">—</div>'}</div>`;
+    }
+    izquierda = `<div class="cal-semana">${cols}</div>`;
+  }
+  caja.innerHTML = barra + `<div class="cal-cuerpo ${cal.vista === 'dia' ? 'solo-dia' : ''}">${izquierda}${agendaDia(porDia.get(cal.dia) || [], cal.dia)}</div>`;
+}
+function inicioSemana(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function ordenarAgenda(lista) { return [...lista].sort((a, b) => String(a.r.hora_servicio || '99:99').localeCompare(String(b.r.hora_servicio || '99:99'))); }
+function etiquetaCorta(x) {
+  const s = x.r;
+  if (x.t === 'IN' || x.t === 'OUT') return `${x.t === 'IN' ? '🛬' : '🛫'} ${s.vuelo || 'sin vuelo'}`;
+  return `${x.t === 'ACTIVIDAD' ? '🎟' : '🔁'} ${s.actividad || TIPOS_SRV[x.t] || ''}`;
+}
+function agendaDia(lista, iso) {
+  const d = diaDe(iso);
+  const activos = lista.filter(x => !x.cancelada);
+  const cuenta = k => activos.filter(x => x.t === k).length;
+  const pax = activos.reduce((a, x) => a + x.pax, 0);
+  const reservas = new Set(activos.map(x => x.reserva)).size;
+  const agencias = new Set(activos.map(x => agenciaDe(x.r)).filter(Boolean)).size;
+  const franjas = [['Mañana', x => (x.r.hora_servicio || '') && x.r.hora_servicio < '12:00'], ['Tarde', x => x.r.hora_servicio >= '12:00' && x.r.hora_servicio < '18:00'],
+    ['Noche', x => x.r.hora_servicio >= '18:00'], ['Sin hora', x => !x.r.hora_servicio]];
+  const tarjeta = x => {
+    const s = x.r, nota = notaServicio(s);
+    const hora = s.hora_servicio ? esc(s.hora_servicio) : '<span class="falta">--:--</span>';
+    const sub = x.t === 'IN' ? 'llega' : x.t === 'OUT' ? 'sale' : 'recogida';
+    const ruta = x.t === 'IN' ? `${esc(s.aeropuerto || '?')} → ${esc(s.hotel || s.punto_llegada || '?')}` : x.t === 'OUT' ? `${esc(s.hotel || s.punto_partida || '?')} → ${esc(s.aeropuerto || '?')}` : esc(s.hotel || s.punto_partida || '');
+    const linea1 = x.t === 'IN' || x.t === 'OUT' ? `<b>${x.t === 'IN' ? '🛬' : '🛫'} ${esc(s.vuelo || 'sin vuelo')}</b>${aerolineaDe(s.vuelo) ? ' · ' + esc(aerolineaDe(s.vuelo)) : ''}` : `<b>${x.t === 'ACTIVIDAD' ? '🎟' : x.t === 'INTERHOTEL' ? '🔁' : '📋'} ${esc(s.actividad || (x.t === 'OTRO' ? 'Servicio' : TIPOS_SRV[x.t]))}</b>`;
+    const tags = (dudasDe(s).size ? '<span class="cal-tag duda">? revisar</span>' : '') + (faltaEnServicio(x) ? '<span class="cal-tag falta">⚠ falta dato</span>' : '') +
+      (/^\s*EXTRAS?\s*:/i.test(nota) ? `<span class="cal-tag extra">➕ ${esc(nota.replace(/^\s*EXTRAS?\s*:\s*/i, ''))}</span>` : '');
+    return `<div class="cal-srv ${x.t}${x.cancelada ? ' cancelada' : ''}" data-cal-reserva="${x.reserva}">
+      <div class="h">${hora}<small>${sub}</small></div>
+      <div class="d">${linea1} · ${esc(paxCorto(s) || '—')}<br><span>${ruta}${ruta ? ' · ' : ''}${esc(agenciaDe(s) || '')} · #${x.reserva}</span>${tags}</div>
+      <div>${x.cancelada ? '<span class="cal-estado can">⛔ Cancelada</span>' : etiquetaEstado(estadoReserva(serviciosDe(s)))}</div></div>`;
+  };
+  const ordenados = ordenarAgenda(lista);
+  return `<div class="cal-agenda">
+    <h3>${NOMBRE_DIA[d.getDay()].replace(/^./, c => c.toUpperCase())} ${d.getDate()} de ${NOMBRE_MES[d.getMonth()]}</h3>
+    <div class="cal-res">${activos.length} servicios · ${reservas} reservas · ${agencias} agencias${cal.sede ? ' · ' + esc(cal.sede) : ''}</div>
+    <div class="cal-tarjetas"><div class="IN"><b>${cuenta('IN')}</b><small>llegadas</small></div><div class="OUT"><b>${cuenta('OUT')}</b><small>salidas</small></div><div class="ACTIVIDAD"><b>${activos.length - cuenta('IN') - cuenta('OUT')}</b><small>actividades y otros</small></div><div class="pax"><b>${pax}</b><small>pasajeros</small></div></div>
+    ${ordenados.length ? franjas.map(([nombre, f]) => { const l = ordenados.filter(f); return l.length ? `<div class="cal-franja">${nombre}</div>${l.map(tarjeta).join('')}` : ''; }).join('')
+      : '<div class="vacio-total">No hay servicios este día.</div>'}
+  </div>`;
+}
+document.getElementById('calendario').addEventListener('click', e => {
+  const r = e.target.closest('[data-cal-reserva]');
+  if (r) return abrirModal(Number(r.dataset.calReserva));
+  const dia = e.target.closest('[data-cal-dia]');
+  if (dia) { cal.dia = dia.dataset.calDia; cal.mes = cal.dia.slice(0, 7); return pintarCalendario(); }
+  const v = e.target.closest('[data-cal-vista]');
+  if (v) { cal.vista = v.dataset.calVista; return pintarCalendario(); }
+  const b = e.target.closest('[data-cal]');
+  if (!b) return;
+  const paso = b.dataset.cal === 'adelante' ? 1 : b.dataset.cal === 'atras' ? -1 : 0;
+  if (!paso) { cal.dia = hoyISO(); cal.mes = cal.dia.slice(0, 7); return pintarCalendario(); }
+  const d = diaDe(cal.dia);
+  if (cal.vista === 'mes') { const [a, m] = cal.mes.split('-').map(Number); const n = new Date(a, m - 1 + paso, 1); cal.mes = isoDe(n).slice(0, 7); cal.dia = isoDe(n); }
+  else { d.setDate(d.getDate() + paso * (cal.vista === 'semana' ? 7 : 1)); cal.dia = isoDe(d); cal.mes = cal.dia.slice(0, 7); }
+  pintarCalendario();
+});
+document.getElementById('calendario').addEventListener('change', e => {
+  const f = e.target.dataset.calFiltro;
+  if (f) { cal[f] = e.target.value; pintarCalendario(); }
+});
 
 /* ---------- Extras para facturar ---------- */
 async function cargarExtras(excel) {
