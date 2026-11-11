@@ -852,7 +852,7 @@ async function probarRedes() {
 }
 
 /* ---------- Base del asistente: 5 pestañas ---------- */
-const TABS_K = [['config', '⚙️ Configuración'], ['docs', '📚 Documentos'], ['revisar', '📝 Por revisar'], ['buscar', '🔎 Probar búsqueda'], ['chat', '💬 Chat de prueba']];
+const TABS_K = [['config', '⚙️ Configuración'], ['docs', '📚 Documentos'], ['revisar', '📝 Por revisar'], ['buscar', '🔎 Probar búsqueda'], ['chat', '💬 Chat de prueba'], ['simular', '🧪 Simulación de ventas']];
 let kTab = (() => { try { return localStorage.getItem('oficinaTabK') || 'docs'; } catch (e) { return 'docs'; } })();
 function selectorEmpresaK() {
   return `<select id="kEmpresa" title="Empresa">${K.empresas.map(x => `<option value="${x.id}" ${String(x.id) === kEmpresa ? 'selected' : ''}>${esc(x.nombre)}${x.es_demo ? ' (demo)' : ''}</option>`).join('')}</select>`;
@@ -863,9 +863,197 @@ function vConocimiento() {
   if (!TABS_K.some(t => t[0] === kTab)) kTab = 'docs';
   const pend = pendientesK();
   const barra = `<div class="pestanas">${TABS_K.map(([k, n]) => `<button class="pestana ${k === kTab ? 'activa' : ''}" data-k-tab="${k}">${n}${k === 'revisar' && pend ? ` <span class="num-p">${pend}</span>` : ''}</button>`).join('')}</div>`;
-  const cuerpo = { config: tabConfigK, docs: tabDocsK, revisar: tabRevisarK, buscar: tabBuscarK, chat: tabChatK }[kTab]();
+  const cuerpo = { config: tabConfigK, docs: tabDocsK, revisar: tabRevisarK, buscar: tabBuscarK, chat: tabChatK, simular: tabSimularK }[kTab]();
   return cabecera('📚 Base del asistente', 'Lo que sabe y cómo responde el asistente de redes · solo tú lo ves y lo cambias', selectorEmpresaK()) + barra + cuerpo;
 }
+/* ---------- 🧪 Simulación de ventas (vendedor IA contra 15 clientes simulados) ---------- */
+let SIM = null, SIMV = null, SIMEmp = null;
+const ROI = (() => { try { return JSON.parse(localStorage.getItem('oficinaROI')) || null; } catch (e) { return null; } })() ||
+  { conv: 3000, asesor: 500, capSin: 700, capCierre: 1500, ticket: 150 };
+const dineroSim = n => 'US$ ' + (Math.abs(n) < 0.1 && n !== 0 ? n.toFixed(4) : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const nombreModelo = id => ((SIM && SIM.modelos.find(m => m.id === id)) || { nombre: id }).nombre;
+const RESULTADO_SIM = { venta: ['✅ Venta lista para depósito', 'ok'], asesor: ['🙋 Pasó a un asesor', 'ojo'], sin_venta: ['✖ No compró', 'gris'], limite: ['⏱ Sin decidir', 'gris'], error: ['⛔ Error', 'mal'] };
+async function cargarSim(forzar) {
+  if (!forzar && SIM && SIMEmp === kEmpresa) return;
+  const r = await api('/api/oficina/conocimiento/simulaciones?empresa_id=' + encodeURIComponent(kEmpresa));
+  if (!r.ok) { SIM = { error: r.data.error || 'No se pudo cargar' }; return; }
+  SIM = r.data; SIMEmp = kEmpresa;
+  const corriendo = SIM.simulaciones.find(s => s.estado === 'corriendo');
+  const elegir = corriendo || SIM.simulaciones.find(s => s.estado === 'lista');
+  if (elegir && (!SIMV || SIMV.id !== elegir.id || SIMV.estado !== 'lista')) { const d = await api('/api/oficina/conocimiento/simulacion?id=' + elegir.id); if (d.ok) SIMV = d.data; }
+  if (corriendo) { clearTimeout(timers.sim); timers.sim = setTimeout(async () => { if (vista === 'conocimiento' && kTab === 'simular') { await cargarSim(true); pintar(); } }, 5000); }
+}
+function calcularROI(m) {
+  const n = Math.max(1, m.conversaciones - m.errores);
+  const tasaVenta = m.ventas / n, tasaHumano = (m.ventas + m.asesor) / n;
+  const costoIA = ROI.conv * m.costo_promedio;
+  const sinIA = Math.ceil(ROI.conv / Math.max(1, ROI.capSin));
+  const conIA = Math.max(1, Math.ceil(ROI.conv * tasaHumano / Math.max(1, ROI.capCierre)));
+  const ahorro = (sinIA - conIA) * ROI.asesor - costoIA;
+  const ventas = ROI.conv * tasaVenta;
+  return { tasaVenta, tasaHumano, costoIA, sinIA, conIA, ahorro, roi: costoIA ? ahorro / costoIA : 0, ventas,
+    porVenta: ventas ? costoIA / ventas : 0, pctVentas: ventas && ROI.ticket ? costoIA / (ventas * ROI.ticket) : 0 };
+}
+function tabSimularK() {
+  if (!SIM || SIMEmp !== kEmpresa) { cargarSim().then(() => { if (vista === 'conocimiento' && kTab === 'simular') pintar(); }); return '<div class="caja"><div class="vacio">Cargando…</div></div>'; }
+  if (SIM.error) return `<div class="caja"><div class="vacio">${esc(SIM.error)}</div></div>`;
+  const e = K.empresa;
+  const corriendo = SIM.simulaciones.find(s => s.estado === 'corriendo');
+  const promptActual = (SIMV && SIMV.ajustes && SIMV.ajustes.instrucciones) || SIM.prompt;
+  const total = SIM.escenarios.length;
+  const form = `<div class="caja"><div class="cab"><div><h2>🧪 Simulación de ventas</h2>
+      <p class="sub">Una IA hace de cliente (${total} perfiles de Punta Cana y Orlando) y conversa con el asistente REAL de ${esc(e.nombre)}: sus tarifarios, su búsqueda en internet y el prompt de vendedor de abajo. Mide tokens, costo por conversación y ventas cerradas. No cambia nada del asistente hasta que pulses "Usar este vendedor".</p></div></div>
+    ${e.tieneClaveIA ? '' : '<div class="k-avisos">⚠️ Esta empresa no tiene clave de IA (OpenRouter): ponla en Clientes y cobros → Editar.</div>'}
+    ${campo('simPrompt', '🎯 Prompt del vendedor (se suma a las reglas de siempre: solo precio de venta, nunca comisión, no inventar, idioma del cliente)', `<textarea id="simPrompt" rows="12" style="font-size:12.5px">${esc(promptActual)}</textarea>`, `<a href="#" data-k="sim-prompt-base">Volver al prompt de vendedor original</a>`)}
+    <div class="fila2"><div class="campo"><label>Modelos a comparar</label>${SIM.modelos.map(m => `<label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="checkbox" data-sim-modelo="${esc(m.id)}" checked> ${esc(m.nombre)} <small style="color:var(--suave)">· ${esc(m.nota)}</small></label>`).join('')}</div>
+      <div class="campo"><label>Clientes simulados <a href="#" data-k="sim-todos" style="font-weight:400">(todos / ninguno)</a></label><div style="max-height:150px;overflow:auto;font-size:12.5px">${SIM.escenarios.map(x => `<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-sim-esc="${x.id}" checked> ${x.sede === 'orl' ? '🇺🇸' : '🇩🇴'} ${x.id}. ${esc(x.titulo)}</label>`).join('')}</div></div></div>
+    <div class="acciones" style="justify-content:space-between;align-items:center"><small style="color:var(--suave)">Cada conversación tiene hasta ${SIM.maxTurnos} mensajes del cliente. La prueba completa con los 2 modelos cuesta aprox. US$ 1 a 3 en OpenRouter y tarda unos 10 a 20 minutos.</small>
+      ${corriendo ? `<button class="btn" disabled>⏳ Simulando… ${corriendo.progreso.hechas || 0} de ${corriendo.progreso.total || '?'}</button>` : `<button class="btn" data-k="sim-correr">▶ Simular</button>`}</div></div>`;
+  return form + (corriendo ? `<div class="caja"><b>⏳ Simulando ${corriendo.progreso.hechas || 0} de ${corriendo.progreso.total || '?'} conversaciones…</b><div style="height:8px;background:var(--borde);border-radius:6px;margin-top:8px"><div style="height:8px;border-radius:6px;background:var(--azul,#1679c2);width:${Math.round(100 * (corriendo.progreso.hechas || 0) / Math.max(1, corriendo.progreso.total || 1))}%"></div></div><p class="sub" style="margin-top:6px">Puedes salir de esta pantalla: sigue corriendo en el servidor.</p></div>` : '') + resultadosSim();
+}
+function resultadosSim() {
+  const listas = SIM.simulaciones.filter(s => s.estado === 'lista' || s.estado === 'error' || s.estado === 'interrumpida');
+  if (!SIMV || SIMV.estado !== 'lista') return listas.length ? `<div class="caja"><div class="vacio">${SIMV && SIMV.estado === 'error' ? 'La última simulación falló: ' + esc((SIMV.resultado || {}).error || '') : 'Elige una simulación.'}</div></div>` + historialSim() : '';
+  const res = SIMV.resultado, mods = Object.values(res.resumen);
+  const fila = (t, f) => `<tr><td>${t}</td>${mods.map(m => `<td class="n">${f(m)}</td>`).join('')}</tr>`;
+  const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
+  const tabla = `<table><thead><tr><th></th>${mods.map(m => `<th class="n">${esc(nombreModelo(m.modelo))}</th>`).join('')}</tr></thead><tbody>
+    ${fila('Conversaciones', m => m.conversaciones + (m.errores ? ` <small style="color:var(--rojo)">(${m.errores} con error)</small>` : ''))}
+    ${fila('✅ Ventas listas para depósito', m => `${m.ventas} · ${pct(m.ventas, m.conversaciones - m.errores)}`)}
+    ${fila('🙋 Pasaron a un asesor (dudas, humano, no sabe)', m => `${m.asesor} · ${pct(m.asesor, m.conversaciones - m.errores)}`)}
+    ${fila('✖ No compraron / sin decidir', m => m.sin_venta + m.limite)}
+    ${fila('💲 Dio precio en la conversación', m => pct(m.dieron_precio, m.conversaciones - m.errores))}
+    ${fila('Mensajes del vendedor por conversación', m => m.turnos_promedio.toFixed(1))}
+    ${fila('Tokens por conversación', m => Math.round(m.tokens_promedio).toLocaleString('en-US'))}
+    ${fila('🌐 Búsquedas en internet', m => `${m.busquedas_web} (en ${m.con_web} conversaciones)`)}
+    ${fila('<b>Costo promedio por conversación</b>', m => `<b>${dineroSim(m.costo_promedio)}</b>`)}
+    ${fila('Costo por mensaje del vendedor', m => dineroSim(m.costo_por_mensaje))}
+    ${fila('Conversación más cara', m => dineroSim(m.costo_max))}
+    ${fila('Costo total del vendedor en la prueba', m => dineroSim(m.costo))}
+    ${fila('<small>Costo del cliente simulado (solo de la prueba)</small>', m => `<small>${dineroSim(m.costo_cliente)}</small>`)}
+  </tbody></table>`;
+  const inp = (k, t, ayuda) => campo('roi_' + k, t, `<input type="number" min="0" step="any" data-roi="${k}" value="${ROI[k]}">`, ayuda);
+  const rois = mods.map(m => [m, calcularROI(m)]);
+  const roiTabla = `<table><thead><tr><th>Al mes</th>${rois.map(([m]) => `<th class="n">${esc(nombreModelo(m.modelo))}</th>`).join('')}</tr></thead><tbody>
+    <tr><td>Gasto de IA (${ROI.conv.toLocaleString('en-US')} conversaciones)</td>${rois.map(([, r]) => `<td class="n">${dineroSim(r.costoIA)}</td>`).join('')}</tr>
+    <tr><td>Asesores necesarios SIN IA (atienden todo)</td>${rois.map(([, r]) => `<td class="n">${r.sinIA} · ${dineroSim(r.sinIA * ROI.asesor)}</td>`).join('')}</tr>
+    <tr><td>Asesores necesarios CON IA (solo depósitos, cobros y casos)</td>${rois.map(([, r]) => `<td class="n">${r.conIA} · ${dineroSim(r.conIA * ROI.asesor)}</td>`).join('')}</tr>
+    <tr><td><b>Ahorro neto al mes</b></td>${rois.map(([, r]) => `<td class="n"><b style="color:${r.ahorro >= 0 ? 'var(--verde)' : 'var(--rojo)'}">${dineroSim(r.ahorro)}</b></td>`).join('')}</tr>
+    <tr><td><b>ROI</b> (ahorro ÷ gasto de IA)</td>${rois.map(([, r]) => `<td class="n"><b>${r.costoIA ? Math.round(r.roi * 100).toLocaleString('en-US') + '%' : '—'}</b></td>`).join('')}</tr>
+    <tr><td>Ventas listas para depósito (estimado)</td>${rois.map(([, r]) => `<td class="n">${Math.round(r.ventas).toLocaleString('en-US')}</td>`).join('')}</tr>
+    <tr><td>Costo de IA por venta</td>${rois.map(([, r]) => `<td class="n">${r.ventas ? dineroSim(r.porVenta) : '—'}</td>`).join('')}</tr>
+    <tr><td>Costo de IA como % de lo vendido</td>${rois.map(([, r]) => `<td class="n">${r.pctVentas ? (r.pctVentas * 100).toFixed(2) + '%' : '—'}</td>`).join('')}</tr>
+  </tbody></table>`;
+  const convs = res.conversaciones;
+  const lista = `<table><thead><tr><th>Cliente simulado</th><th>Modelo</th><th>Resultado</th><th class="n">Mensajes</th><th class="n">Internet</th><th class="n">Tokens</th><th class="n">Costo</th><th></th></tr></thead><tbody>
+    ${convs.map((c, i) => { const r = RESULTADO_SIM[c.resultado] || RESULTADO_SIM.error; return `<tr><td>${c.sede && /orlando/i.test(c.sede) ? '🇺🇸' : '🇩🇴'} ${esc(c.titulo)}</td><td><small>${esc(nombreModelo(c.modelo))}</small></td>
+      <td><span class="chip ${r[1]}">${r[0]}</span>${c.dio_precio ? ' <small>💲</small>' : ''}</td><td class="n">${c.turnos}</td><td class="n">${c.busquedas_web || '—'}</td>
+      <td class="n">${(c.tokens_entrada + c.tokens_salida).toLocaleString('en-US')}</td><td class="n">${dineroSim(c.costo)}</td><td><button class="btn-mini" data-k="sim-ver" data-id="${i}">Ver chat</button></td></tr>`; }).join('')}</tbody></table>`;
+  const fecha = new Date(SIMV.terminado || SIMV.creado).toLocaleString('es-DO');
+  return `<div class="caja"><div class="cab"><div><h2>📊 Resultado · ${esc(fecha)}</h2><p class="sub">${convs.length} conversaciones · costos reales cobrados por OpenRouter (o calculados con el precio del modelo)</p></div>
+      <div class="acciones"><button class="btn-sec" data-k="sim-informe">🖨️ Informe para el cliente</button>${mods.map(m => `<button class="btn-sec" data-k="sim-usar" data-modelo="${esc(m.modelo)}">✔ Usar este vendedor con ${esc(nombreModelo(m.modelo))}</button>`).join('')}</div></div>
+    ${tabla}</div>
+    <div class="caja"><h2>💰 ROI: IA vendedora + asesor solo para el cierre</h2><p class="sub">Cambia los números y se recalcula. La IA atiende todas las conversaciones; el asesor solo recibe las que la IA le pasa (depósito, cobro, dudas, quien pide una persona).</p>
+      <div class="fila2">${inp('conv', 'Conversaciones al mes')}${inp('asesor', 'Costo de un asesor al mes (US$)', 'Sueldo + cargas')}</div>
+      <div class="fila2">${inp('capSin', 'Conversaciones que atiende un asesor al mes (sin IA)', 'Atendiendo de principio a fin: ~35 al día')}${inp('capCierre', 'Cierres que atiende un asesor al mes (con IA)', 'Solo depósito y cobro: más rápido')}</div>
+      <div class="fila2">${inp('ticket', 'Venta promedio por reserva (US$)', 'Para ver el gasto de IA como % de lo vendido')}<div></div></div>
+      <div id="simROI">${roiTabla}</div>
+      <p class="sub" style="margin-top:8px">⚠️ Son clientes simulados: la tasa de ventas real depende de cada cliente. El costo por conversación sí es real (mismo asistente, mismos tarifarios, mismo modelo).</p></div>
+    <div class="caja"><h2>💬 Las conversaciones</h2>${lista}</div>` + historialSim();
+}
+function historialSim() {
+  const l = SIM.simulaciones;
+  if (l.length < 2 && !(l[0] && SIMV && l[0].id !== SIMV.id)) return '';
+  return `<div class="caja"><h2>🕑 Simulaciones anteriores</h2><table><thead><tr><th>Fecha</th><th>Modelos</th><th>Estado</th><th class="n">Costo prom. por conversación</th><th></th></tr></thead><tbody>
+    ${l.map(s => `<tr><td>${esc(new Date(s.creado).toLocaleString('es-DO'))}</td><td><small>${esc((s.ajustes.modelos || []).map(nombreModelo).join(', '))}</small></td><td>${esc(s.estado)}</td>
+      <td class="n">${s.resumen ? Object.values(s.resumen).map(m => dineroSim(m.costo_promedio)).join(' / ') : '—'}</td>
+      <td>${s.estado === 'lista' && (!SIMV || SIMV.id !== s.id) ? `<button class="btn-mini" data-k="sim-abrir" data-id="${s.id}">Ver</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function verChatSim(i) {
+  const c = SIMV.resultado.conversaciones[i];
+  const r = RESULTADO_SIM[c.resultado] || RESULTADO_SIM.error;
+  abrirModal(`<h2>${esc(c.titulo)}</h2><p class="sub">${esc(nombreModelo(c.modelo))} · sede ${esc(c.sede)} · <span class="chip ${r[1]}">${r[0]}</span> · ${dineroSim(c.costo)} · ${(c.tokens_entrada + c.tokens_salida).toLocaleString('en-US')} tokens</p>
+    ${c.error ? `<div class="k-avisos">⛔ ${esc(c.error)}</div>` : ''}
+    <div class="k-chat" style="max-height:60vh">${c.mensajes.map(m => m.rol === 'cliente'
+      ? `<div class="burbuja mia">${esc(m.texto)}</div>`
+      : `<div class="burbuja otra">${esc(m.texto)}</div><div class="k-meta">${dineroSim(m.costo || 0)}${m.tokens ? ` · ${(m.tokens.entrada + m.tokens.salida).toLocaleString('en-US')} tokens` : ''}${m.web ? ' · 🌐 internet' : ''}${m.motivo ? ' · pasa a asesor: ' + esc(m.motivo) : ''}</div>`).join('')}</div>
+    ${c.resumen_para_asesor ? `<p style="font-size:13px"><b>Resumen para el asesor:</b> ${esc(c.resumen_para_asesor)}</p>` : ''}
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
+  document.getElementById('modal').classList.add('ancho');
+}
+function informeSim() {
+  const res = SIMV.resultado, mods = Object.values(res.resumen), e = K.empresa;
+  const rois = mods.map(m => [m, calcularROI(m)]);
+  const w = window.open('', '_blank');
+  if (!w) return aviso('El navegador bloqueó la ventana: permite ventanas emergentes.');
+  const td = v => `<td style="text-align:right">${v}</td>`;
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Vendedor IA · ${esc(e.nombre)}</title>
+    <style>body{font-family:Segoe UI,Arial,sans-serif;color:#1e293b;max-width:900px;margin:24px auto;padding:0 16px}h1{color:#0b4f8a;margin-bottom:2px}h2{color:#0b4f8a;margin-top:26px;border-bottom:2px solid #e2e8f0;padding-bottom:4px}
+    table{border-collapse:collapse;width:100%;font-size:13.5px}th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left}th{background:#f1f5f9}.big{font-size:26px;font-weight:800;color:#0b4f8a}.kpis{display:flex;gap:12px;flex-wrap:wrap}.kpi{flex:1;min-width:180px;background:#f8fafc;border-left:4px solid #1679c2;padding:10px 12px;border-radius:8px}
+    .chat{background:#f8fafc;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13px}.cli{color:#475569}.ia{color:#0b4f8a}@media print{button{display:none}}</style></head><body>
+    <button onclick="print()" style="float:right;padding:8px 14px">🖨️ Imprimir / Guardar PDF</button>
+    <h1>Vendedor IA para ${esc(e.nombre)}</h1><div style="color:#64748b">Simulación de ${res.conversaciones.length} conversaciones de venta · ${esc(new Date(SIMV.terminado || SIMV.creado).toLocaleDateString('es-DO', { day: 'numeric', month: 'long', year: 'numeric' }))} · Zentralia App · Kaizen IA</div>
+    <h2>En resumen</h2><div class="kpis">${rois.map(([m, r]) => `<div class="kpi"><b>${esc(nombreModelo(m.modelo))}</b><div class="big">${dineroSim(m.costo_promedio)}</div>por conversación · ${Math.round(100 * r.tasaVenta)}% ventas listas para depósito<br>Ahorro estimado: <b>${dineroSim(r.ahorro)}/mes</b></div>`).join('')}</div>
+    <h2>Resultados de la simulación</h2><table><tr><th></th>${mods.map(m => `<th style="text-align:right">${esc(nombreModelo(m.modelo))}</th>`).join('')}</tr>
+      <tr><td>Conversaciones</td>${mods.map(m => td(m.conversaciones)).join('')}</tr>
+      <tr><td>Ventas listas para depósito</td>${mods.map(m => td(m.ventas)).join('')}</tr>
+      <tr><td>Pasaron a un asesor</td>${mods.map(m => td(m.asesor)).join('')}</tr>
+      <tr><td>No compraron / sin decidir</td>${mods.map(m => td(m.sin_venta + m.limite)).join('')}</tr>
+      <tr><td>Mensajes del vendedor por conversación</td>${mods.map(m => td(m.turnos_promedio.toFixed(1))).join('')}</tr>
+      <tr><td>Tokens por conversación</td>${mods.map(m => td(Math.round(m.tokens_promedio).toLocaleString('en-US'))).join('')}</tr>
+      <tr><td>Búsquedas en internet</td>${mods.map(m => td(m.busquedas_web)).join('')}</tr>
+      <tr><td><b>Costo por conversación</b></td>${mods.map(m => td('<b>' + dineroSim(m.costo_promedio) + '</b>')).join('')}</tr>
+      <tr><td>Conversación más cara</td>${mods.map(m => td(dineroSim(m.costo_max))).join('')}</tr></table>
+    <h2>ROI mensual (${ROI.conv.toLocaleString('en-US')} conversaciones, asesor US$ ${ROI.asesor})</h2><table><tr><th></th>${rois.map(([m]) => `<th style="text-align:right">${esc(nombreModelo(m.modelo))}</th>`).join('')}</tr>
+      <tr><td>Gasto de IA</td>${rois.map(([, r]) => td(dineroSim(r.costoIA))).join('')}</tr>
+      <tr><td>Asesores sin IA</td>${rois.map(([, r]) => td(r.sinIA + ' · ' + dineroSim(r.sinIA * ROI.asesor))).join('')}</tr>
+      <tr><td>Asesores con IA (solo cierres)</td>${rois.map(([, r]) => td(r.conIA + ' · ' + dineroSim(r.conIA * ROI.asesor))).join('')}</tr>
+      <tr><td><b>Ahorro neto al mes</b></td>${rois.map(([, r]) => td('<b>' + dineroSim(r.ahorro) + '</b>')).join('')}</tr>
+      <tr><td><b>ROI</b></td>${rois.map(([, r]) => td('<b>' + (r.costoIA ? Math.round(r.roi * 100).toLocaleString('en-US') + '%' : '—') + '</b>')).join('')}</tr>
+      <tr><td>Costo de IA por venta</td>${rois.map(([, r]) => td(r.ventas ? dineroSim(r.porVenta) : '—')).join('')}</tr>
+      <tr><td>Costo de IA como % de lo vendido (venta prom. US$ ${ROI.ticket})</td>${rois.map(([, r]) => td(r.pctVentas ? (r.pctVentas * 100).toFixed(2) + '%' : '—')).join('')}</tr></table>
+    <p style="font-size:12px;color:#64748b">Supuestos: un asesor atiende ${ROI.capSin} conversaciones al mes de principio a fin, o ${ROI.capCierre} cierres al mes (solo depósito y cobro). Los clientes son simulados; el costo por conversación es real.</p>
+    <h2>Cómo trabaja el vendedor IA</h2><ul><li>Atiende 24/7 por WhatsApp, Instagram y Facebook, en español, inglés y portugués.</li><li>Descubre lo que el cliente necesita, recomienda, arma el paquete (traslado + excursiones + extras) y da el precio total con los tarifarios de la agencia.</li><li>Nunca inventa precios ni descuentos: los toma solo de los tarifarios. Puede buscar en internet información general (clima, parques, requisitos).</li><li>Cuando el cliente decide, pasa la venta al asesor con un resumen para cobrar el depósito.</li></ul>
+    <h2>Ejemplos de conversaciones</h2>${res.conversaciones.filter(c => c.resultado === 'venta').slice(0, 3).map(c => `<h3 style="font-size:14px">${esc(c.titulo)} · ${esc(nombreModelo(c.modelo))} · ${dineroSim(c.costo)}</h3>${c.mensajes.map(m => `<div class="chat ${m.rol === 'cliente' ? 'cli' : 'ia'}"><b>${m.rol === 'cliente' ? 'Cliente' : 'Vendedor IA'}:</b> ${esc(m.texto).replace(/\n/g, '<br>')}</div>`).join('')}`).join('')}
+    </body></html>`);
+  w.document.close();
+}
+async function correrSim() {
+  const modelos = [...document.querySelectorAll('[data-sim-modelo]')].filter(x => x.checked).map(x => x.dataset.simModelo);
+  const escenarios = [...document.querySelectorAll('[data-sim-esc]')].filter(x => x.checked).map(x => Number(x.dataset.simEsc));
+  if (!modelos.length || !escenarios.length) return aviso('Elige al menos un modelo y un cliente.');
+  if (!confirm(`Se harán ${modelos.length * escenarios.length} conversaciones con la clave de OpenRouter de ${K.empresa.nombre} (aprox. US$ ${(modelos.length * escenarios.length * 0.06).toFixed(2)} a ${(modelos.length * escenarios.length * 0.12).toFixed(2)}). ¿Simular?`)) return;
+  const r = await api('/api/oficina/conocimiento/simular', { empresa_id: kEmpresa, modelos, escenarios, instrucciones: document.getElementById('simPrompt').value });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo empezar.');
+  aviso('Simulación en marcha: tarda unos minutos.'); SIMV = null; await cargarSim(true); pintar();
+}
+document.addEventListener('input', ev => {
+  const k = ev.target.dataset && ev.target.dataset.roi;
+  if (!k || !SIMV) return;
+  ROI[k] = Math.max(0, Number(ev.target.value) || 0);
+  try { localStorage.setItem('oficinaROI', JSON.stringify(ROI)); } catch (e) {}
+  const caja = document.getElementById('simROI');
+  if (caja) { const tmp = document.createElement('div'); tmp.innerHTML = resultadosSim(); const nuevo = tmp.querySelector('#simROI'); if (nuevo) caja.innerHTML = nuevo.innerHTML; }
+});
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-k^="sim-"]');
+  if (!t) return;
+  ev.preventDefault();
+  const a = t.dataset.k;
+  if (a === 'sim-correr') return correrSim();
+  if (a === 'sim-prompt-base') { document.getElementById('simPrompt').value = SIM.prompt; return; }
+  if (a === 'sim-todos') { const cajas = [...document.querySelectorAll('[data-sim-esc]')]; const todas = cajas.every(x => x.checked); cajas.forEach(x => { x.checked = !todas; }); return; }
+  if (a === 'sim-ver') return verChatSim(Number(t.dataset.id));
+  if (a === 'sim-informe') return informeSim();
+  if (a === 'sim-abrir') { const d = await api('/api/oficina/conocimiento/simulacion?id=' + t.dataset.id); if (d.ok) { SIMV = d.data; pintar(); } return; }
+  if (a === 'sim-usar') {
+    if (!confirm(`¿Usar este prompt de vendedor con ${nombreModelo(t.dataset.modelo)} en el asistente de ${K.empresa.nombre}? Reemplaza las "Instrucciones para todas las sedes" y el modelo. Las de cada sede, la bienvenida y la búsqueda en internet no cambian.`)) return;
+    const r = await api('/api/oficina/conocimiento/simulacion/usar', { id: SIMV.id, modelo: t.dataset.modelo });
+    aviso(r.ok ? 'Listo: el asistente ya vende con este prompt.' : (r.data.error || 'Error'));
+    if (r.ok) { await cargarConocimiento(); pintar(); }
+  }
+});
+
 function tabDocsK() {
   const e = K.empresa;
   const borr = K.archivos.filter(a => a.estado === 'borrador');

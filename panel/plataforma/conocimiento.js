@@ -412,6 +412,8 @@ function leerJSON(t) {
   return null;
 }
 
+const crearSimulacion = require('./simulacion');
+
 module.exports = function crearConocimiento({ client, config = {}, registrar, central, claveIA }) {
   const activo = central.activo;
   const indices = new Map();   // 'empresa_id' o 'empresa_id:b' (con borradores) -> { fragmentos, df, promedio }
@@ -449,6 +451,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       } catch (err) { console.error('Base del asistente: no se pudo volver a leer', v.nombre, err.message); }
     }
     if (viejos.length) console.log(`Base del asistente: ${viejos.length} Excel vueltos a leer con el lector nuevo.`);
+    await simulacion.preparar();
   }
 
   const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -624,9 +627,12 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     return { nombre: a.nombre || `el asistente de ${e.nombre}`, modelo: a.modelo || MODELO_POR_DEFECTO, instrucciones: a.instrucciones || '', sedes: a.sedes || {},
       bienvenidas: a.bienvenidas || {}, web: { sedes: (a.web && a.web.sedes) || [], palabras: (a.web && a.web.palabras) || '', sitios: (a.web && a.web.sitios) || '' } };
   }
-  async function responder(empresaId, { sede = '', mensajes = [], borradores = false }) {
+  // modelo / instrucciones: solo para la Simulación de ventas (prueba otro modelo u otro prompt sin cambiar los ajustes guardados).
+  async function responder(empresaId, { sede = '', mensajes = [], borradores = false, modelo = '', instrucciones = null }) {
     const e = await empresa(empresaId);
     const aj = ajustesDe(e);
+    if (modelo) aj.modelo = modelo;
+    if (instrucciones !== null && instrucciones !== undefined) aj.instrucciones = String(instrucciones);
     const sedes = sedesDe(e);
     const sedeOk = sedes.find(s => mismaSede(s, sede)) || '';
     if (sedes.length && !sedeOk) throw error(`Sede no válida. Usa una de: ${sedes.join(', ')}.`);
@@ -690,7 +696,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       textoEjemplos + `\n\nINFORMACIÓN\n${info}` +
       (idiomaCliente && idiomaCliente !== 'es' ? `\n\nIDIOMA DE ESTA RESPUESTA: el cliente escribe en ${NOMBRE_IDIOMA[idiomaCliente][0]}. Escribe el campo "respuesta" COMPLETO en ${NOMBRE_IDIOMA[idiomaCliente][0]}, saludo incluido, y pon "idioma": "${idiomaCliente}". ` +
         `IMPORTANT: the customer is writing in ${NOMBRE_IDIOMA[idiomaCliente][1]}. Write the whole "respuesta" in ${NOMBRE_IDIOMA[idiomaCliente][1]} (only resumen_para_asesor stays in Spanish).` : '');
-    const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, messages: [{ role: 'system', content: sistema }, ...historial] };
+    const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, usage: { include: true }, messages: [{ role: 'system', content: sistema }, ...historial] };
     if (usarWeb) cuerpo.plugins = [{ id: 'web', engine: 'exa', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
     const t0 = Date.now();
     // Llama a la IA. Si con internet no devuelve texto, se pregunta otra vez sin internet: el cliente siempre recibe respuesta.
@@ -720,8 +726,9 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       if (Array.isArray(c)) return c.map(p => (typeof p === 'string' ? p : (p && (p.text || (p.type === 'text' && p.content)) || ''))).join('');
       return typeof c === 'string' ? c : '';
     };
-    let datos, diagnostico = '', webFallo = false, usoTotal = { entrada: 0, salida: 0 };
-    const sumarUso = d => { if (d && d.usage) { usoTotal.entrada += d.usage.prompt_tokens || 0; usoTotal.salida += d.usage.completion_tokens || 0; } };
+    let datos, diagnostico = '', webFallo = false, usoTotal = { entrada: 0, salida: 0, costo: 0, llamadas: 0 };
+    // costo: lo que cobró OpenRouter (US$), si lo informa (usage.include). Si no, lo calcula la Simulación con el precio del modelo.
+    const sumarUso = d => { if (d && d.usage) { usoTotal.entrada += d.usage.prompt_tokens || 0; usoTotal.salida += d.usage.completion_tokens || 0; usoTotal.costo += Number(d.usage.cost) || 0; usoTotal.llamadas++; } };
     let fueConWeb = Boolean(cuerpo.plugins);
     if (fueConWeb) {
       try { datos = await pedir(cuerpo); sumarUso(datos); }
@@ -947,6 +954,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       await registrar(u, 'conocimiento_instrucciones', 'empresa', e.slug, '', '', aj.modelo || MODELO_POR_DEFECTO);
       return json(res, 200, { ok: true });
     }
+    if (url.startsWith('/api/oficina/conocimiento/simula')) return simulacion.manejar(req, res, url, u, { json, leerCuerpo });
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/probar') {
       const f = await leerCuerpo(req);
       const e = await empresa(f.empresa_id);
@@ -1010,6 +1018,8 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     }
     return json(res, 404, { error: 'Ruta no encontrada' });
   }
+
+  const simulacion = crearSimulacion({ client, registrar, central, claveIA, responder, empresa, sedesDe, error });
 
   return { activo, preparar, manejarOficina, manejarPublico, responder, _probar: { detectarIdioma, ampliarConsulta, hotelesYZonas, hotelesEn, rescatarRespuesta, convertirExcel, paginasPdf, pdfATexto, cabecerasDe, fragmentar, palabras, instruccionesBase, leerJSON } };
 };
