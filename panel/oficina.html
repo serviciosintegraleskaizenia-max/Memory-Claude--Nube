@@ -384,7 +384,11 @@ function vRespaldosServidor() {
     : `<button class="btn" data-k="respaldar">💾 Respaldar ahora</button>`;
   if (!u) return titulo + `<div class="caja"><div class="vacio">Todavía no hay ningún respaldo en el servidor.</div>${boton}</div>`;
   const pcDeEsta = pc && u.archivo && pc.archivo === u.archivo;
-  const filasPc = pcDeEsta ? (pc.destinos || []) : [{ lugar: 'Tu PC', ok: false, error: pc ? `todavía no baja esta copia (la última que bajó fue ${haceCuanto(pc.fecha)})` : 'todavía no ha bajado ninguna copia', ruta: 'Se baja a las 3:00 a. m. con la PC encendida' }];
+  // Copia reciente que la PC todavía no baja: es normal (la baja a las 3:00 a. m.), no es un error.
+  const reciente = Date.now() - Date.parse(u.fin) < 26 * 3600 * 1000;
+  const filasPc = pcDeEsta ? (pc.destinos || []) : [{ lugar: 'Tu PC', ok: false, pendiente: reciente && Boolean(pc),
+    error: pc ? (reciente ? `pendiente: la baja a las 3:00 a. m. (la última que bajó fue ${haceCuanto(pc.fecha)})` : `no ha bajado las copias nuevas (la última fue ${haceCuanto(pc.fecha)})`) : 'todavía no ha bajado ninguna copia',
+    ruta: 'Se baja a las 3:00 a. m. con la PC encendida' }];
   const filas = [...u.destinos, ...filasPc];
   return titulo + `
     <div class="caja">
@@ -395,7 +399,7 @@ function vRespaldosServidor() {
       </div>
       <table class="tabla" style="margin-top:12px"><thead><tr><th>Lugar</th><th>Resultado</th><th>Dónde quedó</th></tr></thead><tbody>
       ${filas.map(d => `<tr><td>${iconos[d.lugar] || '📁'} ${esc(d.lugar)}</td>
-        <td>${d.ok ? `✅ Guardado${d.copias ? ` · ${d.copias} copias` : ''}` : '⛔ ' + esc(d.error || '')}</td><td style="word-break:break-all"><small>${esc(d.ruta || '')}</small></td></tr>`).join('')}
+        <td>${d.ok ? `✅ Guardado${d.copias ? ` · ${d.copias} copias` : ''}` : (d.pendiente ? '⏳ ' : '⛔ ') + esc(d.error || '')}</td><td style="word-break:break-all"><small>${esc(d.ruta || '')}</small></td></tr>`).join('')}
       </tbody></table>
       ${u.problemas.length ? `<details style="margin-top:10px"><summary>Ver detalle (${u.problemas.length} aviso(s))</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(u.registro.join('\n'))}</pre></details>` : ''}
     </div>
