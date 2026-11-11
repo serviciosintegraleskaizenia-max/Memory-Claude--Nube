@@ -8,6 +8,10 @@
 //
 // La contraseña de Drive la guarda configurar-respaldo.ps1, cifrada con tu usuario de Windows.
 // El estado del último respaldo queda en C:\Respaldos Zentralia\ultimo-respaldo.json (lo lee la Oficina).
+//
+// MODO SERVIDOR (cuando Zentralia ya corre en el servidor): si existe C:\Respaldos Zentralia\servidor.json,
+// este programa NO arma la copia: baja la copia cifrada que el servidor hizo a las 2:00 a. m. (con una llave que
+// solo sirve para eso), comprueba su huella y la guarda en los mismos 4 lugares. Luego avisa al servidor (Oficina).
 
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +30,7 @@ const ARCHIVO_CLAVE = path.join(BASE, 'clave-respaldo.dat');
 const ESTADO = path.join(BASE, 'ultimo-respaldo.json');
 const CANDADO = path.join(BASE, 'respaldo-en-curso.json');
 const automatico = process.argv.includes('--automatico');
+const SERVIDOR = (() => { try { const c = JSON.parse(fs.readFileSync(path.join(BASE, 'servidor.json'), 'utf8')); return c && c.host && c.llave ? c : null; } catch (e) { return null; } })();
 
 fs.mkdirSync(BASE, { recursive: true });
 const registro = [];
@@ -139,7 +144,7 @@ function carpetaDrive(lista) {
 // ---------- Limpieza: 7 copias diarias + 1 por semana de las 4 semanas anteriores ----------
 function semana(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const dia = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - dia); const ini = new Date(Date.UTC(t.getUTCFullYear(), 0, 1)); return t.getUTCFullYear() + '-' + Math.ceil(((t - ini) / 86400000 + 1) / 7); }
 function limpiar(carpeta) {
-  const re = /^zentralia-respaldo-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.zip(\.cifrado)?$/;
+  const re = /^zentralia-respaldo-(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.(zip|tar)(\.cifrado)?$/;
   const copias = fs.readdirSync(carpeta).map(n => { const m = n.match(re); return m && { n, f: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) }; })
     .filter(Boolean).sort((a, b) => b.f - a.f);
   const guardar = new Set(), dias = new Set(), semanas = new Set();
@@ -153,6 +158,80 @@ function limpiar(carpeta) {
   let borradas = 0;
   for (const c of copias) if (!guardar.has(c.n)) { try { fs.unlinkSync(path.join(carpeta, c.n)); borradas++; } catch (e) {} }
   return { guardadas: guardar.size, borradas };
+}
+
+// ---------- Modo servidor: bajar la copia cifrada que hizo el servidor ----------
+function ssh(orden, opciones = {}) {
+  const args = ['-i', SERVIDOR.llave, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', '-o', 'ServerAliveInterval=30',
+    `${SERVIDOR.usuario || 'root'}@${SERVIDOR.host}`, orden];
+  return spawnSync('ssh', args, { maxBuffer: 4 * 1024 * 1024, windowsHide: true, ...opciones });
+}
+const textoDe = r => String((r.stderr || '') + (r.error ? ' ' + r.error.message : '')).trim().slice(0, 300);
+function huellaDe(archivo) {
+  return new Promise((ok, falla) => {
+    const h = crypto.createHash('sha256');
+    fs.createReadStream(archivo).on('error', falla).on('data', d => h.update(d)).on('end', () => ok(h.digest('hex')));
+  });
+}
+async function bajarDelServidor(destinos) {
+  const r = ssh('ultimo', { encoding: 'utf8', timeout: 180000 });
+  if (r.error || r.status !== 0) throw new Error('No pude hablar con el servidor: ' + textoDe(r));
+  const [nombre, tam, huella] = String(r.stdout || '').trim().split(/\s+/);
+  if (!/^zentralia-respaldo-\d{4}-\d{2}-\d{2}_\d{4}\.tar\.cifrado$/.test(nombre || '') || !/^[0-9a-f]{64}$/.test(huella || '')) throw new Error('Respuesta rara del servidor: ' + String(r.stdout).slice(0, 120));
+  const tamano = Number(tam);
+  const m = nombre.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})/);
+  const hecha = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  log(`Copia más nueva del servidor: ${nombre} (${(tamano / 1048576).toFixed(1)} MB)`);
+  if (Date.now() - hecha.getTime() > 30 * 3600 * 1000) mal(`El servidor no ha hecho respaldo desde ${hecha.toLocaleString('es-DO')}: revisa la Oficina → Respaldos`);
+
+  // Si ya está en C: (completa y con la misma huella) no se vuelve a bajar.
+  const enC = path.join(BASE, nombre);
+  let origen = null;
+  if (fs.existsSync(enC) && fs.statSync(enC).size === tamano && await huellaDe(enC) === huella) { origen = enC; log('OK  ya estaba bajada en C:'); }
+  else {
+    origen = path.join(os.tmpdir(), nombre + '.bajando');
+    const fd = fs.openSync(origen, 'w');
+    const t0 = Date.now();
+    const b = ssh('bajar ' + nombre, { stdio: ['ignore', fd, 'pipe'], timeout: 4 * 3600 * 1000 });
+    fs.closeSync(fd);
+    if (b.error || b.status !== 0) { try { fs.unlinkSync(origen); } catch (e) {} throw new Error('No se pudo bajar la copia: ' + textoDe(b)); }
+    if (fs.statSync(origen).size !== tamano) { fs.unlinkSync(origen); throw new Error('La copia llegó incompleta (se corta el internet)'); }
+    if (await huellaDe(origen) !== huella) { fs.unlinkSync(origen); throw new Error('La copia llegó dañada (la huella no coincide)'); }
+    log(`OK  bajada y comprobada en ${Math.round((Date.now() - t0) / 1000)} s`);
+  }
+
+  const lista = discos();
+  const usb = lista.find(d => d.tipo === 2 && d.libre > tamano * 1.2);
+  const lugares = [
+    { lugar: 'USB', carpeta: usb ? path.join(usb.letra + '\\', CARPETA_DESTINO) : null, falta: lista.some(d => d.tipo === 2) ? 'la memoria USB no tiene espacio' : 'no hay memoria USB conectada' },
+    { lugar: 'Disco C:', carpeta: lista.some(d => d.letra === 'C:') ? BASE : null, falta: 'no hay disco C:' },
+    { lugar: 'Disco D:', carpeta: lista.some(d => d.letra === 'D:' && d.tipo === 3) ? path.join('D:\\', CARPETA_DESTINO) : null, falta: 'no hay disco D:' },
+    { lugar: 'Google Drive', carpeta: (() => { const g = carpetaDrive(lista); return g ? path.join(g, CARPETA_DESTINO) : null; })(), falta: 'no encontré la carpeta de Google Drive (¿está abierto Google Drive para escritorio?)' }
+  ];
+  if (process.env.RESPALDO_DESTINOS) JSON.parse(process.env.RESPALDO_DESTINOS).forEach((c, i) => { if (lugares[i]) lugares[i].carpeta = c; });
+  for (const l of lugares) {
+    const d = { lugar: l.lugar, ruta: l.carpeta, ok: false, cifrado: true, error: '' };
+    destinos.push(d);
+    if (!l.carpeta) { d.error = l.falta; mal(`${l.lugar}: ${l.falta}`); continue; }
+    try {
+      fs.mkdirSync(l.carpeta, { recursive: true });
+      const final = path.join(l.carpeta, nombre);
+      if (path.resolve(final).toLowerCase() !== path.resolve(origen).toLowerCase()) {
+        fs.copyFileSync(origen, final + '.parcial');
+        if (fs.statSync(final + '.parcial').size !== tamano) throw new Error('la copia quedó incompleta');
+        fs.renameSync(final + '.parcial', final); // Drive no sube un archivo a medias
+      }
+      const lim = limpiar(l.carpeta);
+      Object.assign(d, { ruta: final, ok: true, copias: lim.guardadas, borradas: lim.borradas });
+      log(`OK  ${l.lugar}: ${final}${lim.borradas ? ` (borradas ${lim.borradas} copias viejas)` : ''}`);
+    } catch (e) { d.error = e.message; mal(`${l.lugar}: ${e.message}`); }
+  }
+  if (origen !== enC && fs.existsSync(origen)) { try { fs.unlinkSync(origen); } catch (e) {} }
+  // Avisar al servidor dónde quedó (lo muestra la Oficina)
+  const aviso = { fecha: new Date().toISOString(), archivo: nombre, ok: destinos.every(d => d.ok), destinos: destinos.map(d => ({ lugar: d.lugar, ok: d.ok, ruta: d.ruta, copias: d.copias, error: d.error })) };
+  const a = ssh('recibido', { input: JSON.stringify(aviso), encoding: 'utf8', timeout: 60000 });
+  if (a.error || a.status !== 0) log('(no pude avisarle al servidor: ' + textoDe(a) + ')');
+  return { nombre, tamano };
 }
 
 // ---------- El respaldo ----------
@@ -169,6 +248,12 @@ function limpiar(carpeta) {
   const destinos = [];
   let tamano = 0, archivos = 0;
   try {
+    if (SERVIDOR) {
+      log(`Respaldo ${automatico ? 'automático' : 'manual'} · bajando la copia del servidor ${SERVIDOR.host}`);
+      const r = await bajarDelServidor(destinos);
+      tamano = r.tamano; archivos = 1;
+      return;
+    }
     log(`Respaldo ${automatico ? 'automático' : 'manual'} · ${nombre}`);
     // 1. Bases de datos
     const carpetaBases = path.join(temporal, 'bases-de-datos');

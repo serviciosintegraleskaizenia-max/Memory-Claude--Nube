@@ -14,14 +14,20 @@ const { spawn: spawnR } = require('child_process');
 // Respaldo (botón "Respaldar ahora"): corre respaldo-zentralia.js aparte y lee su estado.
 const CARPETA_RESPALDO = process.env.RESPALDO_BASE || 'C:\\Respaldos Zentralia';
 const SCRIPT_RESPALDO = pathR.join(__dirname, '..', 'respaldo-zentralia.js');
+// En el servidor (Linux) el respaldo lo hace systemd como root (servidor/respaldo-servidor.js): la Oficina solo
+// deja el archivo "pedir-respaldo" y lee el estado. La PC baja la copia y avisa en pc-recibido.json.
+const enServidor = () => process.platform !== 'win32' && fsR.existsSync(pathR.join(CARPETA_RESPALDO, 'servidor-configurado'));
 function estadoRespaldo() {
   const leer = f => { try { return JSON.parse(fsR.readFileSync(pathR.join(CARPETA_RESPALDO, f), 'utf8')); } catch (e) { return null; } };
   const enCurso = leer('respaldo-en-curso.json');
+  const servidor = enServidor();
   return {
-    disponible: fsR.existsSync(SCRIPT_RESPALDO), windows: process.platform === 'win32',
-    configurado: fsR.existsSync(pathR.join(CARPETA_RESPALDO, 'clave-respaldo.dat')) || Boolean(process.env.RESPALDO_CLAVE),
-    enCurso: enCurso && Date.now() - Date.parse(enCurso.inicio) < 2 * 3600 * 1000 ? enCurso : null,
-    ultimo: leer('ultimo-respaldo.json')
+    disponible: servidor || fsR.existsSync(SCRIPT_RESPALDO), windows: process.platform === 'win32', servidor,
+    configurado: servidor || fsR.existsSync(pathR.join(CARPETA_RESPALDO, 'clave-respaldo.dat')) || Boolean(process.env.RESPALDO_CLAVE),
+    enCurso: enCurso && Date.now() - Date.parse(enCurso.inicio) < 2 * 3600 * 1000 ? enCurso
+      : servidor && fsR.existsSync(pathR.join(CARPETA_RESPALDO, 'pedir-respaldo')) ? { inicio: new Date().toISOString(), pedido: true } : null,
+    ultimo: leer('ultimo-respaldo.json'),
+    pc: servidor ? leer('pc-recibido.json') : null
   };
 }
 
@@ -406,6 +412,11 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const e = estadoRespaldo();
         if (!e.disponible) return json(res, 400, { error: 'Falta respaldo-zentralia.js en la carpeta del panel.' });
         if (e.enCurso) return json(res, 409, { error: 'Ya hay un respaldo en curso.' });
+        if (e.servidor) {
+          fsR.writeFileSync(pathR.join(CARPETA_RESPALDO, 'pedir-respaldo'), new Date().toISOString());
+          await registrar(u, 'respaldo_manual', 'sistema', 0, '', '', 'Respaldo del servidor pedido desde la Oficina');
+          return json(res, 200, { ok: true });
+        }
         const hijo = spawnR(process.execPath, [SCRIPT_RESPALDO], { cwd: pathR.dirname(SCRIPT_RESPALDO), detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
         hijo.unref();
         await registrar(u, 'respaldo_manual', 'sistema', 0, '', '', 'Respaldo pedido desde la Oficina');

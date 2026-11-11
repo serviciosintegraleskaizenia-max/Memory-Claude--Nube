@@ -374,10 +374,43 @@ function haceCuanto(iso) {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
   return m < 1 ? 'hace un momento' : m < 60 ? `hace ${m} min` : m < 48 * 60 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`;
 }
+// Zentralia en el servidor: el servidor hace la copia cifrada a las 2:00 a. m. y la PC la baja a las 3:00 a. m.
+function vRespaldosServidor() {
+  const titulo = cabecera('💾 Respaldos', 'Cada noche a las 2:00 a. m. el servidor hace una copia cifrada de todo; a las 3:00 a. m. tu PC la baja al USB, C:, D: y Google Drive.');
+  const u = RESP.ultimo, pc = RESP.pc;
+  const iconos = { 'Servidor': '🖥️', 'USB': '🔌', 'Disco C:': '💽', 'Disco D:': '💽', 'Google Drive': '☁️' };
+  const boton = RESP.enCurso
+    ? `<button class="btn" disabled>⏳ Respaldando… (empezó ${haceCuanto(RESP.enCurso.inicio)})</button>`
+    : `<button class="btn" data-k="respaldar">💾 Respaldar ahora</button>`;
+  if (!u) return titulo + `<div class="caja"><div class="vacio">Todavía no hay ningún respaldo en el servidor.</div>${boton}</div>`;
+  const pcDeEsta = pc && u.archivo && pc.archivo === u.archivo;
+  const filasPc = pcDeEsta ? (pc.destinos || []) : [{ lugar: 'Tu PC', ok: false, error: pc ? `todavía no baja esta copia (la última que bajó fue ${haceCuanto(pc.fecha)})` : 'todavía no ha bajado ninguna copia', ruta: 'Se baja a las 3:00 a. m. con la PC encendida' }];
+  const filas = [...u.destinos, ...filasPc];
+  return titulo + `
+    <div class="caja">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><b style="font-size:16px">${u.ok ? '✅ Copia del servidor lista' : u.algunoOk ? '⚠️ Hecho, con avisos' : '⛔ Falló'}</b>
+          <div class="sub">Último respaldo ${u.automatico ? 'automático' : 'manual'}: ${esc(new Date(u.fin).toLocaleString('es-DO'))} (${haceCuanto(u.fin)}) · ${(u.tamano / 1048576).toFixed(1)} MB · ${u.segundos} s</div></div>
+        ${boton}
+      </div>
+      <table class="tabla" style="margin-top:12px"><thead><tr><th>Lugar</th><th>Resultado</th><th>Dónde quedó</th></tr></thead><tbody>
+      ${filas.map(d => `<tr><td>${iconos[d.lugar] || '📁'} ${esc(d.lugar)}</td>
+        <td>${d.ok ? `✅ Guardado${d.copias ? ` · ${d.copias} copias` : ''}` : '⛔ ' + esc(d.error || '')}</td><td style="word-break:break-all"><small>${esc(d.ruta || '')}</small></td></tr>`).join('')}
+      </tbody></table>
+      ${u.problemas.length ? `<details style="margin-top:10px"><summary>Ver detalle (${u.problemas.length} aviso(s))</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(u.registro.join('\n'))}</pre></details>` : ''}
+    </div>
+    <div class="caja"><b>Cómo funciona</b><ul style="margin:6px 0 0 18px;line-height:1.6">
+      <li>El servidor guarda sus <b>3 copias</b> más nuevas. Tu PC guarda las <b>7 últimas diarias</b> y <b>una por semana</b> de las 4 semanas anteriores.</li>
+      <li><b>Todas las copias van cifradas</b> (.tar.cifrado) con tu contraseña del respaldo: ni Hostinger ni Google las pueden abrir.</li>
+      <li>Para abrir una copia en la PC: <code>node C:\\panel-correos\\restaurar-respaldo.js "ruta\\del\\archivo.tar.cifrado"</code> y escribe la contraseña.</li>
+      <li>La copia de las 3:00 a. m. necesita la PC encendida con tu sesión abierta. Si estaba apagada, se baja en cuanto la enciendas.</li>
+    </ul></div>`;
+}
 function vRespaldos() {
   const titulo = cabecera('💾 Respaldos', 'Copia de las bases de datos, n8n y los paneles en el USB, C:, D: y tu Google Drive (cifrado). Cada día a las 3:00 a. m. y cuando pulses el botón.');
   if (!RESP) return titulo + '<div class="vacio">Cargando…</div>';
   if (!RESP.disponible) return titulo + '<div class="caja"><div class="vacio">Falta instalar el respaldo (respaldo-zentralia.js). Instala el último paquete de actualización.</div></div>';
+  if (RESP.servidor) return vRespaldosServidor();
   const u = RESP.ultimo;
   const iconos = { 'USB': '🔌', 'Disco C:': '💽', 'Disco D:': '💽', 'Google Drive': '☁️' };
   const boton = RESP.enCurso
@@ -428,6 +461,7 @@ function alertas() {
     if (!u) lista.push(['💾', 'Todavía no hay ningún respaldo', 'Haz el primero desde Respaldos', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 1]);
     else if (Date.now() - Date.parse(u.fin) > 36 * 3600 * 1000) lista.push(['💾', `El último respaldo es de ${haceCuanto(u.fin)}`, 'El respaldo diario no se está haciendo', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 1]);
     else if (!u.ok) lista.push(['💾', u.algunoOk ? 'El último respaldo tuvo avisos' : 'El último respaldo falló', u.problemas.slice(0, 2).join(' · '), '<button class="btn-mini" data-ir="respaldos">Ver</button>', u.algunoOk ? 2 : 0]);
+    if (u && RESP.servidor && (!RESP.pc || Date.now() - Date.parse(RESP.pc.fecha) > 48 * 3600 * 1000)) lista.push(['💾', 'Tu PC no está bajando los respaldos', RESP.pc ? `La última copia que bajó fue ${haceCuanto(RESP.pc.fecha)}` : 'Todavía no ha bajado ninguna copia del servidor', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 2]);
   }
   return lista.sort((a, b) => a[4] - b[4]);
 }
