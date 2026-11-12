@@ -117,7 +117,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const cacheClaves = new Map();
   async function consultarClave(clave) {
     const guardado = cacheClaves.get(clave);
-    if (guardado && Date.now() - guardado.t < 10 * 60 * 1000) return guardado.datos;
+    if (guardado && Date.now() - guardado.t < 2 * 60 * 1000) return guardado.datos; // casi en vivo: se consulta cada 2 minutos
     let datos = null;
     try {
       const control = new AbortController();
@@ -125,6 +125,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       const r = await fetch(A.OPENROUTER + '/key', { headers: { Authorization: 'Bearer ' + clave }, signal: control.signal });
       clearTimeout(reloj);
       datos = r.ok ? (await r.json()).data || null : { error: 'OpenRouter respondió ' + r.status + (r.status === 401 ? ' (clave no válida)' : '') };
+      // Créditos de la cuenta en vivo: lo recargado en total y lo gastado (el saldo real de OpenRouter).
+      if (datos && !datos.error) {
+        try {
+          const rc = await fetch(A.OPENROUTER + '/credits', { headers: { Authorization: 'Bearer ' + clave }, signal: control.signal });
+          const c = rc.ok ? ((await rc.json()) || {}).data || {} : null;
+          datos.cuenta = c && typeof c.total_credits === 'number' ? { recargado: c.total_credits, usado: Number(c.total_usage) || 0 } : { error: rc.ok ? 'sin datos' : 'OpenRouter no da el saldo con esta clave (' + rc.status + ')' };
+        } catch (e) { datos.cuenta = { error: 'No se pudo leer el saldo' }; }
+      }
     } catch (e) { datos = { error: 'No se pudo consultar OpenRouter' }; }
     cacheClaves.set(clave, { t: Date.now(), datos });
     return datos;
@@ -153,7 +161,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
     return {
       tiene: true, delMes: delMes === null ? null : Math.round(delMes * 100) / 100, total: Math.round(uso * 100) / 100,
-      limite: d.limit ?? null, restante: d.limit_remaining ?? null, hoy: typeof d.usage_daily === 'number' ? Math.round(d.usage_daily * 100) / 100 : null
+      limite: d.limit ?? null, restante: d.limit_remaining ?? null, hoy: typeof d.usage_daily === 'number' ? Math.round(d.usage_daily * 100) / 100 : null,
+      cuenta: d.cuenta && !d.cuenta.error ? { recargado: Math.round(d.cuenta.recargado * 100) / 100, usado: Math.round(d.cuenta.usado * 100) / 100, saldo: Math.round((d.cuenta.recargado - d.cuenta.usado) * 100) / 100 } : null,
+      cuentaError: d.cuenta && d.cuenta.error ? d.cuenta.error : ''
     };
   }
 

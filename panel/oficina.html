@@ -629,12 +629,12 @@ function vGastos() {
       ${Object.keys(porCat).length ? Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(D.categorias[c] || c)}</span><b>${dinero(Math.round(v * 100) / 100)}</b></div><div class="barra"><i style="width:${Math.round(100 * v / maxCat)}%"></i></div></div>`).join('') : '<div class="vacio">Sin gastos este mes.</div>'}
     </div>
   </div>
-  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">🪙 IA por cliente (OpenRouter)<button class="btn-mini" data-nueva-recarga>+ Recarga</button></h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez · las recargas solo se muestran, no se suman a los gastos</p>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">🤖 IA por cliente (OpenRouter)<button class="btn-mini" data-nueva-recarga>+ Recarga</button></h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez · <b>Recargado y saldo salen en vivo de OpenRouter</b> (se actualiza cada 2 minutos) · no se suman a los gastos</p>
     <table><thead><tr><th>Cliente</th><th class="n">Este mes</th><th class="n">Hoy</th><th class="n">Total de la clave</th><th class="n">Le queda de límite</th><th class="n">Recargado</th><th class="n">Saldo · le dura</th></tr></thead><tbody>
     ${ia.map(e => { const x = e.ia || {}; return `<tr><td>${esc(e.nombre)}</td>${!x.tiene ? '<td colspan="4" style="color:var(--suave)">Sin clave · <a href="#" data-editar-cliente="' + e.id + '">ponerla</a></td>' : x.error ? `<td colspan="4"><span class="chip mal">${esc(x.error)}</span></td>` :
       `<td class="n">${x.delMes === null ? 'midiendo…' : dinero(x.delMes)}${x.compartida ? ` <span class="chip ojo" title="Misma clave que ${esc(x.compartida.join(', '))}">compartida</span>` : ''}</td><td class="n">${x.hoy === null ? '—' : dinero(x.hoy)}</td><td class="n">${dinero(x.total)}</td><td class="n">${x.restante === null ? 'sin límite' : dinero(x.restante)}</td>`}${celdasRecarga(e)}</tr>`; }).join('')}
     </tbody></table>
-    ${P && P.recargas.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--suave)">Historial de recargas (${P.recargas.length})</summary><table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Cliente</th><th class="n">Monto</th><th>Nota</th><th></th></tr></thead><tbody>
+    ${P && P.recargas.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--suave)">Recargas anotadas a mano (${P.recargas.length}) · solo se usan si OpenRouter no da el saldo</summary><table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Cliente</th><th class="n">Monto</th><th>Nota</th><th></th></tr></thead><tbody>
       ${P.recargas.map(r => `<tr><td>${fechaCorta(r.fecha)}</td><td>${esc((D.empresas.find(e => e.id === r.empresa_id) || {}).nombre || '—')}</td><td class="n">${dinero(r.monto)}</td><td class="envolver">${esc(r.nota)}</td><td><button class="btn-mini" data-editar-recarga="${r.id}">Editar</button></td></tr>`).join('')}</tbody></table></details>` : ''}
   </div>`;
 }
@@ -643,17 +643,23 @@ function vGastos() {
 const redondo = n => Math.round((Number(n) || 0) * 100) / 100;
 // Recargas de OpenRouter de un cliente: saldo = recargado − lo que lleva gastado la clave; días = saldo ÷ gasto diario del mes.
 function celdasRecarga(e) {
-  const recs = P ? P.recargas.filter(r => r.empresa_id === e.id) : [];
-  if (!recs.length) return `<td class="n" style="color:var(--suave)">—</td><td class="n"><a href="#" data-nueva-recarga="${e.id}">anotar recarga</a></td>`;
-  const recargado = redondo(recs.reduce((a, r) => a + r.monto, 0));
   const x = e.ia || {};
-  if (!x.tiene || x.error || x.total === undefined || x.total === null) return `<td class="n">${dinero(recargado)}</td><td class="n" style="color:var(--suave)">falta la clave</td>`;
-  const saldo = redondo(recargado - x.total);
   const dia = Number(hoy().slice(8, 10)) || 1;
   const porDia = x.delMes ? x.delMes / (mes === hoy().slice(0, 7) ? dia : 30) : 0;
-  const dias = porDia > 0 && saldo > 0 ? Math.floor(saldo / porDia) : null;
-  const chip = saldo <= 0 ? '<span class="chip mal">sin saldo</span>' : dias !== null && dias < 7 ? `<span class="chip mal">~${dias} días</span>` : dias !== null ? `<span class="chip ok">~${dias} días</span>` : '';
-  return `<td class="n">${dinero(recargado)}</td><td class="n">${dinero(saldo)} ${chip}</td>`;
+  const duracion = saldo => {
+    const dias = porDia > 0 && saldo > 0 ? Math.floor(saldo / porDia) : null;
+    return saldo <= 0 ? '<span class="chip mal">sin saldo</span>' : dias !== null && dias < 7 ? `<span class="chip mal">~${dias} días</span>` : dias !== null ? `<span class="chip ok">~${dias} días</span>` : '';
+  };
+  // En vivo: lo que dice OpenRouter de la cuenta (total recargado y total gastado).
+  if (x.cuenta) return `<td class="n" title="Total recargado en la cuenta de OpenRouter (en vivo)">${dinero(x.cuenta.recargado)} <span class="chip az" title="Leído de OpenRouter hace menos de 2 minutos">en vivo</span></td><td class="n" title="Gastado en la cuenta: ${dinero(x.cuenta.usado)}">${dinero(x.cuenta.saldo)} ${duracion(x.cuenta.saldo)}</td>`;
+  // Si OpenRouter no da el saldo con esta clave: lo anotado a mano con "+ Recarga".
+  const recs = P ? P.recargas.filter(r => r.empresa_id === e.id) : [];
+  const aviso = x.cuentaError ? `<br><small style="color:var(--suave)">${esc(x.cuentaError)}</small>` : '';
+  if (!recs.length) return `<td class="n" style="color:var(--suave)">—${aviso}</td><td class="n">${x.tiene ? `<a href="#" data-nueva-recarga="${e.id}">anotar recarga</a>` : ''}</td>`;
+  const recargado = redondo(recs.reduce((a, r) => a + r.monto, 0));
+  if (!x.tiene || x.error || x.total === undefined || x.total === null) return `<td class="n">${dinero(recargado)}</td><td class="n" style="color:var(--suave)">falta la clave</td>`;
+  const saldo = redondo(recargado - x.total);
+  return `<td class="n">${dinero(recargado)} <span class="chip ojo" title="Anotado a mano con + Recarga">a mano</span>${aviso}</td><td class="n">${dinero(saldo)} ${duracion(saldo)}</td>`;
 }
 function cuentasCreacion(p) {
   const comision = redondo(p.cobrado * p.comision_pct / 100);
