@@ -145,6 +145,10 @@
   .s-gris { color: var(--texto-suave); font-size: 12px; }
   .s-iconos { white-space: nowrap; font-size: 13px; } .s-iconos b { font-weight: 700; }
   .s-sep { color: var(--texto-suave); margin: 0 3px; }
+  /* Canceladas en la vista Simple: rojo suave y elegante, sin gritar. */
+  .s-cancel { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: #b42318; background: #fef3f2; border: 1px solid #fecdca; white-space: nowrap; vertical-align: middle; cursor: help; }
+  .s-cancel svg { width: 12px; height: 12px; flex: none; }
+  body.oscuro .s-cancel { color: #fda29b; background: rgba(240, 68, 56, .1); border-color: rgba(240, 68, 56, .28); }
   .s-quien { color: var(--texto-suave); font-size: 11.5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .s-quien.tarde { color: #b91c1c; font-weight: 600; }
   .aviso-circulo { display: inline-flex; align-items: center; justify-content: center; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px; margin-left: 6px; background: #fef3c7; color: #92400e; font-size: 11.5px; font-weight: 800; cursor: help; vertical-align: middle; }
@@ -1611,8 +1615,18 @@ function serviciosSimple(g) {
   const r = g[0], cuenta = {};
   for (const s of g) { const t = tipoServicio(s); cuenta[t] = (cuenta[t] || 0) + 1; }
   const iconos = ['IN', 'OUT', 'ACTIVIDAD', 'INTERHOTEL', 'OTRO'].filter(t => cuenta[t]).map(t => `${iconoTipo(t)} <b>${cuenta[t]}</b>`).join(' · ');
-  const extra = r.es_cancelacion ? 'cancelación' : r.categoria === 'MODIFICACION' ? 'cambio' : r.cancelada_por ? 'cancelada' : '';
-  return `<span class="s-iconos">${iconos || '—'}</span>${extra ? ` <span class="s-gris">${extra}</span>` : ''}`;
+  const cancel = cancelacionDe(g);
+  const extra = cancel ? '' : r.categoria === 'MODIFICACION' ? 'cambio' : '';
+  return `<span class="s-iconos">${iconos || '—'}</span>${cancel ? ` <span class="s-cancel" title="${esc(cancel.titulo)}">${ICONO_ALERTA}${cancel.texto}</span>` : extra ? ` <span class="s-gris">${extra}</span>` : ''}`;
+}
+// Reservas canceladas: el correo que cancela, la reserva original que ya cancelaron, o todos sus servicios cancelados.
+const ICONO_ALERTA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+function cancelacionDe(g) {
+  const r = g[0];
+  if (r.es_cancelacion) return { texto: 'Cancelación', titulo: r.original_id ? `Este correo cancela la reserva #${r.original_id}` : 'Correo de cancelación (sin reserva original encontrada)' };
+  if (r.cancelada_por) return { texto: 'Cancelada', titulo: `El correo #${r.cancelada_por} cancela esta reserva: cancélala también en el sistema de reservas` };
+  if (g.length && g.every(s => /^\s*CANCELAD[OA]\b/i.test(notaServicio(s) || ''))) return { texto: 'Cancelada', titulo: 'Todos los servicios están cancelados' };
+  return null;
 }
 function fechaSimple(iso) { const [, m, d] = iso.split('-').map(Number); return `${d} ${MESES_CORTOS[m - 1]}`; }
 function fechasSimple(g) {
@@ -1679,13 +1693,13 @@ function htmlSimple(grupos, cols) {
       hotel: () => `<td class="recortar">${hotelSimple(g)}</td>`,
       estado: () => `<td class="col-estado">${estadoSimple(g)}${quienSimple(r, g)}</td>`
     };
-    return `<tr data-id="${r.id}" class="srv-pri fila-simple${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k]()).join('')}</tr>`;
+    return `<tr data-id="${r.id}" class="srv-pri fila-simple${gi % 2 ? ' res-par' : ''}${cancelacionDe(g) ? ' fila-cancelada' : ''}">${cols.map(c => celda[c.k]()).join('')}</tr>`;
   }).join('');
 }
 function tarjetasSimples(grupos) {
   return grupos.map(g => {
     const r = g[0];
-    return `<div class="tarjeta-reserva tarjeta-simple" data-id="${r.id}">
+    return `<div class="tarjeta-reserva tarjeta-simple${cancelacionDe(g) ? ' fila-cancelada' : ''}" data-id="${r.id}">
       <div class="t-cabeza"><span><b>${esc(clientesDe(g)) || '—'}</b>${agenciaDe(r) ? ` <span class="s-gris">· ${esc(agenciaDe(r))}</span>` : ''}</span><span>${estadoSimple(g)}</span></div>
       <div class="t-simple">${serviciosSimple(g)} <span class="s-sep">·</span> ${fechasSimple(g)} <span class="s-sep">·</span> ${hotelSimple(g)} <span class="s-sep">·</span> <span class="s-gris">${esc(paxReserva(g, true))} · #${r.id}</span></div>
       ${quienSimple(r, g)}</div>`;
