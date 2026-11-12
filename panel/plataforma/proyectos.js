@@ -33,6 +33,10 @@ module.exports = function crearProyectos({ client }) {
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_recargas_ia (
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, fecha DATE NOT NULL, monto NUMERIC(12,2) NOT NULL DEFAULT 0,
       nota TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Notas viejas de n8n y Chatwoot: quedan como gasto que se paga cada mes.
+    await client.query("UPDATE oficina_proyecto_mensuales SET nota = 'Se paga cada mes.' WHERE nota LIKE 'Ya no hace falta:%'");
+    await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'n8n Pro' WHERE concepto = 'n8n Pro (en la nube)'");
+    await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'Chatwoot (chatbot)' WHERE concepto = 'Chatwoot (en la nube)'");
     await importarSemilla();
   }
 

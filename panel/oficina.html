@@ -671,13 +671,11 @@ function cuentasCreacion(p) {
   const alMes = m => m.frecuencia === 'anual' ? redondo(m.monto / 12) : m.monto;
   const fijo = redondo(activos.filter(m => m.frecuencia !== 'variable').reduce((a, m) => a + alMes(m), 0));
   const variables = activos.filter(m => m.frecuencia === 'variable');
-  const cancelables = activos.filter(m => /cancel|cancél/i.test(m.nota) && m.monto > 0);
-  const ahorro = redondo(cancelables.reduce((a, m) => a + alMes(m), 0));
   // Gasto de IA medido este mes para el cliente de este sistema (con su clave de OpenRouter).
   const emp = D && p.cliente ? D.empresas.find(e => e.nombre.toLowerCase().includes(p.cliente.toLowerCase()) || p.cliente.toLowerCase().includes(e.nombre.toLowerCase())) : null;
   const iaMes = emp && emp.ia && emp.ia.delMes ? redondo(emp.ia.delMes) : 0;
   const variable = redondo(variables.reduce((a, m) => a + (m.categoria === 'ia' && iaMes ? iaMes : m.monto), 0));
-  return { comision, neto, gastos, queda, socios, fijo, variables, cancelables, ahorro, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
+  return { comision, neto, gastos, queda, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
 }
 function vCreacion() {
   const lista = P ? P.proyectos : [];
@@ -705,8 +703,7 @@ function vCreacion() {
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Fijos (mensuales + anuales ÷ 12)</span><b>${dinero(c.fijo)}</b></div>
       ${c.variables.map(m => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${esc(m.concepto)} <small style="color:var(--suave)">(variable${m.categoria === 'ia' ? c.iaMes ? ': este mes va, medido con la clave del cliente' : ': según el uso del cliente' : ''})</small></span><b>${dinero(m.categoria === 'ia' && c.iaMes ? c.iaMes : m.monto)}</b></div>`).join('')}
       <div style="display:flex;justify-content:space-between;padding:10px 0 6px;border-top:1px solid var(--borde);margin-top:4px;font-size:16px"><span>Total aproximado al mes</span><b>${dinero(c.total)}</b></div>
-      ${c.socios.length ? `<div style="font-size:13px;color:var(--suave)">Si lo pagan entre los dos: ${c.socios.map(s => `${esc(s.nombre)} ${dinero(redondo(c.total * s.pct / 100))}`).join(' · ')}</div>` : ''}
-      ${c.ahorro ? `<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#fef3c7;color:#92400e;font-size:13px">💡 ${c.cancelables.map(m => esc(m.concepto)).join(' y ')} ya corren gratis en tu servidor. Si los cancelas ahorras <b>${dinero(c.ahorro)} al mes</b> y el total queda en <b>${dinero(redondo(c.total - c.ahorro))}</b>.</div>` : ''}</div>
+      ${c.socios.length ? `<div style="font-size:13px;color:var(--suave)">Si lo pagan entre los dos: ${c.socios.map(s => `${esc(s.nombre)} ${dinero(redondo(c.total * s.pct / 100))}`).join(' · ')}</div>` : ''}</div>
   </div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🏗️ Lo que costó crear el sistema<button class="btn-mini" data-nuevo-cgasto>+ Gasto</button></h2>
     <table><thead><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Pagó</th><th>Nota</th><th></th></tr></thead><tbody>
@@ -717,7 +714,7 @@ function vCreacion() {
     ${p.mensuales.map(m => `<tr class="${m.activo ? '' : 'apagado'}"><td class="envolver"><b>${esc(m.concepto)}</b></td><td><span class="chip az">${esc(CAT[m.categoria] || m.categoria)}</span></td>
       <td class="n">${m.frecuencia === 'variable' ? (m.categoria === 'ia' && c.iaMes ? dinero(c.iaMes) + ' <small style="color:var(--suave)">este mes</small>' : m.monto ? '~' + dinero(m.monto) : 'según uso') : m.monto ? dinero(m.monto) : 'gratis'}</td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td>
       <td class="n">${m.frecuencia === 'variable' ? '—' : m.monto ? dinero(c.alMes(m)) : '—'}</td><td>${m.desde ? fechaCorta(m.desde) : '—'}</td>
-      <td class="envolver" style="font-size:12.5px;${/cancel|cancél/i.test(m.nota) && m.activo ? 'color:#b45309;font-weight:600' : 'color:var(--suave)'}">${esc(m.nota)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" class="vacio">Sin gastos mensuales todavía.</td></tr>'}
+      <td class="envolver" style="font-size:12.5px;color:var(--suave)">${esc(m.nota)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" class="vacio">Sin gastos mensuales todavía.</td></tr>'}
     </tbody></table></div>`;
 }
 const pActual = () => P && P.proyectos.find(x => x.id === pSel);
@@ -761,7 +758,7 @@ function formMensual(m = {}) {
     ${campo('fCon', 'Gasto', `<input id="fCon" value="${esc(m.concepto || '')}" placeholder="Ej.: Servidor Hostinger">`)}
     <div class="fila2">${campo('fMon', 'Monto (US$)', `<input id="fMon" type="number" step="0.01" min="0" value="${m.monto ?? ''}">`, 'En "variable" pon un estimado (o 0 si depende del uso).')}${campo('fFrec', '¿Cada cuánto?', `<select id="fFrec">${opciones(P.frecuencias, m.frecuencia || 'mensual')}</select>`)}</div>
     <div class="fila2">${campo('fCat', 'Tipo', `<select id="fCat">${opciones(P.categorias, m.categoria || 'servidor')}</select>`)}${campo('fDes', 'Desde (opcional)', `<input id="fDes" type="date" value="${esc(m.desde || '')}">`)}</div>
-    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(m.nota || '')}">`, 'Si escribes "cancelar" o "cancélalo", la Oficina te muestra cuánto ahorras.')}
+    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(m.nota || '')}">`)}
     <div class="campo chk"><label><input type="checkbox" id="fAct" ${m.activo === false ? '' : 'checked'}> Se sigue pagando</label></div>
     ${pieModal(m.id)}`);
   document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'mensual', id: m.id, proyecto_id: pSel, concepto: v('fCon'), monto: v('fMon'), frecuencia: v('fFrec'), categoria: v('fCat'), desde: v('fDes'), nota: v('fNota'), activo: document.getElementById('fAct').checked, orden: m.orden ?? (pActual() ? pActual().mensuales.length : 0) }, 'Gasto mensual guardado.');
@@ -800,7 +797,6 @@ function imprimirCreacion() {
       ${p.mensuales.filter(m => m.activo).map(m => `<tr><td>${esc(m.concepto)}${m.nota ? ` <span class="sub">· ${esc(m.nota)}</span>` : ''}</td><td>${esc(FREC[m.frecuencia] || '')}</td><td class="n">${m.frecuencia === 'variable' ? (m.categoria === 'ia' && c.iaMes ? dinero(c.iaMes) + ' (este mes)' : m.monto ? '~' + dinero(m.monto) : 'según uso') : m.monto ? dinero(c.alMes(m)) : 'gratis'}</td></tr>`).join('')}
       <tr class="tot"><td colspan="2">Total aproximado al mes</td><td class="n">${dinero(c.total)}</td></tr>
       ${c.socios.map(s => `<tr><td colspan="2">${esc(s.nombre)} · ${s.pct} %</td><td class="n">${dinero(redondo(c.total * s.pct / 100))}</td></tr>`).join('')}</table>
-    ${c.ahorro ? `<div class="aviso">${c.cancelables.map(m => esc(m.concepto)).join(' y ')} ya corren gratis en el servidor propio: cancelándolos se ahorran ${dinero(c.ahorro)} al mes (total ${dinero(redondo(c.total - c.ahorro))}).</div>` : ''}
     </body></html>`);
   w.document.close();
 }
