@@ -310,8 +310,8 @@ function selectorMes() {
 }
 
 /* ---------- Carga ---------- */
-async function cargarDatos() {
-  const r = await api('/api/oficina/datos?mes=' + encodeURIComponent(mes));
+async function cargarDatos(fresco) {
+  const r = await api('/api/oficina/datos?mes=' + encodeURIComponent(mes) + (fresco ? '&fresco=1' : ''));
   if (!r.ok) { document.getElementById('vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar la Oficina.')}</div>`; return false; }
   D = r.data;
   const vencidos = D.pagos.filter(p => p.estado === 'vencido' || p.estado === 'hoy').length;
@@ -629,18 +629,32 @@ function vGastos() {
       ${Object.keys(porCat).length ? Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(D.categorias[c] || c)}</span><b>${dinero(Math.round(v * 100) / 100)}</b></div><div class="barra"><i style="width:${Math.round(100 * v / maxCat)}%"></i></div></div>`).join('') : '<div class="vacio">Sin gastos este mes.</div>'}
     </div>
   </div>
-  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">🤖 IA por cliente (OpenRouter)<button class="btn-mini" data-nueva-recarga>+ Recarga</button></h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez · <b>Recargado y saldo salen en vivo de OpenRouter</b> (se actualiza cada 2 minutos) · no se suman a los gastos</p>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">🤖 IA por cliente (OpenRouter)<span style="display:flex;gap:8px;align-items:center;font-size:12px;font-weight:500;color:var(--suave)">${D.leido ? 'Actualizado ' + new Date(D.leido).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '' : ''}<button class="btn-mini" data-ia-fresco title="Preguntar a OpenRouter ahora">↻ Actualizar</button>${sinVivo().length ? '<button class="btn-mini" data-nueva-recarga>+ Recarga</button>' : ''}</span></h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez · <b>Recargado y saldo salen en vivo de OpenRouter</b> (se actualiza solo cada minuto) · no se suman a los gastos</p>
     <table><thead><tr><th>Cliente</th><th class="n">Este mes</th><th class="n">Hoy</th><th class="n">Total de la clave</th><th class="n">Le queda de límite</th><th class="n">Recargado</th><th class="n">Saldo · le dura</th></tr></thead><tbody>
     ${ia.map(e => { const x = e.ia || {}; return `<tr><td>${esc(e.nombre)}</td>${!x.tiene ? '<td colspan="4" style="color:var(--suave)">Sin clave · <a href="#" data-editar-cliente="' + e.id + '">ponerla</a></td>' : x.error ? `<td colspan="4"><span class="chip mal">${esc(x.error)}</span></td>` :
       `<td class="n">${x.delMes === null ? 'midiendo…' : dinero(x.delMes)}${x.compartida ? ` <span class="chip ojo" title="Misma clave que ${esc(x.compartida.join(', '))}">compartida</span>` : ''}</td><td class="n">${x.hoy === null ? '—' : dinero(x.hoy)}</td><td class="n">${dinero(x.total)}</td><td class="n">${x.restante === null ? 'sin límite' : dinero(x.restante)}</td>`}${celdasRecarga(e)}</tr>`; }).join('')}
     </tbody></table>
-    ${P && P.recargas.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--suave)">Recargas anotadas a mano (${P.recargas.length}) · solo se usan si OpenRouter no da el saldo</summary><table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Cliente</th><th class="n">Monto</th><th>Nota</th><th></th></tr></thead><tbody>
+    ${P && P.recargas.length && sinVivo().length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--suave)">Recargas anotadas a mano (${P.recargas.length}) · solo se usan si OpenRouter no da el saldo</summary><table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Cliente</th><th class="n">Monto</th><th>Nota</th><th></th></tr></thead><tbody>
       ${P.recargas.map(r => `<tr><td>${fechaCorta(r.fecha)}</td><td>${esc((D.empresas.find(e => e.id === r.empresa_id) || {}).nombre || '—')}</td><td class="n">${dinero(r.monto)}</td><td class="envolver">${esc(r.nota)}</td><td><button class="btn-mini" data-editar-recarga="${r.id}">Editar</button></td></tr>`).join('')}</tbody></table></details>` : ''}
   </div>`;
 }
 
 /* ---------- Gastos → Creación del sistema (solo Christian y su socio; no se suma a los gastos del negocio) ---------- */
 const redondo = n => Math.round((Number(n) || 0) * 100) / 100;
+// Clientes con clave a los que OpenRouter no les da el saldo en vivo (solo para ellos sirven las recargas anotadas a mano).
+const sinVivo = () => (D ? D.empresas : []).filter(e => !e.es_demo && e.ia && e.ia.tiene && !e.ia.cuenta);
+// En vivo: mientras ves Gastos del negocio, cada minuto se vuelve a leer OpenRouter y se repinta.
+setInterval(async () => {
+  if (vista !== 'gastos' || gastosTab !== 'negocio' || document.visibilityState !== 'visible') return;
+  if (document.getElementById('fondoModal').classList.contains('abierto')) return;
+  if (await cargarDatos()) pintar();
+}, 60000);
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-ia-fresco]');
+  if (!b) return;
+  ev.preventDefault(); b.disabled = true; b.textContent = '⏳ Leyendo…';
+  if (await cargarDatos(true)) { pintar(); aviso('Saldo leído de OpenRouter ahora mismo.'); }
+});
 // Recargas de OpenRouter de un cliente: saldo = recargado − lo que lleva gastado la clave; días = saldo ÷ gasto diario del mes.
 function celdasRecarga(e) {
   const x = e.ia || {};
@@ -651,7 +665,7 @@ function celdasRecarga(e) {
     return saldo <= 0 ? '<span class="chip mal">sin saldo</span>' : dias !== null && dias < 7 ? `<span class="chip mal">~${dias} días</span>` : dias !== null ? `<span class="chip ok">~${dias} días</span>` : '';
   };
   // En vivo: lo que dice OpenRouter de la cuenta (total recargado y total gastado).
-  if (x.cuenta) return `<td class="n" title="Total recargado en la cuenta de OpenRouter (en vivo)">${dinero(x.cuenta.recargado)} <span class="chip az" title="Leído de OpenRouter hace menos de 2 minutos">en vivo</span></td><td class="n" title="Gastado en la cuenta: ${dinero(x.cuenta.usado)}">${dinero(x.cuenta.saldo)} ${duracion(x.cuenta.saldo)}</td>`;
+  if (x.cuenta) return `<td class="n" title="Total recargado en la cuenta de OpenRouter (en vivo)">${dinero(x.cuenta.recargado)} <span class="chip az" title="Leído de OpenRouter hace menos de un minuto">en vivo</span></td><td class="n" title="Gastado en la cuenta: ${dinero(x.cuenta.usado)}">${dinero(x.cuenta.saldo)} ${duracion(x.cuenta.saldo)}</td>`;
   // Si OpenRouter no da el saldo con esta clave: lo anotado a mano con "+ Recarga".
   const recs = P ? P.recargas.filter(r => r.empresa_id === e.id) : [];
   const aviso = x.cuentaError ? `<br><small style="color:var(--suave)">${esc(x.cuentaError)}</small>` : '';

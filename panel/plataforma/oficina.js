@@ -117,7 +117,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const cacheClaves = new Map();
   async function consultarClave(clave) {
     const guardado = cacheClaves.get(clave);
-    if (guardado && Date.now() - guardado.t < 2 * 60 * 1000) return guardado.datos; // casi en vivo: se consulta cada 2 minutos
+    if (guardado && Date.now() - guardado.t < 50 * 1000) return guardado.datos; // en vivo: como mucho 50 segundos de atraso
     let datos = null;
     try {
       const control = new AbortController();
@@ -441,7 +441,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
       if (req.method === 'GET' && url === '/api/oficina/datos') {
         const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
-        return json(res, 200, await datos(mes));
+        // "Actualizar ahora": se vuelve a preguntar a OpenRouter sin esperar.
+        if (p.get('fresco') === '1') cacheClaves.clear();
+        return json(res, 200, { ...(await datos(mes)), leido: new Date().toISOString() });
       }
       if (req.method === 'GET' && url === '/api/oficina/negocios') {
         const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
