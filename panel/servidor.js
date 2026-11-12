@@ -1941,10 +1941,13 @@ http.createServer(async (req, res) => {
       const columnas = Array.isArray(b.columnas)
         ? [...new Set(b.columnas.map(x => String(x || '').replace(/[^a-z_]/g, '').slice(0, 30)).filter(Boolean))].slice(0, 30)
         : null;
-      if (!columnas) return json(res, 400, { error: 'Faltan las columnas.' });
+      // vista: 'simple' (una fila por reserva) o 'completa' (todos los datos afuera).
+      const vista = ['simple', 'completa'].includes(b.vista) ? b.vista : null;
+      const cambio = Object.assign({}, columnas ? { columnas } : {}, vista ? { vista } : {});
+      if (!Object.keys(cambio).length) return json(res, 400, { error: 'Faltan las columnas o la vista.' });
       await client.query("UPDATE usuarios SET preferencias = COALESCE(preferencias, '{}'::jsonb) || $1::jsonb WHERE id = $2",
-        [JSON.stringify({ columnas }), u.id]);
-      return json(res, 200, { ok: true, columnas });
+        [JSON.stringify(cambio), u.id]);
+      return json(res, 200, { ok: true, ...cambio });
     }
 
     if (req.method === 'POST' && url === '/api/cambiar-clave-propia') {

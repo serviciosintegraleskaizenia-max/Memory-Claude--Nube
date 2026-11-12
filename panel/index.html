@@ -138,6 +138,19 @@
   .salud-bien { color: #16a34a; font-weight: 700; }
   .salud-falla { color: #dc2626; font-weight: 700; }
   .salud-sin { color: var(--texto-suave); font-weight: 700; }
+  .vista-toggle { display: inline-flex; border: 1px solid var(--borde); border-radius: 999px; overflow: hidden; background: var(--tarjeta); }
+  .vista-toggle button { border: 0; background: transparent; padding: 6px 13px; font: inherit; font-size: 13px; color: var(--texto-suave); cursor: pointer; }
+  .vista-toggle button.activo { background: #0b4f8a; color: #fff; font-weight: 600; }
+  .fila-simple td { padding-top: 11px; padding-bottom: 11px; }
+  .s-gris { color: var(--texto-suave); font-size: 12px; }
+  .s-iconos { white-space: nowrap; font-size: 13px; } .s-iconos b { font-weight: 700; }
+  .s-sep { color: var(--texto-suave); margin: 0 3px; }
+  .s-quien { color: var(--texto-suave); font-size: 11.5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-quien.tarde { color: #b91c1c; font-weight: 600; }
+  .aviso-circulo { display: inline-flex; align-items: center; justify-content: center; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px; margin-left: 6px; background: #fef3c7; color: #92400e; font-size: 11.5px; font-weight: 800; cursor: help; vertical-align: middle; }
+  .aviso-circulo.urgente { background: #fee2e2; color: #b91c1c; }
+  body.oscuro .aviso-circulo { background: #451a03; color: #fde68a; } body.oscuro .aviso-circulo.urgente { background: #450a0a; color: #fecaca; }
+  .t-simple { font-size: 13px; margin-top: 6px; line-height: 1.5; }
   .chip-revisar { display: inline-block; margin: 3px 4px 0 0; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; cursor: help; }
   .chip-urgente { display: inline-block; margin: 3px 4px 0 0; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
   .caja-revision { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; font-size: 13px; max-width: 640px; }
@@ -574,6 +587,7 @@
     </select>
     <label><input type="checkbox" id="soloCompletos" checked> Ocultar pruebas sin datos</label>
     <button class="btn-sec" id="btnCorreoNuevo" style="display:none;">Correo nuevo</button>
+    <div class="vista-toggle" id="vistaToggle" title="Simple: lo justo para saber cuál abrir · Completa: todos los datos afuera"><button type="button" data-vt="simple">Simple</button><button type="button" data-vt="completa">Completa</button></div>
     <button class="btn-sec" id="btnColumnas" title="Elegir qué columnas ver y exportar">☰ Columnas</button>
     <button class="btn" id="btnExcel">Exportar a Excel</button>
   </div>
@@ -984,6 +998,7 @@ const INCRUSTADO = ['empresas', 'herramientas'].includes(new URLSearchParams(loc
 
 function mostrarApp(s) {
   sesionActual = s;
+  pintarToggleVista();
   // Programador o Gerente sin correo: la verificación en dos pasos no puede funcionar todavía.
   if (s.dos_pasos === 'sin_correo' && !sessionStorage.getItem('avisoDosPasos')) {
     try { sessionStorage.setItem('avisoDosPasos', '1'); } catch (e) {}
@@ -1549,6 +1564,116 @@ function abrirColumnas() {
   });
 }
 
+/* ---------- Vista Simple (una fila por reserva, lo justo para saber cuál abrir) / Completa (todo afuera) ---------- */
+// Cada usuario elige; se guarda en su usuario. Por defecto: Simple. Adentro de la reserva no cambia nada.
+function vistaSimple() { return !(sesionActual && sesionActual.preferencias && sesionActual.preferencias.vista === 'completa'); }
+async function cambiarVistaTabla(v) {
+  if (!sesionActual) return;
+  sesionActual.preferencias = Object.assign({}, sesionActual.preferencias, { vista: v });
+  pintarToggleVista();
+  pintar();
+  const r = await api('/api/preferencias', { vista: v });
+  if (!r.ok) mostrarAviso(r.data.error || 'No se pudo guardar tu vista.', false);
+}
+function pintarToggleVista() {
+  const s = vistaSimple();
+  document.querySelectorAll('#vistaToggle button').forEach(b => b.classList.toggle('activo', (b.dataset.vt === 'simple') === s));
+  document.getElementById('btnColumnas').style.display = s ? 'none' : '';
+}
+const COLUMNAS_SIMPLE = [
+  { k: 'recibido', t: 'Recibido', peso: 8 }, { k: 'agencia', t: 'Agencia', peso: 12 }, { k: 'clientes', t: 'Cliente', peso: 14 },
+  { k: 'pax', t: 'Pax', peso: 6 }, { k: 'servicios', t: 'Servicios', peso: 13 }, { k: 'fechas', t: 'Fechas', peso: 10 },
+  { k: 'hotel', t: 'Hotel', peso: 14 }, { k: 'estado', t: 'Estado', peso: 13 }
+];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const ESTADO_CORTO = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', 'sin accion': 'Sin acción', historico: 'Histórico' };
+function iconoTipo(t) { return t === 'OTRO' ? '📋' : TIPOS_SRV[t].split(' ')[0]; }
+// "🛬 2 · 🛫 1 · 🎟 1" y, en gris, si es un cambio, una cancelación o si ya la cancelaron.
+function serviciosSimple(g) {
+  const r = g[0], cuenta = {};
+  for (const s of g) { const t = tipoServicio(s); cuenta[t] = (cuenta[t] || 0) + 1; }
+  const iconos = ['IN', 'OUT', 'ACTIVIDAD', 'INTERHOTEL', 'OTRO'].filter(t => cuenta[t]).map(t => `${iconoTipo(t)} <b>${cuenta[t]}</b>`).join(' · ');
+  const extra = r.es_cancelacion ? 'cancelación' : r.categoria === 'MODIFICACION' ? 'cambio' : r.cancelada_por ? 'cancelada' : '';
+  return `<span class="s-iconos">${iconos || '—'}</span>${extra ? ` <span class="s-gris">${extra}</span>` : ''}`;
+}
+function fechaSimple(iso) { const [, m, d] = iso.split('-').map(Number); return `${d} ${MESES_CORTOS[m - 1]}`; }
+function fechasSimple(g) {
+  const isos = g.map(s => s.fecha_servicio_iso).filter(Boolean).sort();
+  if (!isos.length) { const t = g.map(s => s.fecha_servicio).filter(Boolean)[0]; return t ? esc(t) : '<span class="s-gris">—</span>'; }
+  const a = isos[0], b = isos[isos.length - 1];
+  if (a === b) return fechaSimple(a);
+  return a.slice(0, 7) === b.slice(0, 7) ? `${Number(a.slice(8))} → ${fechaSimple(b)}` : `${fechaSimple(a)} → ${fechaSimple(b)}`;
+}
+function hotelSimple(g) {
+  const h = [...new Set(g.map(s => String(s.hotel || (tipoServicio(s) === 'OUT' ? s.punto_partida : s.punto_llegada) || '').trim()).filter(Boolean))];
+  return h.length ? esc(h[0]) + (h.length > 1 ? ` <span class="s-gris">+${h.length - 1}</span>` : '') : '<span class="s-gris">—</span>';
+}
+// Todo lo que antes salía afuera en chips (urgente, puntos a revisar, cancelaciones, cambios, datos dudosos, error de la IA)
+// queda en UN circulito: "!" rojo si es urgente, o la cantidad de cosas a revisar. El detalle, al pasar el ratón y adentro.
+function avisosDe(g) {
+  const r = g[0], lista = [];
+  let urgente = false;
+  for (const s of g) {
+    const v = s.revision;
+    if (v && v.urgente) urgente = true;
+    for (const p of (v && v.puntos) || []) lista.push(p.texto);
+    if (dudasDe(s).size) lista.push('La IA no está segura de: ' + [...dudasDe(s)].join(', '));
+    const nota = notaServicio(s);
+    if (nota && NOTA_CANCELADA.test(nota)) lista.push('Servicio cancelado: ' + nota);
+  }
+  if (porAnalizar(r)) lista.push('Todavía no la analizó la IA');
+  else if (r.error_ia) lista.push('La IA no pudo leer bien este correo');
+  if (r.cancelada_por) lista.push(`Llegó un correo que cancela esta reserva (#${r.cancelada_por})`);
+  else if (r.cambio_id) lista.push(`Llegó un cambio para esta reserva (#${r.cambio_id})`);
+  if (r.categoria === 'MODIFICACION' && !r.original_id) lista.push(r.es_cancelacion ? 'Cancelación sin reserva original' : 'Cambio sin reserva original');
+  const unicos = [...new Set(lista)];
+  return { urgente, lista: unicos };
+}
+function circuloAvisos(g) {
+  const { urgente, lista } = avisosDe(g);
+  if (!urgente && !lista.length) return '';
+  const titulo = (urgente ? ['⏰ Urgente: el servicio es en menos de 48 horas'] : []).concat(lista.map(x => '• ' + x)).join('\n') + '\n\nAbre la reserva para ver el detalle.';
+  return `<span class="aviso-circulo${urgente ? ' urgente' : ''}" title="${esc(titulo)}">${urgente ? '!' : lista.length}</span>`;
+}
+// Quién la está trabajando o a quién se la asignaron: una línea gris, sin chips.
+function quienSimple(r, g) {
+  const rev = revisiones.get(r.id) || g.map(s => revisiones.get(s.id)).find(Boolean);
+  if (rev) { const tarde = rev.segundos > rev.limite; return `<div class="s-quien${tarde ? ' tarde' : ''}" title="En revisión desde ${esc(horaCorta(rev.desde))}">👁 ${esc(rev.nombre || rev.usuario)}${rev.segundos ? ' · ' + Math.floor(rev.segundos / 60) + ' min' : ''}</div>`; }
+  if (r.asignado_a && (r.asignado_a !== sesionActual.usuario || puede('supervisar'))) return `<div class="s-quien">👤 ${r.asignado_a === sesionActual.usuario ? 'Tú' : esc(r.asignado_nombre || r.asignado_a)}</div>`;
+  return '';
+}
+function estadoSimple(g) {
+  const e = estadoReserva(g);
+  const clases = { 'pendiente de transcribir': 'etq-pendiente', registrada: 'etq-registrada', revisar: 'etq-revisar', actualizada: 'etq-actualizada', historico: 'etq-historico' };
+  return `<span class="etq ${clases[e] || 'etq-sinaccion'}">${esc(ESTADO_CORTO[e] || e)}</span>${circuloAvisos(g)}`;
+}
+function htmlSimple(grupos, cols) {
+  return grupos.map((g, gi) => {
+    const r = g[0];
+    const celda = {
+      sel: () => `<td class="celda-sel"><input type="checkbox" class="sel-res" data-id="${r.id}" ${seleccionadas.has(r.id) ? 'checked' : ''} title="Seleccionar"></td>`,
+      recibido: () => `<td>${fechaCorta(r.fecha).replace(/\/\d{4}$/, '')} <span class="s-gris">#${r.id}</span></td>`,
+      agencia: () => `<td class="recortar" title="${esc(agenciaDe(r))}">${esc(agenciaDe(r)) || '<span class="s-gris">—</span>'}</td>`,
+      clientes: () => `<td class="recortar" title="${esc(clientesDe(g))}">${esc(clientesDe(g)) || '<span class="s-gris">—</span>'}</td>`,
+      pax: () => `<td>${esc(paxReserva(g, true)) || '<span class="s-gris">—</span>'}</td>`,
+      servicios: () => `<td>${serviciosSimple(g)}</td>`,
+      fechas: () => `<td>${fechasSimple(g)}</td>`,
+      hotel: () => `<td class="recortar">${hotelSimple(g)}</td>`,
+      estado: () => `<td class="col-estado">${estadoSimple(g)}${quienSimple(r, g)}</td>`
+    };
+    return `<tr data-id="${r.id}" class="srv-pri fila-simple${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k]()).join('')}</tr>`;
+  }).join('');
+}
+function tarjetasSimples(grupos) {
+  return grupos.map(g => {
+    const r = g[0];
+    return `<div class="tarjeta-reserva tarjeta-simple" data-id="${r.id}">
+      <div class="t-cabeza"><span><b>${esc(clientesDe(g)) || '—'}</b>${agenciaDe(r) ? ` <span class="s-gris">· ${esc(agenciaDe(r))}</span>` : ''}</span><span>${estadoSimple(g)}</span></div>
+      <div class="t-simple">${serviciosSimple(g)} <span class="s-sep">·</span> ${fechasSimple(g)} <span class="s-sep">·</span> ${hotelSimple(g)} <span class="s-sep">·</span> <span class="s-gris">${esc(paxReserva(g, true))} · #${r.id}</span></div>
+      ${quienSimple(r, g)}</div>`;
+  }).join('');
+}
+
 // Tablet vertical: cada reserva es una tarjeta con sus servicios. Muestra solo los datos que el usuario eligió.
 function pintarTarjetas(grupos, ks) {
   const caja = document.getElementById('tarjetasReservas');
@@ -1557,6 +1682,11 @@ function pintarTarjetas(grupos, ks) {
   tabla.style.display = tarjetas ? 'none' : '';
   caja.style.display = tarjetas ? '' : 'none';
   if (!tarjetas) { caja.innerHTML = ''; return; }
+  if (vistaSimple()) {
+    caja.innerHTML = grupos.length ? tarjetasSimples(grupos) : '<p class="vacio-total">No hay registros con estos filtros.</p>';
+    caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
+    return;
+  }
   const ver = k => ks.includes(k);
   const dato = (k, etiqueta, valor) => (ver(k) ? `<span class="t-dato"><small>${etiqueta}</small>${valor}</span>` : '');
   caja.innerHTML = grupos.length ? grupos.map(g => {
@@ -1585,7 +1715,8 @@ function pintarTarjetas(grupos, ks) {
 
 function pintar() {
   const lista = filtrar();
-  const cols = (esProgramador() && vistaActual !== 'historico' ? [{ k: 'sel', t: '', peso: 2.4 }] : []).concat(columnasEnPantalla());
+  const simple = vistaSimple();
+  const cols = (esProgramador() && vistaActual !== 'historico' ? [{ k: 'sel', t: '', peso: 2.4 }] : []).concat(simple ? COLUMNAS_SIMPLE : columnasEnPantalla());
   anchoPintado = window.innerWidth;
   const compacto = window.innerWidth < 1200;
   const ETQ_CORTA = { MODIFICACION: 'MODIF.', PUBLICIDAD: 'PUBLIC.', SEGUIMIENTO: 'SEGUIM.', NO_ENTENDIDO: 'NO ENT.' };
@@ -1595,7 +1726,8 @@ function pintar() {
   const grupos = agruparReservas(lista);
   ordenVisible = grupos.map(g => g[0].id);
   if (seleccionado) pintarPosicion();
-  cuerpo.innerHTML = grupos.length
+  if (simple && grupos.length) cuerpo.innerHTML = htmlSimple(grupos, cols);
+  else cuerpo.innerHTML = grupos.length
     ? grupos.map((g, gi) => {
         const r = g[0];
         const rev = revisiones.get(r.id) || g.map(s => revisiones.get(s.id)).find(Boolean);
@@ -4574,6 +4706,7 @@ document.getElementById('btnEnviarRespuesta').addEventListener('click', enviarRe
 document.getElementById('btnCorreoNuevo').addEventListener('click', abrirCorreoNuevo);
 document.getElementById('btnExcel').addEventListener('click', abrirExportar);
 document.getElementById('btnColumnas').addEventListener('click', abrirColumnas);
+document.getElementById('vistaToggle').addEventListener('click', e => { const b = e.target.closest('[data-vt]'); if (b) cambiarVistaTabla(b.dataset.vt); });
 // Formulario de redes de la empresa: agregar, quitar y cambiar el tipo de red de cada fila.
 document.addEventListener('click', e => {
   if (e.target.closest('[data-red-agregar]')) {
