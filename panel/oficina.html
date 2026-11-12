@@ -221,6 +221,9 @@ let kChat = [];               // chat de prueba: [{ rol: 'cliente'|'asistente', 
 let kChatSede = '';
 let R = null;                 // conector con Chatwoot: estado
 let rProbe = null;            // bandejas y equipos leídos de Chatwoot
+let P = null;                 // gastos de creación de cada sistema, reparto entre socios y recargas de OpenRouter
+let gastosTab = 'negocio';    // Gastos: 'negocio' (lo de siempre) o 'creacion' (Christian y socio)
+let pSel = null;              // sistema elegido en Creación del sistema
 const timers = {};
 
 /* ---------- Utilidades ---------- */
@@ -267,7 +270,9 @@ const AYUDA = {
     <ul><li><b>Cada mes</b>: servidor, Chatwoot, n8n en la nube, programas para redes…</li><li><b>Cada año</b>: dominio, licencias anuales (se cuenta en su mes).</li>
     <li><b>Una sola vez</b>: una compra, una campaña de publicidad.</li>
     <li>Categorías: servidor, dominio, IA, <b>redes sociales</b>, <b>automatizaciones</b>, programas, publicidad y otro.</li>
-    <li>El gasto de <b>IA de cada cliente</b> se suma solo (con su clave de OpenRouter).</li></ul>`,
+    <li>El gasto de <b>IA de cada cliente</b> se suma solo (con su clave de OpenRouter).</li>
+    <li><b>+ Recarga</b> (en IA por cliente): anota lo que recargas en OpenRouter; se ve cuánto saldo le queda y cuántos días le dura. No se suma a los gastos.</li>
+    <li>La pestaña <b>Creación del sistema</b> es aparte: lo que costó crear cada sistema, el cobro, el banco, el reparto entre socios y los gastos de cada mes. No se mezcla con estos totales.</li></ul>`,
   calendario: `<b>Fechas importantes.</b> Toca un día para agregar una tarea, demo o cita. Toca un evento para editarlo o marcarlo hecho.
     <ul><li>Los <b>cobros</b> y los <b>gastos</b> aparecen solos en su fecha.</li><li>Las tareas sin hacer de días pasados siguen apareciendo en Inicio hasta que las marques hechas.</li></ul>`,
   chat: `<b>Habla con la gente de cada negocio</b> sin entrar a su panel. Tu mensaje les llega en el chat de su panel (con aviso y sonido), firmado con tu usuario Programador de ese negocio.
@@ -332,6 +337,7 @@ async function cargarChatContactos() {
   if (vista === 'chat') pintarListaChat();
 }
 
+async function cargarProyectos() { const r = await api('/api/oficina/proyectos'); if (r.ok) P = r.data; }
 async function ir(v, recargar = true) {
   vista = v;
   document.querySelectorAll('aside .nav').forEach(b => b.classList.toggle('activo', b.dataset.ir === v));
@@ -340,6 +346,7 @@ async function ir(v, recargar = true) {
   if (recargar) {
     if (['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(v)) await cargarDatos();
     if (v === 'inicio' || v === 'negocios') await cargarNegocios();
+    if (v === 'gastos') await cargarProyectos();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'chat') await cargarChatContactos();
     if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
@@ -591,13 +598,17 @@ function gastoDelMes(g, m) {
   if (g.frecuencia === 'anual') return g.fecha.slice(5, 7) === m.slice(5, 7) && g.fecha.slice(0, 7) <= m ? g.monto : 0;
   return g.fecha.slice(0, 7) === m ? g.monto : 0;
 }
+function barraGastos() {
+  return `<div class="pestanas"><button class="pestana ${gastosTab === 'negocio' ? 'activa' : ''}" data-gastos-tab="negocio">💸 Gastos del negocio</button><button class="pestana ${gastosTab === 'creacion' ? 'activa' : ''}" data-gastos-tab="creacion">🏗️ Creación del sistema · socios</button></div>`;
+}
 function vGastos() {
+  if (gastosTab === 'creacion') return vCreacion();
   const porCat = {};
   for (const g of D.gastos) { const v = gastoDelMes(g, mes); if (v && g.moneda === 'US$') porCat[g.categoria] = (porCat[g.categoria] || 0) + v; }
   if (D.totales.ia['US$']) porCat.ia = (porCat.ia || 0) + D.totales.ia['US$'];
   const maxCat = Math.max(1, ...Object.values(porCat));
   const ia = D.empresas.filter(e => !e.es_demo);
-  return cabecera('💸 Gastos', 'Servidor, dominio, IA, redes sociales, automatizaciones y todo lo que pagas', selectorMes() + `<button class="btn" data-nuevo-gasto>+ Gasto</button>`) + `
+  return cabecera('💸 Gastos', 'Servidor, dominio, IA, redes sociales, automatizaciones y todo lo que pagas', selectorMes() + `<button class="btn" data-nuevo-gasto>+ Gasto</button>`) + barraGastos() + `
   <div class="kpis">
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Gastos de ${esc(D.nombreMes)}</div><div class="n">${totalTexto(D.totales.gastos)}</div><div class="d">lo que toca pagar este mes</div></div>
     <div class="kpi"><div class="e">Fijos por mes</div><div class="n">${totalTexto(D.totales.gastosFijos)}</div><div class="d">mensuales + anuales ÷ 12</div></div>
@@ -618,13 +629,193 @@ function vGastos() {
       ${Object.keys(porCat).length ? Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(D.categorias[c] || c)}</span><b>${dinero(Math.round(v * 100) / 100)}</b></div><div class="barra"><i style="width:${Math.round(100 * v / maxCat)}%"></i></div></div>`).join('') : '<div class="vacio">Sin gastos este mes.</div>'}
     </div>
   </div>
-  <div class="caja"><h2>🪙 IA por cliente (OpenRouter)</h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez</p>
-    <table><thead><tr><th>Cliente</th><th class="n">Este mes</th><th class="n">Hoy</th><th class="n">Total de la clave</th><th class="n">Le queda de límite</th></tr></thead><tbody>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">🪙 IA por cliente (OpenRouter)<button class="btn-mini" data-nueva-recarga>+ Recarga</button></h2><p class="sub">Se mide con la clave de OpenRouter de cada cliente · ponla en Clientes → Editar · si varios comparten clave, su gasto se cuenta una sola vez · las recargas solo se muestran, no se suman a los gastos</p>
+    <table><thead><tr><th>Cliente</th><th class="n">Este mes</th><th class="n">Hoy</th><th class="n">Total de la clave</th><th class="n">Le queda de límite</th><th class="n">Recargado</th><th class="n">Saldo · le dura</th></tr></thead><tbody>
     ${ia.map(e => { const x = e.ia || {}; return `<tr><td>${esc(e.nombre)}</td>${!x.tiene ? '<td colspan="4" style="color:var(--suave)">Sin clave · <a href="#" data-editar-cliente="' + e.id + '">ponerla</a></td>' : x.error ? `<td colspan="4"><span class="chip mal">${esc(x.error)}</span></td>` :
-      `<td class="n">${x.delMes === null ? 'midiendo…' : dinero(x.delMes)}${x.compartida ? ` <span class="chip ojo" title="Misma clave que ${esc(x.compartida.join(', '))}">compartida</span>` : ''}</td><td class="n">${x.hoy === null ? '—' : dinero(x.hoy)}</td><td class="n">${dinero(x.total)}</td><td class="n">${x.restante === null ? 'sin límite' : dinero(x.restante)}</td>`}</tr>`; }).join('')}
+      `<td class="n">${x.delMes === null ? 'midiendo…' : dinero(x.delMes)}${x.compartida ? ` <span class="chip ojo" title="Misma clave que ${esc(x.compartida.join(', '))}">compartida</span>` : ''}</td><td class="n">${x.hoy === null ? '—' : dinero(x.hoy)}</td><td class="n">${dinero(x.total)}</td><td class="n">${x.restante === null ? 'sin límite' : dinero(x.restante)}</td>`}${celdasRecarga(e)}</tr>`; }).join('')}
     </tbody></table>
+    ${P && P.recargas.length ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--suave)">Historial de recargas (${P.recargas.length})</summary><table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Cliente</th><th class="n">Monto</th><th>Nota</th><th></th></tr></thead><tbody>
+      ${P.recargas.map(r => `<tr><td>${fechaCorta(r.fecha)}</td><td>${esc((D.empresas.find(e => e.id === r.empresa_id) || {}).nombre || '—')}</td><td class="n">${dinero(r.monto)}</td><td class="envolver">${esc(r.nota)}</td><td><button class="btn-mini" data-editar-recarga="${r.id}">Editar</button></td></tr>`).join('')}</tbody></table></details>` : ''}
   </div>`;
 }
+
+/* ---------- Gastos → Creación del sistema (solo Christian y su socio; no se suma a los gastos del negocio) ---------- */
+const redondo = n => Math.round((Number(n) || 0) * 100) / 100;
+// Recargas de OpenRouter de un cliente: saldo = recargado − lo que lleva gastado la clave; días = saldo ÷ gasto diario del mes.
+function celdasRecarga(e) {
+  const recs = P ? P.recargas.filter(r => r.empresa_id === e.id) : [];
+  if (!recs.length) return `<td class="n" style="color:var(--suave)">—</td><td class="n"><a href="#" data-nueva-recarga="${e.id}">anotar recarga</a></td>`;
+  const recargado = redondo(recs.reduce((a, r) => a + r.monto, 0));
+  const x = e.ia || {};
+  if (!x.tiene || x.error || x.total === undefined || x.total === null) return `<td class="n">${dinero(recargado)}</td><td class="n" style="color:var(--suave)">falta la clave</td>`;
+  const saldo = redondo(recargado - x.total);
+  const dia = Number(hoy().slice(8, 10)) || 1;
+  const porDia = x.delMes ? x.delMes / (mes === hoy().slice(0, 7) ? dia : 30) : 0;
+  const dias = porDia > 0 && saldo > 0 ? Math.floor(saldo / porDia) : null;
+  const chip = saldo <= 0 ? '<span class="chip mal">sin saldo</span>' : dias !== null && dias < 7 ? `<span class="chip mal">~${dias} días</span>` : dias !== null ? `<span class="chip ok">~${dias} días</span>` : '';
+  return `<td class="n">${dinero(recargado)}</td><td class="n">${dinero(saldo)} ${chip}</td>`;
+}
+function cuentasCreacion(p) {
+  const comision = redondo(p.cobrado * p.comision_pct / 100);
+  const neto = redondo(p.cobrado - comision);
+  const gastos = redondo(p.gastos.reduce((a, g) => a + g.monto, 0));
+  const queda = redondo(neto - gastos);
+  const socios = (p.socios || []).map(s => ({ ...s, monto: redondo(queda * s.pct / 100) }));
+  const activos = p.mensuales.filter(m => m.activo);
+  const alMes = m => m.frecuencia === 'anual' ? redondo(m.monto / 12) : m.monto;
+  const fijo = redondo(activos.filter(m => m.frecuencia !== 'variable').reduce((a, m) => a + alMes(m), 0));
+  const variables = activos.filter(m => m.frecuencia === 'variable');
+  const cancelables = activos.filter(m => /cancel|cancél/i.test(m.nota) && m.monto > 0);
+  const ahorro = redondo(cancelables.reduce((a, m) => a + alMes(m), 0));
+  // Gasto de IA medido este mes para el cliente de este sistema (con su clave de OpenRouter).
+  const emp = D && p.cliente ? D.empresas.find(e => e.nombre.toLowerCase().includes(p.cliente.toLowerCase()) || p.cliente.toLowerCase().includes(e.nombre.toLowerCase())) : null;
+  const iaMes = emp && emp.ia && emp.ia.delMes ? redondo(emp.ia.delMes) : 0;
+  const variable = redondo(variables.reduce((a, m) => a + (m.categoria === 'ia' && iaMes ? iaMes : m.monto), 0));
+  return { comision, neto, gastos, queda, socios, fijo, variables, cancelables, ahorro, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
+}
+function vCreacion() {
+  const lista = P ? P.proyectos : [];
+  if (!pSel || !lista.some(x => x.id === pSel)) pSel = lista[0] ? lista[0].id : null;
+  const p = lista.find(x => x.id === pSel);
+  const cab = cabecera('💸 Gastos', 'Solo para ti y tu socio: lo que costó crear cada sistema, el reparto y los gastos de cada mes. No se suma a los gastos del negocio.',
+    `${lista.length > 1 ? `<select id="selProyecto">${lista.map(x => `<option value="${x.id}" ${x.id === pSel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>` : ''}<button class="btn-sec" data-nuevo-proyecto>+ Sistema</button>${p ? '<button class="btn" data-imprimir-creacion>🖨️ Resumen para el socio</button>' : ''}`) + barraGastos();
+  if (!P) return cab + '<div class="vacio">Cargando…</div>';
+  if (!p) return cab + `<div class="caja vacio">Todavía no hay sistemas. Toca <b>+ Sistema</b> y pon lo que cobraste, la comisión del banco y cómo se reparte entre los socios.</div>`;
+  const c = cuentasCreacion(p);
+  const CAT = P.categorias, FREC = P.frecuencias;
+  return cab + `
+  <div class="kpis">
+    <div class="kpi"><div class="e">Cobrado al cliente</div><div class="n">${dinero(p.cobrado)}</div><div class="d">${esc(p.cliente || '')}${p.fecha_cobro ? ' · ' + fechaCorta(p.fecha_cobro) : ''} · <a href="#" data-editar-proyecto="${p.id}">editar</a></div></div>
+    <div class="kpi" style="border-color:var(--ambar)"><div class="e">Banco −${p.comision_pct} %</div><div class="n">−${dinero(c.comision)}</div><div class="d">llegaron <b>${dinero(c.neto)}</b>${p.comision_nota ? ' · ' + esc(p.comision_nota) : ''}</div></div>
+    <div class="kpi" style="border-color:var(--rojo)"><div class="e">Lo que costó crearlo</div><div class="n">${dinero(c.gastos)}</div><div class="d">${p.gastos.length} gastos</div></div>
+    <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.queda)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.gastos)}</div></div>
+  </div>
+  <div class="rej r2">
+    <div class="caja"><h2>🤝 Reparto entre socios</h2><p class="sub">De los ${dinero(c.queda)} que quedan</p>
+      ${c.socios.length ? c.socios.map(s => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--borde)"><div><b style="font-size:15px">${esc(s.nombre)}</b><br><small style="color:var(--suave)">${s.pct} %</small></div><div style="font-size:22px;font-weight:700">${dinero(s.monto)}</div></div>`).join('')
+        : `<div class="vacio">Pon los socios y su porcentaje en <a href="#" data-editar-proyecto="${p.id}">Editar</a>.</div>`}
+      ${p.nota ? `<p class="sub" style="margin-top:10px">${esc(p.nota)}</p>` : ''}</div>
+    <div class="caja"><h2>📅 Gastos de cada mes</h2><p class="sub">Lo que va a costar mantener el sistema desde ahora</p>
+      <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Fijos (mensuales + anuales ÷ 12)</span><b>${dinero(c.fijo)}</b></div>
+      ${c.variables.map(m => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${esc(m.concepto)} <small style="color:var(--suave)">(variable${m.categoria === 'ia' ? c.iaMes ? ': este mes va, medido con la clave del cliente' : ': según el uso del cliente' : ''})</small></span><b>${dinero(m.categoria === 'ia' && c.iaMes ? c.iaMes : m.monto)}</b></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:10px 0 6px;border-top:1px solid var(--borde);margin-top:4px;font-size:16px"><span>Total aproximado al mes</span><b>${dinero(c.total)}</b></div>
+      ${c.socios.length ? `<div style="font-size:13px;color:var(--suave)">Si lo pagan entre los dos: ${c.socios.map(s => `${esc(s.nombre)} ${dinero(redondo(c.total * s.pct / 100))}`).join(' · ')}</div>` : ''}
+      ${c.ahorro ? `<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#fef3c7;color:#92400e;font-size:13px">💡 ${c.cancelables.map(m => esc(m.concepto)).join(' y ')} ya corren gratis en tu servidor. Si los cancelas ahorras <b>${dinero(c.ahorro)} al mes</b> y el total queda en <b>${dinero(redondo(c.total - c.ahorro))}</b>.</div>` : ''}</div>
+  </div>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🏗️ Lo que costó crear el sistema<button class="btn-mini" data-nuevo-cgasto>+ Gasto</button></h2>
+    <table><thead><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Pagó</th><th>Nota</th><th></th></tr></thead><tbody>
+    ${p.gastos.map(g => `<tr class="${g.monto ? '' : 'apagado'}"><td>${fechaCorta(g.fecha)}</td><td class="envolver"><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td>${esc(g.pagado_por)}</td><td class="envolver" style="color:var(--suave);font-size:12.5px">${esc(g.nota)}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Sin gastos todavía.</td></tr>'}
+    <tr><td colspan="3"><b>Total</b></td><td class="n"><b>${dinero(c.gastos)}</b></td><td colspan="3"></td></tr></tbody></table></div>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🔁 Gastos mensuales desde hoy<button class="btn-mini" data-nuevo-mensual>+ Gasto mensual</button></h2>
+    <table><thead><tr><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Cada</th><th class="n">Al mes</th><th>Desde</th><th>Nota</th><th></th></tr></thead><tbody>
+    ${p.mensuales.map(m => `<tr class="${m.activo ? '' : 'apagado'}"><td class="envolver"><b>${esc(m.concepto)}</b></td><td><span class="chip az">${esc(CAT[m.categoria] || m.categoria)}</span></td>
+      <td class="n">${m.frecuencia === 'variable' ? (m.categoria === 'ia' && c.iaMes ? dinero(c.iaMes) + ' <small style="color:var(--suave)">este mes</small>' : m.monto ? '~' + dinero(m.monto) : 'según uso') : m.monto ? dinero(m.monto) : 'gratis'}</td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td>
+      <td class="n">${m.frecuencia === 'variable' ? '—' : m.monto ? dinero(c.alMes(m)) : '—'}</td><td>${m.desde ? fechaCorta(m.desde) : '—'}</td>
+      <td class="envolver" style="font-size:12.5px;${/cancel|cancél/i.test(m.nota) && m.activo ? 'color:#b45309;font-weight:600' : 'color:var(--suave)'}">${esc(m.nota)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" class="vacio">Sin gastos mensuales todavía.</td></tr>'}
+    </tbody></table></div>`;
+}
+const pActual = () => P && P.proyectos.find(x => x.id === pSel);
+async function guardarCreacion(cuerpo, ok) {
+  const r = await api('/api/oficina/proyectos/guardar', cuerpo);
+  if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+  cerrarModal(); aviso(ok); await cargarProyectos(); pintar();
+}
+function borrarCreacion(tipo, id, texto) {
+  const b = document.getElementById('fBorrar');
+  if (b) b.onclick = async () => { if (!confirm(texto)) return; const r = await api('/api/oficina/proyectos/borrar', { tipo, id }); if (!r.ok) return alert(r.data.error || 'No se pudo borrar.'); cerrarModal(); aviso('Borrado.'); await cargarProyectos(); pintar(); };
+}
+function formProyecto(p = {}) {
+  const socios = (p.socios && p.socios.length ? p.socios : [{ nombre: 'Christian', pct: 60 }, { nombre: 'Socio', pct: 40 }]).concat([{ nombre: '', pct: '' }]);
+  abrirModal(`<h2>${p.id ? 'Editar sistema' : 'Nuevo sistema'}</h2>
+    ${campo('fNom', 'Nombre del sistema', `<input id="fNom" value="${esc(p.nombre || '')}" placeholder="Ej.: Panel de correos · Somos Viajes">`)}
+    <div class="fila2">${campo('fCli', 'Cliente', `<input id="fCli" value="${esc(p.cliente || '')}" placeholder="Somos Viajes">`, 'Para leer su gasto de IA del mes.')}${campo('fFec', 'Fecha del cobro', `<input id="fFec" type="date" value="${esc(p.fecha_cobro || hoy())}">`)}</div>
+    <div class="fila2">${campo('fCob', 'Cobrado (US$)', `<input id="fCob" type="number" step="0.01" min="0" value="${p.cobrado ?? ''}">`)}${campo('fPct', 'Comisión o impuesto del banco (%)', `<input id="fPct" type="number" step="0.01" min="0" max="100" value="${p.comision_pct ?? 0}">`)}</div>
+    ${campo('fCnota', 'Banco (nota)', `<input id="fCnota" value="${esc(p.comision_nota || '')}" placeholder="Ej.: BCP">`)}
+    <div class="campo"><label>Socios y porcentaje (deben sumar 100 %)</label>${socios.map((s, i) => `<div class="fila2" style="margin-bottom:6px"><input data-socio-n="${i}" value="${esc(s.nombre)}" placeholder="Nombre"><input data-socio-p="${i}" type="number" step="0.01" min="0" max="100" value="${s.pct}" placeholder="%"></div>`).join('')}</div>
+    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(p.nota || '')}">`)}
+    ${pieModal(p.id)}`);
+  document.getElementById('fGuardar').onclick = () => {
+    const ss = socios.map((_, i) => ({ nombre: document.querySelector(`[data-socio-n="${i}"]`).value.trim(), pct: document.querySelector(`[data-socio-p="${i}"]`).value })).filter(s => s.nombre);
+    guardarCreacion({ tipo: 'proyecto', id: p.id, nombre: v('fNom'), cliente: v('fCli'), fecha_cobro: v('fFec'), cobrado: v('fCob'), comision_pct: v('fPct'), comision_nota: v('fCnota'), socios: ss, nota: v('fNota') }, 'Sistema guardado.');
+  };
+  borrarCreacion('proyecto', p.id, '¿Borrar este sistema con todos sus gastos? No se puede deshacer.');
+}
+function formCGasto(g = {}) {
+  abrirModal(`<h2>${g.id ? 'Editar gasto de creación' : 'Nuevo gasto de creación'}</h2>
+    ${campo('fCon', '¿Qué se pagó?', `<input id="fCon" value="${esc(g.concepto || '')}" placeholder="Ej.: Claude Pro">`)}
+    <div class="fila2">${campo('fFec', 'Fecha', `<input id="fFec" type="date" value="${esc(g.fecha || hoy())}">`)}${campo('fMon', 'Monto (US$)', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}">`, '0 si fue gratis (demo).')}</div>
+    <div class="fila2">${campo('fCat', 'Tipo', `<select id="fCat">${opciones(P.categorias, g.categoria || 'ia')}</select>`)}${campo('fPor', '¿Quién lo pagó? (opcional)', `<input id="fPor" value="${esc(g.pagado_por || '')}" placeholder="Christian / Socio">`)}</div>
+    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(g.nota || '')}">`)}
+    ${pieModal(g.id)}`);
+  document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'gasto', id: g.id, proyecto_id: pSel, concepto: v('fCon'), fecha: v('fFec'), monto: v('fMon'), categoria: v('fCat'), pagado_por: v('fPor'), nota: v('fNota') }, 'Gasto guardado.');
+  borrarCreacion('gasto', g.id, '¿Borrar este gasto?');
+}
+function formMensual(m = {}) {
+  abrirModal(`<h2>${m.id ? 'Editar gasto mensual' : 'Nuevo gasto mensual'}</h2>
+    ${campo('fCon', 'Gasto', `<input id="fCon" value="${esc(m.concepto || '')}" placeholder="Ej.: Servidor Hostinger">`)}
+    <div class="fila2">${campo('fMon', 'Monto (US$)', `<input id="fMon" type="number" step="0.01" min="0" value="${m.monto ?? ''}">`, 'En "variable" pon un estimado (o 0 si depende del uso).')}${campo('fFrec', '¿Cada cuánto?', `<select id="fFrec">${opciones(P.frecuencias, m.frecuencia || 'mensual')}</select>`)}</div>
+    <div class="fila2">${campo('fCat', 'Tipo', `<select id="fCat">${opciones(P.categorias, m.categoria || 'servidor')}</select>`)}${campo('fDes', 'Desde (opcional)', `<input id="fDes" type="date" value="${esc(m.desde || '')}">`)}</div>
+    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(m.nota || '')}">`, 'Si escribes "cancelar" o "cancélalo", la Oficina te muestra cuánto ahorras.')}
+    <div class="campo chk"><label><input type="checkbox" id="fAct" ${m.activo === false ? '' : 'checked'}> Se sigue pagando</label></div>
+    ${pieModal(m.id)}`);
+  document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'mensual', id: m.id, proyecto_id: pSel, concepto: v('fCon'), monto: v('fMon'), frecuencia: v('fFrec'), categoria: v('fCat'), desde: v('fDes'), nota: v('fNota'), activo: document.getElementById('fAct').checked, orden: m.orden ?? (pActual() ? pActual().mensuales.length : 0) }, 'Gasto mensual guardado.');
+  borrarCreacion('mensual', m.id, '¿Borrar este gasto mensual? Si solo lo cancelaste, mejor desmarca "Se sigue pagando".');
+}
+function formRecarga(r = {}, empresaId) {
+  const clientes = D.empresas.filter(e => !e.es_demo);
+  abrirModal(`<h2>${r.id ? 'Editar recarga' : 'Recarga de OpenRouter'}</h2>
+    ${campo('fEmp', 'Cliente', `<select id="fEmp">${clientes.map(e => `<option value="${e.id}" ${String(e.id) === String(r.empresa_id || empresaId) ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`)}
+    <div class="fila2">${campo('fFec', 'Fecha', `<input id="fFec" type="date" value="${esc(r.fecha || hoy())}">`)}${campo('fMon', 'Monto recargado (US$)', `<input id="fMon" type="number" step="0.01" min="0" value="${r.monto ?? ''}">`)}</div>
+    ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(r.nota || '')}" placeholder="Ej.: la recargó mi socio">`)}
+    <div class="ay" style="font-size:12px;color:var(--suave)">Solo sirve para ver el saldo y cuántos días le dura. No se suma a los gastos del mes (el gasto real ya se mide con la clave).</div>
+    ${pieModal(r.id)}`);
+  document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'recarga', id: r.id, empresa_id: v('fEmp'), fecha: v('fFec'), monto: v('fMon'), nota: v('fNota') }, 'Recarga guardada.');
+  borrarCreacion('recarga', r.id, '¿Borrar esta recarga?');
+}
+function imprimirCreacion() {
+  const p = pActual(); if (!p) return;
+  const c = cuentasCreacion(p), CAT = P.categorias, FREC = P.frecuencias;
+  const w = window.open('', '_blank'); if (!w) return alert('El navegador bloqueó la ventana: permite ventanas emergentes.');
+  const fila = (a, b, fuerte) => `<tr${fuerte ? ' class="tot"' : ''}><td>${a}</td><td class="n">${b}</td></tr>`;
+  w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Resumen · ${esc(p.nombre)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;max-width:820px;margin:24px auto;padding:0 18px}h1{font-size:21px;margin:0 0 2px;color:#0b4f8a}h2{font-size:15px;margin:22px 0 6px;color:#0b4f8a}.sub{color:#64748b;font-size:12.5px}table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:left}th{background:#f1f5f9}.n{text-align:right;white-space:nowrap}.tot td{font-weight:800;border-top:2px solid #0b4f8a}.aviso{background:#fef3c7;color:#92400e;padding:8px 10px;border-radius:8px;font-size:13px;margin-top:8px}@media print{button{display:none}}</style></head><body>
+    <button onclick="print()" style="float:right;padding:7px 12px">Imprimir / Guardar PDF</button>
+    <h1>${esc(p.nombre)}</h1><div class="sub">Resumen para los socios · ${esc(fechaLarga(hoy()))}</div>
+    <h2>1. Cobro y reparto</h2><table>
+      ${fila(`Cobrado a ${esc(p.cliente || 'el cliente')}${p.fecha_cobro ? ' (' + esc(fechaCorta(p.fecha_cobro)) + ')' : ''}`, dinero(p.cobrado))}
+      ${fila(`Banco${p.comision_nota ? ' ' + esc(p.comision_nota) : ''} −${p.comision_pct} %`, '−' + dinero(c.comision))}
+      ${fila('Llegó a la cuenta', dinero(c.neto), true)}
+      ${fila('Gastos de creación del sistema (detalle abajo)', '−' + dinero(c.gastos))}
+      ${fila('Quedan para repartir', dinero(c.queda), true)}
+      ${c.socios.map(s => fila(`${esc(s.nombre)} · ${s.pct} %`, dinero(s.monto))).join('')}</table>
+    <h2>2. Lo que costó crear el sistema</h2><table><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th></tr>
+      ${p.gastos.map(g => `<tr><td>${esc(fechaCorta(g.fecha))}</td><td>${esc(g.concepto)}${g.nota ? ` <span class="sub">· ${esc(g.nota)}</span>` : ''}</td><td>${esc(CAT[g.categoria] || '')}</td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="3">Total</td><td class="n">${dinero(c.gastos)}</td></tr></table>
+    <h2>3. Gastos de cada mes desde ahora</h2><table><tr><th>Gasto</th><th>Cada</th><th class="n">Al mes</th></tr>
+      ${p.mensuales.filter(m => m.activo).map(m => `<tr><td>${esc(m.concepto)}${m.nota ? ` <span class="sub">· ${esc(m.nota)}</span>` : ''}</td><td>${esc(FREC[m.frecuencia] || '')}</td><td class="n">${m.frecuencia === 'variable' ? (m.categoria === 'ia' && c.iaMes ? dinero(c.iaMes) + ' (este mes)' : m.monto ? '~' + dinero(m.monto) : 'según uso') : m.monto ? dinero(c.alMes(m)) : 'gratis'}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="2">Total aproximado al mes</td><td class="n">${dinero(c.total)}</td></tr>
+      ${c.socios.map(s => `<tr><td colspan="2">${esc(s.nombre)} · ${s.pct} %</td><td class="n">${dinero(redondo(c.total * s.pct / 100))}</td></tr>`).join('')}</table>
+    ${c.ahorro ? `<div class="aviso">${c.cancelables.map(m => esc(m.concepto)).join(' y ')} ya corren gratis en el servidor propio: cancelándolos se ahorran ${dinero(c.ahorro)} al mes (total ${dinero(redondo(c.total - c.ahorro))}).</div>` : ''}
+    </body></html>`);
+  w.document.close();
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-gastos-tab],[data-nuevo-proyecto],[data-editar-proyecto],[data-nuevo-cgasto],[data-editar-cgasto],[data-nuevo-mensual],[data-editar-mensual],[data-nueva-recarga],[data-editar-recarga],[data-imprimir-creacion]');
+  if (!t) return;
+  ev.preventDefault();
+  const d = t.dataset, p = pActual();
+  if (d.gastosTab) { gastosTab = d.gastosTab; try { localStorage.setItem('gastosTab', gastosTab); } catch (e) {} return pintar(); }
+  if ('nuevoProyecto' in d) return formProyecto();
+  if (d.editarProyecto) return p && formProyecto(p);
+  if ('nuevoCgasto' in d) return formCGasto();
+  if (d.editarCgasto) { const g = p && p.gastos.find(x => String(x.id) === d.editarCgasto); return g && formCGasto(g); }
+  if ('nuevoMensual' in d) return formMensual();
+  if (d.editarMensual) { const m = p && p.mensuales.find(x => String(x.id) === d.editarMensual); return m && formMensual(m); }
+  if ('nuevaRecarga' in d) return formRecarga({}, d.nuevaRecarga);
+  if (d.editarRecarga) { const r = P.recargas.find(x => String(x.id) === d.editarRecarga); return r && formRecarga(r); }
+  if ('imprimirCreacion' in d) return imprimirCreacion();
+});
+document.addEventListener('change', e => { if (e.target.id === 'selProyecto') { pSel = Number(e.target.value); pintar(); } });
+try { if (localStorage.getItem('gastosTab') === 'creacion') gastosTab = 'creacion'; } catch (e) {}
 
 /* ---------- Calendario ---------- */
 const ICONOS_EVENTO = { tarea: '🛠️', demo: '🎯', cita: '📞', cobro: '💳', otro: '📌' };

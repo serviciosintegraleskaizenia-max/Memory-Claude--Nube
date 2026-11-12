@@ -7,6 +7,7 @@
 const { hoyLocal } = require('./cuenta');
 const crearConocimiento = require('./conocimiento');
 const crearRedes = require('./redes');
+const crearProyectos = require('./proyectos');
 const fsR = require('fs');
 const pathR = require('path');
 const { spawn: spawnR } = require('child_process');
@@ -68,11 +69,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const conocimiento = crearConocimiento({ client, config, registrar, central, claveIA: e => claveDe(e) });
   // Conector con Chatwoot: el asistente sugiere (o responde) en Facebook, Instagram y WhatsApp.
   const redes = crearRedes({ client, registrar, central, conocimiento });
+  // Gastos de creación de cada sistema y reparto entre socios (aparte de los gastos del negocio).
+  const proyectos = crearProyectos({ client });
 
   async function preparar() {
     if (!activo) return;
     await conocimiento.preparar();
     await redes.preparar();
+    await proyectos.preparar();
     for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
@@ -403,6 +407,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
 
       if (url === '/api/oficina/redes' || url.startsWith('/api/oficina/redes/')) {
         return await redes.manejarOficina(req, res, url, u, { json, leerCuerpo });
+      }
+      if (url === '/api/oficina/proyectos' || url.startsWith('/api/oficina/proyectos/')) {
+        return await proyectos.manejar(req, res, url, u, { json, leerCuerpo, registrar });
       }
       if (url === '/api/oficina/conocimiento' || url.startsWith('/api/oficina/conocimiento/')) {
         return await conocimiento.manejarOficina(req, res, url, u, { json, leerCuerpo });
