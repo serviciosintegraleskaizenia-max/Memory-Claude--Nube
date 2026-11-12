@@ -11,4 +11,4 @@ Write-Host '== Instalando (otra vez la frase de tu llave)' -ForegroundColor Cyan
 ssh zentralia "bash /tmp/$tmp/actualizar-paneles.sh"
 if ($LASTEXITCODE -ne 0) { Write-Host 'La actualizacion no termino bien: mandame lo de arriba.' -ForegroundColor Red; exit 1 }
 Write-Host ''
-Write-Host 'Listo. Abre oficina.kaizenia.app -> Base del asistente -> Simulacion de ventas.' -ForegroundColor Green
+Write-Host 'Listo. Abre somosviajes.kaizenia.app y toca el boton Operaciones (solo tu lo ves mientras esta en construccion).' -ForegroundColor Green
