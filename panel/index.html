@@ -149,6 +149,11 @@
   .s-cancel { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: #b42318; background: #fef3f2; border: 1px solid #fecdca; white-space: nowrap; vertical-align: middle; cursor: help; }
   .s-cancel svg { width: 12px; height: 12px; flex: none; }
   body.oscuro .s-cancel { color: #fda29b; background: rgba(240, 68, 56, .1); border-color: rgba(240, 68, 56, .28); }
+  #cuerpo tr.fila-cancelada td { background: rgba(240, 68, 56, .045); }
+  body.oscuro #cuerpo tr.fila-cancelada td { background: rgba(240, 68, 56, .07); }
+  #cuerpo tr.fila-cancelada td:first-child { box-shadow: inset 3px 0 0 #f04438; }
+  .tarjeta-simple.fila-cancelada { border-left: 3px solid #f04438; background: rgba(240, 68, 56, .045); }
+  body.oscuro .tarjeta-simple.fila-cancelada { background: rgba(240, 68, 56, .07); }
   .s-quien { color: var(--texto-suave); font-size: 11.5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .s-quien.tarde { color: #b91c1c; font-weight: 600; }
   .aviso-circulo { display: inline-flex; align-items: center; justify-content: center; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px; margin-left: 6px; background: #fef3c7; color: #92400e; font-size: 11.5px; font-weight: 800; cursor: help; vertical-align: middle; }
