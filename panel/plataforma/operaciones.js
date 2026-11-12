@@ -16,7 +16,7 @@ const AEROPUERTOS_RD = ['PUJ', 'SDQ', 'LRM', 'POP', 'STI', 'JBQ', 'AZS', 'BRX', 
 const AEROPUERTOS_ORL = ['MCO', 'SFB', 'TPA', 'MIA', 'FLL'];
 const ESTADOS = ['por_asignar', 'asignado', 'en_camino', 'en_sitio', 'recogido', 'completado', 'no_show', 'cancelado'];
 const NOMBRE_ESTADO = { por_asignar: 'Por asignar', asignado: 'Asignado', en_camino: 'En camino', en_sitio: 'En el lugar', recogido: 'Recogido', completado: 'Completado', no_show: 'No show', cancelado: 'Cancelado' };
-const TIPOS_TARIFA = ['TRASLADO', 'IN', 'OUT', 'INTERHOTEL', 'ACTIVIDAD', 'ENTRADA', 'TRANSPORTE', 'OTRO'];
+const TIPOS_TARIFA = ['TRASLADO', 'IN', 'OUT', 'INOUT', 'INTERHOTEL', 'ACTIVIDAD', 'ENTRADA', 'TRANSPORTE', 'OTRO'];
 const TIPOS_PROVEEDOR = ['transportista', 'tours', 'entradas', 'otro'];
 
 const MODULOS_INICIALES = { operaciones: true, reserva_manual: true, operativo: true, precios: true, reportes: true, paquetes: true, vuelos: false, app_chofer: false, whatsapp: false };
@@ -28,11 +28,15 @@ const REGLAS_INICIALES = {
   duracion_actividad_min: 240,
   tiempos_zona: { 'Bávaro': 30, 'Punta Cana': 20, 'Cap Cana': 20, 'Uvero Alto': 50, 'Macao': 40, 'Bayahíbe': 75, 'La Romana': 70, 'Santo Domingo': 150, 'International Drive': 20, 'Lake Buena Vista': 25, 'Kissimmee': 30, 'Disney': 25 },
   aviso_retraso_min: 15,       // vuelos: avisar si se mueve más que esto
-  consultar_vuelos_cada_min: 10
+  consultar_vuelos_cada_min: 10,
+  // Precios de traslados (documento de Somos Viaje):
+  una_via_mitad_inout: true,   // una sola vía sin tarifa propia = mitad del In/Out de adulto, redondeada hacia arriba (todos como adulto)
+  base_doble_un_pax: false     // un pasajero solo paga doble ("base doble"); apagado hasta confirmarlo
 };
 const PLANTILLAS_INICIALES = {
   operativo: { titulo: 'Operativo del día', subtitulo: '', columnas: ['hora', 'servicio', 'pasajero', 'pax', 'vuelo', 'recoger', 'llevar', 'agencia', 'notas'], pie: 'Llegar 10 minutos antes. Cartel con el nombre del pasajero en llegadas.', firmas: true },
-  voucher: { titulo: 'Voucher de servicio', texto: 'Presente este voucher (impreso o en el celular) a su chofer o guía. Ante cualquier cambio comuníquese con nosotros.', pie: '' },
+  voucher: { titulo: 'Voucher de servicio', texto: 'Presente este voucher (impreso o en el celular) a su chofer o guía. Ante cualquier cambio comuníquese con nosotros.', cartel: 'Le esperamos con un cartel a nombre de {nombre}.', pie: '' },
+  proforma: { titulo: 'Proforma de liquidación', texto: 'Liquidación de los servicios de la reserva. Los precios incluyen las cortesías con costo indicadas.', pie: 'Documento de pre-facturación. No es una factura fiscal.' },
   cotizacion: { titulo: 'Cotización', texto: 'Precios en dólares estadounidenses, sujetos a disponibilidad y confirmación al momento de reservar.', validez_dias: 7, pie: '' },
   reporte: { titulo: 'Reporte de servicios', pie: 'Documento interno para facturación. No es una factura fiscal.' }
 };
@@ -112,6 +116,24 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       precision DOUBLE PRECISION, fecha TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_paquetes (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, sede TEXT NOT NULL DEFAULT 'Orlando', icono TEXT NOT NULL DEFAULT 'castle',
       descripcion TEXT NOT NULL DEFAULT '', piezas JSONB NOT NULL DEFAULT '[]', activo BOOLEAN NOT NULL DEFAULT TRUE, orden INTEGER NOT NULL DEFAULT 0)`);
+    // Tarifarios por mercado (país) y tipo de agencia (mayorista / minorista).
+    for (const t of ['op_agencias', 'op_tarifarios']) {
+      await q(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS mercado TEXT NOT NULL DEFAULT ''`);
+      await q(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS tipo_agencia TEXT NOT NULL DEFAULT ''`);
+    }
+    // Cortesías ("El valor de nuestros servicios"): unas se cobran (van a la proforma) y otras son gratis.
+    await q(`CREATE TABLE IF NOT EXISTS op_cortesias (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, precio NUMERIC NOT NULL DEFAULT 0,
+      cobra BOOLEAN NOT NULL DEFAULT FALSE, por_persona BOOLEAN NOT NULL DEFAULT FALSE, activo BOOLEAN NOT NULL DEFAULT TRUE, orden INTEGER NOT NULL DEFAULT 0, notas TEXT NOT NULL DEFAULT '')`);
+    await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
+      cantidad INTEGER NOT NULL DEFAULT 1, precio NUMERIC NOT NULL DEFAULT 0, cobra BOOLEAN NOT NULL DEFAULT FALSE, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await q('CREATE INDEX IF NOT EXISTS op_servicio_cortesias_op ON op_servicio_cortesias (op_id)');
+    await q('ALTER TABLE op_servicios ADD COLUMN IF NOT EXISTS extras NUMERIC NOT NULL DEFAULT 0');
+    if (!(await client.query('SELECT 1 FROM op_cortesias LIMIT 1')).rowCount) {
+      const ej = [['Bebida de bienvenida', 0, false, true], ['Toallitas frías', 0, false, true], ['Asistencia con el equipaje', 0, false, false], ['Silla de bebé', 0, false, false],
+        ['Parada en el supermercado', 10, true, false], ['Botella de champaña', 25, true, false], ['Espera extra (por hora)', 15, true, false]];
+      let i = 0;
+      for (const [nombre, precio, cobra, porPersona] of ej) await client.query('INSERT INTO op_cortesias (nombre, precio, cobra, por_persona, orden) VALUES ($1,$2,$3,$4,$5)', [nombre, precio, cobra, porPersona, i++]);
+    }
     const def = async (clave, valor) => client.query('INSERT INTO op_config (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO NOTHING', [clave, JSON.stringify(valor)]);
     await def('publico', false);
     await def('modulos', MODULOS_INICIALES);
@@ -233,7 +255,10 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const t = (await client.query("SELECT * FROM op_tarifarios WHERE agencia_id = $1 AND tipo = 'venta' AND activo ORDER BY id DESC LIMIT 1", [agencia.id])).rows[0];
       if (t) return t;
     }
-    return (await client.query("SELECT * FROM op_tarifarios WHERE tipo = 'venta' AND agencia_id IS NULL AND activo ORDER BY id LIMIT 1")).rows[0] || null;
+    // Por mercado (país) y tipo de agencia: el más específico que encaje; si no, el general.
+    return (await client.query(`SELECT * FROM op_tarifarios WHERE tipo = 'venta' AND agencia_id IS NULL AND activo
+        AND (mercado = '' OR lower(mercado) = lower($1)) AND (tipo_agencia = '' OR lower(tipo_agencia) = lower($2))
+      ORDER BY (mercado <> '')::int + (tipo_agencia <> '')::int DESC, id LIMIT 1`, [(agencia && agencia.mercado) || '', (agencia && agencia.tipo_agencia) || ''])).rows[0] || null;
   }
   // Busca la tarifa que mejor encaja: tipo, nombre (tours/entradas), aeropuerto, zona, modalidad, pax, temporada.
   function mejorTarifa(tarifas, { tipo, nombre, aeropuerto, zona, modalidad, pax, fecha }) {
@@ -259,18 +284,35 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     let v = t.cobro === 'persona'
       ? pax.adultos * num(t.precio_adulto) + pax.ninos * num(t.precio_nino || t.precio_adulto) + pax.infantes * num(t.precio_infante)
       : num(t.precio_vehiculo);
-    const h = minutos(hora), d = minutos(t.nocturno_desde), a = minutos(t.nocturno_hasta);
-    if (num(t.nocturno_pct) && h !== null && d !== null && a !== null && (d <= a ? h >= d && h < a : h >= d || h < a)) v *= 1 + num(t.nocturno_pct) / 100;
-    return dinero(v);
+    return dinero(conNocturno(v, t, hora));
   }
   function describir(t) {
     if (!t) return '';
     const partes = [t.servicio, t.nombre, t.aeropuerto, t.zona, t.modalidad, `${t.pax_desde}-${t.pax_hasta} pax`].filter(Boolean);
     return partes.join(' · ') + (t.cobro === 'persona' ? ` · ad ${num(t.precio_adulto)} / niño ${num(t.precio_nino)}` : ` · ${num(t.precio_vehiculo)} por vehículo`);
   }
+  // ¿La reserva tiene la llegada y la salida del mismo pasajero? Entonces es un paquete In/Out.
+  async function parejaInOut(s, tipo) {
+    if (!s.message_id || !['IN', 'OUT'].includes(tipo)) return false;
+    const otros = (await client.query("SELECT * FROM clasificacion WHERE message_id = $1 AND id <> $2 AND NOT COALESCE(error_ia, FALSE)", [s.message_id, s.id || s.sid])).rows;
+    const nombre = norm(s.nombre_cliente);
+    return otros.some(o => tipoDe(o) === (tipo === 'IN' ? 'OUT' : 'IN') && !/^\s*CANCELAD/i.test(o.motivo || '') && (!nombre || !norm(o.nombre_cliente) || norm(o.nombre_cliente) === nombre));
+  }
+  const conNocturno = (v, t, hora) => {
+    const h = minutos(hora), d = minutos(t.nocturno_desde), a = minutos(t.nocturno_hasta);
+    return num(t.nocturno_pct) && h !== null && d !== null && a !== null && (d <= a ? h >= d && h < a : h >= d || h < a) ? v * (1 + num(t.nocturno_pct) / 100) : v;
+  };
+  // Una sola vía con la tarifa In/Out: mitad redondeada hacia arriba; todos los pasajeros cuentan como adulto.
+  function importeUnaVia(t, pax, hora) {
+    const v = t.cobro === 'persona'
+      ? (pax.adultos + pax.ninos) * Math.ceil(num(t.precio_adulto) / 2) + pax.infantes * Math.ceil(num(t.precio_infante) / 2)
+      : Math.ceil(num(t.precio_vehiculo) / 2);
+    return dinero(conNocturno(v, t, hora));
+  }
   // Precio de venta y costo de un servicio de la bandeja.
   async function calcularPrecio(s, op, ctx) {
     const lista = ctx.hoteles || await hoteles();
+    const reglas = ctx.reglas || await cfg('reglas', REGLAS_INICIALES);
     const agencia = ctx.agencia || agenciaDe(s, ctx.agencias || await agencias());
     const tipo = tipoDe(s);
     const zona = zonaDe(tipo === 'OUT' ? (s.hotel || s.punto_partida) : (s.hotel || s.punto_llegada), lista);
@@ -279,7 +321,32 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     const pax = paxDe(s), total = paxTotal(s) || 1;
     const filtro = { tipo, nombre: s.actividad || '', aeropuerto: aeropuertoDe(s.aeropuerto), zona, modalidad, pax: total, fecha };
     const tv = await tarifarioVenta(agencia);
-    const venta = tv ? mejorTarifa(await tarifasDe(tv.id), filtro) : null;
+    const tarifas = tv ? await tarifasDe(tv.id) : [];
+    const traslado = ['IN', 'OUT', 'INTERHOTEL'].includes(tipo);
+    let precio = null, etiqueta = '';
+    // Base doble: un pasajero solo paga como dos (solo si está encendida en Reglas).
+    const doble = traslado && reglas.base_doble_un_pax && pax.adultos + pax.ninos === 1;
+    // 1. Paquete conjunto: llegada + salida en la misma reserva → precio In/Out (adulto y niño), mitad en cada tramo.
+    if (await parejaInOut(s, tipo)) {
+      const tio = mejorTarifa(tarifas, { ...filtro, tipo: 'INOUT' });
+      if (tio) {
+        const todo = importe(tio, pax, s.hora_servicio) * (doble ? 2 : 1), mitad = Math.ceil(todo / 2);
+        precio = dinero(tipo === 'IN' ? mitad : todo - mitad);
+        etiqueta = `${tv.nombre}: In/Out (paquete) ${dinero(todo)} · mitad en la llegada y mitad en la salida · ${describir(tio)}${doble ? ' · base doble (1 pax)' : ''}`;
+      }
+    }
+    // 2. Tarifa propia del servicio (llegada, salida, inter-hotel, tour...).
+    if (precio === null) {
+      const venta = mejorTarifa(tarifas, filtro);
+      if (venta) { precio = importe(venta, pax, s.hora_servicio); etiqueta = `${tv.nombre}: ${describir(venta)}`; }
+    }
+    // 3. Una sola vía sin tarifa propia: mitad del In/Out de adulto, redondeada hacia arriba.
+    if (precio === null && traslado && reglas.una_via_mitad_inout !== false) {
+      const tio = mejorTarifa(tarifas, { ...filtro, tipo: 'INOUT' });
+      if (tio) { precio = importeUnaVia(tio, pax, s.hora_servicio); etiqueta = `${tv.nombre}: una sola vía = mitad del In/Out redondeada hacia arriba (todos como adulto) · ${describir(tio)}`; }
+    }
+    // 4. Base doble en una sola vía (en el paquete ya se aplicó al total).
+    if (precio !== null && doble && !/In\/Out \(paquete\)/.test(etiqueta)) { precio = dinero(precio * 2); etiqueta += ' · base doble (1 pax)'; }
     let costo = null, tc = null, tCosto = '';
     if (op && op.proveedor_id) {
       tc = (await client.query("SELECT * FROM op_tarifarios WHERE proveedor_id = $1 AND tipo = 'costo' AND activo ORDER BY id DESC LIMIT 1", [op.proveedor_id])).rows[0];
@@ -289,7 +356,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const ch = (await client.query('SELECT nombre, pago_servicio FROM op_choferes WHERE id = $1', [op.chofer_id])).rows[0];
       if (ch && num(ch.pago_servicio)) { costo = dinero(ch.pago_servicio); tCosto = `Pago al chofer ${ch.nombre}`; }
     }
-    return { precio: importe(venta, pax, s.hora_servicio), tarifa_venta: venta ? `${tv.nombre}: ${describir(venta)}` : (tv ? `${tv.nombre}: sin tarifa para este servicio` : 'Sin tarifario'),
+    return { precio, tarifa_venta: etiqueta || (tv ? `${tv.nombre}: sin tarifa para este servicio` : 'Sin tarifario'),
       costo, tarifa_costo: tCosto, zona, modalidad, agencia };
   }
 
@@ -378,11 +445,13 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   function masDias(f, n) { const d = new Date((f || hoyLocal()) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 
   // ---------- lista del día ----------
-  async function listar({ fecha, sede, desde, hasta, sinFecha }) {
+  async function listar({ fecha, sede, desde, hasta, sinFecha, grupoDe }) {
     await sincronizar();
     const reglas = await cfg('reglas', REGLAS_INICIALES), lista = await hoteles();
     const params = [], cond = [];
-    if (sinFecha) cond.push("o.fecha = '' AND o.estado <> 'cancelado'");
+    // Todos los servicios de la misma reserva (mismo correo) que el servicio grupoDe: para la proforma y los vouchers.
+    if (grupoDe) { params.push(Number(grupoDe)); cond.push(`(c.id = (SELECT servicio_id FROM op_servicios WHERE id = $1) OR (c.message_id IS NOT NULL AND c.message_id <> '' AND c.message_id = (SELECT c2.message_id FROM op_servicios o2 JOIN clasificacion c2 ON c2.id = o2.servicio_id WHERE o2.id = $1)))`); }
+    else if (sinFecha) cond.push("o.fecha = '' AND o.estado <> 'cancelado'");
     else if (desde || hasta) { params.push(desde || '0000'); cond.push(`o.fecha >= $${params.length}`); params.push(hasta || '9999'); cond.push(`o.fecha <= $${params.length}`); }
     else { params.push(fecha || hoyLocal()); cond.push(`o.fecha = $${params.length}`); }
     if (sede) { params.push(sede); cond.push(`o.sede = $${params.length}`); }
@@ -406,9 +475,13 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         chofer_id: s.chofer_id, chofer: s.chofer || '', chofer_tel: s.chofer_tel || '', vehiculo_id: s.vehiculo_id, vehiculo: s.vehiculo || '', placa: s.placa || '', capacidad: s.capacidad,
         proveedor_id: s.proveedor_id, proveedor: s.proveedor || '', notas: s.notas, alerta: s.alerta, vuelo_vivo: s.vuelo_vivo, wa: s.wa,
         precio: s.precio === null ? null : Number(s.precio), costo: s.costo === null ? null : Number(s.costo), precio_manual: s.precio_manual, tarifa_venta: s.tarifa_venta, tarifa_costo: s.tarifa_costo,
-        entrada_codigos: s.entrada_codigos
+        entrada_codigos: s.entrada_codigos, extras: Number(s.extras) || 0, grupo: s.message_id || 'id:' + s.sid, cortesias: []
       };
     });
+    if (servicios.length) {
+      const cs = (await client.query('SELECT * FROM op_servicio_cortesias WHERE op_id = ANY($1::int[]) ORDER BY id', [servicios.map(x => x.id)])).rows;
+      for (const c of cs) { const x = servicios.find(y => y.id === c.op_id); if (x) x.cortesias.push({ id: c.id, nombre: c.nombre, cantidad: c.cantidad, precio: Number(c.precio), cobra: c.cobra, total: dinero(Number(c.precio) * c.cantidad) }); }
+    }
     marcarChoques(servicios, reglas);
     return servicios;
   }
@@ -509,6 +582,30 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     return { ok: true, recalculados: n };
   }
 
+  // ---------- cortesías de un servicio ----------
+  async function totalExtras(opId) {
+    await client.query('UPDATE op_servicios SET extras = COALESCE((SELECT SUM(precio * cantidad) FROM op_servicio_cortesias WHERE op_id = $1 AND cobra), 0) WHERE id = $1', [opId]);
+  }
+  async function agregarCortesia(u, f) {
+    const opId = Number(f.id);
+    const c = (await client.query('SELECT * FROM op_cortesias WHERE id = $1', [Number(f.cortesia_id)])).rows[0];
+    if (!c) throw error('Elige la cortesía.');
+    const o = (await client.query('SELECT c.adultos, c.ninos, c.infantes FROM op_servicios o JOIN clasificacion c ON c.id = o.servicio_id WHERE o.id = $1', [opId])).rows[0];
+    if (!o) throw error('No existe ese servicio.', 404);
+    const cantidad = Math.max(1, entero(f.cantidad) || (c.por_persona ? paxTotal(o) || 1 : 1));
+    await client.query('INSERT INTO op_servicio_cortesias (op_id, cortesia_id, nombre, cantidad, precio, cobra) VALUES ($1,$2,$3,$4,$5,$6)', [opId, c.id, c.nombre, cantidad, num(c.precio), c.cobra]);
+    await totalExtras(opId);
+    await evento(opId, 'cortesia', `Cortesía: ${c.nombre} ×${cantidad}${c.cobra ? ' · ' + dinero(num(c.precio) * cantidad) : ' (sin costo)'}`, u.usuario);
+    return { ok: true };
+  }
+  async function quitarCortesia(u, f) {
+    const r = (await client.query('DELETE FROM op_servicio_cortesias WHERE id = $1 RETURNING op_id, nombre', [Number(f.id)])).rows[0];
+    if (!r) throw error('No existe esa cortesía.', 404);
+    await totalExtras(r.op_id);
+    await evento(r.op_id, 'cortesia', `Cortesía quitada: ${r.nombre}`, u.usuario);
+    return { ok: true };
+  }
+
   // ---------- reserva manual y paquetes ----------
   async function crearReservaManual(u, f) {
     const cliente = txt(f.cliente, 200);
@@ -527,7 +624,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const r = await client.query(`INSERT INTO clasificacion (categoria, remitente, asunto, estado, fecha, message_id, buzon, agencia, tipo_servicio, nombre_cliente,
           hora_servicio, vuelo, hotel, punto_partida, punto_llegada, fecha_servicio, adultos, ninos, infantes, numero_servicio, aeropuerto, actividad, telefono, motivo, cuerpo)
         VALUES ('RESERVA', $1, $2, 'registrada', $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING id`,
-        [`${u.nombre || u.usuario} (manual)`, `Reserva manual · ${cliente}${f.referencia ? ' · ' + txt(f.referencia, 60) : ''}`, new Date().toISOString(), mid, agencia, tipo, cliente,
+        [`${u.nombre || u.usuario} (manual)`, `Reserva manual · ${cliente}${f.referencia ? ' · ' + txt(f.referencia, 60) : ''}`, new Date().toISOString(), mid, agencia, tipo, txt(s.pasajero, 200) || cliente,
           /^\d{2}:\d{2}$/.test(s.hora || '') ? s.hora : '', txt(s.vuelo, 40), txt(s.hotel || f.hotel, 200), txt(s.desde, 200), txt(s.hasta, 200), fecha,
           entero(s.adultos ?? f.adultos), entero(s.ninos ?? f.ninos), entero(s.infantes ?? f.infantes), i, txt(s.aeropuerto, 10).toUpperCase(), txt(s.actividad, 300),
           txt(f.telefono, 120), txt(s.nota || f.nota, 300), txt(f.nota, 2000)]);
@@ -593,9 +690,9 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const k = quien(s);
       if (!grupos.has(k)) grupos.set(k, { nombre: k, servicios: 0, pax: 0, venta: 0, costo: 0, sin_precio: 0, detalle: [] });
       const g = grupos.get(k);
-      g.servicios++; g.pax += paxTotal(s); g.venta += Number(s.precio) || 0; g.costo += Number(s.costo) || 0; if (s.precio === null) g.sin_precio++;
+      g.servicios++; g.pax += paxTotal(s); g.venta += (Number(s.precio) || 0) + (Number(s.extras) || 0); g.costo += Number(s.costo) || 0; if (s.precio === null) g.sin_precio++;
       if (!clave || clave === k) g.detalle.push({ fecha: s.fecha, reserva: s.servicio_id, cliente: s.nombre_cliente, servicio: tipoDe(s) === 'ACTIVIDAD' ? s.actividad : `${tipoDe(s)} ${s.vuelo || ''} ${s.hotel || ''}`.trim(),
-        pax: paxTotal(s), precio: s.precio === null ? null : Number(s.precio), costo: s.costo === null ? null : Number(s.costo), agencia: s.agencia, proveedor: s.proveedor || s.chofer || '', estado: NOMBRE_ESTADO[s.estado] });
+        pax: paxTotal(s), precio: s.precio === null ? null : dinero(Number(s.precio) + (Number(s.extras) || 0)), costo: s.costo === null ? null : Number(s.costo), agencia: s.agencia, proveedor: s.proveedor || s.chofer || '', estado: NOMBRE_ESTADO[s.estado] });
     }
     const lista = [...grupos.values()].map(g => ({ ...g, venta: dinero(g.venta), costo: dinero(g.costo), ganancia: dinero(g.venta - g.costo) })).sort((a, b) => b.venta - a.venta || b.costo - a.costo);
     const tot = lista.reduce((a, g) => ({ servicios: a.servicios + g.servicios, pax: a.pax + g.pax, venta: a.venta + g.venta, costo: a.costo + g.costo }), { servicios: 0, pax: 0, venta: 0, costo: 0 });
@@ -788,11 +885,12 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     choferes: { tabla: 'op_choferes', campos: { nombre: 'txt', telefono: 'txt', licencia: 'txt', licencia_vence: 'fecha', vehiculo_id: 'id', sede: 'txt', pago_servicio: 'num', codigo: 'txt', activo: 'bool', libre_desde: 'fecha', libre_hasta: 'fecha', notas: 'txt' } },
     vehiculos: { tabla: 'op_vehiculos', campos: { nombre: 'txt', placa: 'txt', capacidad: 'int', tipo: 'txt', sede: 'txt', seguro_vence: 'fecha', marbete_vence: 'fecha', activo: 'bool', notas: 'txt' } },
     proveedores: { tabla: 'op_proveedores', campos: { nombre: 'txt', tipo: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', sede: 'txt', activo: 'bool', notas: 'txt' } },
-    agencias: { tabla: 'op_agencias', campos: { nombre: 'txt', alias: 'txt', tarifario_id: 'id', modalidad: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', activo: 'bool', notas: 'txt' } },
+    agencias: { tabla: 'op_agencias', campos: { nombre: 'txt', alias: 'txt', tarifario_id: 'id', mercado: 'txt', tipo_agencia: 'txt', modalidad: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', activo: 'bool', notas: 'txt' } },
     hoteles: { tabla: 'op_hoteles', campos: { hotel: 'txt', zona: 'txt', sede: 'txt' } },
-    tarifarios: { tabla: 'op_tarifarios', campos: { nombre: 'txt', tipo: 'txt', agencia_id: 'id', proveedor_id: 'id', moneda: 'txt', activo: 'bool', notas: 'txt' } },
+    tarifarios: { tabla: 'op_tarifarios', campos: { nombre: 'txt', tipo: 'txt', agencia_id: 'id', proveedor_id: 'id', mercado: 'txt', tipo_agencia: 'txt', moneda: 'txt', activo: 'bool', notas: 'txt' } },
     tarifas: { tabla: 'op_tarifas', campos: { tarifario_id: 'id', servicio: 'txt', nombre: 'txt', aeropuerto: 'txt', zona: 'txt', modalidad: 'txt', cobro: 'txt', pax_desde: 'int', pax_hasta: 'int',
       precio_vehiculo: 'num', precio_adulto: 'num', precio_nino: 'num', precio_infante: 'num', desde: 'fecha', hasta: 'fecha', nocturno_pct: 'num', nocturno_desde: 'hora', nocturno_hasta: 'hora', notas: 'txt' } },
+    cortesias: { tabla: 'op_cortesias', campos: { nombre: 'txt', precio: 'num', cobra: 'bool', por_persona: 'bool', activo: 'bool', orden: 'int', notas: 'txt' } },
     paquetes: { tabla: 'op_paquetes', campos: { nombre: 'txt', sede: 'txt', icono: 'txt', descripcion: 'txt', piezas: 'json', activo: 'bool', orden: 'int' } }
   };
   function limpiarCampo(tipo, v) {
@@ -892,17 +990,18 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     try {
       if (req.method === 'GET' && url === '/api/op/inicio') {
         pide('ver_operaciones');
-        const [choferes, vehiculos, proveedores, ags, paquetes] = await Promise.all([
+        const [choferes, vehiculos, proveedores, ags, paquetes, cortesias] = await Promise.all([
           client.query('SELECT id, nombre, telefono, vehiculo_id, sede, activo, libre_desde, libre_hasta, licencia_vence FROM op_choferes ORDER BY nombre'),
           client.query('SELECT id, nombre, placa, capacidad, tipo, sede, activo, seguro_vence, marbete_vence FROM op_vehiculos ORDER BY nombre'),
           client.query('SELECT id, nombre, tipo, telefono, sede, activo FROM op_proveedores ORDER BY nombre'),
           client.query('SELECT id, nombre, modalidad FROM op_agencias WHERE activo ORDER BY nombre'),
-          client.query('SELECT * FROM op_paquetes WHERE activo ORDER BY orden, id')]);
+          client.query('SELECT * FROM op_paquetes WHERE activo ORDER BY orden, id'),
+          client.query('SELECT * FROM op_cortesias WHERE activo ORDER BY orden, nombre')]);
         const empresa = ((await client.query('SELECT nombre, marca_nombre, logo IS NOT NULL AS logo, rnc, direccion FROM empresa_datos WHERE id = 1').catch(() => ({ rows: [] }))).rows[0] || {});
         const perms = ['ver_operaciones', 'asignar_servicios', 'crear_reservas', 'ver_precios', 'ver_reportes_op', 'ver_choferes_vivo', 'imprimir_operativo', 'crear_paquetes', 'configurar_operaciones']
           .reduce((a, k) => ({ ...a, [k]: prog || puede(k) }), {});
         return json(res, 200, { ...est, permisos: perms, usuario: { nombre: u.nombre, grupo: u.grupo, usuario: u.usuario }, empresa, hoy: hoyLocal(),
-          choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows,
+          choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
           plantillas: await cfg('plantillas', PLANTILLAS_INICIALES), reglas: await cfg('reglas', REGLAS_INICIALES), estados: NOMBRE_ESTADO });
       }
       if (req.method === 'GET' && url === '/api/op/servicios') {
@@ -957,6 +1056,15 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="reporte-${r.tipo}-${r.desde}-a-${r.hasta}.csv"` });
         return res.end('﻿' + lineas.join('\r\n'));
       }
+      if (req.method === 'POST' && url === '/api/op/cortesia') { pide('asignar_servicios'); return json(res, 200, await agregarCortesia(u, await leerCuerpo(req))); }
+      if (req.method === 'POST' && url === '/api/op/cortesia/quitar') { pide('asignar_servicios'); return json(res, 200, await quitarCortesia(u, await leerCuerpo(req))); }
+      // Proforma (una por reserva) y vouchers (uno por pasajero): todos los servicios de la misma reserva.
+      if (req.method === 'GET' && url === '/api/op/documentos') {
+        pide('ver_operaciones');
+        let lista = await listar({ grupoDe: p.get('id') });
+        if (!prog && !puede('ver_precios')) lista = lista.map(x => ({ ...x, precio: undefined, costo: undefined, extras: undefined }));
+        return json(res, 200, { servicios: lista, numero: lista.length ? Math.min(...lista.map(x => x.reserva)) : 0 });
+      }
       if (req.method === 'POST' && url === '/api/op/whatsapp') { pide('asignar_servicios'); const f = await leerCuerpo(req); return json(res, 200, await enviarWhatsApp(u, f.id)); }
       if (req.method === 'POST' && url === '/api/op/vuelos/ahora') { pide('asignar_servicios'); mod('vuelos', 'Vuelos en vivo'); return json(res, 200, await vigilarVuelos(true)); }
 
@@ -964,21 +1072,22 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       if (url.startsWith('/api/op/config')) {
         pide('configurar_operaciones', 'Solo el Programador (o quien tenga "Configurar operaciones") cambia esto.');
         if (req.method === 'GET' && url === '/api/op/config') {
-          const [tarifarios, tarifas, agencias2, hoteles2, choferes, vehiculos, proveedores, paquetes] = await Promise.all([
+          const [tarifarios, tarifas, agencias2, hoteles2, choferes, vehiculos, proveedores, paquetes, cortesias] = await Promise.all([
             client.query('SELECT * FROM op_tarifarios ORDER BY tipo, nombre'), client.query('SELECT * FROM op_tarifas ORDER BY tarifario_id, servicio, nombre, zona, pax_desde'),
             client.query('SELECT * FROM op_agencias ORDER BY nombre'), client.query('SELECT * FROM op_hoteles ORDER BY sede, zona, hotel'),
             client.query('SELECT id, nombre, telefono, licencia, licencia_vence, vehiculo_id, sede, pago_servicio, codigo, activo, libre_desde, libre_hasta, notas, (pin_hash <> \'\') AS tiene_pin FROM op_choferes ORDER BY nombre'),
-            client.query('SELECT * FROM op_vehiculos ORDER BY nombre'), client.query('SELECT * FROM op_proveedores ORDER BY nombre'), client.query('SELECT * FROM op_paquetes ORDER BY orden, id')]);
+            client.query('SELECT * FROM op_vehiculos ORDER BY nombre'), client.query('SELECT * FROM op_proveedores ORDER BY nombre'), client.query('SELECT * FROM op_paquetes ORDER BY orden, id'),
+            client.query('SELECT * FROM op_cortesias ORDER BY orden, nombre')]);
           const llaves = await cfg('llaves', {});
           return json(res, 200, { publico: await cfg('publico', false), modulos: await modulos(), reglas: await cfg('reglas', REGLAS_INICIALES), plantillas: await cfg('plantillas', PLANTILLAS_INICIALES),
             whatsapp: await cfg('whatsapp', WHATSAPP_INICIAL), vuelos: await cfg('vuelos', VUELOS_INICIAL), llaves: Object.fromEntries(Object.keys(llaves).map(k => [k, Boolean(llaves[k])])),
-            tarifarios: tarifarios.rows, tarifas: tarifas.rows, agencias: agencias2.rows, hoteles: hoteles2.rows, choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, paquetes: paquetes.rows,
+            tarifarios: tarifarios.rows, tarifas: tarifas.rows, agencias: agencias2.rows, hoteles: hoteles2.rows, choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
             tipos_tarifa: TIPOS_TARIFA, tipos_proveedor: TIPOS_PROVEEDOR });
         }
         const f = req.method === 'POST' ? await leerCuerpo(req) : {};
         if (url === '/api/op/config/publico') { await guardarCfg('publico', Boolean(f.publico)); await registrar(u, 'op_publicar', 'operaciones', '', '', String(Boolean(f.publico)), ''); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/modulos') { const m = { ...(await modulos()) }; for (const k of Object.keys(MODULOS_INICIALES)) if (f[k] !== undefined) m[k] = Boolean(f[k]); await guardarCfg('modulos', m); await registrar(u, 'op_modulos', 'operaciones', '', '', JSON.stringify(m), ''); return json(res, 200, { ok: true, modulos: m }); }
-        if (url === '/api/op/config/reglas') { const r = { ...(await cfg('reglas', REGLAS_INICIALES)) }; for (const k of Object.keys(REGLAS_INICIALES)) if (f[k] !== undefined) r[k] = k === 'tiempos_zona' ? Object.fromEntries(Object.entries(f[k] || {}).map(([z, m]) => [txt(z, 60), entero(m)]).filter(([z]) => z)) : entero(f[k]); await guardarCfg('reglas', r); return json(res, 200, { ok: true }); }
+        if (url === '/api/op/config/reglas') { const r = { ...(await cfg('reglas', REGLAS_INICIALES)) }; for (const k of Object.keys(REGLAS_INICIALES)) if (f[k] !== undefined) r[k] = k === 'tiempos_zona' ? Object.fromEntries(Object.entries(f[k] || {}).map(([z, m]) => [txt(z, 60), entero(m)]).filter(([z]) => z)) : typeof REGLAS_INICIALES[k] === 'boolean' ? Boolean(f[k]) : entero(f[k]); await guardarCfg('reglas', r); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/plantillas') { const pl = { ...(await cfg('plantillas', PLANTILLAS_INICIALES)) }; for (const k of Object.keys(PLANTILLAS_INICIALES)) if (f[k] && typeof f[k] === 'object') pl[k] = { ...pl[k], ...Object.fromEntries(Object.entries(f[k]).map(([a, b]) => [a, Array.isArray(b) ? b.map(x => txt(x, 30)) : typeof b === 'boolean' || typeof b === 'number' ? b : txt(b, 1500)])) }; await guardarCfg('plantillas', pl); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/whatsapp') { const w = { ...(await cfg('whatsapp', WHATSAPP_INICIAL)) }; for (const k of Object.keys(WHATSAPP_INICIAL)) if (f[k] !== undefined) w[k] = k === 'auto_al_asignar' ? Boolean(f[k]) : txt(f[k], 1000); await guardarCfg('whatsapp', w); if (f.token) { const l = await cfg('llaves', {}); l.chatwoot = cifrar(txt(f.token, 200)); await guardarCfg('llaves', l); } return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/vuelos') { const v = { ...(await cfg('vuelos', VUELOS_INICIAL)) }; if (['aerodatabox', 'flightaware'].includes(f.proveedor)) v.proveedor = f.proveedor; if (f.rapidapi_host) v.rapidapi_host = txt(f.rapidapi_host, 100); await guardarCfg('vuelos', v); const l = await cfg('llaves', {}); for (const k of ['aerodatabox', 'flightaware']) if (f['llave_' + k]) l[k] = cifrar(txt(f['llave_' + k], 300)); await guardarCfg('llaves', l); return json(res, 200, { ok: true }); }

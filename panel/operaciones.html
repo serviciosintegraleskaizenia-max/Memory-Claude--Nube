@@ -273,7 +273,7 @@ function filaServicio(x) {
     <td><div class="ruta">${esc(x.desde || '—')} ${ic('route')} ${esc(x.hasta || '—')}</div>${x.zona ? `<small class="sub2">${esc(x.zona)}</small>` : ''}</td>
     <td>${I.permisos.asignar_servicios && x.estado !== 'cancelado' ? quien : esc(x.chofer || x.proveedor || '—')}</td>
     <td><span class="estado e-${x.estado}">${esc(x.estado_nombre)}</span></td>
-    ${I.permisos.ver_precios && I.modulos.precios ? `<td style="text-align:right;font-weight:700;white-space:nowrap">${dinero(x.precio)}${x.precio_manual ? '<br><small class="sub2">ajustado</small>' : x.precio === null ? '<br><small class="sub2">sin tarifa</small>' : ''}</td>` : ''}</tr>`;
+    ${I.permisos.ver_precios && I.modulos.precios ? `<td style="text-align:right;font-weight:700;white-space:nowrap">${dinero(x.precio)}${x.precio_manual ? '<br><small class="sub2">ajustado</small>' : x.precio === null ? '<br><small class="sub2">sin tarifa</small>' : ''}${x.extras ? `<br><small class="sub2">+ ${dinero(x.extras)} cortesías</small>` : ''}</td>` : ''}</tr>`;
 }
 function barraLote() {
   return `<div class="lote no-imprimir"><span style="display:flex;gap:6px;align-items:center">${ic('check')}${S.sel.size} seleccionado(s)</span><span style="opacity:.8">Asignar a</span>
@@ -367,9 +367,12 @@ async function abrirDetalle(id) {
       <h4 style="margin:16px 0 8px">Asignar</h4><div style="display:flex;gap:8px"><select id="latQuien" style="flex:1">${opcionesQuien()}</select><button class="btn p" id="latAsignar">Asignar</button></div>
       ${!x.fecha || S.filtro === 'sin_fecha' ? `<h4 style="margin:16px 0 8px">Poner la fecha</h4><div style="display:flex;gap:8px"><input type="date" id="latFecha"><input type="time" id="latHora" value="${esc(x.hora || '')}"><button class="btn s" id="latGuardarFecha">Guardar</button></div>` : ''}
       <h4 style="margin:16px 0 8px">Estado</h4><div style="display:flex;gap:6px;flex-wrap:wrap">${['asignado', 'en_camino', 'en_sitio', 'recogido', 'completado', 'no_show'].map(e => `<button class="btn mini ${x.estado === e ? 'p' : 's'}" data-est="${e}">${esc(I.estados[e])}</button>`).join('')}</div>
+      <h4 style="margin:16px 0 8px">Cortesías <small class="sub2" style="font-weight:500">· "El valor de nuestros servicios"</small></h4>
+      ${(x.cortesias || []).map(c => `<div class="ev" style="align-items:center"><div style="flex:1">${esc(c.nombre)} ×${c.cantidad}</div><b style="white-space:nowrap">${c.cobra ? dinero(c.total) : '<span class="tag t-ve">sin costo</span>'}</b><button class="btn mini s" data-quitar-cortesia="${c.id}" title="Quitar">${ic('x')}</button></div>`).join('') || '<div class="sub2">Ninguna todavía.</div>'}
+      ${(I.cortesias || []).length ? `<div style="display:flex;gap:6px;margin-top:8px"><select id="latCortesia" style="flex:1">${I.cortesias.map(c => `<option value="${c.id}">${esc(c.nombre)} · ${c.cobra ? dinero(c.precio) + (c.por_persona ? ' c/u' : '') : 'sin costo'}</option>`).join('')}</select><input id="latCortesiaCant" type="number" min="1" placeholder="Cant." style="width:70px"><button class="btn mini s" id="latCortesiaAgregar">${ic('plus')}Agregar</button></div>` : '<div class="sub2">Crea el catálogo en Configuración → Cortesías.</div>'}
       <h4 style="margin:16px 0 8px">Notas para el chofer</h4><textarea id="latNotas" rows="2" style="width:100%">${esc(x.notas || '')}</textarea><button class="btn mini s" style="margin-top:6px" id="latGuardarNotas">Guardar notas</button>
       ${I.permisos.ver_precios && I.modulos.precios ? `<h4 style="margin:16px 0 8px">Ajustar precio</h4><div class="rej r3"><input id="latPrecio" type="number" step="0.01" placeholder="Venta" value="${x.precio ?? ''}"><input id="latCosto" type="number" step="0.01" placeholder="Costo" value="${x.costo ?? ''}"><input id="latMotivo" placeholder="Motivo (obligatorio)"></div><button class="btn mini s" style="margin-top:6px" id="latGuardarPrecio">Guardar precio</button>` : ''}
-      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">${I.modulos.whatsapp ? `<button class="btn s" id="latWa">${ic('message-circle')}WhatsApp al cliente${x.wa && x.wa.enviado ? ' (ya enviado)' : ''}</button>` : ''}<button class="btn s" id="latVoucher">${ic('file-text')}Voucher</button><button class="btn r" data-est="cancelado">${ic('ban')}Cancelar servicio</button></div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">${I.modulos.whatsapp ? `<button class="btn s" id="latWa">${ic('message-circle')}WhatsApp al cliente${x.wa && x.wa.enviado ? ' (ya enviado)' : ''}</button>` : ''}<button class="btn s" id="latProforma">${ic('receipt')}Proforma</button><button class="btn s" id="latVoucher">${ic('ticket')}Vouchers</button><button class="btn r" data-est="cancelado">${ic('ban')}Cancelar servicio</button></div>` : ''}
     <h4 style="margin:18px 0 6px">Historial</h4>${(ev.data.eventos || []).map(e => `<div class="ev"><small>${esc(new Date(e.fecha).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small><div>${esc(e.texto)} <small>· ${esc(e.usuario)}</small></div></div>`).join('') || '<div class="sub2">Sin movimientos.</div>'}
   </div>`;
   $('#lat').dataset.id = id;
@@ -392,7 +395,10 @@ $('#lat').addEventListener('click', async ev => {
   if (t.id === 'latGuardarFecha') { const r = await api('/api/op/fecha', { id, fecha: $('#latFecha').value, hora: $('#latHora').value }); if (!r.ok) return aviso(r.data.error); cerrarLat(); aviso('Fecha guardada.'); return recargarYDetalle(); }
   if (t.id === 'latGuardarPrecio') { const r = await api('/api/op/precio', { id, precio: $('#latPrecio').value, costo: $('#latCosto').value, motivo: $('#latMotivo').value }); if (!r.ok) return aviso(r.data.error); aviso('Precio guardado.'); return recargarYDetalle(id); }
   if (t.id === 'latWa') { t.disabled = true; const r = await api('/api/op/whatsapp', { id }); aviso(r.ok ? '✔ WhatsApp enviado.' : r.data.error, 6000); return recargarYDetalle(id); }
-  if (t.id === 'latVoucher') return imprimirVoucher([S.servicios.find(s => s.id === id)]);
+  if (t.id === 'latVoucher') return imprimirVouchers(id);
+  if (t.id === 'latProforma') return imprimirProforma(id);
+  if (t.id === 'latCortesiaAgregar') { const r = await api('/api/op/cortesia', { id, cortesia_id: $('#latCortesia').value, cantidad: $('#latCortesiaCant').value }); if (!r.ok) return aviso(r.data.error); aviso('Cortesía agregada.'); return recargarYDetalle(id); }
+  if (t.dataset.quitarCortesia) { const r = await api('/api/op/cortesia/quitar', { id: t.dataset.quitarCortesia }); if (!r.ok) return aviso(r.data.error); return recargarYDetalle(id); }
 });
 
 /* ---------- vista: Choferes en vivo ---------- */
@@ -457,11 +463,14 @@ function pintarNuevos() {
     <div class="campo" style="margin:0"><label>${s.tipo === 'OUT' ? 'Hora del vuelo' : s.tipo === 'IN' ? 'Hora de llegada' : 'Hora'}</label><input type="time" data-k="hora" value="${esc(s.hora)}"></div>
     ${s.tipo === 'IN' || s.tipo === 'OUT' ? `<div class="campo" style="margin:0"><label>Vuelo</label><input data-k="vuelo" value="${esc(s.vuelo)}" placeholder="CM 241" style="width:110px"></div><div class="campo" style="margin:0"><label>Aeropuerto</label><input data-k="aeropuerto" value="${esc(s.aeropuerto)}" placeholder="PUJ" style="width:80px"></div>`
       : `<div class="campo" style="margin:0;flex:1"><label>Actividad / destino</label><input data-k="actividad" value="${esc(s.actividad)}" placeholder="Isla Saona, Magic Kingdom…"></div>`}
+    <div class="campo" style="margin:0"><label>Pasajero (cartel)</label><input data-k="pasajero" value="${esc(s.pasajero || '')}" placeholder="El mismo cliente" style="width:160px" title="Si cada pasajero viene en otro vuelo, pon aquí su nombre: sale un voucher para cada uno y una sola proforma"></div>
+    <div class="campo" style="margin:0"><label>Ad.</label><input data-k="adultos" type="number" min="0" value="${esc(s.adultos ?? '')}" placeholder="=" style="width:58px" title="Adultos de este servicio (vacío = los de la reserva)"></div>
+    <div class="campo" style="margin:0"><label>Niños</label><input data-k="ninos" type="number" min="0" value="${esc(s.ninos ?? '')}" placeholder="=" style="width:58px"></div>
     <button class="btn mini r" data-quitar="${i}" title="Quitar">${ic('trash-2')}</button></div>`).join('');
 }
 async function guardarNueva() {
   const b = $('#nGuardar'); b.disabled = true;
-  const r = await api('/api/op/reserva', { agencia: $('#nAgencia').value, cliente: $('#nCliente').value, telefono: $('#nTel').value, adultos: $('#nAd').value, ninos: $('#nNi').value, infantes: $('#nIn').value, hotel: $('#nHotel').value, referencia: $('#nRef').value, nota: $('#nNota').value, servicios: nuevos });
+  const r = await api('/api/op/reserva', { agencia: $('#nAgencia').value, cliente: $('#nCliente').value, telefono: $('#nTel').value, adultos: $('#nAd').value, ninos: $('#nNi').value, infantes: $('#nIn').value, hotel: $('#nHotel').value, referencia: $('#nRef').value, nota: $('#nNota').value, servicios: nuevos.map(x => Object.fromEntries(Object.entries(x).filter(([k, v]) => !(['adultos', 'ninos'].includes(k) && (v === '' || v === undefined))))) });
   b.disabled = false;
   if (!r.ok) return aviso(r.data.error || 'No se pudo guardar');
   aviso(`✔ Reserva #${r.data.reserva} creada con ${r.data.servicios} servicio(s).`);
@@ -595,6 +604,57 @@ function ventanaDoc(titulo, cuerpo) {
     <div class="cab"><div style="display:flex;gap:12px;align-items:center">${e.logo ? `<img src="${location.origin}/empresa/logo" style="height:60px;max-width:180px;object-fit:contain">` : ''}<div><b style="font-size:16px">${esc(e.marca_nombre || e.nombre || '')}</b><div class="sub">${esc([e.rnc ? 'RNC ' + e.rnc : '', e.direccion].filter(Boolean).join(' · '))}</div></div></div><h1>${esc(titulo)}</h1></div>${cuerpo}</body></html>`);
   w.document.close();
 }
+// Tipo de tarifa en palabras, para la proforma.
+function tipoTarifa(x) {
+  const t = String(x.tarifa_venta || '');
+  return (/In\/Out \(paquete\)/.test(t) ? 'In/Out (paquete)' : /una sola vía/.test(t) ? 'Una sola vía' : x.precio_manual ? 'Precio ajustado' : '') + (/base doble/.test(t) ? ' · base doble' : '');
+}
+const nombreServicio = x => x.tipo === 'IN' ? `Llegada${x.vuelo ? ' · vuelo ' + x.vuelo : ''}` : x.tipo === 'OUT' ? `Salida${x.vuelo ? ' · vuelo ' + x.vuelo : ''}` : x.tipo === 'INTERHOTEL' ? 'Inter-hotel' : (x.actividad || 'Servicio');
+const paxTexto = x => `${x.pax.adultos} ad${x.pax.ninos ? ' · ' + x.pax.ninos + ' niño' + (x.pax.ninos > 1 ? 's' : '') : ''}${x.pax.infantes ? ' · ' + x.pax.infantes + ' inf' : ''}`;
+async function documentosDe(id) {
+  const r = await api('/api/op/documentos?id=' + id);
+  if (!r.ok) { aviso(r.data.error || 'No se pudo leer la reserva.'); return null; }
+  r.data.servicios = r.data.servicios.filter(x => x.estado !== 'cancelado').sort((a, b) => (a.fecha + (a.recogida || a.hora)).localeCompare(b.fecha + (b.recogida || b.hora)));
+  if (!r.data.servicios.length) { aviso('Esta reserva no tiene servicios activos.'); return null; }
+  return r.data;
+}
+// Proforma de liquidación: UNA por reserva, con todos los pasajeros y servicios; las cortesías con costo se suman.
+async function imprimirProforma(id) {
+  const d = await documentosDe(id); if (!d) return;
+  const pl = I.plantillas.proforma || { titulo: 'Proforma de liquidación', texto: '', pie: 'Documento de pre-facturación. No es una factura fiscal.' };
+  const L = d.servicios, a = L[0];
+  let total = 0, falta = false;
+  const filas = L.map(x => {
+    if (x.precio === null || x.precio === undefined) falta = true; else total += x.precio + (x.extras || 0);
+    const cob = (x.cortesias || []).filter(c => c.cobra), gratis = (x.cortesias || []).filter(c => !c.cobra);
+    return `<tr><td>${esc(fechaCorta(x.fecha))}</td><td>${esc(nombreServicio(x))}<br><span class="sub">${esc(x.desde)} → ${esc(x.hasta)}${gratis.length ? ' · incluye: ' + esc(gratis.map(c => c.nombre).join(', ')) : ''}</span></td><td>${esc(x.cliente)}</td><td>${esc(paxTexto(x))}</td><td class="sub">${esc(tipoTarifa(x))}</td><td style="text-align:right">${x.precio === null || x.precio === undefined ? 'por confirmar' : dinero(x.precio)}</td></tr>`
+      + cob.map(c => `<tr><td></td><td colspan="4">+ ${esc(c.nombre)} ×${c.cantidad}</td><td style="text-align:right">${dinero(c.total)}</td></tr>`).join('');
+  }).join('');
+  ventanaDoc(pl.titulo || 'Proforma', `<p><b>Proforma N°:</b> PF-${d.numero} · <b>Agencia:</b> ${esc(a.agencia)} · <b>Emitida:</b> ${esc(fechaLarga(I.hoy))}<br><b>Pasajeros:</b> ${esc([...new Set(L.map(x => x.cliente))].join(', '))}</p>
+    <table><tr><th>Fecha</th><th>Servicio</th><th>Pasajero</th><th>Pax</th><th>Tarifa</th><th style="text-align:right">Importe</th></tr>${filas}
+    <tr class="tot"><td colspan="5">Total${falta ? ' (hay servicios sin precio: por confirmar)' : ''}</td><td style="text-align:right">${dinero(total)}</td></tr></table>
+    ${pl.texto ? `<p class="sub">${esc(pl.texto)}</p>` : ''}<p class="sub">${esc(pl.pie || '')}</p>`);
+}
+// Vouchers: UNO por pasajero (cada uno con su nombre para el cartel y sus vuelos). Si comparten nombre (grupo), van en un solo voucher.
+async function imprimirVouchers(id) {
+  const d = await documentosDe(id); if (!d) return;
+  const pl = I.plantillas.voucher, cartel = pl.cartel || 'Le esperamos con un cartel a nombre de {nombre}.';
+  const grupos = new Map();
+  for (const x of d.servicios.filter(x => x.clase !== 'entrada')) { const k = String(x.cliente || 'Pasajero').trim().toLowerCase(); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(x); }
+  if (!grupos.size) return aviso('No hay traslados ni tours para el voucher.');
+  let n = 0;
+  const paginas = [...grupos.values()].map(L => {
+    const x = L[0]; n++;
+    const incl = [...new Set(L.flatMap(s => (s.cortesias || []).map(c => c.nombre)))];
+    return `<div class="pagina"><p><b>Voucher N°:</b> V-${d.numero}-${n} · <b>Proforma:</b> PF-${d.numero} · <b>Agencia:</b> ${esc(x.agencia)}</p>
+      <div style="border:2px dashed #0b4f8a;border-radius:12px;padding:14px;text-align:center;margin:10px 0"><div class="sub">Cartel a nombre de</div><div style="font-size:26px;font-weight:800;color:#0b4f8a;letter-spacing:.5px">${esc(String(x.cliente || '').toUpperCase())}</div><div class="sub">${esc(paxTexto(x))}</div></div>
+      <table><tr><th>Fecha</th><th>Servicio</th><th>Vuelo</th><th>Hora</th><th>Desde</th><th>Hasta</th></tr>${L.map(s => `<tr><td>${esc(fechaLarga(s.fecha))}</td><td>${esc(s.tipo === 'IN' ? 'Llegada' : s.tipo === 'OUT' ? 'Salida' : s.tipo === 'INTERHOTEL' ? 'Inter-hotel' : s.actividad)}</td><td>${esc(s.vuelo || '—')}</td><td>${esc(s.tipo === 'OUT' ? 'Recogida ' + s.recogida + ' (vuelo ' + s.hora + ')' : s.tipo === 'IN' ? 'Llega ' + s.hora : s.recogida || s.hora)}</td><td>${esc(s.desde)}</td><td>${esc(s.hasta)}</td></tr>`).join('')}</table>
+      ${incl.length ? `<p><b>Incluye:</b> ${esc(incl.join(', '))}</p>` : ''}
+      ${x.chofer || x.proveedor ? `<p><b>Chofer:</b> ${esc(x.chofer || x.proveedor)}${x.vehiculo ? ' · ' + esc(x.vehiculo) + (x.placa ? ' (' + esc(x.placa) + ')' : '') : ''}</p>` : ''}
+      <p><b>${esc(cartel.replace('{nombre}', x.cliente || ''))}</b></p><p class="sub">${esc(pl.texto || '')}</p>${pl.pie ? `<p class="sub">${esc(pl.pie)}</p>` : ''}</div>`;
+  });
+  ventanaDoc((pl.titulo || 'Voucher') + (grupos.size > 1 ? ` (${grupos.size})` : ''), `<style>.pagina{page-break-after:always;margin-bottom:28px}.pagina:last-child{page-break-after:auto}</style>${paginas.join('<hr style="border:0;border-top:1px dashed #cbd5e1;margin:18px 0">')}`);
+}
 function imprimirVoucher(lista) {
   const pl = I.plantillas.voucher, x = lista[0];
   ventanaDoc(pl.titulo || 'Voucher', `<p><b>Pasajero:</b> ${esc(x.cliente)} · <b>Reserva:</b> #${x.reserva} · <b>Agencia:</b> ${esc(x.agencia)}</p>
@@ -658,13 +718,14 @@ async function vConfig() {
   CF = r.data;
   pintarConfig();
 }
-const TABS_CF = [['general', 'General y módulos'], ['choferes', 'Choferes'], ['vehiculos', 'Vehículos'], ['proveedores', 'Transportistas y proveedores'], ['agencias', 'Agencias'], ['hoteles', 'Hoteles y zonas'], ['tarifarios', 'Tarifarios'], ['paquetes', 'Paquetes'], ['plantillas', 'Plantillas de impresión'], ['reglas', 'Reglas'], ['vuelos', 'Vuelos en vivo'], ['whatsapp', 'WhatsApp']];
+const TABS_CF = [['general', 'General y módulos'], ['choferes', 'Choferes'], ['vehiculos', 'Vehículos'], ['proveedores', 'Transportistas y proveedores'], ['agencias', 'Agencias'], ['hoteles', 'Hoteles y zonas'], ['tarifarios', 'Tarifarios'], ['cortesias', 'Cortesías'], ['paquetes', 'Paquetes'], ['plantillas', 'Plantillas de impresión'], ['reglas', 'Reglas'], ['vuelos', 'Vuelos en vivo'], ['whatsapp', 'WhatsApp']];
 const CAMPOS = {
   choferes: [['nombre', 'Nombre'], ['telefono', 'Teléfono'], ['vehiculo_id', 'Vehículo', 'vehiculo'], ['sede', 'Sede', 'sede'], ['pago_servicio', 'Pago por servicio (US$)', 'num'], ['licencia', 'Licencia'], ['licencia_vence', 'Licencia vence', 'fecha'], ['codigo', 'Usuario de la app'], ['pin', 'PIN de la app (4-8 números)', 'pin'], ['libre_desde', 'Libre desde', 'fecha'], ['libre_hasta', 'Libre hasta', 'fecha'], ['activo', 'Activo', 'bool'], ['notas', 'Notas']],
   vehiculos: [['nombre', 'Nombre'], ['placa', 'Placa'], ['capacidad', 'Capacidad (pax)', 'num'], ['tipo', 'Tipo'], ['sede', 'Sede', 'sede'], ['seguro_vence', 'Seguro vence', 'fecha'], ['marbete_vence', 'Marbete vence', 'fecha'], ['activo', 'Activo', 'bool'], ['notas', 'Notas']],
   proveedores: [['nombre', 'Nombre'], ['tipo', 'Tipo', 'tipoprov'], ['contacto', 'Contacto'], ['telefono', 'Teléfono'], ['email', 'Correo'], ['sede', 'Sede', 'sede'], ['activo', 'Activo', 'bool'], ['notas', 'Notas']],
-  agencias: [['nombre', 'Nombre'], ['alias', 'Otros nombres o dominios (separados por coma)'], ['tarifario_id', 'Tarifario de venta', 'tarifario'], ['modalidad', 'Modalidad por defecto', 'modalidad'], ['contacto', 'Contacto'], ['telefono', 'Teléfono'], ['email', 'Correo'], ['activo', 'Activo', 'bool'], ['notas', 'Notas']],
-  hoteles: [['hotel', 'Hotel'], ['zona', 'Zona'], ['sede', 'Sede', 'sede']]
+  agencias: [['nombre', 'Nombre'], ['alias', 'Otros nombres o dominios (separados por coma)'], ['tarifario_id', 'Tarifario de venta (si tiene uno propio)', 'tarifario'], ['mercado', 'Mercado / país (ej. Perú, RD)'], ['tipo_agencia', 'Tipo de agencia', 'tipoagencia'], ['modalidad', 'Modalidad por defecto', 'modalidad'], ['contacto', 'Contacto'], ['telefono', 'Teléfono'], ['email', 'Correo'], ['activo', 'Activo', 'bool'], ['notas', 'Notas']],
+  hoteles: [['hotel', 'Hotel'], ['zona', 'Zona'], ['sede', 'Sede', 'sede']],
+  cortesias: [['nombre', 'Cortesía'], ['precio', 'Precio (US$)', 'num'], ['cobra', 'Se cobra (va a la proforma)', 'bool'], ['por_persona', 'Por persona', 'bool'], ['orden', 'Orden', 'num'], ['activo', 'Activa', 'bool'], ['notas', 'Notas']]
 };
 function pintarConfig() {
   $('#vista').innerHTML = `<div class="cab"><div><h1>Configuración</h1><div class="sub">Solo quien tiene el permiso "Configurar operaciones". Todo se puede cambiar sin tocar el programa.</div></div></div>
@@ -689,6 +750,7 @@ function inputCampo(k, tipo, v) {
   if (tipo === 'tarifario') return `<select data-c="${k}"><option value="">General</option>${CF.tarifarios.filter(t => t.tipo === 'venta').map(x => `<option value="${x.id}" ${v === x.id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>`;
   if (tipo === 'sede') return `<select data-c="${k}"><option value="">—</option>${['Punta Cana', 'Orlando'].map(x => `<option ${v === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
   if (tipo === 'tipoprov') return `<select data-c="${k}">${CF.tipos_proveedor.map(x => `<option ${v === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
+  if (tipo === 'tipoagencia') return `<select data-c="${k}"><option value="">—</option>${['mayorista', 'minorista'].map(x => `<option ${v === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
   if (tipo === 'modalidad') return `<select data-c="${k}">${['privado', 'compartido'].map(x => `<option ${v === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`;
   if (tipo === 'fecha') return `<input type="date" data-c="${k}" value="${esc(v || '')}">`;
   if (tipo === 'num') return `<input type="number" step="any" data-c="${k}" value="${esc(v ?? '')}" style="width:110px">`;
@@ -716,6 +778,8 @@ function cfTarifarios() {
       ${tfs.map(x => `<div class="plant ${x.id === cfTarifario ? 'a' : ''}" data-tarifario="${x.id}"><div class="tile ${x.tipo === 'venta' ? 't-ve' : 't-amb'}">${ic(x.tipo === 'venta' ? 'hand-coins' : 'wallet')}</div><div><b>${esc(x.nombre)}</b><small>${x.tipo === 'venta' ? 'Venta' : 'Costo'}${x.agencia_id ? ' · ' + esc((CF.agencias.find(a => a.id === x.agencia_id) || {}).nombre || '') : ''}${x.proveedor_id ? ' · ' + esc((CF.proveedores.find(a => a.id === x.proveedor_id) || {}).nombre || '') : ''}${!x.agencia_id && !x.proveedor_id && x.tipo === 'venta' ? ' · general' : ''}</small></div></div>`).join('')}
       <h4 style="margin:14px 0 6px">Nuevo tarifario</h4><input id="ntNombre" placeholder="Nombre (ej. CTB Mayorista 2026)" style="width:100%;margin-bottom:6px"><select id="ntTipo" style="width:100%;margin-bottom:6px"><option value="venta">Venta (lo que cobramos)</option><option value="costo">Costo (lo que nos cobra un proveedor)</option></select>
       <select id="ntAgencia" style="width:100%;margin-bottom:6px"><option value="">Venta: general (todas las agencias)</option>${CF.agencias.map(a => `<option value="${a.id}">Venta: ${esc(a.nombre)}</option>`).join('')}</select><select id="ntProveedor" style="width:100%;margin-bottom:6px"><option value="">Costo: elige el proveedor</option>${CF.proveedores.map(a => `<option value="${a.id}">Costo: ${esc(a.nombre)}</option>`).join('')}</select>
+      <div style="display:flex;gap:6px;margin-bottom:6px"><input id="ntMercado" placeholder="Mercado (opcional)" style="flex:1;min-width:0"><select id="ntTipoAg" style="flex:1;min-width:0"><option value="">Mayorista o minorista</option><option>mayorista</option><option>minorista</option></select></div>
+      <p class="sub2" style="margin:0 0 6px">Un tarifario de venta general con mercado y/o tipo se usa solo para las agencias de ese mercado y tipo.</p>
       <button class="btn p" id="ntCrear" style="width:100%">${ic('plus')}Crear tarifario</button></div>
     <div class="caja" style="overflow:auto">${t ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><h3 style="margin:0">${esc(t.nombre)}</h3><span class="tag">${t.tipo}</span>
         <span style="margin-left:auto" class="sub2">Importar Excel:</span><input type="file" id="cfExcelTarifas" accept=".xlsx"><label class="sub2"><input type="checkbox" id="cfReemplazar"> reemplazar</label>
@@ -739,7 +803,8 @@ function cfPlantillas() {
   $('#cfCuerpo').innerHTML = `<div class="rej r2" style="align-items:start"><div class="caja"><h3>${ic('printer')}Operativo del día</h3>${t('operativo', 'titulo', 'Título')}${t('operativo', 'subtitulo', 'Subtítulo')}
       <div class="campo"><label>Columnas</label><div style="display:flex;gap:10px;flex-wrap:wrap">${cols.map(c => `<label class="sub2"><input type="checkbox" data-plcol="${c}" ${(p.operativo.columnas || []).includes(c) ? 'checked' : ''}> ${c}</label>`).join('')}</div></div>
       ${t('operativo', 'pie', 'Nota al pie', true)}<label class="sub2"><input type="checkbox" data-plbool="operativo.firmas" ${p.operativo.firmas ? 'checked' : ''}> Espacio para firmas</label></div>
-    <div class="caja"><h3>${ic('file-text')}Voucher</h3>${t('voucher', 'titulo', 'Título')}${t('voucher', 'texto', 'Texto', true)}${t('voucher', 'pie', 'Pie', true)}
+    <div class="caja"><h3>${ic('file-text')}Voucher (uno por pasajero)</h3>${t('voucher', 'titulo', 'Título')}${t('voucher', 'cartel', 'Frase del cartel ({nombre} = el pasajero)')}${t('voucher', 'texto', 'Texto', true)}${t('voucher', 'pie', 'Pie', true)}
+      <h3 style="margin-top:12px">${ic('receipt')}Proforma (una por reserva)</h3>${t('proforma', 'titulo', 'Título')}${t('proforma', 'texto', 'Texto', true)}${t('proforma', 'pie', 'Pie', true)}
       <h3 style="margin-top:12px">${ic('file-down')}Cotización</h3>${t('cotizacion', 'titulo', 'Título')}${t('cotizacion', 'texto', 'Condiciones', true)}${t('cotizacion', 'validez_dias', 'Validez (días)')}${t('cotizacion', 'pie', 'Pie', true)}
       <h3 style="margin-top:12px">${ic('chart-column')}Reportes</h3>${t('reporte', 'titulo', 'Título')}${t('reporte', 'pie', 'Pie', true)}</div></div>
     <p class="sub2">El logo es el de la empresa (Reservas → Herramientas → Empresa). Se usa en el operativo, el voucher, la cotización y los reportes.</p><button class="btn p" id="cfGuardarPl">${ic('save')}Guardar plantillas</button>`;
@@ -750,6 +815,10 @@ function cfReglas() {
   $('#cfCuerpo').innerHTML = `<div class="rej r2" style="align-items:start"><div class="caja"><h3>${ic('clock')}Tiempos</h3>${n('antes_aeropuerto_min', 'Minutos antes del vuelo en el aeropuerto (salidas)', 'La recogida = hora del vuelo − esto − tiempo de viaje de la zona')}${n('espera_llegada_min', 'Espera en llegadas (min)', 'Tiempo que el chofer espera al pasajero')}
       ${n('minutos_entre_servicios', 'Margen entre servicios del mismo chofer (min)', 'Para avisar choques')}${n('duracion_traslado_min', 'Viaje si la zona no tiene tiempo (min)', '')}${n('duracion_actividad_min', 'Duración de un tour (min)', '')}${n('aviso_retraso_min', 'Avisar si el vuelo se mueve más de (min)', '')}${n('consultar_vuelos_cada_min', 'Consultar cada vuelo cada (min)', 'Menos consultas = menos costo de la API')}</div>
     <div class="caja"><h3>${ic('map')}Tiempo de viaje aeropuerto ↔ zona (min)</h3><textarea id="rgZonas" rows="14" style="width:100%;font-family:monospace;font-size:12.5px">${esc(Object.entries(r.tiempos_zona || {}).map(([z, m]) => z + ' = ' + m).join('\n'))}</textarea><small class="sub2">Una zona por línea: Bávaro = 30</small></div></div>
+    <div class="caja"><h3>${ic('hand-coins')}Precios de traslados</h3>
+      <div class="switch"><div><b>Una sola vía = mitad del In/Out</b><small>Si la llegada, la salida o el inter-hotel no tiene tarifa propia: mitad del precio In/Out de adulto, redondeada hacia arriba. Todos cuentan como adulto.</small></div><label class="sw"><input type="checkbox" data-rgb="una_via_mitad_inout" ${r.una_via_mitad_inout !== false ? 'checked' : ''}><span></span></label></div>
+      <div class="switch"><div><b>Base doble (un solo pasajero)</b><small>Si el traslado es de una sola persona se cobra como dos (ej.: In/Out de US$ 15 → US$ 30). Apagado hasta confirmarlo con la agencia.</small></div><label class="sw"><input type="checkbox" data-rgb="base_doble_un_pax" ${r.base_doble_un_pax ? 'checked' : ''}><span></span></label></div>
+      <p class="sub2">El paquete In/Out (llegada + salida en la misma reserva) usa la tarifa "INOUT" con precio de adulto y de niño, y reparte la mitad en cada tramo. Después de cambiar algo, usa "Recalcular precios" en Tarifarios.</p></div>
     <button class="btn p" id="cfGuardarRg">${ic('save')}Guardar reglas</button>`;
 }
 function cfVuelos() {
@@ -834,7 +903,7 @@ document.addEventListener('click', async ev => {
     const r = await api(`/api/op/config/${bo.dataset.borrar}/borrar`, { id }); aviso(r.ok ? 'Borrado.' : r.data.error); return vConfig();
   }
   const tf = t.closest('[data-tarifario]'); if (tf) { cfTarifario = Number(tf.dataset.tarifario); return cfTarifarios(); }
-  if (t.closest('#ntCrear')) { const tipo = $('#ntTipo').value; const r = await api('/api/op/config/tarifarios/guardar', { nombre: $('#ntNombre').value, tipo, agencia_id: tipo === 'venta' ? $('#ntAgencia').value : '', proveedor_id: tipo === 'costo' ? $('#ntProveedor').value : '', activo: true }); if (!r.ok) return aviso(r.data.error); cfTarifario = r.data.id; return vConfig(); }
+  if (t.closest('#ntCrear')) { const tipo = $('#ntTipo').value; const r = await api('/api/op/config/tarifarios/guardar', { nombre: $('#ntNombre').value, tipo, agencia_id: tipo === 'venta' ? $('#ntAgencia').value : '', proveedor_id: tipo === 'costo' ? $('#ntProveedor').value : '', mercado: $('#ntMercado').value, tipo_agencia: $('#ntTipoAg').value, activo: true }); if (!r.ok) return aviso(r.data.error); cfTarifario = r.data.id; return vConfig(); }
   if (t.closest('#cfRecalcular')) { const r = await api('/api/op/recalcular', {}); return aviso(r.ok ? `✔ ${r.data.recalculados} servicio(s) recalculados (los ajustados a mano no cambian).` : r.data.error, 6000); }
   if (t.closest('#cfGuardarPl')) {
     const pl2 = JSON.parse(JSON.stringify(CF.plantillas));
@@ -844,7 +913,7 @@ document.addEventListener('click', async ev => {
     const r = await api('/api/op/config/plantillas', pl2); aviso(r.ok ? '✔ Plantillas guardadas.' : r.data.error); if (r.ok) { I.plantillas = pl2; CF.plantillas = pl2; } return;
   }
   if (t.closest('#cfGuardarRg')) {
-    const d = {}; document.querySelectorAll('[data-rg]').forEach(el => { d[el.dataset.rg] = el.value; });
+    const d = {}; document.querySelectorAll('[data-rg]').forEach(el => { d[el.dataset.rg] = el.value; }); document.querySelectorAll('[data-rgb]').forEach(el => { d[el.dataset.rgb] = el.checked; });
     d.tiempos_zona = Object.fromEntries($('#rgZonas').value.split('\n').map(l => l.split('=')).filter(x => x.length === 2 && x[0].trim()).map(([z, m]) => [z.trim(), Number(m) || 0]));
     const r = await api('/api/op/config/reglas', d); aviso(r.ok ? '✔ Reglas guardadas.' : r.data.error); return;
   }
