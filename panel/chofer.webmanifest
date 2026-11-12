@@ -1,0 +1,14 @@
+{
+  "name": "Mis servicios · Chofer",
+  "short_name": "Chofer",
+  "start_url": "/chofer",
+  "scope": "/chofer",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c1a2e",
+  "theme_color": "#0c1a2e",
+  "lang": "es",
+  "icons": [
+    { "src": "/chofer-icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

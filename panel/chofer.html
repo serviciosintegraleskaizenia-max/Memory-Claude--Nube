@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chofer">
+<title>Mis servicios · Chofer</title>
+<link rel="manifest" href="/chofer.webmanifest">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='%230c1a2e'/%3E%3Cpath d='M16 38v-9l4-9h24l4 9v9h-4v4h-6v-4H26v4h-6v-4z' fill='%23c9a24a'/%3E%3C/svg%3E">
+<script src="/iconos-op.js"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--txt:#0f1b2d;--suave:#6b7a90;--borde:#e6ebf2;--nav:#0c1a2e;--oro:#c9a24a;--azul:#1f5fae;--verde:#0f9d6b;--ambar:#c98a12;--violeta:#6d4bd8;--rojo:#d92d4b}
+@media (prefers-color-scheme:dark){:root{--bg:#0a1322;--card:#101d31;--txt:#e7edf6;--suave:#8c9bb3;--borde:#1d2c45}}
+*{box-sizing:border-box}html,body{margin:0}body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;-webkit-tap-highlight-color:transparent}
+.ic{width:18px;height:18px;stroke-width:2;vertical-align:middle;flex:none}
+button,input{font:inherit;color:inherit}
+header{background:linear-gradient(160deg,#0c1a2e,#13253f);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 18px;border-radius:0 0 22px 22px}
+.fila{display:flex;align-items:center;gap:10px}.fila .der{margin-left:auto}
+.av{width:40px;height:40px;border-radius:50%;background:var(--oro);color:#1b1405;display:flex;align-items:center;justify-content:center;font-weight:800}
+header small{color:#c9d4e5}header b{font-size:17px}
+.gps{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.1)}.gps i{width:8px;height:8px;border-radius:50%;background:#94a3b8;display:inline-block}.gps.on i{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+.dias{display:flex;gap:8px;margin-top:14px}.dias button{flex:1;border:0;border-radius:12px;padding:9px;background:rgba(255,255,255,.08);color:#c9d4e5;font-weight:600}.dias button.a{background:var(--oro);color:#1b1405}
+.resumen{display:flex;gap:10px;margin-top:12px;font-size:13px;color:#c9d4e5}.resumen b{color:#fff;font-size:16px}
+main{padding:14px 14px calc(30px + env(safe-area-inset-bottom))}
+.tarjeta{background:var(--card);border:1px solid var(--borde);border-radius:18px;padding:14px;margin-bottom:12px;box-shadow:0 6px 18px rgba(15,27,45,.06)}
+.tarjeta.actual{border:2px solid var(--oro)}.tarjeta.hecho{opacity:.6}
+.hora{font-size:26px;font-weight:800;letter-spacing:-.5px}.hora small{display:block;font-size:12px;font-weight:600;color:var(--suave);letter-spacing:0}
+.tipo{display:inline-flex;gap:6px;align-items:center;font-weight:700;font-size:12px;border-radius:999px;padding:4px 10px}
+.IN{background:rgba(15,157,107,.12);color:var(--verde)}.OUT{background:rgba(31,95,174,.12);color:var(--azul)}.ACTIVIDAD,.INTERHOTEL,.OTRO{background:rgba(109,75,216,.12);color:var(--violeta)}
+.cli{font-size:17px;font-weight:700;margin:10px 0 2px}.sub{color:var(--suave);font-size:13px}
+.ruta{margin:10px 0;border-left:2px dashed var(--borde);padding-left:12px}.ruta div{position:relative;padding:3px 0}.ruta div:before{content:'';position:absolute;left:-18px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--verde)}.ruta div+div:before{background:var(--rojo)}
+.vuelo{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600;background:var(--bg);border-radius:10px;padding:7px 10px;margin:8px 0}
+.vuelo .tarde{color:var(--ambar)}.vuelo .mal{color:var(--rojo)}.vuelo .ok{color:var(--verde)}
+.nota{background:rgba(201,162,74,.12);border-radius:10px;padding:8px 10px;font-size:13px;margin:8px 0}
+.acciones{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;border-radius:13px;padding:13px 10px;font-weight:700;border:1px solid var(--borde);background:var(--card);text-decoration:none;color:var(--txt);cursor:pointer}
+.btn.p{background:linear-gradient(135deg,#1f5fae,#2b7bd8);color:#fff;border:0;grid-column:1/-1;font-size:16px;padding:15px}
+.btn.v{background:var(--verde);color:#fff;border:0;grid-column:1/-1;font-size:16px;padding:15px}
+.btn.r{color:var(--rojo)}
+.estado{font-size:12px;font-weight:700;color:var(--suave)}
+.vacio{text-align:center;color:var(--suave);padding:50px 20px}
+.entrar{max-width:380px;margin:12vh auto;padding:24px}.entrar .caja{background:var(--card);border-radius:22px;padding:24px;border:1px solid var(--borde);box-shadow:0 10px 30px rgba(15,27,45,.08)}
+.entrar input{width:100%;padding:14px;border-radius:12px;border:1px solid var(--borde);background:var(--bg);font-size:17px;margin:6px 0 14px}
+.entrar label{font-size:12px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.6px}
+.error{color:var(--rojo);font-size:14px;min-height:20px}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));background:var(--nav);color:#fff;border-radius:14px;padding:13px 16px;font-weight:600;opacity:0;transform:translateY(20px);transition:.2s;pointer-events:none;text-align:center}.toast.v{opacity:1;transform:none}
+.instalar{display:none;margin-top:12px}.instalar.v{display:flex}
+</style>
+</head>
+<body>
+<div id="raiz"></div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ic2 = (n) => (window.ic ? window.ic(n) : '');
+const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const hoyISO = (n = 0) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const fechaBonita = f => { const d = new Date(f + 'T12:00:00'); return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`; };
+const TIPO = { IN: ['plane-landing', 'Llegada'], OUT: ['plane-takeoff', 'Salida al aeropuerto'], ACTIVIDAD: ['ticket', 'Tour'], INTERHOTEL: ['route', 'Inter-hotel'], OTRO: ['circle-dot', 'Servicio'] };
+// Orden del trabajo: cada estado tiene un botón grande para pasar al siguiente.
+const SIGUIENTE = { asignado: ['en_camino', 'Voy en camino', 'navigation'], en_camino: ['en_sitio', 'Ya llegué', 'map-pin'], en_sitio: ['recogido', 'Pasajeros a bordo', 'users'], recogido: ['completado', 'Servicio terminado', 'check'] };
+let D = { fecha: hoyISO(), datos: null, gpsOk: false, ultimoEnvio: 0, pos: null };
+let instalarEvento = null;
+
+function aviso(t) { const el = $('#toast'); el.textContent = t; el.classList.add('v'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('v'), 3500); }
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+function pantallaEntrar(msg = '') {
+  $('#raiz').innerHTML = `<div class="entrar"><div class="caja"><div class="fila" style="margin-bottom:16px"><div class="av" style="background:var(--nav);color:var(--oro)">${ic2('car')}</div><div><b style="font-size:18px">Mis servicios</b><div class="sub">App del chofer</div></div></div>
+    <label>Usuario</label><input id="codigo" autocomplete="username" autocapitalize="none" placeholder="tu usuario">
+    <label>PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••">
+    <div class="error" id="error">${esc(msg)}</div><button class="btn p" id="btnEntrar" style="width:100%">Entrar</button></div>
+    <p class="sub" style="text-align:center;margin-top:14px">Si no tienes usuario o PIN, pídelo en la oficina.</p></div>`;
+  $('#codigo').focus();
+}
+async function entrar() {
+  const b = $('#btnEntrar'); b.disabled = true;
+  const r = await api('/api/chofer/entrar', { codigo: $('#codigo').value.trim(), pin: $('#pin').value });
+  b.disabled = false;
+  if (!r.ok) { $('#error').textContent = r.data.error || 'No se pudo entrar.'; return; }
+  cargar();
+}
+
+async function cargar(silencioso) {
+  const r = await api('/api/chofer/hoy?fecha=' + D.fecha);
+  if (r.status === 401 || r.status === 403) return pantallaEntrar(r.status === 403 ? r.data.error : '');
+  if (!r.ok) { if (!silencioso) aviso(r.data.error || 'Sin conexión. Reintentando…'); return; }
+  D.datos = r.data;
+  pintar();
+  iniciarGPS();
+}
+function pintar() {
+  const d = D.datos, lista = d.servicios.slice().sort((a, b) => String(a.recogida || a.hora).localeCompare(String(b.recogida || b.hora)));
+  const pendientes = lista.filter(s => !['completado', 'no_show'].includes(s.estado));
+  const actual = pendientes[0];
+  const pax = lista.reduce((a, s) => a + (s.pax || 0), 0);
+  const ini = String(d.chofer || '?').split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase();
+  $('#raiz').innerHTML = `<header><div class="fila"><div class="av">${esc(ini)}</div><div><b>${esc(d.chofer)}</b><br><small>${esc(fechaBonita(D.fecha))}${lista[0] && lista[0].vehiculo ? ' · ' + esc(lista[0].vehiculo) + (lista[0].placa ? ' ' + esc(lista[0].placa) : '') : ''}</small></div>
+      <div class="der"><span class="gps ${D.gpsOk ? 'on' : ''}" id="gps"><i></i>${D.gpsOk ? 'GPS activo' : 'GPS apagado'}</span></div></div>
+    <div class="dias">${[[hoyISO(-1), 'Ayer'], [hoyISO(), 'Hoy'], [hoyISO(1), 'Mañana']].map(([f, n]) => `<button class="${D.fecha === f ? 'a' : ''}" data-fecha="${f}">${n}</button>`).join('')}</div>
+    <div class="resumen"><span><b>${lista.length}</b> servicios</span><span><b>${pendientes.length}</b> pendientes</span><span><b>${pax}</b> pax</span></div>
+    <button class="btn instalar ${instalarEvento ? 'v' : ''}" id="btnInstalar" style="background:rgba(255,255,255,.1);color:#fff;border:0">${ic2('download')}Instalar en el celular</button></header>
+  <main>${lista.map(s => tarjeta(s, actual && s.id === actual.id)).join('') || '<div class="vacio">' + ic2('circle-check') + '<br><b>No tienes servicios este día.</b><br>Si te asignan uno, aparece aquí.</div>'}
+    <div style="text-align:center;margin-top:18px"><button class="btn" id="btnSalir" style="display:inline-flex;padding:10px 18px">${ic2('log-out')}Salir</button></div></main>`;
+}
+function tarjeta(s, esActual) {
+  const [icono, nombre] = TIPO[s.tipo] || TIPO.OTRO;
+  const v = s.vuelo_vivo || {};
+  const vuelo = s.vuelo ? `<div class="vuelo">${ic2('plane')}${esc(s.vuelo)}${v.estado ? ` · <span class="${v.estado === 'cancelado' || v.estado === 'desviado' ? 'mal' : v.retraso_min > 10 ? 'tarde' : 'ok'}">${esc(v.estado)}${v.retraso_min > 10 ? ' (+' + v.retraso_min + ' min)' : ''}${v.hora_estimada ? ' ' + esc(v.hora_estimada) : ''}</span>` : ''}${v.terminal ? ' · T' + esc(v.terminal) : ''}${s.tipo === 'OUT' && s.hora ? ' · sale ' + esc(s.hora) : ''}</div>` : '';
+  // El mapa lleva a donde toca ir ahora: a recoger, o (con pasajeros a bordo) al destino.
+  const destino = s.estado === 'recogido' ? s.hasta : s.desde;
+  const mapa = destino && destino !== '—' ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destino)}` : '';
+  const hecho = ['completado', 'no_show'].includes(s.estado);
+  const sig = SIGUIENTE[s.estado];
+  return `<div class="tarjeta ${esActual ? 'actual' : ''} ${hecho ? 'hecho' : ''}">
+    <div class="fila"><div class="hora">${esc(s.recogida || s.hora || '--:--')}<small>${s.tipo === 'IN' ? 'llega el vuelo' : 'recoger'}</small></div><div class="der" style="text-align:right"><span class="tipo ${esc(s.tipo)}">${ic2(icono)}${nombre}</span><div class="estado" style="margin-top:6px">${esc(s.estado_nombre)}</div></div></div>
+    <div class="cli">${esc(s.cliente || 'Pasajero')}</div><div class="sub">${s.pax} pasajero(s) · reserva #${s.reserva}</div>
+    ${vuelo}
+    <div class="ruta"><div><b>${esc(s.desde || '—')}</b></div><div><b>${esc(s.hasta || '—')}</b></div></div>
+    ${s.notas || s.nota ? `<div class="nota">${ic2('info')} ${esc([s.notas, s.nota].filter(Boolean).join(' · '))}</div>` : ''}
+    ${hecho ? '' : `<div class="acciones">
+      ${sig ? `<button class="btn ${sig[0] === 'completado' ? 'v' : 'p'}" data-estado="${sig[0]}" data-id="${s.id}">${ic2(sig[2])}${sig[1]}</button>` : ''}
+      ${s.telefono ? `<a class="btn" href="tel:${esc(String(s.telefono).replace(/[^\d+]/g, ''))}">${ic2('phone')}Llamar</a>` : ''}
+      ${mapa ? `<a class="btn" href="${mapa}" target="_blank" rel="noopener">${ic2('map')}Mapa</a>` : ''}
+      ${['en_sitio', 'en_camino'].includes(s.estado) ? `<button class="btn r" data-estado="no_show" data-id="${s.id}">${ic2('ban')}No se presentó</button>` : ''}</div>`}</div>`;
+}
+async function cambiar(id, estado) {
+  if (estado === 'no_show' && !confirm('¿El pasajero no se presentó? La oficina recibe el aviso.')) return;
+  const r = await api('/api/chofer/estado', { id, estado });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo guardar. Revisa la conexión.');
+  if (navigator.vibrate) navigator.vibrate(40);
+  aviso('✔ Guardado. La oficina ya lo ve.');
+  enviarUbicacion(true);
+  cargar(true);
+}
+
+// GPS: mientras la app está abierta manda la ubicación cada minuto (o al cambiar de estado).
+let vigilando = null;
+function iniciarGPS() {
+  if (vigilando !== null || !('geolocation' in navigator)) return;
+  vigilando = navigator.geolocation.watchPosition(p => {
+    D.pos = p.coords; if (!D.gpsOk) { D.gpsOk = true; const g = $('#gps'); if (g) { g.classList.add('on'); g.innerHTML = '<i></i>GPS activo'; } }
+    enviarUbicacion(false);
+  }, () => { D.gpsOk = false; const g = $('#gps'); if (g) { g.classList.remove('on'); g.innerHTML = '<i></i>Activa la ubicación'; } }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 });
+}
+async function enviarUbicacion(forzar) {
+  if (!D.pos || (!forzar && Date.now() - D.ultimoEnvio < 60000)) return;
+  D.ultimoEnvio = Date.now();
+  await api('/api/chofer/ubicacion', { lat: D.pos.latitude, lng: D.pos.longitude, precision: D.pos.accuracy }).catch(() => {});
+}
+// Mantener la pantalla encendida mientras se usa (si el teléfono lo permite).
+async function pantallaEncendida() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch (e) {} }
+
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('button'); if (!t) return;
+  if (t.id === 'btnEntrar') return entrar();
+  if (t.dataset.fecha) { D.fecha = t.dataset.fecha; return cargar(); }
+  if (t.dataset.estado) return cambiar(Number(t.dataset.id), t.dataset.estado);
+  if (t.id === 'btnSalir') { if (!confirm('¿Salir de la app?')) return; await api('/api/chofer/salir', {}); return pantallaEntrar(); }
+  if (t.id === 'btnInstalar' && instalarEvento) { instalarEvento.prompt(); instalarEvento = null; t.classList.remove('v'); }
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && $('#pin')) entrar(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && D.datos) { cargar(true); pantallaEncendida(); } });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalarEvento = e; const b = $('#btnInstalar'); if (b) b.classList.add('v'); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/chofer-sw.js').catch(() => {});
+setInterval(() => { if (document.visibilityState === 'visible' && D.datos) cargar(true); }, 60000);
+setInterval(() => enviarUbicacion(false), 60000);
+pantallaEncendida();
+cargar();
+</script>
+</body>
+</html>

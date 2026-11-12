@@ -30,8 +30,13 @@ const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), reg
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
 const oficina = crearOficina({ client, config, registrar: (...a) => registrar(...a), central });
+const operaciones = require('./plataforma/operaciones')({ client, config, registrar: (...a) => registrar(...a),
+  fechaServicioISO: (...a) => fechaServicioISO(...a), hoyLocal: () => require('./plataforma/cuenta').hoyLocal(),
+  esCancelacion: (...a) => esCancelacion(...a), indiceReservas: (...a) => indiceReservas(...a), originalDe: (...a) => originalDe(...a) });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia'];
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia',
+  // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
+  'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones'];
 // Datos que la IA llena y que se pueden corregir a mano con el permiso "editar_ia".
 const CAMPOS_IA = {
   nombre_cliente: { max: 500 }, telefono: { max: 120 },
@@ -327,8 +332,10 @@ client.connect()
   .then(() => motorCorreo.preparar().catch(e => console.log('Motor de correo:', e.message)))
   .then(() => central.preparar().catch(e => console.log('Panel central:', e.message)))
   .then(() => oficina.preparar().catch(e => console.log('Oficina:', e.message)))
+  .then(() => operaciones.preparar().catch(e => console.log('Operaciones:', e.message)))
   .then(() => {
     motorCorreo.iniciar();
+    operaciones.iniciar();
     central.iniciar();
     setTimeout(() => cuenta.revisarPago().catch(e => console.log('Pago:', e.message)), 30 * 1000);
     setInterval(() => cuenta.revisarPago().catch(e => console.log('Pago:', e.message)), 60 * 60 * 1000);
@@ -1707,6 +1714,14 @@ http.createServer(async (req, res) => {
       if (!central.activo) { res.writeHead(302, { Location: '/' }); return res.end(); }
       return archivo(res, path.join(CARPETA, 'oficina.html'), 'text/html; charset=utf-8');
     }
+    // Operaciones (pantalla de la oficina) y la app web del chofer.
+    if (req.method === 'GET' && url === '/operaciones') return archivo(res, path.join(CARPETA, 'operaciones.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/chofer') return archivo(res, path.join(CARPETA, 'chofer.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/chofer.webmanifest') return archivo(res, path.join(CARPETA, 'chofer.webmanifest'), 'application/manifest+json');
+    if (req.method === 'GET' && url === '/chofer-icono.svg') return archivo(res, path.join(CARPETA, 'chofer-icono.svg'), 'image/svg+xml');
+    if (req.method === 'GET' && url === '/chofer-sw.js') return archivo(res, path.join(CARPETA, 'chofer-sw.js'), 'text/javascript; charset=utf-8');
+    if (req.method === 'GET' && url === '/iconos-op.js') return archivo(res, path.join(CARPETA, 'iconos-op.js'), 'text/javascript; charset=utf-8');
+    if (url.startsWith('/api/chofer/')) return operaciones.manejarChofer(req, res, url, { json, leerCuerpo, esLocal });
     if (req.method === 'GET' && url === '/asistente') {
       return archivo(res, path.join(CARPETA, 'asistente.html'), 'text/html; charset=utf-8');
     }
@@ -1836,6 +1851,7 @@ http.createServer(async (req, res) => {
         modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
         vence: u.vence || null, asistente: Boolean(await conexionAsistente()),
         preferencias: u.preferencias || {},
+        operaciones: await operaciones.estadoPublico(u).catch(() => null),
         dos_pasos: necesitaDosPasos(u) ? (u.email ? 'activa' : 'sin_correo') : 'no'
       });
     }
@@ -1907,6 +1923,8 @@ http.createServer(async (req, res) => {
 
     const permisos = permisosDe(u, await mapaGrupos());
     const puede = p => Boolean(permisos[p]);
+
+    if (url.startsWith('/api/op/')) return operaciones.manejar(req, res, url, u, { json, leerCuerpo, puede });
 
     // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
     if (url.startsWith('/api/asistente/')) {
