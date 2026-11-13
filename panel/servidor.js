@@ -36,7 +36,10 @@ const operaciones = require('./plataforma/operaciones')({ client, config, regist
 const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
-  'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones'];
+  'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
+  // Oficina de Kaizen IA (solo en el panel central): entrar y cada sección por separado. El Programador las tiene todas.
+  'ver_oficina', 'oficina_inicio', 'oficina_negocios', 'oficina_clientes', 'oficina_gastos', 'oficina_creacion', 'oficina_calendario', 'oficina_chat', 'oficina_enlaces',
+  'oficina_asistente', 'oficina_redes', 'oficina_respaldos'];
 // Datos que la IA llena y que se pueden corregir a mano con el permiso "editar_ia".
 const CAMPOS_IA = {
   nombre_cliente: { max: 500 }, telefono: { max: 120 },
@@ -1884,7 +1887,7 @@ http.createServer(async (req, res) => {
 
     // Pestaña Empresas: solo en el panel central y solo para el programador (lo revisa el módulo).
     if (url.startsWith('/api/oficina/')) {
-      return oficina.manejar(req, res, url, u, { json, leerCuerpo });
+      return oficina.manejar(req, res, url, u, { json, leerCuerpo, permisos: u ? permisosDe(u, await mapaGrupos()) : {} });
     }
     if (url.startsWith('/api/central/')) {
       return central.manejar(req, res, url, u, { json, leerCuerpo });

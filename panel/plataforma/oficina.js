@@ -34,7 +34,7 @@ function estadoRespaldo() {
 
 const CATEGORIAS = {
   servidor: 'Servidor', dominio: 'Dominio', ia: 'IA (tokens)', redes: 'Redes sociales', automatizacion: 'Automatizaciones',
-  software: 'Programas y suscripciones', publicidad: 'Publicidad', otro: 'Otro'
+  hosting: 'Hosting y página web', software: 'Programas y suscripciones', publicidad: 'Publicidad (Meta, Google…)', otro: 'Otro'
 };
 const FRECUENCIAS = { mensual: 'Cada mes', anual: 'Cada año', unico: 'Una sola vez' };
 const TIPOS_EVENTO = { tarea: 'Tarea', demo: 'Demo', cita: 'Cita / llamada', cobro: 'Cobro', otro: 'Otro' };
@@ -408,10 +408,38 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     throw Object.assign(new Error('Tipo no válido.'), { codigo: 400 });
   }
 
-  async function manejar(req, res, url, u, { json, leerCuerpo }) {
+  // Qué sección de la Oficina usa cada ruta (para quien no es Programador: su socio u otro usuario con "Entrar a la Oficina").
+  function seccionesDe(url, metodo, cuerpoTipo) {
+    if (url === '/api/oficina/datos') return ['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'];
+    if (url === '/api/oficina/negocios') return ['negocios', 'inicio'];
+    if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
+    const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces)$/);
+    if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces' }[g[2]]];
+    if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
+    if (url === '/api/oficina/evento-hecho') return ['calendario', 'inicio'];
+    if (url.startsWith('/api/oficina/chat')) return ['chat'];
+    if (url.startsWith('/api/oficina/conocimiento')) return ['asistente', 'redes'];
+    if (url.startsWith('/api/oficina/redes')) return ['redes', 'asistente'];
+    if (url.startsWith('/api/oficina/respaldo')) return ['respaldos', 'inicio'];
+    if (url.startsWith('/api/oficina/proyectos')) return metodo === 'GET' ? ['creacion', 'gastos'] : cuerpoTipo === 'recarga' ? ['gastos'] : ['creacion'];
+    return [];
+  }
+
+  async function manejar(req, res, url, u, { json, leerCuerpo, permisos = {} }) {
     if (!activo) return json(res, 404, { error: 'La Oficina solo existe en el panel central.' });
     if (!u) return json(res, 401, { error: 'Sin sesión' });
-    if (u.grupo !== 'Programador') return json(res, 403, { error: 'La Oficina es solo del programador.' });
+    if (u.grupo !== 'Programador') {
+      if (!permisos.ver_oficina) return json(res, 403, { error: 'No tienes acceso a la Oficina.' });
+      // El tipo de lo que se guarda (para separar recargas de OpenRouter de los gastos de creación).
+      let tipo = '';
+      if (req.method === 'POST' && url.startsWith('/api/oficina/proyectos/')) {
+        const original = leerCuerpo; let guardado;
+        leerCuerpo = async r => { if (guardado === undefined) guardado = await original(r); return guardado; };
+        tipo = String((await leerCuerpo(req)).tipo || '');
+      }
+      const secciones = seccionesDe(url, req.method, tipo);
+      if (!secciones.some(sc => permisos['oficina_' + sc])) return json(res, 403, { error: 'No tienes permiso para esta parte de la Oficina.' });
+    }
     try {
       const p = new URL(req.url, 'http://localhost').searchParams;
 

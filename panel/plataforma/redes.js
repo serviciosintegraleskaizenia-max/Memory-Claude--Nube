@@ -52,6 +52,9 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       pasar_a_asesor BOOLEAN NOT NULL DEFAULT FALSE, motivo VARCHAR(20) NOT NULL DEFAULT '', enviada TEXT, parecido NUMERIC(4,3),
       resultado VARCHAR(14) NOT NULL DEFAULT 'pendiente', error TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), respondido TIMESTAMPTZ)`);
     await client.query('CREATE INDEX IF NOT EXISTS redes_sugerencias_conv ON redes_sugerencias (empresa_id, conversacion, resultado)');
+    // Lo que gastó cada respuesta del asistente (para el diagnóstico de costo por red).
+    for (const c of ['tokens_entrada INTEGER NOT NULL DEFAULT 0', 'tokens_salida INTEGER NOT NULL DEFAULT 0', 'costo NUMERIC(12,6) NOT NULL DEFAULT 0'])
+      await client.query(`ALTER TABLE redes_sugerencias ADD COLUMN IF NOT EXISTS ${c}`);
     // Hasta qué mensaje se revisó cada conversación (para no contestar dos veces ni contestar historial viejo).
     await client.query(`CREATE TABLE IF NOT EXISTS redes_visto (
       empresa_id INTEGER NOT NULL, conversacion INTEGER NOT NULL, ultimo_id BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (empresa_id, conversacion))`);
@@ -199,9 +202,10 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       await client.query("UPDATE redes_sugerencias SET resultado = 'sin_respuesta' WHERE empresa_id = $1 AND conversacion = $2 AND resultado = 'pendiente'", [e.id, conv]);
       const r = await conocimiento.responder(e.id, { sede, mensajes });
       const ultimoCliente = mensajes.filter(m => m.rol === 'cliente').slice(-1)[0].texto;
-      fila = (await client.query(`INSERT INTO redes_sugerencias (empresa_id, bandeja, conversacion, sede, modo, cliente, sugerencia, idioma, pasar_a_asesor, motivo)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [e.id, bandeja, conv, sede, b.modo, ultimoCliente.slice(0, 2000), r.respuesta, r.idioma || '', r.pasar_a_asesor, r.motivo || ''])).rows[0];
+      const uso = r.tokens || {};
+      fila = (await client.query(`INSERT INTO redes_sugerencias (empresa_id, bandeja, conversacion, sede, modo, cliente, sugerencia, idioma, pasar_a_asesor, motivo, tokens_entrada, tokens_salida, costo)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [e.id, bandeja, conv, sede, b.modo, ultimoCliente.slice(0, 2000), r.respuesta, r.idioma || '', r.pasar_a_asesor, r.motivo || '', uso.entrada || 0, uso.salida || 0, uso.costo || 0])).rows[0];
       if (b.modo === 'responder') {
         const m = await cw(aj, 'POST', `/conversations/${conv}/messages`, { content: r.respuesta, message_type: 'outgoing', private: false });
         if (m && m.id) propios.add(String(m.id));
@@ -315,6 +319,55 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
     };
   }
 
+  // ---------- Diagnóstico: conversaciones por red y costo de tokens ----------
+  const NOMBRE_RED = c => /facebook/i.test(c) ? 'Facebook (Messenger)' : /instagram/i.test(c) ? 'Instagram' : /whatsapp/i.test(c) ? 'WhatsApp' : /webwidget/i.test(c) ? 'Página web' : /email/i.test(c) ? 'Correo' : /telegram/i.test(c) ? 'Telegram' : /sms|twilio/i.test(c) ? 'SMS' : c || 'Otro';
+  // Costo de referencia por respuesta si todavía no hay respuestas medidas (US$, aprox. 4,000 tokens de entrada y 300 de salida).
+  const COSTO_REFERENCIA = { haiku: 0.0055, sonnet: 0.0165, gpt: 0.004, gemini: 0.002 };
+  async function diagnostico(e, dias) {
+    const aj = ajustes(e);
+    const hasta = Math.floor(Date.now() / 1000), desde = hasta - dias * 86400;
+    const bandejas = lista(await cw(aj, 'GET', '/inboxes'));
+    // Lo medido: respuestas reales del asistente en el periodo.
+    const medido = Object.fromEntries((await client.query(`SELECT bandeja, COUNT(*)::int AS respuestas, COUNT(DISTINCT conversacion)::int AS conversaciones,
+        COALESCE(SUM(costo), 0)::float AS costo, COALESCE(SUM(tokens_entrada + tokens_salida), 0)::int AS tokens, COUNT(*) FILTER (WHERE costo > 0)::int AS con_costo
+      FROM redes_sugerencias WHERE empresa_id = $1 AND creado > NOW() - ($2 || ' days')::interval AND resultado <> 'error' GROUP BY 1`, [e.id, String(dias)])).rows.map(x => [x.bandeja, x]));
+    // Costo por respuesta: lo medido; si no hay, lo de la última simulación con el modelo del asistente; si no, una referencia.
+    const ajIA = (await client.query('SELECT conocimiento_ajustes FROM empresas WHERE id = $1', [e.id])).rows[0] || {};
+    const modelo = String((ajIA.conocimiento_ajustes || {}).modelo || 'anthropic/claude-haiku-5.5');
+    const totMed = Object.values(medido).reduce((a, x) => ({ costo: a.costo + x.costo, n: a.n + x.con_costo }), { costo: 0, n: 0 });
+    let costoRespuesta = totMed.n >= 5 ? totMed.costo / totMed.n : 0, fuente = costoRespuesta ? `medido en ${totMed.n} respuestas reales` : '';
+    if (!costoRespuesta) {
+      const sim = (await client.query("SELECT resultado->'resumen' AS r FROM conocimiento_simulaciones WHERE empresa_id = $1 AND estado = 'lista' ORDER BY id DESC LIMIT 1", [e.id]).catch(() => ({ rows: [] }))).rows[0];
+      const m = sim && sim.r && (sim.r[modelo] || Object.values(sim.r)[0]);
+      if (m && m.costo_por_mensaje) { costoRespuesta = Number(m.costo_por_mensaje); fuente = `de la simulación de ventas (${m.modelo || modelo})`; }
+    }
+    if (!costoRespuesta) { const k = Object.keys(COSTO_REFERENCIA).find(x => modelo.includes(x)); costoRespuesta = COSTO_REFERENCIA[k || 'haiku']; fuente = `referencia para ${modelo.split('/').pop()} (todavía sin respuestas medidas)`; }
+    const filas = [];
+    for (const b of bandejas) {
+      const canal = String(b.channel_type || '').replace('Channel::', '');
+      const conf = aj.bandejas[String(b.id)] || {};
+      let conversaciones = null, mensajes = null, aproximado = false;
+      // Chatwoot: reporte del periodo (v2); si no se puede, el total de conversaciones de la bandeja (v1).
+      try {
+        const r = await fetch(aj.url.replace(/\/$/, '') + `/api/v2/accounts/${aj.cuenta}/reports/summary?type=inbox&id=${b.id}&since=${desde}&until=${hasta}`, { headers: { api_access_token: aj.token }, signal: AbortSignal.timeout(15000) });
+        if (r.ok) { const d = await r.json(); conversaciones = Number(d.conversations_count ?? (d.conversations_count && d.conversations_count.value)) || 0; mensajes = Number(d.incoming_messages_count) || 0; }
+      } catch (err) { /* sigue con v1 */ }
+      if (conversaciones === null) {
+        const d = await cw(aj, 'GET', `/conversations?inbox_id=${b.id}&status=all&page=1`).catch(() => null);
+        const meta = d && (d.data ? d.data.meta : d.meta);
+        if (meta) { conversaciones = Number(meta.all_count) || 0; aproximado = true; }
+      }
+      const med = medido[b.id] || { respuestas: 0, conversaciones: 0, costo: 0, tokens: 0 };
+      // Mensajes de clientes = respuestas que haría el asistente. Si Chatwoot no los da, ~5 por conversación.
+      const msgs = mensajes !== null ? mensajes : conversaciones !== null ? conversaciones * 5 : med.respuestas;
+      const estimado = msgs * costoRespuesta;
+      filas.push({ id: b.id, nombre: b.name, red: NOMBRE_RED(canal), canal, sede: conf.sede || '', modo: conf.modo || 'apagado', conversaciones, mensajes, aproximado,
+        respuestas_asistente: med.respuestas, conversaciones_asistente: med.conversaciones, costo_medido: Math.round(med.costo * 10000) / 10000, tokens: med.tokens,
+        costo_estimado: Math.round(estimado * 100) / 100, costo_mes: Math.round(estimado * 30 / dias * 100) / 100 });
+    }
+    return { dias, modelo, costo_por_respuesta: Math.round(costoRespuesta * 100000) / 100000, fuente, filas };
+  }
+
   async function manejarOficina(req, res, url, u, { json, leerCuerpo }) {
     const p = new URL(req.url, 'http://localhost').searchParams;
     if (req.method === 'GET' && url === '/api/oficina/redes') {
@@ -350,6 +403,11 @@ module.exports = function crearRedes({ client, registrar, central, conocimiento 
       await client.query('UPDATE empresas SET chatwoot = $1 WHERE id = $2', [JSON.stringify(nuevo), e.id]);
       await registrar(u, 'redes_ajustes', 'empresa', e.slug, '', '', f.token ? 'token nuevo' : (f.bandejas ? 'bandejas' : 'ajustes'));
       return json(res, 200, { ok: true });
+    }
+    if (req.method === 'GET' && url === '/api/oficina/redes/diagnostico') {
+      const e = await empresa(p.get('empresa_id'));
+      const dias = [7, 30, 90].includes(Number(p.get('dias'))) ? Number(p.get('dias')) : 30;
+      return json(res, 200, await diagnostico(e, dias));
     }
     if (req.method === 'POST' && url === '/api/oficina/redes/probar') {
       const f = await leerCuerpo(req);

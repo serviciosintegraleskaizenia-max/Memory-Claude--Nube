@@ -778,9 +778,14 @@ const PERMISOS = [
   ['ver_reportes_op', 'Reportes por agencia, proveedor y general', 'operaciones'],
   ['configurar_empresa', 'Configurar empresa (nombre, logo, banner, reparto, caché)', 'sistema'],
   ['configurar_operaciones', 'Configurar operaciones (choferes, tarifarios, plantillas, reglas, llaves)', 'sistema'],
-  ['probar_asistente', 'Probar el asistente de redes sociales (chat de prueba y calificar respuestas)', 'sistema']
+  ['probar_asistente', 'Probar el asistente de redes sociales (chat de prueba y calificar respuestas)', 'sistema'],
+  ['ver_oficina', 'Entrar a la Oficina (en vez del panel de correo)', 'oficina'],
+  ['oficina_inicio', 'Inicio', 'oficina'], ['oficina_negocios', 'Estado de cada negocio', 'oficina'], ['oficina_clientes', 'Clientes y cobros', 'oficina'],
+  ['oficina_gastos', 'Gastos del negocio', 'oficina'], ['oficina_creacion', 'Gastos: creación del sistema y reparto entre socios', 'oficina'], ['oficina_calendario', 'Calendario', 'oficina'],
+  ['oficina_chat', 'Chat con los negocios', 'oficina'], ['oficina_enlaces', 'Enlaces', 'oficina'], ['oficina_asistente', 'Base del asistente (y simulación de ventas)', 'oficina'],
+  ['oficina_redes', 'Redes sociales (y diagnóstico de costo)', 'oficina'], ['oficina_respaldos', 'Respaldos', 'oficina']
 ];
-const CAPAS_PERMISOS = [['reservas', 'Asesores · reservas'], ['correo', 'Correo'], ['gerencia', 'Supervisión y gerencia'], ['operaciones', 'Operaciones y choferes'], ['sistema', 'Sistema y configuración']];
+const CAPAS_PERMISOS = [['reservas', 'Asesores · reservas'], ['correo', 'Correo'], ['gerencia', 'Supervisión y gerencia'], ['operaciones', 'Operaciones y choferes'], ['sistema', 'Sistema y configuración'], ['oficina', 'Oficina de Kaizen IA (socios)']];
 
 // Sedes de la empresa: llegan con la sesión (cada empresa tiene las suyas).
 let EMPRESAS = ['todas', 'Republica Dominicana', 'Orlando'];
@@ -1025,7 +1030,7 @@ function mostrarApp(s) {
     try { sessionStorage.setItem('avisoDosPasos', '1'); } catch (e) {}
     setTimeout(() => alert('🔒 Verificación en dos pasos: tu usuario (' + s.grupo + ') debe tener un correo para recibir el código al entrar desde fuera de la oficina.\n\nAgrégalo en Herramientas → Usuarios → Editar → Correo.'), 800);
   }
-  if (s.central && s.grupo === 'Programador' && !INCRUSTADO) { location.replace('/oficina'); return; }
+  if (s.central && (s.grupo === 'Programador' || (s.permisos || {}).ver_oficina) && !INCRUSTADO) { location.replace('/oficina'); return; }
   if (INCRUSTADO) {
     if (Array.isArray(s.sedes) && s.sedes.length) EMPRESAS = s.sedes;
     document.getElementById('pantallaLogin').style.display = 'none';
@@ -3103,7 +3108,7 @@ function val(id) {
 
 function checks(marcados, bloqueado) {
   const opPublico = sesionActual && sesionActual.operaciones && sesionActual.operaciones.publico;
-  return CAPAS_PERMISOS.map(([capa, titulo]) => `<div class="capa-permisos" style="grid-column:1/-1;margin-top:8px;font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase;opacity:.75;display:flex;align-items:center;gap:8px;justify-content:space-between">
+  return CAPAS_PERMISOS.filter(([capa]) => capa !== 'oficina' || (sesionActual && sesionActual.central)).map(([capa, titulo]) => `<div class="capa-permisos" style="grid-column:1/-1;margin-top:8px;font-weight:700;font-size:12px;letter-spacing:.5px;text-transform:uppercase;opacity:.75;display:flex;align-items:center;gap:8px;justify-content:space-between">
       <span>${titulo}${capa === 'operaciones' && !opPublico ? ' · 🚧 en construcción' : ''}</span>${bloqueado ? '' : `<span style="text-transform:none;font-weight:600;letter-spacing:0"><a href="#" data-capa-todo="${capa}">todos</a> · <a href="#" data-capa-nada="${capa}">ninguno</a></span>`}</div>` +
     PERMISOS.filter(p => p[2] === capa).map(([k, etiqueta]) =>
       `<label class="chk" data-capa="${capa}"><input type="checkbox" data-permiso="${k}" ${marcados && marcados[k] ? 'checked' : ''} ${bloqueado ? 'disabled' : ''}> ${etiqueta}</label>`).join('')

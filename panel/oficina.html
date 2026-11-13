@@ -338,7 +338,18 @@ async function cargarChatContactos() {
 }
 
 async function cargarProyectos() { const r = await api('/api/oficina/proyectos'); if (r.ok) P = r.data; }
+// Permisos de la Oficina para quien no es Programador (Herramientas → Grupos / Usuarios → "Oficina").
+let YO = null;
+const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', clientes: 'oficina_clientes', gastos: ['oficina_gastos', 'oficina_creacion'], calendario: 'oficina_calendario', chat: 'oficina_chat',
+  enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos' };
+function puedeSec(v) {
+  if (!YO || YO.grupo === 'Programador') return true;
+  const p = YO.permisos || {}, k = PERMISO_SEC[v];
+  return Boolean(k && [].concat(k).some(x => p[x]));
+}
+function primeraSec() { return ['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'respaldos'].find(puedeSec) || 'inicio'; }
 async function ir(v, recargar = true) {
+  if (!puedeSec(v)) v = primeraSec();
   vista = v;
   document.querySelectorAll('aside .nav').forEach(b => b.classList.toggle('activo', b.dataset.ir === v));
   document.getElementById('lateral').classList.remove('abierto');
@@ -599,7 +610,19 @@ function gastoDelMes(g, m) {
   return g.fecha.slice(0, 7) === m ? g.monto : 0;
 }
 function barraGastos() {
+  if (YO && YO.grupo !== 'Programador') {
+    const p = YO.permisos || {};
+    if (!p.oficina_gastos || !p.oficina_creacion) return '';
+  }
   return `<div class="pestanas"><button class="pestana ${gastosTab === 'negocio' ? 'activa' : ''}" data-gastos-tab="negocio">💸 Gastos del negocio</button><button class="pestana ${gastosTab === 'creacion' ? 'activa' : ''}" data-gastos-tab="creacion">🏗️ Creación del sistema · socios</button></div>`;
+}
+// Gasto mensual estimado: fijos por mes (mensuales + anuales ÷ 12) + IA del mes llevada a 30 días si el mes no ha terminado.
+function estimadoMes() {
+  const fijos = Number((D.totales.gastosFijos || {})['US$']) || 0;
+  const ia = Number((D.totales.ia || {})['US$']) || 0;
+  const esteMes = mes === hoy().slice(0, 7), dia = Number(hoy().slice(8, 10)) || 1;
+  const diasMes = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
+  return Math.round((fijos + (esteMes ? ia / dia * diasMes : ia)) * 100) / 100;
 }
 function vGastos() {
   if (gastosTab === 'creacion') return vCreacion();
@@ -613,7 +636,7 @@ function vGastos() {
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Gastos de ${esc(D.nombreMes)}</div><div class="n">${totalTexto(D.totales.gastos)}</div><div class="d">lo que toca pagar este mes</div></div>
     <div class="kpi"><div class="e">Fijos por mes</div><div class="n">${totalTexto(D.totales.gastosFijos)}</div><div class="d">mensuales + anuales ÷ 12</div></div>
     <div class="kpi" style="border-color:var(--ambar)"><div class="e">IA del mes</div><div class="n">${totalTexto(D.totales.ia)}</div><div class="d">suma de las claves de cada cliente</div></div>
-    <div class="kpi" style="border-color:var(--verde)"><div class="e">Gastos activos</div><div class="n">${D.gastos.filter(g => g.activo).length}</div><div class="d">${D.gastos.filter(g => !g.activo).length} pausados</div></div>
+    <div class="kpi" style="border-color:var(--verde)"><div class="e">Estimado al mes</div><div class="n">${dinero(estimadoMes())}</div><div class="d">fijos + IA llevada al mes completo · ${D.gastos.filter(g => g.activo).length} gastos activos</div></div>
   </div>
   <div class="rej r21">
     <div class="caja"><h2>Lista de gastos</h2><p class="sub">Toca Editar para cambiar el monto o pausar un gasto que ya no pagas</p>
@@ -623,7 +646,7 @@ function vGastos() {
         <td>${esc(D.frecuencias[g.frecuencia])}</td><td>${g.frecuencia === 'mensual' ? 'día ' + (g.dia || 1) : fechaCorta(g.fecha)}</td>
         <td class="n">${gastoDelMes(g, mes) ? dinero(gastoDelMes(g, mes), g.moneda) : '—'}</td>
         <td><button class="btn-mini" data-editar-gasto="${g.id}">Editar</button></td></tr>`).join('')}
-      </tbody></table>` : `<div class="vacio">Todavía no hay gastos. Toca <b>+ Gasto</b> y agrega, por ejemplo:<br>Servidor Hostinger · US$ 41.29 cada mes · Dominio kaizenia.app · cada año · Chatwoot · n8n · publicidad en Instagram…</div>`}
+      </tbody></table>` : `<div class="vacio">Todavía no hay gastos. Toca <b>+ Gasto</b> y agrega cada gasto del mes, por ejemplo:<br>servidor · hosting de la página web · publicidad en Meta · dominio (cada año) · Chatwoot · n8n…<br>Se suman solos en "Fijos por mes" y "Estimado al mes".</div>`}
     </div>
     <div class="caja"><h2>Por categoría</h2><p class="sub">${esc(D.nombreMes)} · US$</p>
       ${Object.keys(porCat).length ? Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(D.categorias[c] || c)}</span><b>${dinero(Math.round(v * 100) / 100)}</b></div><div class="barra"><i style="width:${Math.round(100 * v / maxCat)}%"></i></div></div>`).join('') : '<div class="vacio">Sin gastos este mes.</div>'}
@@ -1115,7 +1138,7 @@ function tabSimularK() {
     <div class="fila2"><div class="campo"><label>Modelos a comparar</label>${SIM.modelos.map(m => `<label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="checkbox" data-sim-modelo="${esc(m.id)}" checked> ${esc(m.nombre)} <small style="color:var(--suave)">· ${esc(m.nota)}</small></label>`).join('')}</div>
       <div class="campo"><label>Clientes simulados <a href="#" data-k="sim-todos" style="font-weight:400">(todos / ninguno)</a></label><div style="max-height:150px;overflow:auto;font-size:12.5px">${SIM.escenarios.map(x => `<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-sim-esc="${x.id}" checked> ${x.sede === 'orl' ? '🇺🇸' : '🇩🇴'} ${x.id}. ${esc(x.titulo)}</label>`).join('')}</div></div></div>
     <div class="acciones" style="justify-content:space-between;align-items:center"><small style="color:var(--suave)">Cada conversación tiene hasta ${SIM.maxTurnos} mensajes del cliente. La prueba completa con los 2 modelos cuesta aprox. US$ 1 a 3 en OpenRouter y tarda unos 10 a 20 minutos.</small>
-      ${corriendo ? `<button class="btn" disabled>⏳ Simulando… ${corriendo.progreso.hechas || 0} de ${corriendo.progreso.total || '?'}</button>` : `<button class="btn" data-k="sim-correr">▶ Simular</button>`}</div></div>`;
+      <span style="display:flex;gap:8px">${corriendo ? '' : `<button class="btn-sec" data-k="sim-usar-prompt" title="Pone este prompt en el asistente de redes y en el chat de prueba del panel, sin simular">✅ Usar este prompt en el asistente</button>`}${corriendo ? `<button class="btn" disabled>⏳ Simulando… ${corriendo.progreso.hechas || 0} de ${corriendo.progreso.total || '?'}</button>` : `<button class="btn" data-k="sim-correr">▶ Simular</button>`}</span></div></div>`;
   return form + (corriendo ? `<div class="caja"><b>⏳ Simulando ${corriendo.progreso.hechas || 0} de ${corriendo.progreso.total || '?'} conversaciones…</b><div style="height:8px;background:var(--borde);border-radius:6px;margin-top:8px"><div style="height:8px;border-radius:6px;background:var(--azul,#1679c2);width:${Math.round(100 * (corriendo.progreso.hechas || 0) / Math.max(1, corriendo.progreso.total || 1))}%"></div></div><p class="sub" style="margin-top:6px">Puedes salir de esta pantalla: sigue corriendo en el servidor.</p></div>` : '') + resultadosSim();
 }
 function resultadosSim() {
@@ -1248,6 +1271,13 @@ document.addEventListener('click', async ev => {
   ev.preventDefault();
   const a = t.dataset.k;
   if (a === 'sim-correr') return correrSim();
+  if (a === 'sim-usar-prompt') {
+    if (!confirm(`¿Poner este prompt de vendedor en el asistente de ${K.empresa.nombre}? Reemplaza las "Instrucciones para todas las sedes" (redes sociales y el chat 🤖 Asistente del panel). El modelo, las instrucciones de cada sede y la bienvenida no cambian.`)) return;
+    const r = await api('/api/oficina/conocimiento/simulacion/usar-prompt', { empresa_id: kEmpresa, instrucciones: document.getElementById('simPrompt').value });
+    aviso(r.ok ? 'Listo: el asistente ya vende con este prompt (redes y chat de prueba).' : (r.data.error || 'Error'));
+    if (r.ok) { await cargarConocimiento(); pintar(); }
+    return;
+  }
   if (a === 'sim-prompt-base') { document.getElementById('simPrompt').value = SIM.prompt; return; }
   if (a === 'sim-todos') { const cajas = [...document.querySelectorAll('[data-sim-esc]')]; const todas = cajas.every(x => x.checked); cajas.forEach(x => { x.checked = !todas; }); return; }
   if (a === 'sim-ver') return verChatSim(Number(t.dataset.id));
@@ -1413,6 +1443,38 @@ function bandejasRedes() {
   const base = rProbe ? rProbe.bandejas : Object.entries(R.bandejas).map(([id, b]) => ({ id: Number(id), nombre: b.nombre, canal: b.canal || '' }));
   return base.map(b => ({ ...b, cfg: R.bandejas[String(b.id)] || {}, tipo: canalDe(b.canal || (R.bandejas[String(b.id)] || {}).canal) }));
 }
+// Diagnóstico: conversaciones de cada red (Chatwoot) y cuánto gastaría el asistente en tokens.
+let DIAG = null, DIAGDias = 30, DIAGEmp = null, DIAGCargando = false;
+function htmlDiagnosticoRedes() {
+  const botones = [7, 30, 90].map(d => `<button class="btn-mini ${DIAGDias === d ? 'p' : ''}" data-k="r-diag" data-dias="${d}">${d} días</button>`).join('');
+  const cab = `<div class="cab"><div><h2>📊 Diagnóstico: conversaciones y gasto en tokens</h2><p class="sub">Cuántas conversaciones y mensajes tuvo cada red (de Chatwoot) y cuánto costaría que el asistente conteste todo. Si una red tiene dos páginas, se suman.</p></div><div style="display:flex;gap:6px;align-items:center">${botones}</div></div>`;
+  if (DIAGCargando) return `<div class="caja">${cab}<div class="vacio">⏳ Contando conversaciones en Chatwoot…</div></div>`;
+  if (!DIAG || DIAGEmp !== kEmpresa) return `<div class="caja">${cab}<div class="vacio">Elige el periodo (7, 30 o 90 días) para calcular.</div></div>`;
+  if (DIAG.error) return `<div class="caja">${cab}<div class="vacio">${esc(DIAG.error)}</div></div>`;
+  const n = v => v === null || v === undefined ? '—' : Number(v).toLocaleString('es-DO');
+  const redes = {};
+  for (const f of DIAG.filas) { const r = redes[f.red] = redes[f.red] || { red: f.red, filas: [], conversaciones: 0, mensajes: 0, respuestas: 0, medido: 0, mes: 0, aprox: false }; r.filas.push(f); r.conversaciones += f.conversaciones || 0; r.mensajes += f.mensajes || 0; r.respuestas += f.respuestas_asistente; r.medido += f.costo_medido; r.mes += f.costo_mes; r.aprox = r.aprox || f.aproximado; }
+  const lista = Object.values(redes).sort((a, b) => b.mes - a.mes);
+  const tot = lista.reduce((a, r) => ({ conv: a.conv + r.conversaciones, msg: a.msg + r.mensajes, med: a.med + r.medido, mes: a.mes + r.mes }), { conv: 0, msg: 0, med: 0, mes: 0 });
+  return `<div class="caja">${cab}
+    <div class="kpis">
+      <div class="kpi"><div class="e">Conversaciones · ${DIAG.dias} días</div><div class="n">${n(tot.conv)}</div><div class="d">todas las redes de ${esc(K.empresa.nombre)}</div></div>
+      <div class="kpi"><div class="e">Mensajes de clientes</div><div class="n">${n(tot.msg)}</div><div class="d">cada uno sería una respuesta del asistente</div></div>
+      <div class="kpi" style="border-color:var(--ambar)"><div class="e">Costo por respuesta</div><div class="n">US$ ${DIAG.costo_por_respuesta.toFixed(4)}</div><div class="d">${esc(DIAG.fuente)}</div></div>
+      <div class="kpi" style="border-color:var(--rojo)"><div class="e">Estimado al mes</div><div class="n">${dinero(tot.mes)}</div><div class="d">si el asistente contesta todo · gastado de verdad: ${dinero(Math.round(tot.med * 100) / 100)}</div></div>
+    </div>
+    <table><thead><tr><th>Red / página</th><th>Sede</th><th>Asistente</th><th class="n">Conversaciones</th><th class="n">Mensajes de clientes</th><th class="n">Respondió el asistente</th><th class="n">Gastado (medido)</th><th class="n">Estimado al mes</th></tr></thead><tbody>
+    ${lista.map(r => `<tr style="background:var(--fondo2,rgba(148,163,184,.08))"><td colspan="3"><b>${esc(r.red)}</b> <small style="color:var(--suave)">· ${r.filas.length} página(s)</small></td><td class="n"><b>${n(r.conversaciones)}</b>${r.aprox ? '*' : ''}</td><td class="n"><b>${n(r.mensajes)}</b></td><td class="n"><b>${n(r.respuestas)}</b></td><td class="n"><b>${dinero(Math.round(r.medido * 100) / 100)}</b></td><td class="n"><b>${dinero(Math.round(r.mes * 100) / 100)}</b></td></tr>`
+      + r.filas.map(f => `<tr><td style="padding-left:22px">${esc(f.nombre)}</td><td>${esc(f.sede || '—')}</td><td><span class="chip ${f.modo === 'apagado' ? 'gris' : f.modo === 'nota' ? 'ojo' : 'ok'}">${esc((R.modos || {})[f.modo] || f.modo)}</span></td><td class="n">${n(f.conversaciones)}${f.aproximado ? '*' : ''}</td><td class="n">${n(f.mensajes)}</td><td class="n">${n(f.respuestas_asistente)}</td><td class="n">${dinero(f.costo_medido)}</td><td class="n">${dinero(f.costo_mes)}</td></tr>`).join('')).join('') || '<tr><td colspan="8" class="vacio">No hay bandejas en Chatwoot.</td></tr>'}
+    <tr><td colspan="3"><b>Total ${esc(K.empresa.nombre)}</b></td><td class="n"><b>${n(tot.conv)}</b></td><td class="n"><b>${n(tot.msg)}</b></td><td></td><td class="n"><b>${dinero(Math.round(tot.med * 100) / 100)}</b></td><td class="n"><b>${dinero(Math.round(tot.mes * 100) / 100)}</b></td></tr></tbody></table>
+    <p class="sub" style="margin-top:8px">Modelo del asistente: ${esc(DIAG.modelo)}. "Estimado al mes" = mensajes de clientes × costo por respuesta, llevado a 30 días. ${DIAG.filas.some(f => f.aproximado) ? '* Chatwoot no dio el reporte del periodo: es el total de conversaciones de esa bandeja y los mensajes se calculan a 5 por conversación.' : ''}</p></div>`;
+}
+async function cargarDiagnostico(dias) {
+  DIAGDias = dias; DIAGCargando = true; pintar();
+  const r = await api(`/api/oficina/redes/diagnostico?empresa_id=${encodeURIComponent(kEmpresa)}&dias=${dias}`);
+  DIAGCargando = false; DIAG = r.ok ? r.data : { error: r.data.error || 'No se pudo calcular.' }; DIAGEmp = kEmpresa;
+  if (vista === 'redes') pintar();
+}
 function vRedes() {
   if (!K || !K.empresa) return cabecera('📲 Redes sociales', '') + '<div class="vacio">Cargando…</div>';
   const e = K.empresa;
@@ -1448,6 +1510,7 @@ function vRedes() {
       ${sedes.map(sd => `<div><h3 class="rd-sede">${sd ? '📍 ' + esc(sd) : 'Sin sede'}</h3>${CANALES.map(c => tarjeta(c, sd)).join('')}</div>`).join('')}
     </div>
     <div class="rd-tarjeta proximo"><div class="rd-cab">🎵 TikTok <span class="chip gris">Próximamente</span></div><div class="rd-vacio">Chatwoot todavía no recibe mensajes directos de TikTok. Cuando haya forma de conectarlo, se activa aquí.</div></div>
+    ${htmlDiagnosticoRedes()}
     ${otras.length ? `<div class="caja"><h2>Otras bandejas de Chatwoot</h2><table><tbody>${otras.map(b => `<tr><td><b>${esc(b.nombre)}</b><br><small style="color:var(--suave)">${esc(b.canal || '')}</small></td><td>${esc(b.cfg.sede || 'Sin sede')}</td><td>${esc(R.modos[b.cfg.modo || 'apagado'])}</td></tr>`).join('')}</tbody></table></div>` : ''}
     ${ult ? `<div class="caja"><h2>Últimas sugerencias (todas las redes)</h2><table><thead><tr><th>Cuándo</th><th>Red</th><th>Cliente</th><th>Sugerencia</th><th>Resultado</th><th></th></tr></thead><tbody>${ult}</tbody></table></div>` : ''}
     <p class="sub" style="margin-top:8px">Con 90% de acierto o más en ~200 conversaciones, una red se puede pasar a "Responde solo". Las redes de las páginas reales déjalas en <b>Apagado</b> hasta el día del cambio.</p>`;
@@ -1599,6 +1662,7 @@ document.addEventListener('click', async ev => {
   if (accion === 'r-ayuda') return ayudaRedes();
   if (accion === 'r-guardar') { const g = await guardarRedes(); if (!g.ok) return aviso(g.data.error || 'Error'); await cargarConocimiento(); if (R.tieneToken && R.cuenta) await probarRedes(); return pintar(); }
   if (accion === 'r-probar') { await probarRedes(); return pintar(); }
+  if (accion === 'r-diag') return cargarDiagnostico(Number(t.dataset.dias));
   if (accion === 'r-copiar') { try { await navigator.clipboard.writeText(document.getElementById('rAviso').textContent); aviso('Dirección copiada. Pégala en Chatwoot → Webhooks.'); } catch (e) { aviso('No se pudo copiar.'); } return; }
   if (accion === 'r-crear-equipo') { const r = await api('/api/oficina/redes/equipo', { empresa_id: kEmpresa, sede: t.dataset.sede }); if (!r.ok) return aviso(r.data.error || 'Error'); await probarRedes(); await cargarConocimiento(); aviso('Equipo creado en Chatwoot.'); return pintar(); }
   if (accion === 'r-guardar-bandejas-viejo') {
@@ -1803,19 +1867,23 @@ document.getElementById('btnTema').onclick = () => { const o = document.body.cla
 (async () => {
   try { if (localStorage.getItem('tema') === 'oscuro') document.body.classList.add('oscuro'); } catch (e) {}
   const s = await api('/api/sesion');
-  if (!s.ok || !s.data.central || s.data.grupo !== 'Programador') { location.href = '/'; return; }
+  if (!s.ok || !s.data.central || (s.data.grupo !== 'Programador' && !(s.data.permisos || {}).ver_oficina)) { location.href = '/'; return; }
+  YO = s.data;
+  // Quien no es Programador (p. ej. el socio) solo ve las secciones que le dieron.
+  document.querySelectorAll('aside .nav[data-ir]').forEach(b => { b.style.display = puedeSec(b.dataset.ir) ? '' : 'none'; });
+  if (YO.grupo !== 'Programador') { document.querySelectorAll('aside .sep').forEach(x => { if (/administrar/i.test(x.textContent)) x.style.display = 'none'; }); if (!puedeSec('gastos') || !(YO.permisos || {}).oficina_gastos) gastosTab = 'creacion'; }
   mes = hoy().slice(0, 7);
   let inicial = 'inicio';
   try { inicial = localStorage.getItem('oficinaVista') || 'inicio'; } catch (e) {}
   const pedida = new URLSearchParams(location.search).get('ir'); if (pedida) inicial = pedida;
-  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'empresas', 'herramientas'].includes(inicial) ? inicial : 'inicio');
-  cargarChatContactos();
+  await ir(['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'respaldos', 'empresas', 'herramientas'].includes(inicial) && puedeSec(inicial) ? inicial : primeraSec());
+  if (puedeSec('chat')) cargarChatContactos();
   // Se mantiene al día solo: lo de la pantalla cada minuto, el chat cada pocos segundos.
   setInterval(async () => {
     if (document.hidden || document.getElementById('fondoModal').classList.contains('abierto')) return;
     if (['inicio', 'negocios'].includes(vista)) { if (vista === 'inicio') { await cargarDatos(); await cargarServicios(); } await cargarNegocios(); pintar(); }
   }, 60000);
-  setInterval(() => { if (!document.hidden) { cargarChatContactos(); if (vista === 'chat' && chatSel) cargarConversacion(false); } }, 5000);
+  setInterval(() => { if (!document.hidden && puedeSec('chat')) { cargarChatContactos(); if (vista === 'chat' && chatSel) cargarConversacion(false); } }, 5000);
   // Latido para que el central sepa que sigues conectado.
   const latido = () => api('/api/latido', { activo: true });
   latido(); setInterval(latido, 60000);

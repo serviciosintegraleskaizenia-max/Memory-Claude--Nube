@@ -47,7 +47,7 @@
 </head>
 <body>
 <header>
-  <div><h1>🤖 Probar el asistente</h1><p id="sub">Asistente de redes sociales</p></div>
+  <div><h1>🤖 Probar el asistente</h1></div>
   <div><button class="btn-tema" id="btnTema">Modo oscuro</button></div>
 </header>
 <main>
@@ -139,7 +139,6 @@ document.getElementById('sede').addEventListener('change', () => { if (mensajes.
   if (!s.data.permisos || !s.data.permisos.probar_asistente) { document.getElementById('chat').innerHTML = '<div class="vacio">No tienes permiso para probar el asistente. Pídeselo al gerente o a Kaizen IA.</div>'; return; }
   const i = await api('/api/asistente/info');
   if (!i.ok) { document.getElementById('chat').innerHTML = `<div class="vacio">${esc(i.data.error || 'El asistente no está disponible.')}</div>`; return; }
-  document.getElementById('sub').textContent = `${i.data.empresa} · ${i.data.nombre}`;
   const sel = document.getElementById('sede');
   sel.innerHTML = (i.data.sedes.length ? i.data.sedes : ['']).map(x => `<option value="${esc(x)}">${x ? 'Oficina de ' + esc(x) : 'General'}</option>`).join('');
   pintar();

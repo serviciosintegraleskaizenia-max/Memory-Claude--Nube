@@ -234,6 +234,17 @@ Escribe SOLO el texto de tu mensaje.`;
       correr(id, e, apiKey, modelos, instrucciones, escenarios); // en segundo plano
       return json(res, 200, { ok: true, id });
     }
+    // "Usar este prompt en el asistente" sin simular: lo pone como instrucciones generales (redes sociales y chat de prueba del panel).
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/usar-prompt') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const instrucciones = String(f.instrucciones ?? '').trim().slice(0, 6000);
+      if (instrucciones.length < 20) throw error('El prompt está vacío.');
+      const fila = (await client.query('SELECT conocimiento_ajustes FROM empresas WHERE id = $1', [e.id])).rows[0] || {};
+      await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify({ ...(fila.conocimiento_ajustes || {}), instrucciones }), e.id]);
+      await registrar(u, 'simulacion_usar', 'empresa', e.slug, '', '', 'prompt de vendedor sin simulación');
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/usar') {
       // Pone el prompt de esa simulación (y el modelo elegido) como instrucciones generales del asistente.
       const f = await leerCuerpo(req);
