@@ -11,6 +11,9 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { leerExcel } = require('./lector-xlsx');
+const crearImportador = require('./op-importar');
+const fs = require('fs');
+const path = require('path');
 
 const AEROPUERTOS_RD = ['PUJ', 'SDQ', 'LRM', 'POP', 'STI', 'JBQ', 'AZS', 'BRX', 'STO'];
 const AEROPUERTOS_ORL = ['MCO', 'SFB', 'TPA', 'MIA', 'FLL'];
@@ -19,19 +22,22 @@ const NOMBRE_ESTADO = { por_asignar: 'Por asignar', asignado: 'Asignado', en_cam
 const TIPOS_TARIFA = ['TRASLADO', 'IN', 'OUT', 'INOUT', 'INTERHOTEL', 'ACTIVIDAD', 'ENTRADA', 'TRANSPORTE', 'OTRO'];
 const TIPOS_PROVEEDOR = ['transportista', 'tours', 'entradas', 'otro'];
 
-const MODULOS_INICIALES = { operaciones: true, reserva_manual: true, operativo: true, precios: true, reportes: true, paquetes: true, vuelos: false, app_chofer: false, whatsapp: false };
+const MODULOS_INICIALES = { operaciones: true, reserva_manual: true, operativo: true, precios: true, reportes: true, paquetes: true, vuelos: false, aviones: true, app_chofer: false, whatsapp: false };
 const REGLAS_INICIALES = {
   antes_aeropuerto_min: 180,   // salida: el cliente debe estar en el aeropuerto X minutos antes del vuelo
   espera_llegada_min: 30,      // llegada: tiempo de espera del chofer desde que aterriza
   minutos_entre_servicios: 15, // margen mínimo entre dos servicios del mismo chofer
   duracion_traslado_min: 60,   // si la zona no tiene tiempo propio
   duracion_actividad_min: 240,
-  tiempos_zona: { 'Bávaro': 30, 'Punta Cana': 20, 'Cap Cana': 20, 'Uvero Alto': 50, 'Macao': 40, 'Bayahíbe': 75, 'La Romana': 70, 'Santo Domingo': 150, 'International Drive': 20, 'Lake Buena Vista': 25, 'Kissimmee': 30, 'Disney': 25 },
+  tiempos_zona: { 'Bávaro': 30, 'Punta Cana': 25, 'Cap Cana': 20, 'Uvero Alto': 50, 'Macao': 40, 'Bayahíbe': 75, 'La Romana': 70, 'Santo Domingo': 150, 'Juan Dolio': 120, 'Boca Chica': 140,
+    'Miches': 120, 'Samaná': 240, 'Santiago': 240, 'Puerto Plata': 300, 'Cabarete': 310, 'Puerto La Romana': 70, 'International Drive': 20, 'Lake Buena Vista': 25, 'Kissimmee': 30, 'Disney': 25 },
   aviso_retraso_min: 15,       // vuelos: avisar si se mueve más que esto
   consultar_vuelos_cada_min: 10,
   // Precios de traslados (documento de Somos Viaje):
   una_via_mitad_inout: true,   // una sola vía sin tarifa propia = mitad del In/Out de adulto, redondeada hacia arriba (todos como adulto)
-  base_doble_un_pax: false     // un pasajero solo paga doble ("base doble"); apagado hasta confirmarlo
+  base_doble_un_pax: false,    // un pasajero solo paga doble ("base doble"); apagado hasta confirmarlo
+  modalidad_defecto: 'compartido', // si la reserva no dice regular o privado
+  privado_por_trayecto: true   // la tarifa privada por ruta es por cada trayecto (si no, la mitad por tramo)
 };
 const PLANTILLAS_INICIALES = {
   operativo: { titulo: 'Operativo del día', subtitulo: '', columnas: ['hora', 'servicio', 'pasajero', 'pax', 'vuelo', 'recoger', 'llevar', 'agencia', 'notas'], pie: 'Llegar 10 minutos antes. Cartel con el nombre del pasajero en llegadas.', firmas: true },
@@ -42,10 +48,18 @@ const PLANTILLAS_INICIALES = {
 };
 const WHATSAPP_INICIAL = { chatwoot_url: '', cuenta: '', inbox_id: '', plantilla: '', idioma: 'es', auto_al_asignar: false,
   mensaje: 'Hola {cliente}, le saluda {empresa}. Su traslado del {fecha} a las {recogida}: chofer {chofer}, vehículo {vehiculo} {placa}. Punto de encuentro: {punto}. Cualquier duda, responda a este mensaje.' };
-const VUELOS_INICIAL = { proveedor: 'aerodatabox', rapidapi_host: 'aerodatabox.p.rapidapi.com' };
+const VUELOS_INICIAL = { proveedor: 'aerodatabox', rapidapi_host: 'aerodatabox.p.rapidapi.com', opensky_url: 'https://opensky-network.org/api', opensky_cada_min: 10 };
+// Código IATA de la aerolínea (como viene en la reserva: "CM 241") → código OACI que usan los aviones en el aire ("CMP241").
+const AEROLINEAS_OACI = { CM: ['CMP'], AV: ['AVA', 'LRC', 'TAI'], LA: ['LAN', 'LPE', 'LNE', 'TAM', 'LXP', 'ARE'], JJ: ['TAM'], DM: ['DWI'], B6: ['JBU'], AA: ['AAL'], UA: ['UAL'], DL: ['DAL'],
+  WN: ['SWA'], NK: ['NKS'], F9: ['FFT'], AC: ['ACA'], RV: ['ROU'], WS: ['WJA'], WG: ['SWG'], TS: ['TSC'], UX: ['AEA'], IB: ['IBE'], AF: ['AFR'], KL: ['KLM'], LH: ['DLH'], BA: ['BAW'],
+  DE: ['CFG'], X3: ['TUI'], BY: ['TOM'], H2: ['SKU'], P5: ['RPB'], JA: ['JAT'], G3: ['GLO'], AD: ['AZU'], AR: ['ARG'], Y4: ['VOI'], Q6: ['VOC'], AM: ['AMX'], OB: ['BOV'], SY: ['SCX'],
+  G4: ['AAY'], MX: ['MXY'], '9V': ['ROI'], L5: ['LCU'], CU: ['CUB'], '4O': ['AIJ'], VB: ['VIV'], XP: ['CXP'], Z0: ['NOS'], PU: ['PUE'], '2K': ['GLG'], E9: ['EVE'] };
+// Zona del mapa donde se buscan los aviones: Caribe, Centroamérica, norte de Sudamérica y Florida.
+const ZONA_AVIONES = { lamin: 5, lomin: -100, lamax: 36, lomax: -55 };
 
 module.exports = function crearOperaciones({ client, config, registrar, fechaServicioISO, hoyLocal, esCancelacion, indiceReservas, originalDe }) {
   let ultimaSync = 0, sincronizando = null;
+  const importador = crearImportador({ client });
 
   // ---------- utilidades ----------
   const error = (msg, codigo = 400) => Object.assign(new Error(msg), { codigo });
@@ -101,6 +115,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       desde TEXT NOT NULL DEFAULT '', hasta TEXT NOT NULL DEFAULT '', nocturno_pct NUMERIC NOT NULL DEFAULT 0, nocturno_desde TEXT NOT NULL DEFAULT '', nocturno_hasta TEXT NOT NULL DEFAULT '',
       notas TEXT NOT NULL DEFAULT '')`);
     await q('CREATE INDEX IF NOT EXISTS op_tarifas_tarifario ON op_tarifas (tarifario_id)');
+    await q("ALTER TABLE op_tarifas ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT ''"); // inter-hotel: zona de salida
     await q(`CREATE TABLE IF NOT EXISTS op_servicios (id SERIAL PRIMARY KEY, servicio_id INTEGER UNIQUE, clase TEXT NOT NULL DEFAULT 'transporte',
       estado TEXT NOT NULL DEFAULT 'por_asignar', fecha TEXT NOT NULL DEFAULT '', hora TEXT NOT NULL DEFAULT '', sede TEXT NOT NULL DEFAULT '', agencia TEXT NOT NULL DEFAULT '',
       chofer_id INTEGER, vehiculo_id INTEGER, proveedor_id INTEGER, hora_recogida TEXT NOT NULL DEFAULT '', notas TEXT NOT NULL DEFAULT '',
@@ -141,6 +156,10 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     await def('plantillas', PLANTILLAS_INICIALES);
     await def('whatsapp', WHATSAPP_INICIAL);
     await def('vuelos', VUELOS_INICIAL);
+    // Las agencias sin modalidad propia usan la de la empresa (Reglas → regular por defecto).
+    await q("ALTER TABLE op_agencias ALTER COLUMN modalidad SET DEFAULT ''");
+    if (!(await cfg('migr_modalidad', false))) { await q("UPDATE op_agencias SET modalidad = '' WHERE modalidad = 'privado'"); await guardarCfg('migr_modalidad', true); }
+    await cargarDatosIniciales();
     // Paquetes de ejemplo (se editan o borran en Configuración).
     if (!(await client.query('SELECT 1 FROM op_paquetes LIMIT 1')).rowCount) {
       const ej = [
@@ -217,7 +236,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     const base = txt(s.agencia, 120) || (dominio ? dominio.split('.').slice(-2, -1)[0] : '');
     const nb = norm(base), nd = norm(dominio);
     const a = lista.find(x => x.claves.some(k => k && (k === nb || (nb && nb.includes(k)) || (nd && nd.includes(k)))));
-    return { nombre: a ? a.nombre : (base || 'Sin agencia'), id: a ? a.id : null, modalidad: a ? a.modalidad : 'privado', tarifario_id: a ? a.tarifario_id : null };
+    return { nombre: a ? a.nombre : (base || 'Sin agencia'), id: a ? a.id : null, modalidad: a ? a.modalidad : '', tarifario_id: a ? a.tarifario_id : null, mercado: a ? a.mercado : '', tipo_agencia: a ? a.tipo_agencia : '' };
   }
   const paxDe = s => ({ adultos: entero(s.adultos), ninos: entero(s.ninos), infantes: entero(s.infantes) });
   const paxTotal = s => entero(s.adultos) + entero(s.ninos) + entero(s.infantes);
@@ -226,7 +245,9 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   function tiempos(s, op, reglas, zona) {
     const t = tipoDe(s, op);
     const h = minutos(op && op.vuelo && op.vuelo.hora_estimada ? op.vuelo.hora_estimada : s.hora_servicio);
-    const viaje = Number((reglas.tiempos_zona || {})[zona]) || Number(reglas.duracion_traslado_min) || 60;
+    const tz = { ...REGLAS_INICIALES.tiempos_zona, ...(reglas.tiempos_zona || {}) };
+    const clave = Object.keys(tz).find(k => norm(k) === norm(zona));
+    const viaje = Number(clave ? tz[clave] : 0) || Number(reglas.duracion_traslado_min) || 60;
     if (h === null) return { recogida: '', inicio: null, fin: null };
     if (t === 'OUT') { const rec = h - (Number(reglas.antes_aeropuerto_min) || 180) - viaje; return { recogida: hhmm(rec), inicio: rec, fin: rec + viaje + 15 }; }
     if (t === 'IN') return { recogida: hhmm(h), inicio: h, fin: h + (Number(reglas.espera_llegada_min) || 30) + viaje };
@@ -260,8 +281,21 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         AND (mercado = '' OR lower(mercado) = lower($1)) AND (tipo_agencia = '' OR lower(tipo_agencia) = lower($2))
       ORDER BY (mercado <> '')::int + (tipo_agencia <> '')::int DESC, id LIMIT 1`, [(agencia && agencia.mercado) || '', (agencia && agencia.tipo_agencia) || ''])).rows[0] || null;
   }
+  // Todos los tarifarios de venta que le tocan a una agencia, del más específico al general:
+  // el propio de la agencia → mercado + tipo (mayorista/minorista) → solo mercado → solo tipo → general.
+  async function tarifariosVenta(agencia) {
+    const todos = (await client.query("SELECT * FROM op_tarifarios WHERE tipo = 'venta' AND activo ORDER BY id")).rows;
+    const lista = [];
+    if (agencia && agencia.tarifario_id) lista.push(...todos.filter(t => t.id === agencia.tarifario_id));
+    if (agencia && agencia.id) lista.push(...todos.filter(t => t.agencia_id === agencia.id));
+    const m = norm(agencia && agencia.mercado), tp = norm(agencia && agencia.tipo_agencia);
+    const enMercado = t => !t.mercado || String(t.mercado).split(',').some(x => norm(x) === m);
+    const puntos = t => (t.mercado ? 2 : 0) + (t.tipo_agencia ? 1 : 0);
+    lista.push(...todos.filter(t => !t.agencia_id && enMercado(t) && (!t.tipo_agencia || norm(t.tipo_agencia) === tp)).sort((a, b) => puntos(b) - puntos(a)));
+    return [...new Map(lista.map(t => [t.id, t])).values()];
+  }
   // Busca la tarifa que mejor encaja: tipo, nombre (tours/entradas), aeropuerto, zona, modalidad, pax, temporada.
-  function mejorTarifa(tarifas, { tipo, nombre, aeropuerto, zona, modalidad, pax, fecha }) {
+  function mejorTarifa(tarifas, { tipo, nombre, aeropuerto, zona, origen, modalidad, pax, fecha }) {
     const nNombre = norm(nombre), nZona = norm(zona);
     let mejor = null, puntos = -1;
     for (const t of tarifas) {
@@ -272,6 +306,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       if (t.nombre) { const nt = norm(t.nombre); if (!nNombre || !(nNombre.includes(nt) || nt.includes(nNombre))) continue; p += 3 + Math.min(nt.length, 40) / 40; }
       if (t.aeropuerto) { if (t.aeropuerto.toUpperCase() !== aeropuerto) continue; p += 2; }
       if (t.zona) { const z = norm(t.zona); if (!nZona || !(nZona === z || nZona.includes(z) || z.includes(nZona))) continue; p += 3; }
+      if (t.origen) { if (norm(t.origen) !== norm(origen)) continue; p += 3; }
       if (t.modalidad) { if (modalidad && norm(t.modalidad) !== norm(modalidad)) continue; p += 1; }
       if (pax && (pax < t.pax_desde || pax > t.pax_hasta)) continue;
       if (t.desde || t.hasta) { if (!fecha || (t.desde && fecha < t.desde) || (t.hasta && fecha > t.hasta)) continue; p += 2; }
@@ -288,7 +323,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   }
   function describir(t) {
     if (!t) return '';
-    const partes = [t.servicio, t.nombre, t.aeropuerto, t.zona, t.modalidad, `${t.pax_desde}-${t.pax_hasta} pax`].filter(Boolean);
+    const partes = [t.servicio, t.nombre, t.aeropuerto, t.origen ? t.origen + ' →' : '', t.zona, t.modalidad, `${t.pax_desde}-${t.pax_hasta} pax`].filter(Boolean);
     return partes.join(' · ') + (t.cobro === 'persona' ? ` · ad ${num(t.precio_adulto)} / niño ${num(t.precio_nino)}` : ` · ${num(t.precio_vehiculo)} por vehículo`);
   }
   // ¿La reserva tiene la llegada y la salida del mismo pasajero? Entonces es un paquete In/Out.
@@ -315,38 +350,53 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     const reglas = ctx.reglas || await cfg('reglas', REGLAS_INICIALES);
     const agencia = ctx.agencia || agenciaDe(s, ctx.agencias || await agencias());
     const tipo = tipoDe(s);
-    const zona = zonaDe(tipo === 'OUT' ? (s.hotel || s.punto_partida) : (s.hotel || s.punto_llegada), lista);
-    const modalidad = /compartid|shared|regular/i.test([s.motivo, s.actividad, s.asunto].join(' ')) ? 'compartido' : /privad|private/i.test([s.motivo, s.actividad, s.asunto].join(' ')) ? 'privado' : agencia.modalidad;
+    // Zona del hotel (lista de hoteles); si no está, por el nombre de la zona escrito en la reserva.
+    const zonaTexto = t => zonaDe(t, lista) || importador.zonaConocida(t);
+    const zona = tipo === 'INTERHOTEL' ? zonaTexto(s.punto_llegada || s.actividad || s.hotel) : zonaTexto(tipo === 'OUT' ? (s.hotel || s.punto_partida) : (s.hotel || s.punto_llegada));
+    const origen = tipo === 'INTERHOTEL' ? zonaTexto(s.punto_partida || s.hotel) : '';
+    const texto = [s.motivo, s.actividad, s.asunto, s.nota].join(' ');
+    const modalidad = /compartid|shared|regular|colectiv/i.test(texto) ? 'compartido' : /luxury|lujo|vip/i.test(texto) && tipo !== 'ACTIVIDAD' ? 'luxury' : /privad|private/i.test(texto) ? 'privado' : agencia.modalidad || reglas.modalidad_defecto || 'compartido';
     const fecha = (op && op.fecha) || fechaServicioISO(s.fecha_servicio, s.fecha) || '';
     const pax = paxDe(s), total = paxTotal(s) || 1;
-    const filtro = { tipo, nombre: s.actividad || '', aeropuerto: aeropuertoDe(s.aeropuerto), zona, modalidad, pax: total, fecha };
-    const tv = await tarifarioVenta(agencia);
-    const tarifas = tv ? await tarifasDe(tv.id) : [];
+    const filtro = { tipo, nombre: s.actividad || '', aeropuerto: aeropuertoDe(s.aeropuerto), zona, origen, modalidad, pax: total, fecha };
+    const tvs = await tarifariosVenta(agencia);
+    const porTarifario = new Map();
+    for (const tv of tvs) porTarifario.set(tv.id, await tarifasDe(tv.id));
+    // Primera tarifa que encaje, del tarifario más específico al general.
+    const buscar = f => { for (const tv of tvs) { const t = mejorTarifa(porTarifario.get(tv.id), f); if (t) return { t, tv }; } return null; };
     const traslado = ['IN', 'OUT', 'INTERHOTEL'].includes(tipo);
-    let precio = null, etiqueta = '';
-    // Base doble: un pasajero solo paga como dos (solo si está encendida en Reglas).
     const doble = traslado && reglas.base_doble_un_pax && pax.adultos + pax.ninos === 1;
-    // 1. Paquete conjunto: llegada + salida en la misma reserva → precio In/Out (adulto y niño), mitad en cada tramo.
-    if (await parejaInOut(s, tipo)) {
-      const tio = mejorTarifa(tarifas, { ...filtro, tipo: 'INOUT' });
-      if (tio) {
-        const todo = importe(tio, pax, s.hora_servicio) * (doble ? 2 : 1), mitad = Math.ceil(todo / 2);
-        precio = dinero(tipo === 'IN' ? mitad : todo - mitad);
-        etiqueta = `${tv.nombre}: In/Out (paquete) ${dinero(todo)} · mitad en la llegada y mitad en la salida · ${describir(tio)}${doble ? ' · base doble (1 pax)' : ''}`;
+    const pareja = await parejaInOut(s, tipo);
+    function precioCon(f) {
+      // 1. Paquete conjunto (llegada + salida en la misma reserva): precio In/Out, mitad en cada tramo.
+      if (pareja) {
+        const r = buscar({ ...f, tipo: 'INOUT' });
+        if (r) {
+          const todo = importe(r.t, pax, s.hora_servicio) * (doble ? 2 : 1), mitad = Math.ceil(todo / 2);
+          return { precio: dinero(tipo === 'IN' ? mitad : todo - mitad), etiqueta: `${r.tv.nombre}: In/Out (paquete) ${dinero(todo)} · mitad en la llegada y mitad en la salida · ${describir(r.t)}${doble ? ' · base doble (1 pax)' : ''}` };
+        }
       }
+      // 2. Tarifa propia del servicio (traslado privado por ruta, inter-hotel, tour...).
+      const r = buscar(f);
+      if (r) {
+        let precio = importe(r.t, pax, s.hora_servicio), extra = '';
+        if (r.t.cobro === 'vehiculo' && String(r.t.servicio).toUpperCase() === 'TRASLADO' && reglas.privado_por_trayecto === false && ['IN', 'OUT'].includes(tipo)) { precio = dinero(Math.ceil(precio / 2)); extra = ' · mitad (la tarifa es ida y vuelta)'; }
+        return { precio, etiqueta: `${r.tv.nombre}: ${describir(r.t)}${extra}` };
+      }
+      // 3. Una sola vía sin tarifa propia: mitad del In/Out de adulto, redondeada hacia arriba (todos como adulto).
+      if (traslado && reglas.una_via_mitad_inout !== false) {
+        const r2 = buscar({ ...f, tipo: 'INOUT' });
+        if (r2) return { precio: importeUnaVia(r2.t, pax, s.hora_servicio), etiqueta: `${r2.tv.nombre}: una sola vía = mitad del In/Out redondeada hacia arriba (todos como adulto) · ${describir(r2.t)}` };
+      }
+      return null;
     }
-    // 2. Tarifa propia del servicio (llegada, salida, inter-hotel, tour...).
-    if (precio === null) {
-      const venta = mejorTarifa(tarifas, filtro);
-      if (venta) { precio = importe(venta, pax, s.hora_servicio); etiqueta = `${tv.nombre}: ${describir(venta)}`; }
-    }
-    // 3. Una sola vía sin tarifa propia: mitad del In/Out de adulto, redondeada hacia arriba.
-    if (precio === null && traslado && reglas.una_via_mitad_inout !== false) {
-      const tio = mejorTarifa(tarifas, { ...filtro, tipo: 'INOUT' });
-      if (tio) { precio = importeUnaVia(tio, pax, s.hora_servicio); etiqueta = `${tv.nombre}: una sola vía = mitad del In/Out redondeada hacia arriba (todos como adulto) · ${describir(tio)}`; }
-    }
+    let res = precioCon(filtro);
+    // Si no hay tarifa regular para esa ruta (en el tarifario sale X o 0), se cotiza privado.
+    if (!res && modalidad === 'compartido' && traslado) { res = precioCon({ ...filtro, modalidad: 'privado' }); if (res) res.etiqueta += ' · no hay regular para esta ruta: privado'; }
+    let precio = res ? res.precio : null, etiqueta = res ? res.etiqueta : '';
     // 4. Base doble en una sola vía (en el paquete ya se aplicó al total).
     if (precio !== null && doble && !/In\/Out \(paquete\)/.test(etiqueta)) { precio = dinero(precio * 2); etiqueta += ' · base doble (1 pax)'; }
+    const tv = tvs[0] || null;
     let costo = null, tc = null, tCosto = '';
     if (op && op.proveedor_id) {
       tc = (await client.query("SELECT * FROM op_tarifarios WHERE proveedor_id = $1 AND tipo = 'costo' AND activo ORDER BY id DESC LIMIT 1", [op.proveedor_id])).rows[0];
@@ -356,7 +406,12 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const ch = (await client.query('SELECT nombre, pago_servicio FROM op_choferes WHERE id = $1', [op.chofer_id])).rows[0];
       if (ch && num(ch.pago_servicio)) { costo = dinero(ch.pago_servicio); tCosto = `Pago al chofer ${ch.nombre}`; }
     }
-    return { precio, tarifa_venta: etiqueta || (tv ? `${tv.nombre}: sin tarifa para este servicio` : 'Sin tarifario'),
+    // Tours sin proveedor asignado: costo estimado con los netos generales (lo que paga Somos Viaje).
+    if (costo === null && tipo === 'ACTIVIDAD') {
+      const generales = (await client.query("SELECT * FROM op_tarifarios WHERE tipo = 'costo' AND proveedor_id IS NULL AND activo ORDER BY id")).rows;
+      for (const g of generales) { const t = mejorTarifa(await tarifasDe(g.id), { ...filtro, modalidad: '' }); if (t) { costo = importe(t, pax, s.hora_servicio); tCosto = `Estimado · ${g.nombre}: ${describir(t)}`; break; } }
+    }
+    return { precio, tarifa_venta: etiqueta || (tv ? `Sin tarifa para este servicio${agencia.mercado ? '' : ' · ¿la agencia tiene mercado?'} (${zona || 'zona desconocida'}${filtro.aeropuerto ? ' · ' + filtro.aeropuerto : ''})` : 'Sin tarifario: pon el mercado de la agencia o crea un tarifario general'),
       costo, tarifa_costo: tCosto, zona, modalidad, agencia };
   }
 
@@ -624,7 +679,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const r = await client.query(`INSERT INTO clasificacion (categoria, remitente, asunto, estado, fecha, message_id, buzon, agencia, tipo_servicio, nombre_cliente,
           hora_servicio, vuelo, hotel, punto_partida, punto_llegada, fecha_servicio, adultos, ninos, infantes, numero_servicio, aeropuerto, actividad, telefono, motivo, cuerpo)
         VALUES ('RESERVA', $1, $2, 'registrada', $3, $4, 'manual', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) RETURNING id`,
-        [`${u.nombre || u.usuario} (manual)`, `Reserva manual · ${cliente}${f.referencia ? ' · ' + txt(f.referencia, 60) : ''}`, new Date().toISOString(), mid, agencia, tipo, txt(s.pasajero, 200) || cliente,
+        [`${u.nombre || u.usuario} (manual)`, `Reserva manual${f.canal ? ' (' + txt(f.canal, 40) + ')' : ''} · ${cliente}${f.referencia ? ' · ' + txt(f.referencia, 60) : ''}`, new Date().toISOString(), mid, agencia, tipo, txt(s.pasajero, 200) || cliente,
           /^\d{2}:\d{2}$/.test(s.hora || '') ? s.hora : '', txt(s.vuelo, 40), txt(s.hotel || f.hotel, 200), txt(s.desde, 200), txt(s.hasta, 200), fecha,
           entero(s.adultos ?? f.adultos), entero(s.ninos ?? f.ninos), entero(s.infantes ?? f.infantes), i, txt(s.aeropuerto, 10).toUpperCase(), txt(s.actividad, 300),
           txt(f.telefono, 120), txt(s.nota || f.nota, 300), txt(f.nota, 2000)]);
@@ -888,7 +943,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     agencias: { tabla: 'op_agencias', campos: { nombre: 'txt', alias: 'txt', tarifario_id: 'id', mercado: 'txt', tipo_agencia: 'txt', modalidad: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', activo: 'bool', notas: 'txt' } },
     hoteles: { tabla: 'op_hoteles', campos: { hotel: 'txt', zona: 'txt', sede: 'txt' } },
     tarifarios: { tabla: 'op_tarifarios', campos: { nombre: 'txt', tipo: 'txt', agencia_id: 'id', proveedor_id: 'id', mercado: 'txt', tipo_agencia: 'txt', moneda: 'txt', activo: 'bool', notas: 'txt' } },
-    tarifas: { tabla: 'op_tarifas', campos: { tarifario_id: 'id', servicio: 'txt', nombre: 'txt', aeropuerto: 'txt', zona: 'txt', modalidad: 'txt', cobro: 'txt', pax_desde: 'int', pax_hasta: 'int',
+    tarifas: { tabla: 'op_tarifas', campos: { tarifario_id: 'id', servicio: 'txt', nombre: 'txt', aeropuerto: 'txt', origen: 'txt', zona: 'txt', modalidad: 'txt', cobro: 'txt', pax_desde: 'int', pax_hasta: 'int',
       precio_vehiculo: 'num', precio_adulto: 'num', precio_nino: 'num', precio_infante: 'num', desde: 'fecha', hasta: 'fecha', nocturno_pct: 'num', nocturno_desde: 'hora', nocturno_hasta: 'hora', notas: 'txt' } },
     cortesias: { tabla: 'op_cortesias', campos: { nombre: 'txt', precio: 'num', cobra: 'bool', por_persona: 'bool', activo: 'bool', orden: 'int', notas: 'txt' } },
     paquetes: { tabla: 'op_paquetes', campos: { nombre: 'txt', sede: 'txt', icono: 'txt', descripcion: 'txt', piezas: 'json', activo: 'bool', orden: 'int' } }
@@ -974,6 +1029,37 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     return { ok: true, importadas: n, hoja: hoja.nombre };
   }
 
+  // ---------- Excel de Somos Viaje (tarifarios por mercado, actividades, hoteles, agregados) ----------
+  async function importarSomos(u, archivo, buf) {
+    if (!buf.length || buf.length > 20 * 1024 * 1024) throw error('Sube un Excel (.xlsx) de menos de 20 MB.');
+    const r = await importador.importar(txt(archivo, 200) || 'archivo.xlsx', buf);
+    cacheHoteles.t = 0; cacheAgencias.t = 0;
+    if (u) await registrar(u, 'op_importar', 'tarifario', '', '', txt(archivo, 120), JSON.stringify(r).slice(0, 300));
+    return r;
+  }
+  // Una sola vez al instalar: carga lo que venga en datos-iniciales/operaciones (Excel + catalogo.json). Nunca está en el repositorio.
+  async function cargarDatosIniciales() {
+    const dir = path.join(__dirname, '..', 'datos-iniciales', 'operaciones');
+    if (!fs.existsSync(dir) || await cfg('semilla_operaciones', false)) return;
+    const resumen = [];
+    try {
+      const archivos = fs.readdirSync(dir).filter(f => /\.xlsx$/i.test(f)).sort((a, b) => (/transfer|trasnfer/i.test(b) ? 1 : 0) - (/transfer|trasnfer/i.test(a) ? 1 : 0));
+      for (const f of archivos) { try { resumen.push(await importarSomos(null, f, fs.readFileSync(path.join(dir, f)))); } catch (e) { resumen.push({ archivo: f, error: e.message }); } }
+      const cat = path.join(dir, 'catalogo.json');
+      if (fs.existsSync(cat)) {
+        const c = JSON.parse(fs.readFileSync(cat, 'utf8'));
+        for (const n of c.choferes || []) await client.query('INSERT INTO op_choferes (nombre, sede) SELECT $1, $2 WHERE NOT EXISTS (SELECT 1 FROM op_choferes WHERE lower(nombre) = lower($1))', [n, 'Punta Cana']);
+        for (const n of c.transportistas || []) await client.query("INSERT INTO op_proveedores (nombre, tipo, sede) SELECT $1, 'transportista', $2 WHERE NOT EXISTS (SELECT 1 FROM op_proveedores WHERE lower(nombre) = lower($1))", [n, 'Punta Cana']);
+        for (const n of c.agencias || []) await client.query("INSERT INTO op_agencias (nombre, modalidad) SELECT $1, '' WHERE NOT EXISTS (SELECT 1 FROM op_agencias WHERE lower(nombre) = lower($1))", [n]);
+        // Grupos de usuarios por perfil (se pueden cambiar en Herramientas → Grupos).
+        for (const g of c.grupos || []) await client.query('INSERT INTO grupos (nombre, permisos, protegido) SELECT $1::varchar, $2::jsonb, FALSE WHERE NOT EXISTS (SELECT 1 FROM grupos WHERE nombre = $1::varchar)', [String(g.nombre).slice(0, 40), JSON.stringify(g.permisos || {})]).catch(() => {});
+        resumen.push({ archivo: 'catalogo.json', choferes: (c.choferes || []).length, transportistas: (c.transportistas || []).length, agencias: (c.agencias || []).length, grupos: (c.grupos || []).length });
+      }
+      await guardarCfg('semilla_operaciones', { fecha: new Date().toISOString(), resumen });
+      console.log('Operaciones: datos iniciales cargados:', resumen.map(r => r.archivo + (r.error ? ' (error)' : '')).join(', '));
+    } catch (e) { console.error('Operaciones: no se pudieron cargar los datos iniciales:', e.message); }
+  }
+
   // ---------- rutas del panel ----------
   async function estadoPublico(u) {
     const publico = await cfg('publico', false);
@@ -1002,14 +1088,15 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           .reduce((a, k) => ({ ...a, [k]: prog || puede(k) }), {});
         return json(res, 200, { ...est, permisos: perms, usuario: { nombre: u.nombre, grupo: u.grupo, usuario: u.usuario }, empresa, hoy: hoyLocal(),
           choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
-          plantillas: await cfg('plantillas', PLANTILLAS_INICIALES), reglas: await cfg('reglas', REGLAS_INICIALES), estados: NOMBRE_ESTADO });
+          plantillas: await cfg('plantillas', PLANTILLAS_INICIALES), reglas: await cfg('reglas', REGLAS_INICIALES), estados: NOMBRE_ESTADO, vuelosCada: (await cfg('vuelos', VUELOS_INICIAL)).opensky_cada_min || 10 });
       }
       if (req.method === 'GET' && url === '/api/op/servicios') {
         pide('ver_operaciones'); mod('operaciones', 'Operaciones');
         let lista = await listar({ fecha: p.get('fecha'), sede: p.get('sede') || '', desde: p.get('desde'), hasta: p.get('hasta'), sinFecha: p.get('sinfecha') === '1' });
         const sinFecha = Number((await client.query("SELECT count(*) FROM op_servicios WHERE fecha = '' AND estado NOT IN ('cancelado', 'completado')")).rows[0].count);
         if (!prog && !puede('ver_precios')) lista = lista.map(x => ({ ...x, precio: undefined, costo: undefined, tarifa_venta: undefined, tarifa_costo: undefined }));
-        const ubic = est.modulos.app_chofer ? (await client.query("SELECT u.*, c.nombre FROM op_ubicaciones u JOIN op_choferes c ON c.id = u.chofer_id WHERE u.fecha > NOW() - INTERVAL '2 hours'")).rows : [];
+        const ubic = est.modulos.app_chofer ? (await client.query(`SELECT u.*, c.nombre, v.nombre AS vehiculo, v.placa FROM op_ubicaciones u JOIN op_choferes c ON c.id = u.chofer_id
+          LEFT JOIN op_vehiculos v ON v.id = c.vehiculo_id WHERE u.fecha > NOW() - INTERVAL '2 hours'`)).rows : [];
         return json(res, 200, { servicios: lista, ubicaciones: ubic, sin_fecha: sinFecha });
       }
       if (req.method === 'GET' && url === '/api/op/eventos') {
@@ -1065,6 +1152,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         if (!prog && !puede('ver_precios')) lista = lista.map(x => ({ ...x, precio: undefined, costo: undefined, extras: undefined }));
         return json(res, 200, { servicios: lista, numero: lista.length ? Math.min(...lista.map(x => x.reserva)) : 0 });
       }
+      if (req.method === 'GET' && url === '/api/op/aviones') { pide('ver_operaciones'); return json(res, 200, await buscarAviones(p.get('ahora') === '1')); }
       if (req.method === 'POST' && url === '/api/op/whatsapp') { pide('asignar_servicios'); const f = await leerCuerpo(req); return json(res, 200, await enviarWhatsApp(u, f.id)); }
       if (req.method === 'POST' && url === '/api/op/vuelos/ahora') { pide('asignar_servicios'); mod('vuelos', 'Vuelos en vivo'); return json(res, 200, await vigilarVuelos(true)); }
 
@@ -1087,12 +1175,19 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         const f = req.method === 'POST' ? await leerCuerpo(req) : {};
         if (url === '/api/op/config/publico') { await guardarCfg('publico', Boolean(f.publico)); await registrar(u, 'op_publicar', 'operaciones', '', '', String(Boolean(f.publico)), ''); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/modulos') { const m = { ...(await modulos()) }; for (const k of Object.keys(MODULOS_INICIALES)) if (f[k] !== undefined) m[k] = Boolean(f[k]); await guardarCfg('modulos', m); await registrar(u, 'op_modulos', 'operaciones', '', '', JSON.stringify(m), ''); return json(res, 200, { ok: true, modulos: m }); }
-        if (url === '/api/op/config/reglas') { const r = { ...(await cfg('reglas', REGLAS_INICIALES)) }; for (const k of Object.keys(REGLAS_INICIALES)) if (f[k] !== undefined) r[k] = k === 'tiempos_zona' ? Object.fromEntries(Object.entries(f[k] || {}).map(([z, m]) => [txt(z, 60), entero(m)]).filter(([z]) => z)) : typeof REGLAS_INICIALES[k] === 'boolean' ? Boolean(f[k]) : entero(f[k]); await guardarCfg('reglas', r); return json(res, 200, { ok: true }); }
+        if (url === '/api/op/config/reglas') { const r = { ...(await cfg('reglas', REGLAS_INICIALES)) }; for (const k of Object.keys(REGLAS_INICIALES)) if (f[k] !== undefined) r[k] = k === 'tiempos_zona' ? Object.fromEntries(Object.entries(f[k] || {}).map(([z, m]) => [txt(z, 60), entero(m)]).filter(([z]) => z)) : typeof REGLAS_INICIALES[k] === 'boolean' ? Boolean(f[k]) : typeof REGLAS_INICIALES[k] === 'string' ? txt(f[k], 30) : entero(f[k]); await guardarCfg('reglas', r); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/plantillas') { const pl = { ...(await cfg('plantillas', PLANTILLAS_INICIALES)) }; for (const k of Object.keys(PLANTILLAS_INICIALES)) if (f[k] && typeof f[k] === 'object') pl[k] = { ...pl[k], ...Object.fromEntries(Object.entries(f[k]).map(([a, b]) => [a, Array.isArray(b) ? b.map(x => txt(x, 30)) : typeof b === 'boolean' || typeof b === 'number' ? b : txt(b, 1500)])) }; await guardarCfg('plantillas', pl); return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/whatsapp') { const w = { ...(await cfg('whatsapp', WHATSAPP_INICIAL)) }; for (const k of Object.keys(WHATSAPP_INICIAL)) if (f[k] !== undefined) w[k] = k === 'auto_al_asignar' ? Boolean(f[k]) : txt(f[k], 1000); await guardarCfg('whatsapp', w); if (f.token) { const l = await cfg('llaves', {}); l.chatwoot = cifrar(txt(f.token, 200)); await guardarCfg('llaves', l); } return json(res, 200, { ok: true }); }
-        if (url === '/api/op/config/vuelos') { const v = { ...(await cfg('vuelos', VUELOS_INICIAL)) }; if (['aerodatabox', 'flightaware'].includes(f.proveedor)) v.proveedor = f.proveedor; if (f.rapidapi_host) v.rapidapi_host = txt(f.rapidapi_host, 100); await guardarCfg('vuelos', v); const l = await cfg('llaves', {}); for (const k of ['aerodatabox', 'flightaware']) if (f['llave_' + k]) l[k] = cifrar(txt(f['llave_' + k], 300)); await guardarCfg('llaves', l); return json(res, 200, { ok: true }); }
+        if (url === '/api/op/config/vuelos') { const v = { ...(await cfg('vuelos', VUELOS_INICIAL)) }; if (['aerodatabox', 'flightaware'].includes(f.proveedor)) v.proveedor = f.proveedor; if (f.rapidapi_host) v.rapidapi_host = txt(f.rapidapi_host, 100); if (f.opensky_cliente !== undefined) v.opensky_cliente = txt(f.opensky_cliente, 120); if (f.opensky_cada_min) v.opensky_cada_min = Math.max(2, entero(f.opensky_cada_min)); await guardarCfg('vuelos', v); const l = await cfg('llaves', {}); for (const k of ['aerodatabox', 'flightaware', 'opensky']) if (f['llave_' + k]) l[k] = cifrar(txt(f['llave_' + k], 300)); await guardarCfg('llaves', l); aviones.t = 0; return json(res, 200, { ok: true }); }
         if (url === '/api/op/config/vuelos/probar') { const r = await consultarVuelo(f.proveedor, identVuelo(f.vuelo), /^\d{4}-\d{2}-\d{2}$/.test(f.fecha || '') ? f.fecha : hoyLocal()); return json(res, 200, { ok: true, resultado: r }); }
         if (url === '/api/op/config/importar') return json(res, 200, await importarExcel(u, f));
+        if (url === '/api/op/config/importar-somos') {
+          const r = await importarSomos(u, f.archivo, Buffer.from(String(f.base64 || ''), 'base64'));
+          // Los servicios que vienen (sin precio a mano) toman los precios nuevos.
+          const ids = (await client.query("SELECT id FROM op_servicios WHERE fecha >= $1 AND estado <> 'cancelado' AND NOT precio_manual", [hoyLocal()])).rows.map(x => x.id);
+          if (ids.length) await recalcular(u, ids);
+          return json(res, 200, { ok: true, ...r, recalculados: ids.length });
+        }
         const m = url.match(/^\/api\/op\/config\/(\w+)\/(guardar|borrar)$/);
         if (m) return json(res, 200, m[2] === 'guardar' ? await guardarCatalogo(u, m[1], f) : await borrarCatalogo(u, m[1], f.id));
       }
@@ -1104,10 +1199,68 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     }
   }
 
+  // ---------- aviones en el mapa (OpenSky, gratis) ----------
+  // Cada pocos minutos se piden los aviones que vuelan sobre el Caribe y se buscan los vuelos de las llegadas y salidas de hoy.
+  let aviones = { t: 0, lista: [], error: '', consultado: null };
+  let tokenOpenSky = { valor: '', vence: 0 };
+  function callsignsDe(vuelo) {
+    const m = String(vuelo || '').toUpperCase().replace(/[^A-Z0-9]/g, '').match(/^([A-Z0-9]{2})(\d{1,4})[A-Z]?$/);
+    if (!m) return [];
+    const numero = String(Number(m[2]));
+    return (AEROLINEAS_OACI[m[1]] || []).map(p => p + numero);
+  }
+  async function tokenSky(v) {
+    const l = await cfg('llaves', {});
+    if (!v.opensky_cliente || !l.opensky) return '';
+    if (tokenOpenSky.valor && tokenOpenSky.vence > Date.now() + 60000) return tokenOpenSky.valor;
+    const r = await fetch('https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'client_credentials', client_id: v.opensky_cliente, client_secret: descifrar(l.opensky) }), signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error('OpenSky no aceptó la cuenta (' + r.status + ')');
+    const d = await r.json();
+    tokenOpenSky = { valor: d.access_token, vence: Date.now() + (Number(d.expires_in) || 1800) * 1000 };
+    return tokenOpenSky.valor;
+  }
+  async function buscarAviones(forzar) {
+    const mods = await modulos();
+    if (!mods.aviones) return aviones;
+    const v = await cfg('vuelos', VUELOS_INICIAL);
+    const cada = Math.max(2, Number(v.opensky_cada_min) || 10) * 60000;
+    if (!forzar && Date.now() - aviones.t < cada) return aviones;
+    // Vuelos de hoy (llegadas que aún no completan y salidas que aún no despegan hace mucho).
+    const hoy = hoyLocal();
+    const servicios = (await listar({ fecha: hoy })).filter(x => ['IN', 'OUT'].includes(x.tipo) && x.vuelo && x.estado !== 'cancelado');
+    aviones.t = Date.now();
+    if (!servicios.length) { aviones = { ...aviones, lista: [], error: '', consultado: new Date().toISOString() }; return aviones; }
+    try {
+      const token = await tokenSky(v).catch(e => { aviones.error = e.message; return ''; });
+      const q = new URLSearchParams(Object.entries(ZONA_AVIONES).map(([k, x]) => [k, String(x)]));
+      const r = await fetch(`${v.opensky_url || VUELOS_INICIAL.opensky_url}/states/all?${q}`, { headers: token ? { Authorization: 'Bearer ' + token } : {}, signal: AbortSignal.timeout(20000) });
+      if (!r.ok) throw new Error(r.status === 429 ? 'OpenSky: se pasó el límite gratis de consultas de hoy (pon una cuenta gratis en Configuración → Vuelos en vivo)' : 'OpenSky respondió ' + r.status);
+      const d = await r.json();
+      const porCallsign = new Map((d.states || []).map(e => [String(e[1] || '').trim().toUpperCase(), e]));
+      const lista = [];
+      const vistos = new Set();
+      for (const x of servicios) {
+        const clave = x.vuelo.toUpperCase().replace(/\s+/g, '');
+        if (vistos.has(clave + x.tipo)) { const ya = lista.find(a => a.vuelo === clave && a.tipo === x.tipo); if (ya) { ya.servicios.push(x.id); ya.pax += x.pax_total; } continue; }
+        vistos.add(clave + x.tipo);
+        const cs = callsignsDe(x.vuelo).find(c => porCallsign.has(c));
+        const e = cs ? porCallsign.get(cs) : null;
+        lista.push({ vuelo: clave, tipo: x.tipo, hora: x.hora, aeropuerto: x.aeropuerto, servicios: [x.id], pax: x.pax_total, cliente: x.cliente,
+          callsign: cs || '', en_mapa: Boolean(e && e[6] !== null && e[5] !== null),
+          lat: e ? e[6] : null, lng: e ? e[5] : null, rumbo: e ? e[10] : null, altura_m: e ? Math.round(e[13] || e[7] || 0) : null,
+          velocidad_kmh: e && e[9] !== null ? Math.round(e[9] * 3.6) : null, en_tierra: e ? Boolean(e[8]) : null, visto: e && e[4] ? new Date(e[4] * 1000).toISOString() : null });
+      }
+      aviones = { t: Date.now(), lista, error: token || !aviones.error ? '' : aviones.error, consultado: new Date().toISOString() };
+    } catch (e) { aviones = { ...aviones, error: e.message, consultado: new Date().toISOString() }; }
+    return aviones;
+  }
+
   function iniciar() {
     setTimeout(() => sincronizar(true).catch(e => console.log('Operaciones:', e.message)), 15000);
     setInterval(() => sincronizar().catch(e => console.log('Operaciones:', e.message)), 60 * 1000);
     setInterval(() => vigilarVuelos().catch(e => console.log('Vuelos:', e.message)), 2 * 60 * 1000);
+    setInterval(() => buscarAviones().catch(e => console.log('Aviones:', e.message)), 60 * 1000);
   }
 
   return { preparar, iniciar, manejar, manejarChofer, estadoPublico, sincronizar, _probar: { mejorTarifa, importe, tiempos, marcarChoques, identVuelo, cifrar, descifrar, agenciaDe, zonaDe } };

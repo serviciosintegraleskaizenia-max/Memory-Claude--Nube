@@ -19,7 +19,9 @@ for app in panel-correos kaizen-pruebas; do
   tar czf "/srv/zentralia/datos/codigo-anterior/$STAMP/$app.tgz" -C "$APPS/$app" --exclude=node_modules --exclude=cache-correos --exclude='*.log' --exclude='config*.js' --exclude=empresas . 2>/dev/null || true
   cp -r "$D/panel/." "$APPS/$app/"
   # Los datos de socios y gastos solo van a la Oficina (kaizen-pruebas), no al panel de la empresa.
-  [ "$app" = panel-correos ] && rm -rf "$APPS/$app/datos-iniciales"
+  # Datos iniciales: los de Operaciones (tarifarios, choferes) solo al panel de la empresa; los de socios solo a la Oficina.
+  [ "$app" = panel-correos ] && rm -f "$APPS/$app/datos-iniciales/creacion-sistema.json"
+  [ "$app" = kaizen-pruebas ] && rm -rf "$APPS/$app/datos-iniciales/operaciones"
   chown -R zentralia:zentralia "$APPS/$app"
   echo "    OK  $app"
 done
