@@ -9,6 +9,7 @@
 // Mientras no se publica, solo el Programador lo ve: los demás ven "Próximamente".
 
 const crypto = require('crypto');
+const viator = require('../viator');
 const bcrypt = require('bcryptjs');
 const { leerExcel } = require('./lector-xlsx');
 const crearImportador = require('./op-importar');
@@ -451,6 +452,12 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         etiqueta += ` · fuera de horario (${tipo === 'OUT' ? 'recogida' : 'vuelo'} ${hora}) +${num(reglas.suplemento_fuera_horario)}`;
       }
     }
+    // Correo de Viator con un solo servicio: lo que se cobra es el monto que paga Viator (manda sobre el tarifario).
+    if (s.cuerpo && /Viator amount/i.test(s.cuerpo)) {
+      const m = String(s.cuerpo).match(/Viator amount\s*:?\s*(?:USD|US\$|\$)?\s*([0-9][0-9.,]*)/i);
+      const solo = !s.message_id || Number((await client.query('SELECT COUNT(*)::int AS n FROM clasificacion WHERE message_id = $1', [s.message_id])).rows[0].n) <= 1;
+      if (m && solo) { const antes = etiqueta; precio = dinero(Number(m[1].replace(/,/g, ''))); etiqueta = 'Monto de Viator (lo que paga Viator por esta reserva)' + (antes ? ` · el tarifario decía: ${antes}` : ''); }
+    }
     const tv = tvs[0] || null;
     let costo = null, tc = null, tCosto = '';
     if (op && op.proveedor_id) {
@@ -567,6 +574,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     if (sede) { params.push(sede); cond.push(`o.sede = $${params.length}`); }
     const filas = (await client.query(`SELECT o.*, o.vuelo AS vuelo_vivo, c.id AS sid, c.message_id, c.categoria, c.tipo_servicio, c.nombre_cliente, c.hora_servicio, c.vuelo, c.hotel, c.punto_partida,
         c.punto_llegada, c.fecha_servicio, c.adultos, c.ninos, c.infantes, c.aeropuerto, c.actividad, c.telefono, c.motivo, c.asunto, c.remitente,
+        ${viator.SQL},
         ch.nombre AS chofer, ch.telefono AS chofer_tel, v.nombre AS vehiculo, v.placa, v.capacidad, p.nombre AS proveedor
       FROM op_servicios o JOIN clasificacion c ON c.id = o.servicio_id
       LEFT JOIN op_choferes ch ON ch.id = o.chofer_id LEFT JOIN op_vehiculos v ON v.id = o.vehiculo_id LEFT JOIN op_proveedores p ON p.id = o.proveedor_id
@@ -585,7 +593,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         chofer_id: s.chofer_id, chofer: s.chofer || '', chofer_tel: s.chofer_tel || '', vehiculo_id: s.vehiculo_id, vehiculo: s.vehiculo || '', placa: s.placa || '', capacidad: s.capacidad,
         proveedor_id: s.proveedor_id, proveedor: s.proveedor || '', notas: s.notas, alerta: s.alerta, vuelo_vivo: s.vuelo_vivo, wa: s.wa,
         precio: s.precio === null ? null : Number(s.precio), costo: s.costo === null ? null : Number(s.costo), precio_manual: s.precio_manual, tarifa_venta: s.tarifa_venta, tarifa_costo: s.tarifa_costo,
-        entrada_codigos: s.entrada_codigos, extras: Number(s.extras) || 0, grupo: s.message_id || 'id:' + s.sid, cortesias: []
+        entrada_codigos: s.entrada_codigos, extras: Number(s.extras) || 0, grupo: s.message_id || 'id:' + s.sid, cortesias: [], viator: viator.detalles(s)
       };
     });
     if (servicios.length) {
@@ -1134,6 +1142,133 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     } catch (e) { console.error('Operaciones: no se pudieron cargar los datos iniciales:', e.message); }
   }
 
+  // ---------- Reservas: servicios agrupados por reserva (mismo correo o misma reserva manual) ----------
+  const ESTADO_RESERVA = { activa: 'Activa', completada: 'Completada', cancelada: 'Cancelada', parcial: 'Parcialmente cancelada' };
+  async function listaReservas(p, conPrecios, admin = false) {
+    const cond = ["c.estado = 'registrada' OR c.message_id LIKE 'manual-%'"].map(x => `(${x})`), v = [];
+    const par = x => { v.push(x); return '$' + v.length; };
+    const fechaOk = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '';
+    const desde = fechaOk(p.get('desde')), hasta = fechaOk(p.get('hasta')), altaDesde = fechaOk(p.get('alta_desde')), altaHasta = fechaOk(p.get('alta_hasta'));
+    if (desde) cond.push(`o.fecha >= ${par(desde)}`);
+    if (hasta) cond.push(`o.fecha <= ${par(hasta)}`);
+    if (altaDesde) cond.push(`c.creado >= ${par(altaDesde)}::date`);
+    if (altaHasta) cond.push(`c.creado < ${par(altaHasta)}::date + 1`);
+    if (!desde && !hasta && !altaDesde && !altaHasta) cond.push(`(o.fecha >= ${par(masDias(hoyLocal(), -30))} OR c.creado > NOW() - INTERVAL '30 days')`);
+    const agencia = txt(p.get('agencia'), 120); if (agencia) cond.push(`lower(c.agencia) = lower(${par(agencia)})`);
+    const sede = txt(p.get('sede'), 60); if (sede) cond.push(`o.sede = ${par(sede)}`);
+    const vuelo = txt(p.get('vuelo'), 20).replace(/\s+/g, ''); if (vuelo) cond.push(`replace(upper(c.vuelo), ' ', '') LIKE ${par(vuelo.toUpperCase() + '%')}`);
+    const q = txt(p.get('q'), 120);
+    if (q) { const k = par('%' + q.toLowerCase() + '%'); cond.push(`(lower(c.nombre_cliente) LIKE ${k} OR lower(c.agencia) LIKE ${k} OR lower(c.vuelo) LIKE ${k} OR lower(c.hotel) LIKE ${k} OR lower(c.asunto) LIKE ${k} OR c.id::text = ${par(q.replace(/^#/, ''))})`); }
+    const filas = (await client.query(`SELECT o.id, o.servicio_id, o.estado, o.fecha, o.precio, o.costo, o.extras, o.chofer_id, o.proveedor_id, o.sede, o.costo_manual,
+        c.message_id, c.creado, c.agencia, c.nombre_cliente, c.tipo_servicio, c.vuelo, c.hotel, c.hora_servicio, c.adultos, c.ninos, c.infantes, c.asunto, c.remitente,
+        c.punto_partida, c.punto_llegada, c.actividad, c.numero_servicio, COALESCE(a.usuario, '') AS asesor
+      FROM op_servicios o JOIN clasificacion c ON c.id = o.servicio_id
+      LEFT JOIN asignaciones a ON a.clave = COALESCE(NULLIF(c.message_id, ''), 'id:' || c.id)
+      WHERE ${cond.join(' AND ')} ORDER BY c.creado DESC, o.fecha, o.id LIMIT 3000`, v)).rows;
+    const tipos = String(p.get('tipo') || '').split(',').filter(Boolean), estados = String(p.get('estado') || '').split(',').filter(Boolean);
+    const asesor = txt(p.get('asesor'), 50), grupo = p.get('grupo') || '', aerolinea = txt(p.get('aerolinea'), 4).toUpperCase(), origen = p.get('origen') || '';
+    const porClave = new Map();
+    for (const f of filas) {
+      const k = f.message_id || 'id:' + f.servicio_id;
+      if (!porClave.has(k)) porClave.set(k, []);
+      porClave.get(k).push(f);
+    }
+    let lista = [...porClave.entries()].map(([clave, l]) => {
+      const vivos = l.filter(x => x.estado !== 'cancelado');
+      const estado = !vivos.length ? 'cancelada' : vivos.every(x => ['completado', 'no_show'].includes(x.estado)) ? 'completada' : vivos.length < l.length ? 'parcial' : 'activa';
+      const venta = vivos.reduce((a, x) => a + (x.precio === null ? 0 : Number(x.precio) + Number(x.extras || 0)), 0);
+      const costo = vivos.reduce((a, x) => a + (x.costo === null ? 0 : Number(x.costo)), 0);
+      const fechas = l.map(x => x.fecha).filter(Boolean).sort();
+      const manual = String(clave).startsWith('manual-');
+      return {
+        clave, numero: Math.min(...l.map(x => x.servicio_id)), op_id: l[0].id, creado: l.reduce((m, x) => (x.creado < m ? x.creado : m), l[0].creado),
+        agencia: l[0].agencia || '', clientes: [...new Set(l.map(x => (x.nombre_cliente || '').trim()).filter(Boolean))],
+        asesor: l[0].asesor || (manual ? String(l[0].remitente || '').replace(/\s*\(manual\)$/, '') : ''),
+        pax: Math.max(...l.map(x => paxTotal(x))), estado, estado_nombre: ESTADO_RESERVA[estado], origen: manual ? 'manual' : 'correo',
+        canal: manual ? ((String(l[0].asunto || '').match(/^Reserva manual \(([^)]+)\)/) || [])[1] || 'Oficina').trim() : 'Correo',
+        desde: fechas[0] || '', hasta: fechas[fechas.length - 1] || '',
+        servicios: l.map(x => ({ id: x.id, tipo: tipoDe(x), fecha: x.fecha, hora: x.hora_servicio || '', vuelo: x.vuelo || '', estado: x.estado, pax: paxTotal(x),
+          asignado: Boolean(x.chofer_id || x.proveedor_id), cliente: x.nombre_cliente || '', lugar: x.hotel || x.actividad || x.punto_llegada || '' })),
+        ...(conPrecios ? { venta: dinero(venta), costo: dinero(costo), ganancia: dinero(venta - costo), sin_precio: vivos.filter(x => x.precio === null).length, sin_costo: vivos.filter(x => x.costo === null).length } : {})
+      };
+    });
+    if (tipos.length) lista = lista.filter(r => r.servicios.some(x => tipos.includes(x.tipo)));
+    if (estados.length) lista = lista.filter(r => estados.includes(r.estado));
+    if (asesor) lista = lista.filter(r => r.asesor === asesor);
+    if (grupo === 'grupo') lista = lista.filter(r => r.pax >= 10); else if (grupo === 'individual') lista = lista.filter(r => r.pax < 10);
+    if (aerolinea) lista = lista.filter(r => r.servicios.some(x => x.vuelo.replace(/\s+/g, '').toUpperCase().startsWith(aerolinea)));
+    if (origen) lista = lista.filter(r => r.origen === origen);
+    const resumen = { reservas: lista.length, pax: lista.reduce((a, r) => a + r.pax, 0), servicios: lista.reduce((a, r) => a + r.servicios.length, 0) };
+    if (conPrecios) Object.assign(resumen, { venta: dinero(lista.reduce((a, r) => a + r.venta, 0)), costo: dinero(lista.reduce((a, r) => a + r.costo, 0)) });
+    const asesores = [...new Set(lista.map(r => r.asesor).filter(Boolean))].sort();
+    return { reservas: lista.slice(0, admin ? 1500 : 600), resumen, asesores, total: lista.length };
+  }
+  async function detalleReserva(opId, conPrecios) {
+    let servicios = await listar({ grupoDe: opId });
+    if (!servicios.length) throw error('No existe esa reserva.', 404);
+    const reglas = await cfg('reglas', REGLAS_INICIALES);
+    servicios = servicios.map(x => ({ ...x, aviso: avisoPuerto(x, reglas) }));
+    if (!conPrecios) servicios = servicios.map(x => ({ ...x, precio: undefined, costo: undefined, extras: undefined, tarifa_venta: undefined, tarifa_costo: undefined }));
+    const ids = servicios.map(x => x.servicio_id);
+    const c = (await client.query('SELECT id, remitente, asunto, buzon, creado, message_id, agencia FROM clasificacion WHERE id = ANY($1::int[]) ORDER BY id', [ids])).rows;
+    const primero = c[0] || {};
+    const manual = String(primero.message_id || '').startsWith('manual-');
+    const ag = agenciaDe({ agencia: primero.agencia }, await agencias());
+    const fichaAg = ag && ag.id ? (await client.query('SELECT id, nombre, contacto, telefono, email, mercado, tipo_agencia FROM op_agencias WHERE id = $1', [ag.id])).rows[0] : null;
+    const correoRemitente = String(primero.remitente || '').match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    const asesor = (await client.query('SELECT usuario FROM asignaciones WHERE clave = $1', [primero.message_id || 'id:' + primero.id])).rows[0]
+      || (manual ? { usuario: String(primero.remitente || '').replace(/\s*\(manual\)$/, '') } : null);
+    const eventos = (await client.query('SELECT op_id, tipo, texto, usuario, fecha AS creado FROM op_eventos WHERE op_id = ANY($1::int[]) ORDER BY fecha DESC LIMIT 60', [servicios.map(x => x.id)]).catch(() => ({ rows: [] }))).rows;
+    return {
+      numero: Math.min(...ids), servicios, manual, asesor: asesor ? asesor.usuario : '',
+      correo: manual ? null : { id: primero.id, remitente: primero.remitente || '', asunto: primero.asunto || '', buzon: primero.buzon || '', creado: primero.creado },
+      agencia: { nombre: primero.agencia || (fichaAg && fichaAg.nombre) || '', email: (fichaAg && fichaAg.email) || (correoRemitente ? correoRemitente[0] : ''), telefono: (fichaAg && fichaAg.telefono) || '', contacto: (fichaAg && fichaAg.contacto) || '', mercado: (fichaAg && fichaAg.mercado) || '' },
+      eventos
+    };
+  }
+  // ---------- Administración: ganancias por día / mes / agencia / tipo ----------
+  async function ganancias(p) {
+    const fechaOk = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x : '';
+    const hoy = hoyLocal();
+    const desde = fechaOk(p.get('desde')) || hoy.slice(0, 8) + '01', hasta = fechaOk(p.get('hasta')) || hoy;
+    const sede = txt(p.get('sede'), 60);
+    const filas = (await client.query(`SELECT o.id, o.fecha, o.precio, o.costo, o.extras, o.sede, o.chofer_id, o.proveedor_id, c.agencia, c.tipo_servicio, c.actividad, c.adultos, c.ninos, c.infantes, c.message_id, c.id AS sid
+      FROM op_servicios o JOIN clasificacion c ON c.id = o.servicio_id
+      WHERE o.estado <> 'cancelado' AND o.fecha BETWEEN $1 AND $2 AND ($3 = '' OR o.sede = $3)`, [desde, hasta, sede])).rows;
+    const suma = (l) => { const venta = l.reduce((a, x) => a + (x.precio === null ? 0 : Number(x.precio) + Number(x.extras || 0)), 0), costo = l.reduce((a, x) => a + (x.costo === null ? 0 : Number(x.costo)), 0);
+      return { servicios: l.length, reservas: new Set(l.map(x => x.message_id || 'id:' + x.sid)).size, pax: l.reduce((a, x) => a + paxTotal(x), 0), venta: dinero(venta), costo: dinero(costo), ganancia: dinero(venta - costo),
+        margen: venta ? Math.round((venta - costo) / venta * 1000) / 10 : 0, sin_precio: l.filter(x => x.precio === null).length, sin_costo: l.filter(x => x.costo === null).length }; };
+    const agrupar = (fn) => { const m = new Map(); for (const x of filas) { const k = fn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return [...m.entries()].map(([k, l]) => ({ k, ...suma(l) })); };
+    const dias = agrupar(x => x.fecha).sort((a, b) => a.k.localeCompare(b.k));
+    const meses = agrupar(x => String(x.fecha).slice(0, 7)).sort((a, b) => a.k.localeCompare(b.k));
+    const porAgencia = agrupar(x => x.agencia || 'Sin agencia').sort((a, b) => b.venta - a.venta);
+    const NOMBRE_TIPO = { IN: 'Llegadas', OUT: 'Salidas', INTERHOTEL: 'Inter-hotel', ACTIVIDAD: 'Tours y actividades', OTRO: 'Otros' };
+    const porTipo = agrupar(x => NOMBRE_TIPO[tipoDe(x)] || 'Otros').sort((a, b) => b.venta - a.venta);
+    const porQuien = agrupar(x => x.proveedor_id ? 'Transportistas' : x.chofer_id ? 'Choferes propios' : 'Sin asignar').sort((a, b) => b.venta - a.venta);
+    // El mismo período anterior, para comparar.
+    const dias_n = Math.round((new Date(hasta) - new Date(desde)) / 864e5) + 1;
+    const antDesde = masDias(desde, -dias_n), antHasta = masDias(desde, -1);
+    const ant = (await client.query(`SELECT COALESCE(SUM(COALESCE(precio, 0) + COALESCE(extras, 0)), 0) AS venta, COALESCE(SUM(COALESCE(costo, 0)), 0) AS costo FROM op_servicios
+      WHERE estado <> 'cancelado' AND fecha BETWEEN $1 AND $2 AND ($3 = '' OR sede = $3)`, [antDesde, antHasta, sede])).rows[0];
+    return { desde, hasta, total: suma(filas), dias, meses, porAgencia: porAgencia.slice(0, 25), porTipo, porQuien,
+      anterior: { desde: antDesde, hasta: antHasta, venta: dinero(Number(ant.venta)), ganancia: dinero(Number(ant.venta) - Number(ant.costo)) } };
+  }
+  // ---------- Administración: directorio de agencias con sus números ----------
+  async function directorioAgencias() {
+    const ags = (await client.query('SELECT * FROM op_agencias ORDER BY lower(nombre)')).rows;
+    const stats = (await client.query(`SELECT lower(c.agencia) AS k, COUNT(DISTINCT COALESCE(NULLIF(c.message_id, ''), 'id:' || c.id))::int AS reservas,
+        COALESCE(SUM(CASE WHEN o.estado <> 'cancelado' THEN COALESCE(o.precio, 0) + COALESCE(o.extras, 0) END), 0) AS venta, MAX(c.creado) AS ultima
+      FROM op_servicios o JOIN clasificacion c ON c.id = o.servicio_id GROUP BY lower(c.agencia)`)).rows;
+    const correos = (await client.query('SELECT lower(agencia) AS k, array_agg(DISTINCT remitente) AS l FROM agencias_conocidas GROUP BY lower(agencia)').catch(() => ({ rows: [] }))).rows;
+    return { agencias: ags.map(a => {
+      const claves = [a.nombre, ...String(a.alias || '').split(',')].map(x => x.trim().toLowerCase()).filter(Boolean);
+      const st = stats.filter(x => claves.includes(x.k));
+      const cs = correos.filter(x => claves.includes(x.k)).flatMap(x => x.l || []);
+      return { ...a, reservas: st.reduce((s, x) => s + x.reservas, 0), venta: dinero(st.reduce((s, x) => s + Number(x.venta), 0)), ultima: st.map(x => x.ultima).filter(Boolean).sort().pop() || null,
+        correos: [...new Set([a.email, ...cs].filter(Boolean))].slice(0, 6) };
+    }) };
+  }
+
   // ---------- rutas del panel ----------
   async function estadoPublico(u) {
     const publico = await cfg('publico', false);
@@ -1158,7 +1293,8 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           client.query('SELECT * FROM op_paquetes WHERE activo ORDER BY orden, id'),
           client.query('SELECT * FROM op_cortesias WHERE activo ORDER BY orden, nombre')]);
         const empresa = ((await client.query('SELECT nombre, marca_nombre, logo IS NOT NULL AS logo, rnc, direccion FROM empresa_datos WHERE id = 1').catch(() => ({ rows: [] }))).rows[0] || {});
-        const perms = ['ver_operaciones', 'asignar_servicios', 'crear_reservas', 'ver_precios', 'ver_reportes_op', 'ver_choferes_vivo', 'imprimir_operativo', 'crear_paquetes', 'configurar_operaciones']
+        const perms = ['ver_operaciones', 'asignar_servicios', 'crear_reservas', 'ver_precios', 'ver_reportes_op', 'ver_choferes_vivo', 'imprimir_operativo', 'crear_paquetes', 'configurar_operaciones',
+          'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias']
           .reduce((a, k) => ({ ...a, [k]: prog || puede(k) }), {});
         return json(res, 200, { ...est, permisos: perms, usuario: { nombre: u.nombre, grupo: u.grupo, usuario: u.usuario }, empresa, hoy: hoyLocal(),
           choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
@@ -1227,7 +1363,20 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         const rg = await cfg('reglas', REGLAS_INICIALES);
         return json(res, 200, { servicios: lista.map(x => ({ ...x, aviso: avisoPuerto(x, rg) })), numero: lista.length ? Math.min(...lista.map(x => x.reserva)) : 0 });
       }
-      if (req.method === 'GET' && url === '/api/op/aviones') { pide('ver_operaciones'); return json(res, 200, await buscarAviones(p.get('ahora') === '1')); }
+      if (req.method === 'GET' && url === '/api/op/aviones') { pide('ver_vuelos', 'No tienes permiso para ver los vuelos.'); return json(res, 200, await buscarAviones(p.get('ahora') === '1')); }
+      // ---------- Reservas (lo registrado en el panel de correo + las manuales) ----------
+      if (req.method === 'GET' && url === '/api/op/reservas') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await listaReservas(p, prog || puede('ver_precios'))); }
+      if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
+      // ---------- Administración (gerencia) ----------
+      if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
+      if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }
+      if (req.method === 'POST' && url === '/api/op/admin/costo') {
+        pide('editar_costos', 'No tienes permiso para corregir costos.');
+        const f = await leerCuerpo(req);
+        return json(res, 200, await ajustarPrecio(u, f.id, { costo: f.costo, motivo: f.motivo || 'Costo corregido en Administración' }));
+      }
+      if (req.method === 'GET' && url === '/api/op/admin/agencias') { pide('ver_agencias', 'No tienes permiso para ver las agencias.'); return json(res, 200, await directorioAgencias()); }
+      if (req.method === 'POST' && url === '/api/op/admin/agencia') { pide('editar_agencias', 'No tienes permiso para editar agencias.'); const f = await leerCuerpo(req); cacheAgencias.t = 0; return json(res, 200, await guardarCatalogo(u, 'agencias', f)); }
       if (req.method === 'POST' && url === '/api/op/whatsapp') { pide('asignar_servicios'); const f = await leerCuerpo(req); return json(res, 200, await enviarWhatsApp(u, f.id)); }
       if (req.method === 'POST' && url === '/api/op/vuelos/ahora') { pide('asignar_servicios'); mod('vuelos', 'Vuelos en vivo'); return json(res, 200, await vigilarVuelos(true)); }
 

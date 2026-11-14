@@ -87,6 +87,10 @@
   .enlace { border:1px solid var(--borde); border-radius:12px; padding:10px 12px; display:flex; gap:10px; align-items:center; font-size:13px; background:var(--tarjeta); min-width:0; position:relative; }
   .enlace a { color:var(--texto); text-decoration:none; font-weight:700; } .enlace a:hover { color:var(--azul); }
   .enlace .ic { width:36px; height:36px; border-radius:9px; display:grid; place-items:center; font-size:18px; flex:none; background:var(--hover); }
+  .enlace .accesos { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+  .enlace .accesos a { font-size:11.5px; font-weight:600; text-decoration:none; color:var(--texto); background:var(--hover); border:1px solid var(--borde); border-radius:999px; padding:2px 9px; }
+  .enlace .accesos a:hover { border-color:var(--azul); color:var(--azul); }
+  .enlace.cliente { align-items:flex-start; }
   .enlace small { display:block; color:var(--suave); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .enlace .min { min-width:0; flex:1; }
   .enlace .editar { position:absolute; top:6px; right:6px; border:none; background:none; cursor:pointer; opacity:.4; font-size:13px; }
@@ -986,11 +990,14 @@ function abrirChatCon(empresa, usuario, nombre) {
 function vEnlaces() {
   const grupos = {};
   for (const x of D.enlaces) (grupos[x.grupo] = grupos[x.grupo] || []).push(x);
-  const tarjeta = x => { const s = servicios.get(x.id); return `<div class="enlace"><div class="ic">${esc(x.icono)}</div><div class="min"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nombre)}</a><small>${x.vigilar ? `<span class="punto p-${s ? (s.ok ? 'bien' : 'falla') : 'gris'}"></span>` : ''}${esc(x.nota || x.url.replace(/^https?:\/\//, ''))}</small></div><button class="editar" data-editar-enlace="${x.id}" title="Editar">✏️</button></div>`; };
-  const clientes = D.empresas.map(e => `<div class="enlace"><div class="ic" style="background:${colorDe(e.slug)}22">${e.es_demo ? '🎯' : '🏢'}</div><div class="min"><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.nombre)}</a><small><span class="punto p-${e.vivo ? 'bien' : 'falla'}"></span>${esc(e.url.replace(/^https?:\/\//, ''))}</small></div></div>`).join('');
-  return cabecera('🔗 Enlaces', 'Todas tus páginas y herramientas a un clic', `<button class="btn" data-nuevo-enlace>+ Enlace</button>`) +
-    `<div class="caja"><h2>Mis clientes</h2><p class="sub">Se arma solo con los paneles de cada empresa</p><div class="enlaces">${clientes || '<div class="vacio">Sin empresas.</div>'}</div></div>` +
-    Object.entries(grupos).map(([g, l]) => `<div class="caja"><h2>${esc(g)}</h2><p class="sub">&nbsp;</p><div class="enlaces">${l.map(tarjeta).join('')}</div></div>`).join('');
+  const local = u => /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(u);
+  const tarjeta = x => { const s = servicios.get(x.id); return `<div class="enlace"><div class="ic">${esc(x.icono)}</div><div class="min"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.nombre)}</a><small>${x.vigilar ? `<span class="punto p-${s ? (s.ok ? 'bien' : 'falla') : 'gris'}"></span>` : ''}${local(x.url) ? '<span title="Esta dirección solo abre dentro del servidor: edítala y pon la de internet">⚠️ solo en el servidor · </span>' : ''}${esc(x.nota || x.url.replace(/^https?:\/\//, ''))}</small></div><button class="editar" data-editar-enlace="${x.id}" title="Editar">✏️</button></div>`; };
+  // Cada cliente con accesos directos a sus secciones.
+  const accesos = e => { const b = String(e.url || '').replace(/\/+$/, ''); return e.es_demo ? '' : `<div class="accesos">${[['📥', 'Correo', '/'], ['🚐', 'Operaciones', '/operaciones'], ['📱', 'App del chofer', '/chofer']].map(([i, n, r]) => `<a href="${esc(b + r)}" target="_blank" rel="noopener">${i} ${n}</a>`).join('')}</div>`; };
+  const clientes = D.empresas.map(e => `<div class="enlace cliente"><div class="ic" style="background:${colorDe(e.slug)}22">${e.es_demo ? '🎯' : '🏢'}</div><div class="min"><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.nombre)}</a><small><span class="punto p-${e.vivo ? 'bien' : 'falla'}"></span>${esc(e.url.replace(/^https?:\/\//, ''))}</small>${accesos(e)}</div></div>`).join('');
+  return cabecera('🔗 Enlaces', 'Todas tus páginas y herramientas a un clic', `<button class="btn-sec" data-nueva-seccion>+ Sección</button><button class="btn" data-nuevo-enlace>+ Enlace</button>`) +
+    `<div class="caja"><h2>Mis clientes</h2><p class="sub">Se arma solo con los paneles de cada empresa · accesos directos a cada sección</p><div class="enlaces">${clientes || '<div class="vacio">Sin empresas.</div>'}</div></div>` +
+    Object.entries(grupos).map(([g, l]) => `<div class="caja"><div class="cab"><h2>${esc(g)}</h2><button class="btn-mini" data-nuevo-enlace data-grupo="${esc(g)}">+ Agregar aquí</button></div><div class="enlaces">${l.map(tarjeta).join('')}</div></div>`).join('');
 }
 
 
@@ -1905,7 +1912,7 @@ function formEvento(ev = {}, fecha) {
 }
 function formEnlace(x = {}) {
   const grupos = [...new Set(D.enlaces.map(e => e.grupo).concat(['Infraestructura', 'Mis redes', 'Cobros', 'Mi negocio']))];
-  abrirModal(`<h2>${x.id ? 'Editar enlace' : 'Nuevo enlace'}</h2>
+  abrirModal(`<h2>${x.id ? 'Editar enlace' : 'Nuevo enlace' + (x.grupo ? ' en ' + esc(x.grupo) : '')}</h2>
     <div class="fila2">${campo('fNom', 'Nombre', `<input id="fNom" value="${esc(x.nombre || '')}" placeholder="Ej.: Instagram de Kaizen">`)}${campo('fIco', 'Ícono (emoji)', `<input id="fIco" value="${esc(x.icono || '🔗')}" maxlength="4">`)}</div>
     ${campo('fUrl', 'Dirección', `<input id="fUrl" value="${esc(x.url || '')}" placeholder="https://instagram.com/kaizenia">`)}
     ${campo('fGru', 'Grupo', `<input id="fGru" list="listaGrupos" value="${esc(x.grupo || 'Mis redes')}"><datalist id="listaGrupos">${grupos.map(g => `<option value="${esc(g)}">`).join('')}</datalist>`, 'Escribe uno nuevo o elige uno de la lista.')}
@@ -1944,7 +1951,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-editar-enlace],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
+  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-editar-enlace],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente) return;
   ev.preventDefault();
@@ -1962,7 +1969,8 @@ document.addEventListener('click', async ev => {
   if (d.nuevoEvento) return formEvento({}, d.nuevoEvento);
   if (d.editarEvento) { const e = buscar(D.eventos, d.editarEvento); return e && formEvento(e); }
   if (d.hecho) { await api('/api/oficina/evento-hecho', { id: d.hecho, hecho: true }); aviso('Marcado como hecho.'); return ir(vista); }
-  if ('nuevoEnlace' in d) return formEnlace();
+  if ('nuevoEnlace' in d) return formEnlace(d.grupo ? { grupo: d.grupo } : {});
+  if ('nuevaSeccion' in d) { const n = (prompt('Nombre de la sección nueva (ej.: Mis redes, Proveedores, Bancos):') || '').trim(); if (n) formEnlace({ grupo: n.slice(0, 60) }); return; }
   if (d.editarEnlace) { const x = buscar(D.enlaces, d.editarEnlace); return x && formEnlace(x); }
   if (d.editarCliente) { const e = buscar(D.empresas, d.editarCliente); return e && formCliente(e); }
   if (d.filtroPagos) { filtroPagos = d.filtroPagos; return pintar(); }

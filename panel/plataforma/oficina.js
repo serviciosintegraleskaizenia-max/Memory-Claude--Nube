@@ -46,8 +46,8 @@ const ENLACES_INICIALES = [
   ['Infraestructura', 'n8n', 'http://localhost:5678', '⚙️', 'Flujos de correo', true],
   ['Infraestructura', 'Chatwoot', 'http://localhost:3000', '💬', 'Redes sociales de los clientes', false],
   ['Infraestructura', 'Hostinger', 'https://hpanel.hostinger.com', '🖥️', 'Servidor', false],
-  ['Infraestructura', 'OpenRouter', 'https://openrouter.ai/settings/credits', '🪙', 'Saldo y claves de IA', false],
-  ['Infraestructura', 'Azure / Microsoft 365', 'https://portal.azure.com', '🪟', 'Permisos de correo', false],
+  ['Infraestructura', 'OpenRouter', 'https://openrouter.ai/settings/credits', '🤖', 'Saldo y claves de IA', false],
+  ['Infraestructura', 'Azure / Microsoft 365', 'https://portal.azure.com', '🔐', 'Permisos de correo', false],
   ['Infraestructura', 'GitHub', 'https://github.com', '🐙', 'Código', false],
   ['Cobros', 'PayPal', 'https://www.paypal.com', '🅿️', 'Cobros', false],
   ['Mi negocio', 'Mi página web', 'https://kaizenia.app', '🌐', 'kaizenia.app', false]
@@ -107,6 +107,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           [grupo, nombre, url, icono, nota, vigilar, orden++]);
       }
     }
+    // Íconos que Windows no dibuja (salía un cuadrito): se cambian por unos que se ven en todas partes.
+    await client.query("UPDATE oficina_enlaces SET icono = '🤖' WHERE icono = '🪙'");
+    await client.query("UPDATE oficina_enlaces SET icono = '🔐' WHERE icono = '🪟'");
   }
 
   // Consulta a la base de una empresa que no falla si la tabla todavía no existe (versión vieja del panel).

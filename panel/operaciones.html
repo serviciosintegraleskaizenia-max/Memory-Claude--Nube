@@ -96,6 +96,65 @@ tbody tr.fila{cursor:pointer}tbody tr.fila:hover td{background:rgba(31,95,174,.0
 .dias{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.dia{border:1px solid var(--borde);border-radius:9px;padding:3px 8px;font-size:11.5px;font-weight:600;background:var(--bg);display:inline-flex;gap:4px;align-items:center}.dia input{border:0;background:transparent;padding:0;width:110px;font-size:11.5px}
 .linea{display:flex;justify-content:space-between;padding:7px 0;color:var(--suave)}.linea b{color:var(--txt)}.linea.tot{border-top:1px solid var(--borde);margin-top:6px;padding-top:12px;font-size:16px}.linea.tot b{font-size:20px}
 #mapa{height:460px;border-radius:14px}
+/* Hoy */
+.hoy-urge{background:linear-gradient(135deg,rgba(217,45,75,.07),rgba(217,45,75,.02));border:1px solid rgba(217,45,75,.25);border-radius:16px;padding:12px 16px;margin-bottom:16px}
+.hoy-urge .t{display:flex;align-items:center;gap:9px;color:var(--rojo)}.hoy-urge .t b{color:var(--txt)}.hoy-urge .t span{margin-left:auto;color:var(--suave);font-weight:600}
+.hoy-urge .l{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.hoy-urge .l button{border:1px solid var(--borde);background:var(--card);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.hoy-urge .l .ir{margin-left:auto;background:var(--nav);color:#fff;border-color:var(--nav);display:inline-flex;gap:6px;align-items:center}.hoy-urge .l .ir .ic{width:15px;height:15px}
+.hoy-nota{display:flex;gap:8px;align-items:center;width:100%;border:1px solid var(--borde);background:var(--card);border-radius:12px;padding:9px 13px;color:var(--suave);font-weight:600;margin-bottom:14px;cursor:pointer;text-align:left}
+.hoy-proximas{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.hoy-prox{position:relative;overflow:hidden;border-radius:18px;padding:18px 20px;color:#e9eef7;background:linear-gradient(135deg,#0c1a2e 0%,#163259 100%);box-shadow:0 14px 34px rgba(12,26,46,.22);cursor:pointer}
+.hoy-prox:after{content:'';position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(201,162,74,.28),transparent 70%)}
+.hoy-prox small{color:var(--oro2);font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700}
+.hoy-cuando{display:flex;align-items:baseline;gap:12px;margin:6px 0 2px}.hoy-cuando b{font-size:34px;letter-spacing:-1px;color:#fff}.hoy-cuando span{color:#aebdd4;font-weight:600}
+.hoy-quien{font-size:16px;font-weight:700;color:#fff}.hoy-det{color:#aebdd4;font-size:12.5px;margin-top:2px}
+.hoy-asig{display:inline-flex;gap:6px;align-items:center;margin-top:10px;font-size:12px;font-weight:700;background:rgba(255,255,255,.08);border-radius:999px;padding:4px 11px}.hoy-asig .ic{width:14px;height:14px}
+.hoy-asig.falta{background:rgba(201,162,74,.2);color:var(--oro2)}
+.hoy-prox.vacia{cursor:default;background:var(--card);color:var(--suave);box-shadow:var(--sombra);border:1px solid var(--borde)}.hoy-prox.vacia:after{display:none}.hoy-prox.vacia b{display:block;margin-top:8px;color:var(--suave);font-size:15px}.hoy-prox.vacia small{color:var(--suave)}
+.hoy-nums{display:flex;gap:0;background:var(--card);border:1px solid var(--borde);border-radius:16px;box-shadow:var(--sombra);margin-bottom:14px;overflow:hidden}
+.hoy-nums>div{flex:1;padding:13px 18px;border-right:1px solid var(--borde)}.hoy-nums>div:last-child{border-right:0}
+.hoy-nums b{font-size:24px;letter-spacing:-.6px;display:block}.hoy-nums small{color:var(--suave)}.hoy-nums em{display:block;font-style:normal;font-size:11.5px;font-weight:700;color:var(--ambar);margin-top:2px}.hoy-nums em.ok{color:var(--verde)}
+.hoy-graf-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.hoy-graf-cab h3{margin:0}.hoy-graf-cab span{color:var(--suave);font-size:12px;display:flex;gap:6px;align-items:center}
+.pt{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}.pt.in{background:var(--verde)}.pt.out{background:var(--azul)}.pt.venta{background:#c9d6ea}.pt.gan{background:var(--oro)}
+.hoy-graf svg.graf{width:100%;height:130px;margin-top:8px;overflow:visible}.b-in{fill:var(--verde);opacity:.85}.b-out{fill:var(--azul);opacity:.85}
+svg .n{font-size:10px;fill:var(--suave);text-anchor:middle;font-weight:700}svg .e{font-size:10px;fill:var(--suave)}svg .ahora{stroke:var(--oro);stroke-width:2;stroke-dasharray:3 3}
+.hoy-lista h3 .tag{margin-left:4px}
+.hoy-fila{display:grid;grid-template-columns:64px minmax(0,1fr) 44px minmax(0,.9fr) minmax(0,.8fr);gap:10px;align-items:center;padding:9px 6px;border-bottom:1px solid var(--borde);cursor:pointer;border-radius:8px}
+.hoy-fila:last-child{border-bottom:0}.hoy-fila:hover{background:rgba(31,95,174,.04)}.hoy-fila.pasado{opacity:.45}
+.hoy-fila .h{font-weight:800;font-size:15px}.hoy-fila .h small{display:block;font-size:10.5px;color:var(--suave);font-weight:500}
+.hoy-fila .c b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hoy-fila .c small{color:var(--suave);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.hoy-fila .p{font-weight:800;text-align:center}.hoy-fila .p small{display:block;font-size:10px;color:var(--suave);font-weight:500}
+.hoy-fila .l{font-size:12px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hoy-fila .a{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}.hoy-fila .a.falta{color:var(--ambar)}
+/* Reservas */
+.rv-buscar{display:flex;gap:8px;margin-bottom:12px}.buscar.grande{margin-left:0;flex:1;width:auto;padding:4px 14px}.buscar.grande input{font-size:14px}
+.sep-v{width:1px;height:22px;background:var(--borde);margin:0 4px}
+.rv-mas .campo label{font-size:12px;color:var(--suave);font-weight:600}
+.rv-res{color:var(--suave);font-size:12.5px;margin:2px 2px 10px}
+.rv-ss{display:flex;gap:5px;flex-wrap:wrap}.rv-s{display:inline-flex;gap:4px;align-items:center;font-size:11.5px;font-weight:600;background:var(--bg);border:1px solid var(--borde);border-radius:8px;padding:2px 7px;white-space:nowrap}
+.rv-s .ic{width:13px;height:13px;color:var(--suave)}.rv-s.x{text-decoration:line-through;opacity:.55}
+.e-cancelado{background:rgba(217,45,75,.1);color:var(--rojo)}
+.rv-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.rv-total{display:flex;justify-content:space-between;align-items:center;background:var(--bg);border-radius:12px;padding:10px 14px}.rv-total b{font-size:18px}
+.rv-srv{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--borde);border-radius:14px;padding:11px 12px;margin-bottom:8px}.rv-srv.x{opacity:.5}
+.rv-aviso{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--ambar);margin-top:5px}.rv-aviso .ic{width:15px;height:15px}
+/* Administración */
+.gn-nums{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}.gn-nums.mini{grid-template-columns:repeat(3,1fr)}
+.gn-n{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:14px 16px;box-shadow:var(--sombra)}.gn-n small{display:block;color:var(--suave);font-size:11.5px}
+.gn-n>small:first-child{text-transform:uppercase;letter-spacing:1.2px;font-size:10.5px;font-weight:700}.gn-n b{display:block;font-size:22px;letter-spacing:-.5px;margin:4px 0 2px}
+.gn-n.dest{background:linear-gradient(135deg,#0c1a2e,#163259);color:#fff;border-color:transparent}.gn-n.dest>small:first-child{color:var(--oro2)}.gn-n.dest b{color:#fff}.gn-n.dest .sub2{color:#aebdd4}
+.sube{color:var(--verde)!important;font-weight:700}.baja{color:var(--rojo)!important;font-weight:700}.gn-n.dest .sube{color:#4ade9a!important}.gn-n.dest .baja{color:#ff8a9d!important}
+.gn-svg{width:100%;height:220px;margin-top:10px}.g-venta{fill:#c9d6ea}body.oscuro .g-venta{fill:#2a3d5c}.g-gan{fill:var(--oro)}
+.t-compacta td,.t-compacta th{padding:8px 6px}.margen{height:6px;border-radius:9px;background:var(--bg);width:70px;margin-left:auto;overflow:hidden}.margen i{display:block;height:100%;background:var(--oro)}
+.bl-linea{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--borde)}
+.ag-rej{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.ag-t{background:var(--card);border:1px solid var(--borde);border-radius:16px;padding:14px;box-shadow:var(--sombra);display:flex;flex-direction:column;gap:10px;min-width:0}.ag-t.inactiva{opacity:.55}
+.ag-c{display:flex;gap:10px;align-items:center}.ag-c b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-c small{color:var(--suave);font-size:12px}
+.ag-d{display:flex;flex-direction:column;gap:4px;font-size:12.5px}.ag-d a,.ag-d span{display:flex;gap:6px;align-items:center;color:var(--txt);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-d a{color:var(--azul)}.ag-d .ic{width:14px;height:14px;color:var(--suave)}
+.ag-n{display:flex;gap:12px;align-items:center;border-top:1px solid var(--borde);padding-top:9px;font-size:12.5px;flex-wrap:wrap}
+@media (max-width:1100px){.gn-nums{grid-template-columns:1fr 1fr}.hoy-nums{flex-wrap:wrap}.hoy-nums>div{flex:1 1 40%}}
+@media (max-width:760px){.hoy-proximas{grid-template-columns:1fr}.hoy-fila{grid-template-columns:56px minmax(0,1fr) 40px}.hoy-fila .l,.hoy-fila .a{display:none}}
+
 .nota-pie{color:var(--suave);font-size:12px;margin-top:8px}
 @media (max-width:1100px){.app{grid-template-columns:72px 1fr}.item span.t,.marca div,.sec,.pie .quien div,.lnk span{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.r3,.r4{grid-template-columns:1fr 1fr}}
 @media (max-width:760px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;overflow-x:auto}.r2,.r3,.r4{grid-template-columns:1fr}main{padding:14px}}
@@ -126,7 +185,7 @@ const fechaLarga = f => { if (!f) return 'Sin fecha'; const d = new Date(f + 'T1
 const fechaCorta = f => { if (!f) return '—'; const d = new Date(f + 'T12:00:00'); return `${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`; };
 const masDias = (f, n) => { const d = new Date(f + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const TIPO = { IN: ['plane-landing', 'Llegada', 't-ve'], OUT: ['plane-takeoff', 'Salida', 't-az'], ACTIVIDAD: ['ticket', 'Tour / actividad', 't-vi'], INTERHOTEL: ['route', 'Inter-hotel', 't-vi'], OTRO: ['circle-dot', 'Servicio', 't-gr'] };
-let I = null, S = { vista: 'operaciones', fecha: '', sede: '', filtro: 'por_asignar', q: '', sel: new Set(), servicios: [], ubicaciones: [], sinFecha: 0 };
+let I = null, S = { vista: 'hoy', fecha: '', sede: '', filtro: 'por_asignar', q: '', sel: new Set(), servicios: [], ubicaciones: [], sinFecha: 0 };
 const timers = {};
 
 async function api(url, cuerpo) {
@@ -157,29 +216,34 @@ function proximamente() {
     <a class="btn s" href="/">${ic('arrow-left')} Volver a Reservas</a></div>`;
 }
 
+// [clave, icono, título, permiso (o varios: basta uno), módulo, sección del menú]
 const VISTAS = [
-  ['operaciones', 'route', 'Operaciones', 'ver_operaciones', 'operaciones'],
-  ['vivo', 'navigation', 'Mapa en vivo', 'ver_choferes_vivo', 'operaciones'],
+  ['hoy', 'sun', 'Hoy', 'ver_operaciones', 'operaciones'],
+  ['reservas', 'book-open', 'Reservas', 'ver_reservas_op', null],
+  ['operaciones', 'route', 'Asignar servicios', 'ver_operaciones', 'operaciones'],
+  ['vivo', 'navigation', 'Mapa en vivo', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
   ['nueva', 'plus', 'Nueva reserva', 'crear_reservas', 'reserva_manual'],
   ['paquetes', 'package', 'Paquetes', 'crear_paquetes', 'paquetes'],
   ['entradas', 'ticket', 'Entradas por emitir', 'crear_paquetes', 'paquetes'],
   ['operativo', 'printer', 'Operativo del día', 'imprimir_operativo', 'operativo'],
-  ['reportes', 'chart-column', 'Reportes', 'ver_reportes_op', 'reportes', 'Gerencia'],
-  ['config', 'settings', 'Configuración', 'configurar_operaciones', null]
+  ['ganancias', 'trending-up', 'Ganancias', 'ver_administracion', null, 'Administración'],
+  ['boletas', 'receipt', 'Boletas', 'ver_boletas', null, 'Administración'],
+  ['agencias', 'briefcase', 'Agencias', 'ver_agencias', null, 'Administración'],
+  ['reportes', 'chart-column', 'Reportes', 'ver_reportes_op', 'reportes', 'Administración'],
+  ['config', 'settings', 'Configuración', 'configurar_operaciones', null, 'Ajustes']
 ];
-const puedeVista = v => { const x = VISTAS.find(y => y[0] === v); return x && I.permisos[x[3]] && (!x[4] || I.modulos[x[4]]); };
+const puedeVista = v => { const x = VISTAS.find(y => y[0] === v); return x && [].concat(x[3]).some(k => I.permisos[k]) && (!x[4] || I.modulos[x[4]]); };
 function pintarMenu() {
   const e = I.empresa || {};
   const nombre = e.marca_nombre || e.nombre || 'Mi empresa';
   let html = `<div class="marca"><div class="logoE">${e.logo ? `<img src="/empresa/logo" alt="">` : esc(iniciales(nombre))}</div><div><b>${esc(nombre)}</b><small>Operaciones</small></div></div>`;
-  html += `<a class="item" href="/">${ic('inbox')}<span class="t">Reservas</span></a>`;
-  let gerencia = false;
+  let seccion = '';
   for (const [k, icono, titulo, perm, mod, sec] of VISTAS) {
     if (!puedeVista(k)) continue;
-    if (sec && !gerencia) { html += `<div class="sec">${sec}</div>`; gerencia = true; }
-    if (k === 'config' && !gerencia) { html += `<div class="sec">Ajustes</div>`; gerencia = true; }
+    if ((sec || '') !== seccion) { seccion = sec || ''; if (seccion) html += `<div class="sec">${seccion}</div>`; }
     html += `<button class="item ${S.vista === k ? 'a' : ''}" data-ir="${k}">${ic(icono)}<span class="t">${titulo}</span>${k === 'operaciones' ? `<span class="bd" id="bdPor" style="display:none"></span>` : ''}</button>`;
   }
+  html += `<div class="sec">Correo</div><a class="item" href="/">${ic('inbox')}<span class="t">Panel de correo</span></a>`;
   html += `<div class="pie">${!I.publico ? `<div style="background:rgba(201,162,74,.15);color:var(--oro2);border-radius:9px;padding:7px 9px;font-size:11.5px;display:flex;gap:6px;align-items:center">${ic('construction')}<span class="t">En construcción: solo tú lo ves</span></div>` : ''}
     <div class="quien"><div class="av">${esc(iniciales(I.usuario.nombre || I.usuario.usuario))}</div><div><b>${esc(I.usuario.nombre || I.usuario.usuario)}</b><small>${esc(I.usuario.grupo)}</small></div></div>
     <button class="lnk" id="btnTema">${ic(document.body.classList.contains('oscuro') ? 'sun' : 'moon')}<span>${document.body.classList.contains('oscuro') ? 'Modo claro' : 'Modo oscuro'}</span></button>
@@ -188,12 +252,14 @@ function pintarMenu() {
 }
 function guardarEstado() { try { localStorage.setItem('opEstado', JSON.stringify({ sede: S.sede, vista: S.vista })); } catch (e) {} }
 async function ir(v) {
-  if (!puedeVista(v)) v = VISTAS.map(x => x[0]).find(puedeVista) || 'operaciones';
+  if (!puedeVista(v)) v = VISTAS.map(x => x[0]).find(puedeVista) || 'hoy';
   S.vista = v; guardarEstado(); pintarMenu();
   clearInterval(timers.recargar);
-  const f = { operaciones: vOperaciones, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig }[v];
+  clearInterval(timers.reloj);
+  const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias }[v];
   await f();
-  if (v === 'operaciones' || v === 'vivo') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : pintarOperaciones())); }, 45000);
+  if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
 
 /* ---------- datos del día ---------- */
@@ -319,7 +385,7 @@ async function asignar(ids, quien) {
   const r = await api('/api/op/asignar', cuerpo);
   if (!r.ok) return aviso(r.data.error || 'No se pudo asignar');
   S.sel.clear();
-  await cargar(); S.vista === 'vivo' ? pintarVivo() : pintarOperaciones();
+  await cargar(); repintarDia();
   aviso(r.data.avisos && r.data.avisos.length ? '⚠ ' + r.data.avisos.join(' · ') : quien === 'x' ? 'Asignación quitada.' : '✔ Asignado.', r.data.avisos && r.data.avisos.length ? 8000 : 3000);
 }
 
@@ -358,6 +424,8 @@ async function abrirDetalle(id) {
     ${x.vuelo ? `<div class="dato"><span>Vuelo</span><span>${esc(x.vuelo)} ${x.aeropuerto ? '· ' + esc(x.aeropuerto) : ''}${v && v.estado ? ` · <b>${esc(v.estado)}</b>${v.hora_estimada ? ' ' + esc(v.hora_estimada) : ''}${v.terminal ? ' · terminal ' + esc(v.terminal) : ''}${v.puerta ? ' · puerta ' + esc(v.puerta) : ''}` : ''}</span></div>` : ''}
     <div class="dato"><span>Recorrido</span><span>${esc(x.desde || '—')} → ${esc(x.hasta || '—')}${x.zona ? ' · zona ' + esc(x.zona) : ''}</span></div>
     <div class="dato"><span>Pasajeros</span><span>${x.pax.adultos} adultos${x.pax.ninos ? ', ' + x.pax.ninos + ' niños' : ''}${x.pax.infantes ? ', ' + x.pax.infantes + ' infantes' : ''}</span></div>
+    ${x.viator && x.viator.incluye.length ? `<div class="dato"><span>Incluye (Viator)</span><span>${x.viator.incluye.map(a => `<span class="tag" style="margin:0 4px 4px 0;background:rgba(109,75,216,.1);color:var(--violeta)">${esc(a)}</span>`).join('')}</span></div>` : ''}
+    ${x.viator && (x.viator.guia || x.viator.monto) ? `<div class="dato"><span>Viator</span><span>${x.viator.guia ? 'Guía en ' + esc(x.viator.guia) : ''}${x.viator.guia && x.viator.monto ? ' · ' : ''}${x.viator.monto && I.permisos.ver_precios ? 'monto ' + dinero(x.viator.monto) : ''}</span></div>` : ''}
     ${x.telefono ? `<div class="dato"><span>Teléfono</span><span>${esc(x.telefono)}</span></div>` : ''}
     ${x.nota ? `<div class="dato"><span>Nota de la reserva</span><span>${esc(x.nota)}</span></div>` : ''}
     <div class="dato"><span>Asignado a</span><span>${esc(x.chofer || x.proveedor || 'Nadie todavía')}${x.vehiculo ? ' · ' + esc(x.vehiculo) + (x.placa ? ' (' + esc(x.placa) + ')' : '') : ''}</span></div>
@@ -379,7 +447,7 @@ async function abrirDetalle(id) {
   $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
 }
 function cerrarLat() { $('#lat').classList.remove('abierto'); $('#fondo').classList.remove('abierto'); }
-async function recargarYDetalle(id) { await cargar(); S.vista === 'vivo' ? pintarVivo() : pintarOperaciones(); if (id) abrirDetalle(id); }
+async function recargarYDetalle(id) { await cargar(); repintarDia(); if (id) abrirDetalle(id); }
 $('#lat').addEventListener('click', async ev => {
   const id = Number($('#lat').dataset.id);
   const t = ev.target.closest('button');
@@ -404,7 +472,7 @@ $('#lat').addEventListener('click', async ev => {
 /* ---------- vista: Choferes en vivo ---------- */
 let mapa = null, marcas = [];
 let AV = { lista: [], error: '' };
-async function cargarAviones(ahora) { if (!I.modulos.aviones) return; const r = await api('/api/op/aviones' + (ahora ? '?ahora=1' : '')); if (r.ok) AV = r.data; }
+async function cargarAviones(ahora) { if (!I.modulos.aviones || !I.permisos.ver_vuelos) return; const r = await api('/api/op/aviones' + (ahora ? '?ahora=1' : '')); if (r.ok) AV = r.data; }
 async function vVivo() { $('#vista').innerHTML = '<div class="vacio">Cargando…</div>'; S.filtro = S.filtro === 'sin_fecha' ? 'todo' : S.filtro; await Promise.all([cargar(), cargarAviones()]); pintarVivo(); }
 function estadoChofer(c) {
   if (!c.activo) return ['Inactivo', 't-gr'];
@@ -421,7 +489,7 @@ function estadoAvion(a) {
   return [a.tipo === 'IN' ? 'Todavía no aparece en el radar' : 'Sin señal', 't-gr'];
 }
 function pintarVivo() {
-  const conCarros = I.modulos.app_chofer, conAviones = I.modulos.aviones;
+  const conCarros = I.modulos.app_chofer && I.permisos.ver_choferes_vivo, conAviones = I.modulos.aviones && I.permisos.ver_vuelos;
   const vuelos = (AV.lista || []).slice().sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
   $('#vista').innerHTML = cabeceraDia('Mapa en vivo', 'Carros de Somos Viajes y aviones de las llegadas y salidas de hoy', conAviones ? `<button class="btn s" id="btnAvionesAhora">${ic('refresh-cw')}Buscar aviones ahora</button>` : '') + `
     <div class="rej" style="grid-template-columns:minmax(0,1fr) 380px;align-items:start">
@@ -613,7 +681,7 @@ const COL_OP = {
   hora: ['Hora', x => x.tipo === 'OUT' ? x.recogida : x.hora || x.recogida], servicio: ['Servicio', x => x.tipo === 'IN' ? 'Llegada' : x.tipo === 'OUT' ? 'Salida' : x.actividad || 'Servicio'], pasajero: ['Nombre', x => x.cliente],
   pax: ['Pax', x => x.pax_total], vuelo: ['Vuelo', x => x.vuelo || '—'], hora_vuelo: ['Hora', x => x.hora || ''], recoger: ['Desde', x => x.desde], llevar: ['Hasta', x => x.hasta],
   agencia: ['Agencia', x => x.agencia], notas: ['Notas', x => [x.notas, x.nota].filter(Boolean).join(' · ')], telefono: ['Teléfono', x => x.telefono],
-  observacion: ['Observación', x => [x.tipo === 'OUT' ? x.recogida : '', x.notas, x.nota].filter(Boolean).join(' · ')], in: ['In', x => x.tipo !== 'OUT' ? x.pax_total : ''], out: ['Out', x => x.tipo === 'OUT' ? x.pax_total : ''],
+  observacion: ['Observación', x => [x.tipo === 'OUT' ? x.recogida : '', x.viator && x.viator.incluye.length ? 'Incluye: ' + x.viator.incluye.join(', ') : '', x.viator && x.viator.guia ? 'Guía ' + x.viator.guia : '', x.notas, x.nota].filter(Boolean).join(' · ')], in: ['In', x => x.tipo !== 'OUT' ? x.pax_total : ''], out: ['Out', x => x.tipo === 'OUT' ? x.pax_total : ''],
   conductor: ['Conductor', x => x.chofer || x.proveedor || 'SIN ASIGNAR'] };
 function htmlOperativo(pl) {
   const lista = S.servicios.filter(x => x.estado !== 'cancelado' && x.clase === 'transporte');
@@ -691,6 +759,7 @@ async function imprimirVouchers(id) {
     return `<div class="pagina"><p><b>Voucher N°:</b> V-${d.numero}-${n} · <b>Proforma:</b> PF-${d.numero} · <b>Agencia:</b> ${esc(x.agencia)}</p>
       <div style="border:2px dashed #0b4f8a;border-radius:12px;padding:14px;text-align:center;margin:10px 0"><div class="sub">Cartel a nombre de</div><div style="font-size:26px;font-weight:800;color:#0b4f8a;letter-spacing:.5px">${esc(String(x.cliente || '').toUpperCase())}</div><div class="sub">${esc(paxTexto(x))}</div></div>
       <table><tr><th>Fecha</th><th>Servicio</th><th>Vuelo</th><th>Hora</th><th>Desde</th><th>Hasta</th></tr>${L.map(s => `<tr><td>${esc(fechaLarga(s.fecha))}</td><td>${esc(s.tipo === 'IN' ? 'Llegada' : s.tipo === 'OUT' ? 'Salida' : s.tipo === 'INTERHOTEL' ? 'Inter-hotel' : s.actividad)}</td><td>${esc(s.vuelo || '—')}</td><td>${esc(s.tipo === 'OUT' ? 'Recogida ' + s.recogida + ' (vuelo ' + s.hora + ')' : s.tipo === 'IN' ? 'Llega ' + s.hora : s.recogida || s.hora)}</td><td>${esc(s.desde)}</td><td>${esc(s.hasta)}</td></tr>`).join('')}</table>
+      ${L.some(s => s.viator && s.viator.incluye.length) ? `<p><b>Actividades incluidas:</b> ${esc([...new Set(L.flatMap(s => (s.viator && s.viator.incluye) || []))].join(' · '))}${L.find(s => s.viator && s.viator.guia) ? ` · <b>Guía:</b> ${esc(L.find(s => s.viator && s.viator.guia).viator.guia)}` : ''}</p>` : ''}
       ${incl.length ? `<p><b>Incluye:</b> ${esc(incl.join(', '))}</p>` : ''}
       ${L.some(s => s.aviso) ? `<p style="border-left:3px solid #c98a12;padding:4px 10px;background:#fff8e6"><b>Importante:</b> ${esc(L.find(s => s.aviso).aviso)}</p>` : ''}
       ${x.chofer || x.proveedor ? `<p><b>Chofer:</b> ${esc(x.chofer || x.proveedor)}${x.vehiculo ? ' · ' + esc(x.vehiculo) + (x.placa ? ' (' + esc(x.placa) + ')' : '') : ''}</p>` : ''}
@@ -923,6 +992,383 @@ async function subirExcel(input, cuerpo) {
 }
 
 /* ---------- eventos ---------- */
+/* ================= Hoy: el día de un vistazo (lo justo: lo que viene, lo que falta asignar y el ritmo del día) ================= */
+function repintarDia() { S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones(); }
+const ahoraMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const hhmm = m => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
+function faltan(min) {
+  if (min < 0) return 'ya empezó';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? `en ${h} h ${String(m).padStart(2, '0')} min` : `en ${m} min`;
+}
+async function vHoy() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  if (S.filtro === 'sin_fecha') S.filtro = 'por_asignar';
+  await cargar();
+  pintarHoy();
+  timers.reloj = setInterval(() => { if (S.vista !== 'hoy') return; const r = $('#reloj'); if (r) r.textContent = hhmm(ahoraMin()); document.querySelectorAll('[data-cuenta]').forEach(el => { el.textContent = faltan(Number(el.dataset.cuenta) - ahoraMin()); }); }, 20000);
+}
+function pintarHoy() {
+  const esHoy = S.fecha === I.hoy, ahora = esHoy ? ahoraMin() : -1;
+  const t = S.servicios.filter(x => x.estado !== 'cancelado' && x.clase === 'transporte');
+  const ini = x => (x.inicio === null || x.inicio === undefined ? 9999 : x.inicio);
+  const llegadas = t.filter(x => x.tipo === 'IN').sort((a, b) => ini(a) - ini(b));
+  const salidas = t.filter(x => x.tipo === 'OUT').sort((a, b) => ini(a) - ini(b));
+  const otros = t.filter(x => !['IN', 'OUT'].includes(x.tipo)).sort((a, b) => ini(a) - ini(b));
+  const pendientes = t.filter(x => x.estado === 'por_asignar');
+  const urgentes = esHoy ? pendientes.filter(x => ini(x) >= ahora - 30 && ini(x) <= ahora + 180).sort((a, b) => ini(a) - ini(b)) : [];
+  const prox = l => l.find(x => ini(x) >= (esHoy ? ahora : 0) && ini(x) < 9999);
+  const pl = prox(llegadas), ps = prox(salidas);
+  const pax = l => l.reduce((a, x) => a + x.pax_total, 0);
+  const tarjetaProxima = (x, titulo) => {
+    if (!x) return `<div class="hoy-prox vacia"><small>${titulo}</small><b>Nada más ${esHoy ? 'por hoy' : 'este día'}</b></div>`;
+    const quien = x.chofer || x.proveedor;
+    return `<div class="hoy-prox" data-abrir="${x.id}"><small>${titulo}</small>
+      <div class="hoy-cuando"><b>${esc(x.tipo === 'OUT' ? x.recogida || x.hora : x.hora)}</b>${esHoy ? `<span data-cuenta="${ini(x)}">${faltan(ini(x) - ahora)}</span>` : ''}</div>
+      <div class="hoy-quien">${esc(x.cliente || 'Sin nombre')}</div>
+      <div class="hoy-det">${x.vuelo ? esc(x.vuelo) + ' · ' : ''}${x.pax_total} pax · ${esc(x.desde)} → ${esc(x.hasta)}</div>
+      <div class="hoy-asig ${quien ? '' : 'falta'}">${quien ? ic('user-check') + esc(quien) : ic('triangle-alert') + 'Sin asignar'}</div></div>`;
+  };
+  const fila = x => {
+    const quien = x.chofer || x.proveedor, pasado = esHoy && ini(x) < ahora - 20;
+    const v = x.vuelo_vivo;
+    return `<div class="hoy-fila ${pasado ? 'pasado' : ''}" data-abrir="${x.id}">
+      <div class="h">${esc(x.tipo === 'OUT' ? x.recogida || x.hora : x.hora)}${x.tipo === 'OUT' && x.hora ? `<small>vuelo ${esc(x.hora)}</small>` : ''}</div>
+      <div class="c"><b>${esc(x.cliente || 'Sin nombre')}</b><small>${x.vuelo ? esc(x.vuelo) + (v && v.retraso_min > 10 ? ` <span style="color:var(--ambar)">+${v.retraso_min} min</span>` : '') + ' · ' : ''}${esc(x.agencia || '')}</small></div>
+      <div class="p">${x.pax_total}<small>pax</small></div>
+      <div class="l">${esc(x.tipo === 'OUT' ? x.desde : x.hasta)}</div>
+      <div class="a ${quien ? '' : 'falta'}">${quien ? esc(quien) : 'Sin asignar'}</div></div>`;
+  };
+  // Pasajeros por hora (llegadas por la hora del vuelo, salidas por la hora de recogida).
+  const porHora = l => { const h = Array(24).fill(0); for (const x of l) if (ini(x) < 1440) h[Math.floor(ini(x) / 60)] += x.pax_total; return h; };
+  const hIn = porHora(llegadas), hOut = porHora(salidas), max = Math.max(1, ...hIn, ...hOut);
+  const W = 960, H = 120, col = W / 24;
+  const barras = hIn.map((n, i) => {
+    const a = Math.round(n / max * (H - 26)), b = Math.round(hOut[i] / max * (H - 26));
+    return `${n ? `<rect x="${i * col + 6}" y="${H - 14 - a}" width="${col / 2 - 7}" height="${a}" rx="3" class="b-in"><title>${n} pax llegando · ${String(i).padStart(2, '0')}:00</title></rect><text x="${i * col + col / 4 + 0.5}" y="${H - 18 - a}" class="n">${n}</text>` : ''}
+      ${hOut[i] ? `<rect x="${i * col + col / 2 + 1}" y="${H - 14 - b}" width="${col / 2 - 7}" height="${b}" rx="3" class="b-out"><title>${hOut[i]} pax saliendo · ${String(i).padStart(2, '0')}:00</title></rect><text x="${i * col + col * 3 / 4 - 2.5}" y="${H - 18 - b}" class="n">${hOut[i]}</text>` : ''}
+      ${i % 3 === 0 ? `<text x="${i * col + 2}" y="${H - 1}" class="e">${String(i).padStart(2, '0')}</text>` : ''}`;
+  }).join('');
+  const linea = esHoy ? `<line x1="${ahora / 60 * col}" x2="${ahora / 60 * col}" y1="4" y2="${H - 12}" class="ahora"/>` : '';
+  const sinFechaAviso = S.sinFecha ? `<button class="hoy-nota" data-ir-filtro="sin_fecha">${ic('calendar')}${S.sinFecha} servicio(s) registrados sin fecha: complétalos</button>` : '';
+  $('#vista').innerHTML = cabeceraDia('Hoy', `${fechaLarga(S.fecha)}${esHoy ? ` · <span id="reloj">${hhmm(ahora)}</span>` : ''}`) + `
+    ${urgentes.length ? `<div class="hoy-urge"><div class="t">${ic('triangle-alert')}<b>${urgentes.length} servicio(s) sin asignar empiezan en las próximas 3 horas</b><span>${pax(urgentes)} pax</span></div>
+      <div class="l">${urgentes.slice(0, 6).map(x => `<button data-abrir="${x.id}">${esc(x.tipo === 'OUT' ? x.recogida : x.hora)} · ${x.tipo === 'IN' ? 'Llegada' : x.tipo === 'OUT' ? 'Salida' : 'Servicio'} · ${esc(x.cliente || '')}</button>`).join('')}
+      ${I.permisos.asignar_servicios ? `<button class="ir" data-ir-filtro="por_asignar">Asignar ahora ${ic('arrow-right')}</button>` : ''}</div></div>` : ''}
+    ${sinFechaAviso}
+    <div class="hoy-proximas">${tarjetaProxima(pl, 'Próxima llegada')}${tarjetaProxima(ps, 'Próxima salida')}</div>
+    <div class="hoy-nums">
+      <div><b>${t.length}</b><small>servicios</small>${pendientes.length ? `<em>${pendientes.length} sin asignar</em>` : '<em class="ok">todo asignado</em>'}</div>
+      <div><b>${pax(t)}</b><small>pasajeros</small></div>
+      <div><b>${llegadas.length}</b><small>llegadas · ${pax(llegadas)} pax</small></div>
+      <div><b>${salidas.length}</b><small>salidas · ${pax(salidas)} pax</small></div>
+      ${otros.length ? `<div><b>${otros.length}</b><small>tours e inter-hotel</small></div>` : ''}</div>
+    <div class="caja hoy-graf"><div class="hoy-graf-cab"><h3>${ic('clock')}El día por hora</h3><span><i class="pt in"></i>llegadas <i class="pt out"></i>salidas (por recogida)</span></div>
+      <svg class="graf" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${barras}${linea}</svg></div>
+    <div class="rej r2" style="align-items:start">
+      <div class="caja hoy-lista"><h3>${ic('plane-landing')}Llegadas <span class="tag">${llegadas.length}</span></h3>${llegadas.map(fila).join('') || '<div class="vacio">Sin llegadas.</div>'}</div>
+      <div class="caja hoy-lista"><h3>${ic('plane-takeoff')}Salidas <span class="tag">${salidas.length}</span></h3>${salidas.map(fila).join('') || '<div class="vacio">Sin salidas.</div>'}</div></div>
+    ${otros.length ? `<div class="caja hoy-lista"><h3>${ic('ticket')}Tours e inter-hotel <span class="tag">${otros.length}</span></h3>${otros.map(fila).join('')}</div>` : ''}`;
+}
+
+/* ================= Reservas: lo registrado (correo) y lo manual, con buscador y ficha ================= */
+const RV = { q: '', tipo: [], estado: [], desde: '', hasta: '', alta_desde: '', alta_hasta: '', agencia: '', asesor: '', aerolinea: '', vuelo: '', grupo: '', origen: '', mas: false, datos: null };
+const ESTADO_RV = { activa: ['Activa', 'e-asignado'], completada: ['Completada', 'e-completado'], cancelada: ['Cancelada', 'e-cancelado'], parcial: ['Parcial', 'e-por_asignar'] };
+const TIPO_CORTO = { IN: ['plane-landing', 'Llegada'], OUT: ['plane-takeoff', 'Salida'], INTERHOTEL: ['route', 'Inter-hotel'], ACTIVIDAD: ['ticket', 'Tour'], OTRO: ['circle-dot', 'Servicio'] };
+function consultaRV() {
+  const p = new URLSearchParams();
+  for (const k of ['q', 'desde', 'hasta', 'alta_desde', 'alta_hasta', 'agencia', 'asesor', 'aerolinea', 'vuelo', 'grupo', 'origen']) if (RV[k]) p.set(k, RV[k]);
+  if (RV.tipo.length) p.set('tipo', RV.tipo.join(','));
+  if (RV.estado.length) p.set('estado', RV.estado.join(','));
+  if (S.sede) p.set('sede', S.sede);
+  return p.toString();
+}
+async function vReservas() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  await cargarReservas();
+}
+async function cargarReservas() {
+  const r = await api('/api/op/reservas?' + consultaRV());
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
+  RV.datos = r.data;
+  pintarReservas();
+}
+function filtrosActivosRV() { return ['desde', 'hasta', 'alta_desde', 'alta_hasta', 'agencia', 'asesor', 'aerolinea', 'vuelo', 'grupo', 'origen'].filter(k => RV[k]).length; }
+function pintarReservas() {
+  const d = RV.datos, precios = I.permisos.ver_precios && I.modulos.precios;
+  const chip = (grupo, k, n) => `<button class="pill ${RV[grupo].includes(k) ? 'a' : ''}" data-rv-chip="${grupo}" data-k="${k}">${n}</button>`;
+  const fila = r => {
+    const [en, cls] = ESTADO_RV[r.estado] || ['', ''];
+    const servs = r.servicios.slice(0, 4).map(x => `<span class="rv-s ${x.estado === 'cancelado' ? 'x' : ''}" title="${esc(TIPO_CORTO[x.tipo] ? TIPO_CORTO[x.tipo][1] : '')} ${esc(x.vuelo)}">${ic((TIPO_CORTO[x.tipo] || TIPO_CORTO.OTRO)[0])}${esc(fechaCorta(x.fecha))}${x.hora ? ' ' + esc(x.hora) : ''}</span>`).join('') + (r.servicios.length > 4 ? `<span class="rv-s">+${r.servicios.length - 4}</span>` : '');
+    return `<tr class="fila" data-rv="${r.op_id}"><td><b>#${r.numero}</b><br><small class="sub2">${esc(new Date(r.creado).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' }))} · ${esc(r.canal)}</small></td>
+      <td class="cli"><b>${esc(r.clientes[0] || 'Sin nombre')}${r.clientes.length > 1 ? ` <span class="sub2">+${r.clientes.length - 1}</span>` : ''}</b><small>${esc(r.agencia || '—')}</small></td>
+      <td><div class="rv-ss">${servs}</div></td><td><span class="pax">${ic('users')}${r.pax}</span></td>
+      <td>${r.asesor ? `<span class="sub2">${esc(r.asesor)}</span>` : '<span class="sub2">—</span>'}</td>
+      <td><span class="estado ${cls}">${en}</span></td>${precios ? `<td style="text-align:right;white-space:nowrap"><b>${dinero(r.venta)}</b>${r.sin_precio ? `<br><small style="color:var(--ambar)">${r.sin_precio} sin precio</small>` : ''}</td>` : ''}</tr>`;
+  };
+  const n = filtrosActivosRV();
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Reservas</h1><div class="sub">Lo registrado en el panel de correo y las reservas hechas aquí · ${RV.desde || RV.hasta || RV.alta_desde || RV.alta_hasta ? 'con fechas elegidas' : 'últimos 30 días y lo que viene'}</div></div>
+      <div class="der">${puedeVista('nueva') ? `<button class="btn p" data-ir="nueva">${ic('plus')}Nueva reserva</button>` : ''}</div></div>
+    <div class="rv-buscar"><div class="buscar grande">${ic('search')}<input id="rvQ" placeholder="Cliente, agencia, vuelo, hotel o número de reserva" value="${esc(RV.q)}"></div>
+      <button class="btn s" id="rvMas">${ic('filter')}Filtros${n ? ` <span class="tag" style="background:var(--oro);color:#1b1405">${n}</span>` : ''}</button></div>
+    <div class="filtros">${chip('tipo', 'IN', 'Llegadas')}${chip('tipo', 'OUT', 'Salidas')}${chip('tipo', 'INTERHOTEL', 'Inter-hotel')}${chip('tipo', 'ACTIVIDAD', 'Tours')}
+      <span class="sep-v"></span>${chip('estado', 'activa', 'Activas')}${chip('estado', 'completada', 'Completadas')}${chip('estado', 'cancelada', 'Canceladas')}</div>
+    ${RV.mas ? `<div class="caja rv-mas"><div class="rej r4">
+      <div class="campo"><label>Fecha del servicio</label><div style="display:flex;gap:6px"><input type="date" data-rvf="desde" value="${RV.desde}"><input type="date" data-rvf="hasta" value="${RV.hasta}"></div></div>
+      <div class="campo"><label>Fecha en que se registró</label><div style="display:flex;gap:6px"><input type="date" data-rvf="alta_desde" value="${RV.alta_desde}"><input type="date" data-rvf="alta_hasta" value="${RV.alta_hasta}"></div></div>
+      <div class="campo"><label>Agencia</label><input data-rvf="agencia" list="rvAgencias" value="${esc(RV.agencia)}" placeholder="Todas"><datalist id="rvAgencias">${(I.agencias || []).map(a => `<option value="${esc(a.nombre)}">`).join('')}</datalist></div>
+      <div class="campo"><label>Asesor</label><select data-rvf="asesor"><option value="">Todos</option>${(d.asesores || []).map(a => `<option ${RV.asesor === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></div>
+      <div class="campo"><label>Aerolínea (código)</label><input data-rvf="aerolinea" value="${esc(RV.aerolinea)}" placeholder="CM, AV, LA…" maxlength="3"></div>
+      <div class="campo"><label>Vuelo</label><input data-rvf="vuelo" value="${esc(RV.vuelo)}" placeholder="CM 241"></div>
+      <div class="campo"><label>Reserva</label><select data-rvf="grupo"><option value="">Individuales y grupos</option><option value="individual" ${RV.grupo === 'individual' ? 'selected' : ''}>Individuales</option><option value="grupo" ${RV.grupo === 'grupo' ? 'selected' : ''}>Grupos (10 pax o más)</option></select></div>
+      <div class="campo"><label>Llegó por</label><select data-rvf="origen"><option value="">Correo y manual</option><option value="correo" ${RV.origen === 'correo' ? 'selected' : ''}>Correo</option><option value="manual" ${RV.origen === 'manual' ? 'selected' : ''}>Manual (oficina, teléfono, WhatsApp)</option></select></div>
+      </div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn s mini" id="rvLimpiar">Limpiar</button><button class="btn p mini" id="rvAplicar">Aplicar</button></div></div>` : ''}
+    <div class="rv-res">${d.resumen.reservas} reserva(s) · ${d.resumen.pax} pax · ${d.resumen.servicios} servicio(s)${precios && d.resumen.venta !== undefined ? ` · <b>${dinero(d.resumen.venta)}</b> en ventas` : ''}${d.total > d.reservas.length ? ` · se muestran las ${d.reservas.length} más recientes` : ''}</div>
+    <div class="card"><table><thead><tr><th>Reserva</th><th>Cliente y agencia</th><th>Servicios</th><th>Pax</th><th>Asesor</th><th>Estado</th>${precios ? '<th style="text-align:right">Venta</th>' : ''}</tr></thead>
+      <tbody>${d.reservas.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>`;
+}
+// Ficha de una reserva: los servicios, la agencia, los documentos y el acceso al correo (sin mostrar el correo aquí).
+async function abrirReserva(opId) {
+  const r = await api('/api/op/reserva-detalle?id=' + opId);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo abrir');
+  const d = r.data, L = d.servicios, a = L[0], precios = I.permisos.ver_precios && I.modulos.precios;
+  const vivos = L.filter(x => x.estado !== 'cancelado');
+  const venta = vivos.reduce((s, x) => s + (x.precio || 0) + (x.extras || 0), 0);
+  const estado = !vivos.length ? 'cancelada' : vivos.every(x => ['completado', 'no_show'].includes(x.estado)) ? 'completada' : vivos.length < L.length ? 'parcial' : 'activa';
+  const [en, cls] = ESTADO_RV[estado];
+  const asunto = `Reserva #${d.numero} · ${a.cliente || ''}`;
+  const servicio = x => {
+    const [icono, nombre] = TIPO_CORTO[x.tipo] || TIPO_CORTO.OTRO, quien = x.chofer || x.proveedor;
+    return `<div class="rv-srv ${x.estado === 'cancelado' ? 'x' : ''}"><div class="tile ${(TIPO[x.tipo] || TIPO.OTRO)[2]}">${ic(icono)}</div>
+      <div style="flex:1;min-width:0"><b>${esc(nombre)} · ${esc(fechaLarga(x.fecha))}</b>
+        <div class="sub2">${x.tipo === 'OUT' ? `Recogida ${esc(x.recogida)} · vuelo ${esc(x.hora)}` : esc(x.hora || '')}${x.vuelo ? ' · ' + esc(x.vuelo) : ''} · ${esc(x.cliente)} · ${x.pax_total} pax</div>
+        <div class="sub2">${esc(x.desde)} → ${esc(x.hasta)}</div>
+        ${x.viator && x.viator.incluye.length ? `<div class="sub2" style="color:var(--violeta);margin-top:3px">${ic('ticket')} Incluye: ${esc(x.viator.incluye.join(' · '))}${x.viator.guia ? ' · guía en ' + esc(x.viator.guia) : ''}</div>` : ''}
+        ${x.aviso ? `<div class="rv-aviso">${ic('info')}${esc(x.aviso)}</div>` : ''}
+        <div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap"><span class="estado e-${x.estado}">${esc(x.estado_nombre)}</span><span class="sub2">${quien ? ic('user-check') + ' ' + esc(quien) : 'sin asignar'}</span>
+          ${precios ? `<b style="margin-left:auto">${dinero(x.precio)}</b>` : ''}</div></div>
+      ${I.permisos.ver_operaciones ? `<button class="btn mini s" data-rv-servicio="${x.id}" data-fecha="${esc(x.fecha || '')}" title="Asignar, cambiar estado, cortesías…">${ic('pencil')}</button>` : ''}</div>`;
+  };
+  $('#lat').innerHTML = `<div class="cabp"><div class="tile t-az">${ic('book-open')}</div><div style="flex:1;min-width:0"><b style="font-size:16px">${esc(a.cliente || 'Sin nombre')}</b>
+      <div class="sub2">Reserva #${d.numero} · ${esc(d.agencia.nombre || a.agencia || '—')}${d.asesor ? ' · asesor ' + esc(d.asesor) : ''}</div><span class="estado ${cls}" style="margin-top:6px">${en}</span></div><button class="btn mini s" id="cerrarLat">${ic('x')}</button></div>
+    <div class="cuerpo">
+      <div class="rv-acciones">
+        <button class="btn s" data-rv-doc="proforma" data-id="${a.id}">${ic('file-text')}Proforma</button>
+        <button class="btn s" data-rv-doc="vouchers" data-id="${a.id}">${ic('ticket')}Voucher${new Set(L.filter(x => x.clase !== 'entrada').map(x => String(x.cliente).toLowerCase())).size > 1 ? 's' : ''}</button>
+        ${d.correo ? `<a class="btn s" href="/?ver=${d.correo.id}" target="_blank" rel="noopener">${ic('mail')}Ver correo</a>` : ''}
+        ${d.agencia.email ? `<a class="btn s" href="/?escribir=${encodeURIComponent(d.agencia.email)}&asunto=${encodeURIComponent(asunto)}" target="_blank" rel="noopener">${ic('send')}Escribir a la agencia</a>` : ''}
+      </div>
+      ${precios ? `<div class="rv-total"><span>Total de la reserva</span><b>${dinero(venta)}</b></div>` : ''}
+      <h4 style="margin:16px 0 8px">Servicios <span class="tag">${L.length}</span></h4>${L.map(servicio).join('')}
+      <h4 style="margin:18px 0 6px">Agencia</h4>
+      <div class="dato"><span>Nombre</span><span>${esc(d.agencia.nombre || '—')}${d.agencia.mercado ? ' · ' + esc(d.agencia.mercado) : ''}</span></div>
+      <div class="dato"><span>Correo</span><span>${d.agencia.email ? esc(d.agencia.email) : '<span class="sub2">sin correo (agrégalo en Agencias)</span>'}</span></div>
+      ${d.agencia.telefono ? `<div class="dato"><span>Teléfono</span><span>${esc(d.agencia.telefono)}</span></div>` : ''}${d.agencia.contacto ? `<div class="dato"><span>Contacto</span><span>${esc(d.agencia.contacto)}</span></div>` : ''}
+      ${d.correo ? `<div class="dato"><span>Llegó por correo</span><span>${esc(d.correo.asunto || '(sin asunto)')}<br><small class="sub2">${esc(d.correo.remitente)}${d.correo.buzon ? ' → ' + esc(d.correo.buzon) : ''}</small></span></div>` : `<div class="dato"><span>Origen</span><span>Reserva manual</span></div>`}
+      ${(d.eventos || []).length ? `<h4 style="margin:18px 0 6px">Historial</h4>${d.eventos.slice(0, 20).map(e => `<div class="ev"><small>${esc(new Date(e.creado).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}</small><div>${esc(e.texto)}${e.usuario ? ` <span class="sub2">· ${esc(e.usuario)}</span>` : ''}</div></div>`).join('')}` : ''}
+    </div>`;
+  $('#lat').dataset.id = '';
+  $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
+}
+// Abre la ficha de un servicio aunque sea de otro día.
+async function abrirServicio(id, fecha) {
+  if (!S.servicios.some(x => x.id === id)) { if (fecha) S.fecha = fecha; if (S.filtro === 'sin_fecha' || S.filtro === 'por_asignar') S.filtro = 'todo'; await cargar(); }
+  if (!S.servicios.some(x => x.id === id)) { S.filtro = 'sin_fecha'; await cargar(); }
+  abrirDetalle(id);
+}
+
+/* ================= Administración (gerencia): ganancias, boletas y agencias ================= */
+const GN = { rango: 'mes', desde: '', hasta: '', datos: null };
+function rangoGN() {
+  const h = I.hoy, [y, m] = h.split('-').map(Number);
+  const ini = (yy, mm) => `${yy}-${String(mm).padStart(2, '0')}-01`;
+  const finMes = (yy, mm) => masDias(mm === 12 ? ini(yy + 1, 1) : ini(yy, mm + 1), -1);
+  if (GN.rango === 'mes') return [ini(y, m), h];
+  if (GN.rango === 'pasado') { const yy = m === 1 ? y - 1 : y, mm = m === 1 ? 12 : m - 1; return [ini(yy, mm), finMes(yy, mm)]; }
+  if (GN.rango === '7') return [masDias(h, -6), h];
+  if (GN.rango === '30') return [masDias(h, -29), h];
+  if (GN.rango === 'anio') return [`${y}-01-01`, h];
+  return [GN.desde || ini(y, m), GN.hasta || h];
+}
+async function vGanancias() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  const [desde, hasta] = rangoGN();
+  const r = await api(`/api/op/admin/ganancias?desde=${desde}&hasta=${hasta}${S.sede ? '&sede=' + encodeURIComponent(S.sede) : ''}`);
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
+  GN.datos = r.data; pintarGanancias();
+}
+function selectorRango(id) {
+  return `<div class="seg" id="${id}">${[['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes'], ['pasado', 'Mes pasado'], ['anio', 'Este año'], ['otro', 'Fechas']].map(([k, n]) => `<button class="${GN.rango === k ? 'a' : ''}" data-gn-rango="${k}">${n}</button>`).join('')}</div>
+    ${GN.rango === 'otro' ? `<div class="fecha"><input type="date" data-gn-f="desde" value="${GN.desde}"><span class="sub2">a</span><input type="date" data-gn-f="hasta" value="${GN.hasta}"></div>` : ''}`;
+}
+function pintarGanancias() {
+  const d = GN.datos, t = d.total;
+  const cambio = (a, b) => (b ? Math.round((a - b) / Math.abs(b) * 100) : null);
+  const cv = cambio(t.venta, d.anterior.venta), cg = cambio(t.ganancia, d.anterior.ganancia);
+  const flecha = c => c === null ? '<small class="sub2">sin datos del período anterior</small>' : `<small class="${c >= 0 ? 'sube' : 'baja'}">${c >= 0 ? '▲' : '▼'} ${Math.abs(c)}% vs. período anterior</small>`;
+  // Todos los días (o meses) del rango, también los que no tienen ventas.
+  const nDias = Math.round((new Date(d.hasta) - new Date(d.desde)) / 864e5) + 1, porMes = nDias > 62;
+  const vacio = k => ({ k, venta: 0, ganancia: 0, servicios: 0 });
+  const serie = [];
+  if (porMes) { const m = new Map(d.meses.map(x => [x.k, x])); for (let f = d.desde.slice(0, 7); f <= d.hasta.slice(0, 7); f = masDias(f + '-28', 7).slice(0, 7)) serie.push(m.get(f) || vacio(f)); }
+  else { const m = new Map(d.dias.map(x => [x.k, x])); for (let f = d.desde; f <= d.hasta; f = masDias(f, 1)) serie.push(m.get(f) || vacio(f)); }
+  const W = 960, H = 200, max = Math.max(1, ...serie.map(x => x.venta)), col = W / Math.max(serie.length, 1), bw = Math.min(col * 0.64, 34);
+  const barras = serie.map((x, i) => {
+    const hv = Math.round(x.venta / max * (H - 34)), hg = Math.max(0, Math.round(x.ganancia / max * (H - 34)));
+    const etiqueta = porMes ? MESES[Number(x.k.slice(5, 7)) - 1].slice(0, 3) : String(Number(x.k.slice(8, 10)));
+    const cada = Math.ceil(serie.length / 16);
+    return `<g><title>${porMes ? MESES[Number(x.k.slice(5, 7)) - 1] + ' ' + x.k.slice(0, 4) : fechaLarga(x.k)}: venta ${dinero(x.venta)} · ganancia ${dinero(x.ganancia)} · ${x.servicios} servicios</title>
+      <rect x="${i * col + (col - bw) / 2}" y="${H - 18 - hv}" width="${bw}" height="${hv}" rx="3" class="g-venta"/>
+      <rect x="${i * col + (col - bw) / 2}" y="${H - 18 - hg}" width="${bw}" height="${hg}" rx="3" class="g-gan"/>
+      ${i % cada === 0 ? `<text x="${i * col + col / 2}" y="${H - 3}" class="e" text-anchor="middle">${etiqueta}</text>` : ''}</g>`;
+  }).join('');
+  const tabla = (titulo, l, col1) => `<div class="caja"><h3>${titulo}</h3>${l.length ? `<table class="t-compacta"><thead><tr><th>${col1}</th><th style="text-align:right">Venta</th><th style="text-align:right">Ganancia</th><th style="text-align:right">Margen</th></tr></thead><tbody>
+    ${l.map(x => `<tr><td><b>${esc(x.k)}</b><br><small class="sub2">${x.reservas} reserva(s) · ${x.pax} pax</small></td><td style="text-align:right">${dinero(x.venta)}</td><td style="text-align:right"><b>${dinero(x.ganancia)}</b></td>
+      <td style="text-align:right"><div class="margen"><i style="width:${Math.max(0, Math.min(100, x.margen))}%"></i></div><small>${x.margen}%</small></td></tr>`).join('')}</tbody></table>` : '<div class="vacio">Sin datos.</div>'}</div>`;
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Ganancias</h1><div class="sub">${fechaLarga(d.desde)} al ${fechaLarga(d.hasta)} · venta menos costo de cada servicio (sin los cancelados)</div></div>
+      <div class="der">${selectorRango('gnRango')}<div class="seg" id="segSede">${['', 'Punta Cana', 'Orlando'].map(x => `<button class="${S.sede === x ? 'a' : ''}" data-sede="${x}">${x || 'Todas'}</button>`).join('')}</div></div></div>
+    <div class="gn-nums">
+      <div class="gn-n"><small>Venta</small><b>${dinero(t.venta)}</b>${flecha(cv)}</div>
+      <div class="gn-n"><small>Costo</small><b>${dinero(t.costo)}</b><small class="sub2">choferes, transportistas y proveedores</small></div>
+      <div class="gn-n dest"><small>Ganancia</small><b>${dinero(t.ganancia)}</b>${flecha(cg)}</div>
+      <div class="gn-n"><small>Margen</small><b>${t.margen}%</b><small class="sub2">${t.reservas} reservas · ${t.servicios} servicios · ${t.pax} pax</small></div></div>
+    ${t.sin_costo || t.sin_precio ? `<div class="hoy-nota" style="cursor:default">${ic('info')}${t.sin_costo ? `${t.sin_costo} servicio(s) sin costo: la ganancia real puede ser menor. ` : ''}${t.sin_precio ? `${t.sin_precio} sin precio de venta. ` : ''}${puedeVista('boletas') ? '<a href="#" data-ir="boletas" style="margin-left:6px">Corregir en Boletas →</a>' : ''}</div>` : ''}
+    <div class="caja"><div class="hoy-graf-cab"><h3>${ic('trending-up')}${porMes ? 'Por mes' : 'Por día'}</h3><span><i class="pt venta"></i>venta <i class="pt gan"></i>ganancia</span></div>
+      ${serie.some(x => x.venta) ? `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="gn-svg">${barras}</svg>` : '<div class="vacio">No hay servicios en estas fechas.</div>'}</div>
+    <div class="rej r2" style="align-items:start">${tabla(ic('briefcase') + 'Por agencia', d.porAgencia, 'Agencia')}${tabla(ic('route') + 'Por tipo de servicio', d.porTipo, 'Servicio')}</div>
+    ${tabla(ic('car') + 'Quién hizo el servicio', d.porQuien, 'Hecho por')}`;
+}
+// Boletas: venta contra costo de cada reserva (documento interno de administración).
+const BL = { datos: null, q: '' };
+async function vBoletas() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  const [desde, hasta] = rangoGN();
+  const r = await api(`/api/op/admin/boletas?desde=${desde}&hasta=${hasta}${BL.q ? '&q=' + encodeURIComponent(BL.q) : ''}${S.sede ? '&sede=' + encodeURIComponent(S.sede) : ''}`);
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
+  BL.datos = r.data;
+  const d = r.data, [d1, d2] = rangoGN();
+  const lista = d.reservas.filter(x => x.estado !== 'cancelada');
+  const venta = lista.reduce((a, x) => a + x.venta, 0), costo = lista.reduce((a, x) => a + x.costo, 0);
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Boletas</h1><div class="sub">Venta contra costo de cada reserva · servicios del ${fechaLarga(d1)} al ${fechaLarga(d2)}</div></div><div class="der">${selectorRango('blRango')}</div></div>
+    <div class="rv-buscar"><div class="buscar grande">${ic('search')}<input id="blQ" placeholder="Cliente, agencia o número de reserva" value="${esc(BL.q)}"></div></div>
+    <div class="gn-nums"><div class="gn-n"><small>Venta</small><b>${dinero(venta)}</b></div><div class="gn-n"><small>Costo</small><b>${dinero(costo)}</b></div><div class="gn-n dest"><small>Ganancia</small><b>${dinero(venta - costo)}</b></div><div class="gn-n"><small>Reservas</small><b>${lista.length}</b><small class="sub2">${lista.filter(x => x.sin_costo).length} con servicios sin costo</small></div></div>
+    <div class="card"><table><thead><tr><th>Reserva</th><th>Cliente y agencia</th><th>Servicios</th><th style="text-align:right">Venta</th><th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th></tr></thead><tbody>
+    ${d.reservas.map(r => `<tr class="fila" data-boleta="${r.op_id}" ${r.estado === 'cancelada' ? 'style="opacity:.5"' : ''}><td><b>#${r.numero}</b><br><small class="sub2">${esc(fechaCorta(r.desde))}</small></td><td class="cli"><b>${esc(r.clientes[0] || 'Sin nombre')}</b><small>${esc(r.agencia)}</small></td>
+      <td>${r.servicios.length}${r.sin_costo ? ` <span class="tag" style="color:var(--ambar)">${r.sin_costo} sin costo</span>` : ''}</td><td style="text-align:right">${dinero(r.venta)}</td><td style="text-align:right">${dinero(r.costo)}</td>
+      <td style="text-align:right"><b style="color:${r.ganancia >= 0 ? 'var(--verde)' : 'var(--rojo)'}">${dinero(r.ganancia)}</b></td></tr>`).join('') || '<tr><td colspan="6" class="vacio">No hay reservas en estas fechas.</td></tr>'}</tbody></table></div>`;
+}
+async function abrirBoleta(opId) {
+  const r = await api('/api/op/reserva-detalle?id=' + opId);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo abrir');
+  const d = r.data, L = d.servicios, a = L[0], editar = I.permisos.editar_costos;
+  const vivos = L.filter(x => x.estado !== 'cancelado');
+  const venta = vivos.reduce((s, x) => s + (x.precio || 0) + (x.extras || 0), 0), costo = vivos.reduce((s, x) => s + (x.costo || 0), 0);
+  $('#lat').innerHTML = `<div class="cabp"><div class="tile t-ve">${ic('receipt')}</div><div style="flex:1"><b style="font-size:16px">Boleta · reserva #${d.numero}</b><div class="sub2">${esc(a.cliente)} · ${esc(d.agencia.nombre || a.agencia)}</div></div>
+      <button class="btn mini s" data-imprimir-boleta="${opId}">${ic('printer')}</button><button class="btn mini s" id="cerrarLat">${ic('x')}</button></div>
+    <div class="cuerpo"><div class="gn-nums mini"><div class="gn-n"><small>Venta</small><b>${dinero(venta)}</b></div><div class="gn-n"><small>Costo</small><b>${dinero(costo)}</b></div><div class="gn-n dest"><small>Ganancia</small><b>${dinero(venta - costo)}</b></div></div>
+    ${L.map(x => `<div class="rv-srv ${x.estado === 'cancelado' ? 'x' : ''}" style="flex-direction:column;align-items:stretch">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc((TIPO_CORTO[x.tipo] || TIPO_CORTO.OTRO)[1])} · ${esc(fechaCorta(x.fecha))} · ${esc(x.cliente)}</b><span class="sub2">${x.pax_total} pax</span></div>
+      <div class="sub2">${esc(x.desde)} → ${esc(x.hasta)} · ${esc(x.chofer || x.proveedor || 'sin asignar')}</div>
+      <div class="bl-linea"><span>Venta</span><b>${dinero(x.precio)}${x.extras ? ` + ${dinero(x.extras)} cortesías` : ''}</b></div>
+      <div class="bl-linea"><span>Costo</span>${editar && x.estado !== 'cancelado' ? `<span style="display:flex;gap:6px;align-items:center"><input type="number" step="0.01" value="${x.costo ?? ''}" data-costo="${x.id}" placeholder="sin costo" style="width:110px;text-align:right"><button class="btn mini s" data-guardar-costo="${x.id}" data-boleta-de="${opId}">${ic('save')}</button></span>` : `<b>${dinero(x.costo)}</b>`}</div>
+      <small class="sub2">${esc(x.tarifa_costo || 'Costo: lo que se le paga al chofer o transportista (sin asignar = sin costo).')}</small></div>`).join('')}
+    </div>`;
+  $('#lat').dataset.id = '';
+  $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
+}
+async function imprimirBoleta(opId) {
+  const r = await api('/api/op/reserva-detalle?id=' + opId); if (!r.ok) return;
+  const d = r.data, L = d.servicios.filter(x => x.estado !== 'cancelado');
+  const venta = L.reduce((s, x) => s + (x.precio || 0) + (x.extras || 0), 0), costo = L.reduce((s, x) => s + (x.costo || 0), 0);
+  ventanaDoc('Boleta interna', `<p><b>Boleta N°:</b> BL-${d.numero} · <b>Agencia:</b> ${esc(d.agencia.nombre)} · <b>Emitida:</b> ${esc(fechaLarga(I.hoy))}</p>
+    <table><tr><th>Fecha</th><th>Servicio</th><th>Pasajero</th><th>Hecho por</th><th style="text-align:right">Venta</th><th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th></tr>
+    ${L.map(x => `<tr><td>${esc(fechaCorta(x.fecha))}</td><td>${esc(nombreServicio(x))}</td><td>${esc(x.cliente)}</td><td>${esc(x.chofer || x.proveedor || '—')}</td><td style="text-align:right">${dinero((x.precio || 0) + (x.extras || 0))}</td><td style="text-align:right">${dinero(x.costo)}</td><td style="text-align:right">${dinero((x.precio || 0) + (x.extras || 0) - (x.costo || 0))}</td></tr>`).join('')}
+    <tr class="tot"><td colspan="4">Total</td><td style="text-align:right">${dinero(venta)}</td><td style="text-align:right">${dinero(costo)}</td><td style="text-align:right">${dinero(venta - costo)}</td></tr></table>
+    <p class="sub">Documento interno de administración. No se entrega al cliente.</p>`);
+}
+// Agencias: el directorio con sus números y sus correos.
+const AG = { datos: null, q: '' };
+async function vAgencias() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  const r = await api('/api/op/admin/agencias');
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
+  AG.datos = r.data; pintarAgencias();
+}
+function pintarAgencias() {
+  const q = AG.q.trim().toLowerCase();
+  const l = AG.datos.agencias.filter(a => !q || [a.nombre, a.alias, a.mercado, a.contacto, a.email, ...(a.correos || [])].join(' ').toLowerCase().includes(q))
+    .sort((a, b) => (b.activo - a.activo) || (b.reservas - a.reservas) || a.nombre.localeCompare(b.nombre));
+  const precios = I.permisos.ver_precios || I.permisos.ver_administracion;
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Agencias</h1><div class="sub">${AG.datos.agencias.length} agencias · correos tomados de sus reservas</div></div>
+      <div class="der">${I.permisos.editar_agencias ? `<button class="btn p" data-agencia-editar="0">${ic('plus')}Agencia</button>` : ''}</div></div>
+    <div class="rv-buscar"><div class="buscar grande">${ic('search')}<input id="agQ" placeholder="Nombre, mercado, contacto o correo" value="${esc(AG.q)}"></div></div>
+    <div class="ag-rej">${l.map(a => `<div class="ag-t ${a.activo ? '' : 'inactiva'}">
+      <div class="ag-c"><div class="av" style="background:${colorDe(a.id)}">${esc(iniciales(a.nombre.replace(/[^\p{L}\s]/gu, ' ')))}</div><div style="min-width:0"><b>${esc(a.nombre)}</b><small>${[a.mercado, a.tipo_agencia].filter(Boolean).map(esc).join(' · ') || 'sin mercado'}</small></div>
+        ${I.permisos.editar_agencias ? `<button class="btn mini s" data-agencia-editar="${a.id}" style="margin-left:auto">${ic('pencil')}</button>` : ''}</div>
+      <div class="ag-d">${(a.correos || []).slice(0, 2).map(c => `<a href="/?escribir=${encodeURIComponent(c)}" target="_blank" rel="noopener">${ic('mail')}${esc(c)}</a>`).join('') || '<span class="sub2">sin correo</span>'}
+        ${a.telefono ? `<span>${ic('phone')}${esc(a.telefono)}</span>` : ''}${a.contacto ? `<span>${ic('user-round')}${esc(a.contacto)}</span>` : ''}</div>
+      <div class="ag-n"><span><b>${a.reservas}</b> reservas</span>${precios ? `<span><b>${dinero(a.venta)}</b></span>` : ''}<span class="sub2">${a.ultima ? 'última ' + esc(new Date(a.ultima).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })) : 'sin reservas'}</span></div></div>`).join('') || '<div class="vacio">No hay agencias con esa búsqueda.</div>'}</div>`;
+}
+function formAgencia(id) {
+  const a = id ? AG.datos.agencias.find(x => x.id === id) : { nombre: '', alias: '', mercado: '', tipo_agencia: '', contacto: '', telefono: '', email: '', notas: '', activo: true };
+  if (!a) return;
+  $('#lat').innerHTML = `<div class="cabp"><div class="tile t-az">${ic('briefcase')}</div><div style="flex:1"><b style="font-size:16px">${id ? esc(a.nombre) : 'Nueva agencia'}</b><div class="sub2">${id ? (a.correos || []).length + ' correo(s) conocidos' : 'Datos de contacto y de tarifa'}</div></div><button class="btn mini s" id="cerrarLat">${ic('x')}</button></div>
+    <div class="cuerpo">
+      <div class="campo"><label>Nombre</label><input id="agNombre" value="${esc(a.nombre)}"></div>
+      <div class="campo"><label>Otros nombres con los que escribe (separados por coma)</label><input id="agAlias" value="${esc(a.alias || '')}"></div>
+      <div class="rej r2"><div class="campo"><label>Mercado (país)</label><input id="agMercado" value="${esc(a.mercado || '')}" placeholder="Perú, Colombia…"></div>
+        <div class="campo"><label>Tipo</label><select id="agTipo"><option value="">—</option><option ${a.tipo_agencia === 'mayorista' ? 'selected' : ''} value="mayorista">Mayorista</option><option ${a.tipo_agencia === 'minorista' ? 'selected' : ''} value="minorista">Minorista</option></select></div></div>
+      <div class="rej r2"><div class="campo"><label>Contacto</label><input id="agContacto" value="${esc(a.contacto || '')}"></div><div class="campo"><label>Teléfono</label><input id="agTel" value="${esc(a.telefono || '')}"></div></div>
+      <div class="campo"><label>Correo principal</label><input id="agEmail" type="email" value="${esc(a.email || '')}" placeholder="${esc((a.correos || [])[0] || 'reservas@agencia.com')}"></div>
+      ${(a.correos || []).length ? `<small class="sub2">Le han escrito desde: ${a.correos.map(esc).join(', ')}</small>` : ''}
+      <div class="campo" style="margin-top:10px"><label>Notas</label><textarea id="agNotas" rows="3">${esc(a.notas || '')}</textarea></div>
+      <label class="sub2" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="agActiva" ${a.activo !== false ? 'checked' : ''}> Activa</label>
+      <div style="display:flex;gap:8px;margin-top:14px"><button class="btn p" data-agencia-guardar="${id || 0}">${ic('save')}Guardar</button></div></div>`;
+  $('#lat').dataset.id = '';
+  $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
+}
+// Clics de las vistas nuevas.
+document.addEventListener('click', async ev => {
+  const t = ev.target;
+  const ab = t.closest('[data-abrir]'); if (ab && S.vista === 'hoy') { ev.preventDefault(); return abrirDetalle(Number(ab.dataset.abrir)); }
+  const irf = t.closest('[data-ir-filtro]'); if (irf) { ev.preventDefault(); S.filtro = irf.dataset.irFiltro; return ir('operaciones'); }
+  const rv = t.closest('tr[data-rv]'); if (rv) return abrirReserva(Number(rv.dataset.rv));
+  const ch = t.closest('[data-rv-chip]'); if (ch) { const g = ch.dataset.rvChip, k = ch.dataset.k; RV[g] = RV[g].includes(k) ? RV[g].filter(x => x !== k) : [...RV[g], k]; return cargarReservas(); }
+  if (t.closest('#rvMas')) { RV.mas = !RV.mas; return pintarReservas(); }
+  if (t.closest('#rvAplicar')) { document.querySelectorAll('[data-rvf]').forEach(el => { RV[el.dataset.rvf] = el.value.trim(); }); return cargarReservas(); }
+  if (t.closest('#rvLimpiar')) { for (const k of ['desde', 'hasta', 'alta_desde', 'alta_hasta', 'agencia', 'asesor', 'aerolinea', 'vuelo', 'grupo', 'origen']) RV[k] = ''; return cargarReservas(); }
+  const doc = t.closest('[data-rv-doc]'); if (doc) return doc.dataset.rvDoc === 'proforma' ? imprimirProforma(Number(doc.dataset.id)) : imprimirVouchers(Number(doc.dataset.id));
+  const sv = t.closest('[data-rv-servicio]'); if (sv) return abrirServicio(Number(sv.dataset.rvServicio), sv.dataset.fecha);
+  const gr = t.closest('[data-gn-rango]'); if (gr) { GN.rango = gr.dataset.gnRango; if (GN.rango === 'otro') { const [a, b] = rangoGN(); GN.desde = GN.desde || a; GN.hasta = GN.hasta || b; } return ir(S.vista); }
+  const bl = t.closest('tr[data-boleta]'); if (bl) return abrirBoleta(Number(bl.dataset.boleta));
+  const ib = t.closest('[data-imprimir-boleta]'); if (ib) return imprimirBoleta(Number(ib.dataset.imprimirBoleta));
+  const gc = t.closest('[data-guardar-costo]');
+  if (gc) {
+    const id = Number(gc.dataset.guardarCosto), v = document.querySelector(`[data-costo="${id}"]`).value;
+    const motivo = prompt('¿Por qué cambias el costo? (queda en el historial)', 'Costo real del servicio');
+    if (motivo === null) return;
+    const r = await api('/api/op/admin/costo', { id, costo: v, motivo });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar');
+    aviso('Costo guardado.'); await abrirBoleta(Number(gc.dataset.boletaDe)); if (S.vista === 'boletas') vBoletas(); return;
+  }
+  const ae = t.closest('[data-agencia-editar]'); if (ae) return formAgencia(Number(ae.dataset.agenciaEditar));
+  const ag = t.closest('[data-agencia-guardar]');
+  if (ag) {
+    const id = Number(ag.dataset.agenciaGuardar);
+    const r = await api('/api/op/admin/agencia', { id: id || undefined, nombre: $('#agNombre').value, alias: $('#agAlias').value, mercado: $('#agMercado').value, tipo_agencia: $('#agTipo').value, contacto: $('#agContacto').value, telefono: $('#agTel').value, email: $('#agEmail').value, notas: $('#agNotas').value, activo: $('#agActiva').checked });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar');
+    cerrarLat(); aviso('Agencia guardada.'); return vAgencias();
+  }
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Enter') return;
+  if (ev.target.id === 'rvQ') { RV.q = ev.target.value.trim(); cargarReservas(); }
+  if (ev.target.id === 'blQ') { BL.q = ev.target.value.trim(); vBoletas(); }
+  if (ev.target.closest && ev.target.closest('.rv-mas')) document.getElementById('rvAplicar').click();
+});
+document.addEventListener('input', ev => { if (ev.target.id === 'agQ') { AG.q = ev.target.value; const pos = ev.target.selectionStart; pintarAgencias(); const n = $('#agQ'); n.focus(); n.setSelectionRange(pos, pos); } });
+document.addEventListener('change', ev => { const f = ev.target.dataset && ev.target.dataset.gnF; if (f) { GN[f] = ev.target.value; ir(S.vista); } });
+
 document.addEventListener('click', async ev => {
   const t = ev.target;
   if (!t.closest('.pop') && !t.closest('[data-asig]')) cerrarPop();

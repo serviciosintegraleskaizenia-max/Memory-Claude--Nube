@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const config = require(process.env.PANEL_CONFIG ? require('path').resolve(process.env.PANEL_CONFIG) : './config');
 const crearCuenta = require('./plataforma/cuenta');
 const { revisarReservas } = require('./revision');
+const viator = require('./viator');
 const crearCentral = require('./plataforma/central');
 const crearOficina = require('./plataforma/oficina');
 const crearMotor = require('./motor');
@@ -37,6 +38,7 @@ const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
   'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
+  'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias',
   // Oficina de Kaizen IA (solo en el panel central): entrar y cada sección por separado. El Programador las tiene todas.
   'ver_oficina', 'oficina_inicio', 'oficina_negocios', 'oficina_clientes', 'oficina_gastos', 'oficina_creacion', 'oficina_calendario', 'oficina_chat', 'oficina_enlaces',
   'oficina_asistente', 'oficina_redes', 'oficina_respaldos'];
@@ -1994,7 +1996,8 @@ http.createServer(async (req, res) => {
         c.aeropuerto, c.actividad, c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel,
         c.punto_partida, c.punto_llegada, c.adultos, c.ninos, c.infantes, c.numero_servicio,
         c.creado >= (SELECT reparto_desde FROM empresa_datos WHERE id = 1) AS tras_reparto,
-        a.usuario AS asignado_a, COALESCE(us.nombre, a.usuario) AS asignado_nombre`;
+        a.usuario AS asignado_a, COALESCE(us.nombre, a.usuario) AS asignado_nombre,
+        ${viator.SQL}`;
       const uniones = `LEFT JOIN asignaciones a ON a.clave = ${CLAVE_SQL} LEFT JOIN usuarios us ON us.usuario = a.usuario`;
       let filas;
       let revisiones = new Map();
@@ -2065,7 +2068,11 @@ http.createServer(async (req, res) => {
         }
       }
       return json(res, 200, filas.map(x => {
-        const base = { ...x, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
+        const { viator_incluye, viator_guia, viator_monto, viator_nacimientos, ...resto } = x;
+        const base = { ...resto, fecha_servicio_iso: fechaServicioISO(x.fecha_servicio, x.fecha) };
+        // Viator: actividades incluidas (parques como La Hacienda), idioma del guía y monto.
+        const v = viator.detalles(x);
+        if (v) base.viator = v;
         const rev = revisiones.get(x.id);
         if (rev && (rev.puntos.length || rev.urgente)) base.revision = rev;
         if (x.categoria === 'MODIFICACION') {
@@ -3441,8 +3448,12 @@ http.createServer(async (req, res) => {
         const { id, confirmar } = await leerCuerpo(req);
         const destino = await buscarPorId(id);
         if (!destino) return json(res, 404, { error: 'Usuario no encontrado' });
-        if (esIntocable(destino)) return json(res, 403, { error: 'El usuario programador no se puede eliminar.' });
         if (destino.id === u.id) return json(res, 403, { error: 'No puedes eliminar tu propio usuario.' });
+        // Un programador puede borrar a otro programador creado por error, pero nunca al primero (el dueño del sistema).
+        if (esIntocable(destino)) {
+          const dueno = (await client.query("SELECT id FROM usuarios WHERE grupo = 'Programador' ORDER BY id LIMIT 1")).rows[0];
+          if (dueno && dueno.id === destino.id) return json(res, 403, { error: 'El primer programador (el dueño del sistema) no se puede eliminar.' });
+        }
         if (String(confirmar || '').trim().toLowerCase() !== destino.usuario) {
           return json(res, 400, { error: `Para confirmar escribe el usuario exactamente: ${destino.usuario}` });
         }
