@@ -140,4 +140,54 @@ function leerExcel(buf) {
   return hojas;
 }
 
-module.exports = { leerExcel, abrirZip };
+// ---------- Escribir un Excel sencillo (para guardar lo que se edita en la Oficina) ----------
+// hojas: [{ nombre, filas: [{ [columna]: { v, enlace } }] }] — el mismo formato que devuelve leerExcel.
+// Se pierden colores y celdas combinadas; se conservan las hojas, los valores y los enlaces.
+const TABLA_CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(buf) { let c = 0xffffffff; for (let i = 0; i < buf.length; i++) c = TABLA_CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function zip(archivos) {
+  const locales = [], centrales = []; let pos = 0;
+  for (const [nombre, contenido] of archivos) {
+    const datos = Buffer.from(contenido, 'utf8'), comp = zlib.deflateRawSync(datos), n = Buffer.from(nombre, 'utf8'), crc = crc32(datos);
+    const l = Buffer.alloc(30); l.writeUInt32LE(0x04034b50, 0); l.writeUInt16LE(20, 4); l.writeUInt16LE(0x0800, 6); l.writeUInt16LE(8, 8);
+    l.writeUInt32LE(crc, 14); l.writeUInt32LE(comp.length, 18); l.writeUInt32LE(datos.length, 22); l.writeUInt16LE(n.length, 26);
+    const c = Buffer.alloc(46); c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(0x0800, 8); c.writeUInt16LE(8, 10);
+    c.writeUInt32LE(crc, 16); c.writeUInt32LE(comp.length, 20); c.writeUInt32LE(datos.length, 24); c.writeUInt16LE(n.length, 28); c.writeUInt32LE(pos, 42);
+    locales.push(l, n, comp); centrales.push(c, n); pos += 30 + n.length + comp.length;
+  }
+  const central = Buffer.concat(centrales), fin = Buffer.alloc(22);
+  fin.writeUInt32LE(0x06054b50, 0); fin.writeUInt16LE(archivos.length, 8); fin.writeUInt16LE(archivos.length, 10); fin.writeUInt32LE(central.length, 12); fin.writeUInt32LE(pos, 16);
+  return Buffer.concat([...locales, central, fin]);
+}
+const xmlEsc = t => String(t).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function letra(n) { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function escribirExcel(hojas) {
+  const lista = (hojas || []).filter(h => h && h.nombre).slice(0, 50);
+  if (!lista.length) throw new Error('No hay hojas para guardar.');
+  const archivos = [];
+  const usados = new Set();
+  const nombres = lista.map(h => { let n = String(h.nombre).replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Hoja'; let k = n, i = 2; while (usados.has(k.toLowerCase())) k = n.slice(0, 28) + ' ' + i++; usados.add(k.toLowerCase()); return k; });
+  lista.forEach((h, i) => {
+    const enlaces = [];
+    const filasXml = (h.filas || []).slice(0, 20000).map((f, r) => {
+      const celdas = Object.keys(f || {}).map(Number).filter(c => c > 0 && c <= 16384).sort((a, b) => a - b).map(c => {
+        const celda = f[c] || {}, ref = letra(c) + (r + 1), v = celda.v;
+        if (v === null || v === undefined || v === '') return '';
+        if (celda.enlace && /^(https?:|mailto:)/i.test(celda.enlace)) enlaces.push([ref, celda.enlace]);
+        return typeof v === 'number' && Number.isFinite(v) ? `<c r="${ref}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+      }).join('');
+      return `<row r="${r + 1}">${celdas}</row>`;
+    }).join('');
+    const hl = enlaces.length ? `<hyperlinks>${enlaces.map(([ref], k) => `<hyperlink ref="${ref}" r:id="rIdL${k + 1}"/>`).join('')}</hyperlinks>` : '';
+    archivos.push([`xl/worksheets/sheet${i + 1}.xml`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData>${filasXml}</sheetData>${hl}</worksheet>`]);
+    if (enlaces.length) archivos.push([`xl/worksheets/_rels/sheet${i + 1}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${enlaces.map(([, u], k) => `<Relationship Id="rIdL${k + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${xmlEsc(u)}" TargetMode="External"/>`).join('')}</Relationships>`]);
+  });
+  archivos.unshift(
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${lista.map((h, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${nombres.map((n, i) => `<sheet name="${xmlEsc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${nombres.map((n, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`]);
+  return zip(archivos);
+}
+
+module.exports = { leerExcel, abrirZip, escribirExcel };

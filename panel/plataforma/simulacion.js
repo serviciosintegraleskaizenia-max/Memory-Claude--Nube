@@ -58,6 +58,10 @@ module.exports = function crearSimulacion({ client, registrar, central, claveIA,
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), autor TEXT NOT NULL DEFAULT '',
       estado VARCHAR(12) NOT NULL DEFAULT 'corriendo', ajustes JSONB NOT NULL DEFAULT '{}', progreso JSONB NOT NULL DEFAULT '{}',
       resultado JSONB NOT NULL DEFAULT '{}', terminado TIMESTAMPTZ)`);
+    // Prompts guardados por empresa (versiones con nombre para volver a usarlas).
+    await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_prompts (
+      id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, nombre TEXT NOT NULL, prompt TEXT NOT NULL, autor TEXT NOT NULL DEFAULT '',
+      creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     // Si el panel se reinició a mitad de una simulación, queda marcada como interrumpida.
     await client.query("UPDATE conocimiento_simulaciones SET estado = 'interrumpida' WHERE estado = 'corriendo'");
   }
@@ -137,7 +141,8 @@ Escribe SOLO el texto de tu mensaje.`;
         if (conWeb) c.busquedas_web++;
         if (/US\$\s?\d|\$\s?\d/.test(r.respuesta)) c.dio_precio = true;
         mensajes.push({ rol: 'asistente', texto: r.respuesta });
-        c.mensajes.push({ rol: 'asistente', texto: r.respuesta, costo, tokens: r.tokens, web: conWeb, segundos: Math.round((Date.now() - t0) / 100) / 10, motivo: r.motivo || '' });
+        c.mensajes.push({ rol: 'asistente', texto: r.respuesta, costo, tokens: r.tokens, web: conWeb, segundos: Math.round((Date.now() - t0) / 100) / 10, motivo: r.motivo || '', sin_respuesta: Boolean(r.sin_respuesta), diagnostico: r.diagnostico || '' });
+        if (r.sin_respuesta) { c.error = 'La IA no devolvió respuesta (se pasó a un asesor). ' + (r.diagnostico || ''); c.resultado = 'error'; break; }
         if (r.pasar_a_asesor) {
           c.motivo = r.motivo || 'humano';
           c.resumen_para_asesor = r.resumen_para_asesor || '';
@@ -206,7 +211,9 @@ Escribe SOLO el texto de tu mensaje.`;
       const lista = (await client.query(`SELECT id, creado, autor, estado, ajustes, progreso, terminado,
           CASE WHEN estado = 'lista' THEN resultado->'resumen' ELSE NULL END AS resumen
         FROM conocimiento_simulaciones WHERE empresa_id = $1 ORDER BY id DESC LIMIT 15`, [e.id])).rows;
-      return json(res, 200, { simulaciones: lista, prompt: PROMPT_VENDEDOR, modelos: MODELOS, escenarios: ESCENARIOS, sedes: sedesDe(e), maxTurnos: MAX_TURNOS });
+      const prompts = (await client.query('SELECT id, nombre, prompt, autor, creado, actualizado FROM conocimiento_prompts WHERE empresa_id = $1 ORDER BY actualizado DESC LIMIT 50', [e.id])).rows;
+      const enUso = String(((e.conocimiento_ajustes || {}).instrucciones) || '');
+      return json(res, 200, { simulaciones: lista, prompt: PROMPT_VENDEDOR, prompts, en_uso: enUso, modelos: MODELOS, escenarios: ESCENARIOS, sedes: sedesDe(e), maxTurnos: MAX_TURNOS });
     }
     if (req.method === 'GET' && url === '/api/oficina/conocimiento/simulacion') {
       const s = (await client.query('SELECT * FROM conocimiento_simulaciones WHERE id = $1', [Number(p.get('id'))])).rows[0];
@@ -225,7 +232,7 @@ Escribe SOLO el texto de tu mensaje.`;
       const ids = new Set((Array.isArray(f.escenarios) ? f.escenarios : ESCENARIOS.map(x => x.id)).map(Number));
       const escenarios = ESCENARIOS.filter(x => ids.has(x.id));
       if (!escenarios.length) return json(res, 400, { error: 'Elige al menos un cliente simulado.' });
-      const instrucciones = String(f.instrucciones ?? PROMPT_VENDEDOR).trim().slice(0, 6000);
+      const instrucciones = String(f.instrucciones ?? PROMPT_VENDEDOR).trim().slice(0, 12000);
       const ajustes = { modelos, escenarios: escenarios.map(x => x.id), instrucciones, modeloCliente: MODELO_CLIENTE, maxTurnos: MAX_TURNOS };
       const id = (await client.query("INSERT INTO conocimiento_simulaciones (empresa_id, autor, ajustes, progreso) VALUES ($1, $2, $3, $4) RETURNING id",
         [e.id, u.usuario, JSON.stringify(ajustes), JSON.stringify({ hechas: 0, total: modelos.length * escenarios.length })])).rows[0].id;
@@ -238,7 +245,7 @@ Escribe SOLO el texto de tu mensaje.`;
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/usar-prompt') {
       const f = await leerCuerpo(req);
       const e = await empresa(f.empresa_id);
-      const instrucciones = String(f.instrucciones ?? '').trim().slice(0, 6000);
+      const instrucciones = String(f.instrucciones ?? '').trim().slice(0, 12000);
       if (instrucciones.length < 20) throw error('El prompt está vacío.');
       const fila = (await client.query('SELECT conocimiento_ajustes FROM empresas WHERE id = $1', [e.id])).rows[0] || {};
       await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify({ ...(fila.conocimiento_ajustes || {}), instrucciones }), e.id]);
@@ -258,6 +265,63 @@ Escribe SOLO el texto de tu mensaje.`;
       await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify(aj), e.id]);
       await registrar(u, 'simulacion_usar', 'empresa', e.slug, '', '', `simulación ${s.id}${modelo ? ' · ' + modelo : ''}`);
       return json(res, 200, { ok: true });
+    }
+    // ---------- Prompts guardados ----------
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/prompt/guardar') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const prompt = String(f.prompt || '').trim().slice(0, 12000);
+      if (prompt.length < 20) throw error('El prompt está vacío.');
+      const nombre = String(f.nombre || '').trim().slice(0, 80) || 'Versión ' + new Date().toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      let id = Number(f.id) || 0;
+      if (id) {
+        const r = await client.query('UPDATE conocimiento_prompts SET nombre = $1, prompt = $2, actualizado = NOW() WHERE id = $3 AND empresa_id = $4 RETURNING id', [nombre, prompt, id, e.id]);
+        if (!r.rowCount) id = 0;
+      }
+      if (!id) id = (await client.query('INSERT INTO conocimiento_prompts (empresa_id, nombre, prompt, autor) VALUES ($1, $2, $3, $4) RETURNING id', [e.id, nombre, prompt, u.usuario])).rows[0].id;
+      await registrar(u, 'prompt_guardar', 'empresa', e.slug, '', '', nombre);
+      return json(res, 200, { ok: true, id, nombre });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/prompt/borrar') {
+      const f = await leerCuerpo(req);
+      await client.query('DELETE FROM conocimiento_prompts WHERE id = $1', [Number(f.id)]);
+      return json(res, 200, { ok: true });
+    }
+    // ✨ Mejorar con IA: lee el prompt y lo que falló en la última simulación, y propone una versión mejor (no la guarda sola).
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/simulacion/prompt/mejorar') {
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [e.id])).rows[0];
+      const apiKey = claveIA ? claveIA(fila) : '';
+      if (!apiKey) throw error('Esta empresa no tiene clave de IA (OpenRouter).');
+      const prompt = String(f.prompt || '').trim().slice(0, 12000);
+      if (prompt.length < 20) throw error('Escribe o pega un prompt primero.');
+      const pedido = String(f.pedido || '').trim().slice(0, 1500);
+      const sim = (await client.query("SELECT resultado FROM conocimiento_simulaciones WHERE empresa_id = $1 AND estado = 'lista' ORDER BY id DESC LIMIT 1", [e.id])).rows[0];
+      const malas = ((sim && sim.resultado && sim.resultado.conversaciones) || []).filter(c => c.resultado !== 'venta').slice(0, 8);
+      const conversaciones = malas.map(c => `### ${c.titulo} (${c.modelo}) → ${c.resultado}${c.error ? ' · ' + c.error : ''}\n` + c.mensajes.map(m => `${m.rol === 'cliente' ? 'CLIENTE' : 'VENDEDOR'}: ${String(m.texto).slice(0, 600)}`).join('\n')).join('\n\n').slice(0, 24000);
+      const sistema = `Eres experto en escribir prompts para vendedores de viajes que atienden por WhatsApp, Instagram y Facebook (en español).
+Te paso el PROMPT DEL VENDEDOR de una agencia${malas.length ? ' y conversaciones de una simulación donde NO se cerró la venta' : ''}${pedido ? ' y lo que el dueño quiere cambiar' : ''}.
+Mejora el prompt para que venda más y falle menos:
+- Corrige lo que se ve mal en las conversaciones (preguntas repetidas, respuestas largas, no pedir datos, no cerrar, inventar, idioma).
+- Mantén lo bueno, el estilo y el orden. Escribe claro, en frases cortas. Máximo 6000 caracteres.
+- NO pongas precios ni tarifas: la información de la agencia se agrega sola al final (sección INFORMACIÓN). Quita marcadores como "[AQUÍ PEGA TUS TARIFAS]".
+- No cambies las reglas fijas: solo precio de venta, nunca comisión ni neto, no inventar, pasar a un asesor con el motivo "reservar" para cobrar el depósito.
+Devuelve SOLO JSON válido: {"cambios": ["qué cambiaste y por qué, en una línea", ...], "prompt": "el prompt completo mejorado"}`;
+      const contenido = `PROMPT DEL VENDEDOR:\n${prompt}${pedido ? `\n\nLO QUE EL DUEÑO QUIERE CAMBIAR:\n${pedido}` : ''}${conversaciones ? `\n\nCONVERSACIONES SIN VENTA:\n${conversaciones}` : ''}`;
+      const modelo = (MODELOS.find(m => /sonnet/i.test(m.id)) || MODELOS[0]).id;
+      const r = await fetch(central.ayudantes.OPENROUTER + '/chat/completions', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json', 'X-Title': 'Kaizen IA - mejorar prompt' },
+        body: JSON.stringify({ model: modelo, max_tokens: 4000, temperature: 0.3, usage: { include: true }, messages: [{ role: 'system', content: sistema }, { role: 'user', content: contenido }] })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) throw error('La IA respondió con error: ' + ((d.error && d.error.message) || r.status), 502);
+      const t = String((((d.choices || [])[0] || {}).message || {}).content || '');
+      let j = null;
+      try { j = JSON.parse(t.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')); } catch (err) { const m = t.match(/\{[\s\S]*\}/); if (m) { try { j = JSON.parse(m[0]); } catch (e2) {} } }
+      if (!j || !j.prompt) throw error('La IA no devolvió un prompt válido. Prueba otra vez.', 502);
+      await registrar(u, 'prompt_mejorar', 'empresa', e.slug, '', '', `${malas.length} conversaciones · ${modelo}`);
+      return json(res, 200, { ok: true, prompt: String(j.prompt).slice(0, 12000), cambios: (Array.isArray(j.cambios) ? j.cambios : []).map(String).slice(0, 15), conversaciones: malas.length, costo: Number(d.usage && d.usage.cost) || null, modelo });
     }
     return json(res, 404, { error: 'Ruta no encontrada' });
   }

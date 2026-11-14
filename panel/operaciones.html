@@ -80,7 +80,10 @@ tbody tr.fila{cursor:pointer}tbody tr.fila:hover td{background:rgba(31,95,174,.0
 .pop .op{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer}.pop .op:hover{background:var(--bg)}.pop .op small{color:var(--suave);display:block}.pop .op.no{opacity:.45}
 .fondo{position:fixed;inset:0;background:rgba(6,13,24,.45);z-index:50;display:none}.fondo.abierto{display:block}
 .panel-lat{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--card);z-index:55;box-shadow:-20px 0 50px rgba(0,0,0,.2);transform:translateX(105%);transition:transform .2s;display:flex;flex-direction:column}
-.panel-lat.abierto{transform:none}.panel-lat .cabp{padding:16px 20px;border-bottom:1px solid var(--borde);display:flex;gap:10px;align-items:flex-start}.panel-lat .cuerpo{padding:16px 20px;overflow:auto;flex:1}
+.panel-lat.abierto{transform:none}.panel-lat.grande{width:min(1200px,100%)}
+.panel-lat .cabp>.btn.mini{min-width:32px;justify-content:center}
+.v-min{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:90;background:var(--nav);color:#fff;border-radius:999px;padding:8px 8px 8px 16px;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.3);cursor:pointer;font-size:13px;max-width:90vw}
+.v-min span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v-min button{border:0;background:rgba(255,255,255,.12);color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer}.panel-lat .cabp{padding:16px 20px;border-bottom:1px solid var(--borde);display:flex;gap:10px;align-items:flex-start}.panel-lat .cuerpo{padding:16px 20px;overflow:auto;flex:1}
 .dato{display:grid;grid-template-columns:130px 1fr;gap:8px;padding:6px 0;border-bottom:1px dashed var(--borde);font-size:13px}.dato span:first-child{color:var(--suave)}
 .ev{display:flex;gap:10px;padding:7px 0;font-size:12.5px;border-bottom:1px solid var(--borde)}.ev small{color:var(--suave);white-space:nowrap}
 .campo{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}.campo>input,.campo>select,.campo>textarea{width:100%}.rej>*{min-width:0}.campo>div>input{flex:1;min-width:0;width:100%}.ficha{border:1px solid var(--borde);border-radius:14px;padding:12px 14px 4px;margin-bottom:10px}.ficha.nueva{border-style:dashed;border-color:var(--oro)}.ficha .pie-f{display:flex;gap:6px;justify-content:flex-end;padding-bottom:10px}.campo label{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--suave);font-weight:700}
@@ -175,6 +178,7 @@ svg .n{font-size:10px;fill:var(--suave);text-anchor:middle;font-weight:700}svg .
 <div id="prox" style="display:none"></div>
 <div class="fondo" id="fondo"></div>
 <div class="panel-lat" id="lat"></div>
+<div class="v-min" id="vMin" style="display:none" title="Volver a abrir"><b>&#9635;</b><span></span><button data-vmin-x title="Cerrar">&#10005;</button></div>
 <div class="toast" id="toast"></div>
 <script>
 'use strict';
@@ -452,7 +456,27 @@ async function abrirDetalle(id) {
   $('#lat').dataset.id = id;
   $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
 }
-function cerrarLat() { $('#lat').classList.remove('abierto'); $('#fondo').classList.remove('abierto'); }
+function cerrarLat() { $('#lat').classList.remove('abierto', 'grande'); $('#fondo').classList.remove('abierto'); $('#vMin').style.display = 'none'; }
+// Toda ficha lateral lleva minimizar, agrandar y cerrar (X), junto al botón X que ya trae.
+new MutationObserver(() => {
+  const x = $('#cerrarLat');
+  if (!x || x.parentElement.querySelector('[data-lat-v]')) return;
+  x.title = 'Cerrar';
+  x.insertAdjacentHTML('beforebegin', `<button class="btn mini s" data-lat-v="min" title="Minimizar">&#8212;</button><button class="btn mini s" data-lat-v="max" title="Agrandar">${$('#lat').classList.contains('grande') ? '&#10697;' : '&#9633;'}</button>`);
+}).observe(document.getElementById('lat'), { childList: true });
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-lat-v]');
+  if (b) {
+    if (b.dataset.latV === 'max') { $('#lat').classList.toggle('grande'); b.innerHTML = $('#lat').classList.contains('grande') ? '&#10697;' : '&#9633;'; return; }
+    const t = ($('#lat .cabp b') || {}).textContent || 'Ficha';
+    $('#lat').classList.remove('abierto'); $('#fondo').classList.remove('abierto');
+    const c = $('#vMin'); c.querySelector('span').textContent = t.trim().slice(0, 60); c.style.display = 'flex';
+    return;
+  }
+  const c = ev.target.closest('#vMin'); if (!c) return;
+  if (ev.target.closest('[data-vmin-x]')) return cerrarLat();
+  c.style.display = 'none'; $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
+});
 async function recargarYDetalle(id) { await cargar(); repintarDia(); if (id) abrirDetalle(id); }
 $('#lat').addEventListener('click', async ev => {
   const id = Number($('#lat').dataset.id);

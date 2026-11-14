@@ -439,7 +439,14 @@
   body.incrustado .caja-ventana { width: 100%; max-height: none; box-shadow: none; border-radius: 0; padding: 14px 16px; }
   body.incrustado [data-accion="cerrar"] { display: none; }
   body.incrustado-empresas .barra-ventana { display: none; }
-  .caja-ventana { background: var(--tarjeta); color: var(--texto); width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
+  .caja-ventana { background: var(--tarjeta); color: var(--texto); width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; border-radius: 14px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); position: relative; }
+  .caja-ventana.grande { width: 98vw; max-width: none; height: 94vh; max-height: 94vh; }
+  .caja-ventana > .barra-ventana:first-of-type { padding-right: 104px; }
+  .ctl-v { position: sticky; top: -20px; float: right; margin: -10px -12px 0 8px; display: flex; gap: 2px; z-index: 6; background: var(--tarjeta); border-radius: 9px; }
+  .ctl-v button { width: 32px; height: 30px; border: 0; background: transparent; border-radius: 7px; cursor: pointer; font-size: 15px; color: var(--texto); opacity: .65; line-height: 1; }
+  .ctl-v button:hover { background: var(--hover); opacity: 1; } .ctl-v button.x:hover { background: #e11d48; color: #fff; }
+  .v-min { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90; background: #0b1f3a; color: #fff; border-radius: 999px; padding: 8px 8px 8px 16px; gap: 10px; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.3); cursor: pointer; font-size: 13px; max-width: 90vw; }
+  .v-min span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .v-min button { border: 0; background: rgba(255,255,255,.12); color: #fff; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
   .barra-ventana { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
   .barra-ventana h2 { margin: 0; font-size: 18px; }
   .form-fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
@@ -740,6 +747,7 @@
   <div class="bandeja-lista" id="bandejaLista"></div>
 </div>
 
+<div class="v-min" id="vMin" style="display:none" title="Volver a abrir"><b>&#9635;</b><span></span><button data-vmin-x title="Cerrar">&#10005;</button></div>
 <div class="overlay" id="overlay">
   <div class="caja-ventana" id="caja"></div>
 </div>
@@ -2483,7 +2491,7 @@ async function abrirExportar() {
   abrirVentana(`
     <div class="barra-ventana">
       <h2>Exportar a Excel</h2>
-      <div><button class="btn-sec" data-accion="cerrar">Cerrar</button></div>
+      <div></div>
     </div>
     <div class="pie-acciones">
       <button class="btn-sec" data-accion="exp-rango" data-desde="0" data-hasta="0">Hoy</button>
@@ -3097,7 +3105,7 @@ async function abrirCorreoNuevo() {
   abrirVentana(`
     <div class="barra-ventana">
       <h2>Correo nuevo</h2>
-      <div><button class="btn-sec" data-accion="cerrar">Cerrar</button></div>
+      <div></div>
     </div>
     <div class="form-fila">
       <label>Enviar desde<select id="cnBuzon">${opciones}</select></label>
@@ -3127,8 +3135,13 @@ async function enviarCorreoNuevo() {
 
 /* ---------- Ventana de herramientas ---------- */
 
+// Toda ventana lleva arriba a la derecha: minimizar, agrandar y cerrar (X). Nada de botones "Cerrar".
 function abrirVentana(html) {
-  document.getElementById('caja').innerHTML = html;
+  const caja = document.getElementById('caja');
+  caja.classList.remove('grande');
+  caja.innerHTML = (INCRUSTADO ? '' : `<div class="ctl-v"><button data-v="min" title="Minimizar">&#8212;</button><button data-v="max" title="Agrandar">&#9633;</button><button data-v="x" class="x" title="Cerrar">&#10005;</button></div>`) + html;
+  caja.querySelectorAll('[data-accion="cerrar"]').forEach(b => { if (/^\s*cerrar\s*$/i.test(b.textContent)) b.remove(); });
+  document.getElementById('vMin').style.display = 'none';
   document.getElementById('overlay').classList.add('abierto');
 }
 
@@ -3136,7 +3149,23 @@ function cerrarVentana() {
   if (INCRUSTADO) return;
   document.getElementById('overlay').classList.remove('abierto');
   document.getElementById('caja').innerHTML = '';
+  document.getElementById('vMin').style.display = 'none';
 }
+document.addEventListener('click', e => {
+  const b = e.target.closest('#caja .ctl-v [data-v]');
+  if (b) {
+    const caja = document.getElementById('caja');
+    if (b.dataset.v === 'x') return cerrarVentana();
+    if (b.dataset.v === 'max') { caja.classList.toggle('grande'); b.innerHTML = caja.classList.contains('grande') ? '&#10697;' : '&#9633;'; return; }
+    const t = (caja.querySelector('h2') || {}).textContent || 'Ventana';
+    document.getElementById('overlay').classList.remove('abierto');
+    const c = document.getElementById('vMin'); c.querySelector('span').textContent = t.trim().slice(0, 60); c.style.display = 'flex';
+    return;
+  }
+  const c = e.target.closest('#vMin'); if (!c) return;
+  if (e.target.closest('[data-vmin-x]')) return cerrarVentana();
+  c.style.display = 'none'; document.getElementById('overlay').classList.add('abierto');
+});
 
 function mostrarAviso(texto, ok) {
   const el = document.getElementById('avisoV');
@@ -3214,7 +3243,7 @@ function marco(tab, aviso) {
     (puede('exportar_datos') || puede('supervisar') ? boton('extras', 'Extras para facturar') : '') +
     (esProg ? boton('bloqueos', 'Bloqueos') : '') +
     (audit ? boton('auditoria', 'Auditoría') : '') +
-    `<button class="btn-sec" data-accion="cerrar">Cerrar</button>`;
+    '';
 
   let cuerpo;
   if (tab === 'usuarios') cuerpo = tablaUsuarios();

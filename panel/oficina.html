@@ -127,7 +127,14 @@
   /* Ventana de formulario */
   .fondo-modal { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
   .fondo-modal.abierto { display:flex; }
-  .modal { background:var(--tarjeta); border-radius:14px; width:min(560px,100%); max-height:92vh; overflow-y:auto; padding:18px 20px; box-shadow:0 20px 50px rgba(0,0,0,.3); }
+  .modal { background:var(--tarjeta); border-radius:14px; width:min(560px,100%); max-height:92vh; overflow-y:auto; padding:18px 20px; box-shadow:0 20px 50px rgba(0,0,0,.3); position:relative; }
+  .modal > h2:first-of-type, .modal > .caja:first-of-type { padding-right:104px; }
+  .modal.grande { width:96vw !important; max-width:none; height:92vh; max-height:92vh; }
+  .ctl-v { position:sticky; top:-18px; float:right; margin:-8px -10px 0 8px; display:flex; gap:2px; z-index:6; background:var(--tarjeta); border-radius:9px; }
+  .ctl-v button { width:32px; height:30px; border:0; background:transparent; border-radius:7px; cursor:pointer; font-size:15px; color:var(--texto); opacity:.65; line-height:1; }
+  .ctl-v button:hover { background:var(--hover); opacity:1; } .ctl-v button.x:hover { background:#e11d48; color:#fff; }
+  .v-min { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:90; background:var(--lateral); color:#fff; border-radius:999px; padding:8px 8px 8px 16px; gap:10px; align-items:center; box-shadow:0 10px 30px rgba(0,0,0,.3); cursor:pointer; font-size:13px; max-width:90vw; }
+  .v-min span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .v-min button { border:0; background:rgba(255,255,255,.12); color:#fff; width:26px; height:26px; border-radius:50%; cursor:pointer; }
   .modal h2 { margin:0 0 12px; font-size:17px; }
   .campo { margin-bottom:12px; } .campo label { display:block; font-size:13px; font-weight:600; margin-bottom:4px; }
   .campo .ay { font-size:12px; color:var(--suave); margin-top:3px; }
@@ -150,6 +157,28 @@
   .k-avisos { background:#fffbeb; border:1px solid #fde68a; color:#78350f; border-radius:10px; padding:8px 12px; font-size:12.5px; margin-bottom:12px; }
   body.oscuro .k-avisos { background:#451a03; border-color:#92400e; color:#fde68a; }
   .k-res { border:1px solid var(--borde); border-radius:10px; margin-top:10px; }
+  /* Visor de documentos */
+  .sim-pbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0 2px; } .sim-pbar label { font-weight:600; font-size:13px; margin-right:auto; }
+  .sim-pbar select { max-width:280px; } .sim-pacc { display:flex; gap:6px; flex-wrap:wrap; }
+  .va-barra { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; border-bottom:1px solid var(--borde); margin-bottom:12px; }
+  .va-barra .acciones { margin-bottom:6px; }
+  .va-pdf { width:100%; height:calc(92vh - 210px); min-height:420px; border:1px solid var(--borde); border-radius:10px; background:#fff; }
+  .va-hojas { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .va-hojas button { border:1px solid var(--borde); background:var(--tarjeta); color:var(--texto); border-radius:999px; padding:4px 12px; cursor:pointer; font-size:12.5px; }
+  .va-hojas button.a { background:var(--azul); color:#fff; border-color:var(--azul); } .va-hojas i { font-style:normal; opacity:.7; font-size:11px; }
+  .va-tabla-c { overflow:auto; max-height:calc(92vh - 250px); border:1px solid var(--borde); border-radius:10px; }
+  .va-tabla { border-collapse:collapse; font-size:12.5px; width:max-content; min-width:100%; }
+  .va-tabla th { position:sticky; top:0; background:var(--hover); color:var(--suave); font-weight:600; font-size:11px; padding:5px 8px; border:1px solid var(--borde); z-index:1; }
+  .va-tabla tbody th { position:sticky; left:0; top:auto; text-align:right; }
+  .va-tabla td { border:1px solid var(--borde); padding:5px 8px; max-width:320px; white-space:pre-wrap; vertical-align:top; }
+  .va-tabla tbody tr:first-child td { font-weight:700; background:color-mix(in srgb, var(--azul) 6%, transparent); }
+  .va-tabla.editando td { background:var(--tarjeta); cursor:text; } .va-tabla.editando td:focus { outline:2px solid var(--azul); outline-offset:-2px; }
+  .va-tabla td[data-enlace]::after { content:' 📎'; font-size:10px; }
+  .va-acc { display:flex; gap:10px; align-items:center; margin-top:8px; }
+  .va-texto { line-height:1.6; font-size:13.5px; } .va-texto h4 { margin:14px 0 4px; font-size:14px; color:var(--azul); } .va-texto p { margin:4px 0; } .va-texto ul { margin:4px 0; padding-left:20px; }
+  .va-texto li.ficha-l { list-style:none; margin:0 0 8px -20px; border:1px solid var(--borde); border-radius:10px; padding:8px 10px; display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .va-texto li.ficha-l span i { font-style:normal; color:var(--suave); font-size:11.5px; display:block; }
+  .va-edit { width:100%; min-height:calc(92vh - 260px); font-family:inherit; font-size:13px; line-height:1.55; }
   /* Carpetas de la base */
   .k-carpetas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
   @media (max-width:900px) { .k-carpetas { grid-template-columns:1fr; } }
@@ -244,6 +273,7 @@
   <div id="vista"><div class="vacio">Cargando…</div></div>
 </main>
 <div class="fondo-modal" id="fondoModal"><div class="modal" id="modal"></div></div>
+<div class="v-min" id="vMin" style="display:none" title="Volver a abrir"><b>&#9635;</b><span></span><button data-vmin-x title="Cerrar">&#10005;</button></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1170,17 +1200,62 @@ function calcularROI(m) {
   return { tasaVenta, tasaHumano, costoIA, sinIA, conIA, ahorro, roi: costoIA ? ahorro / costoIA : 0, ventas,
     porVenta: ventas ? costoIA / ventas : 0, pctVentas: ventas && ROI.ticket ? costoIA / (ventas * ROI.ticket) : 0 };
 }
+// Prompt del vendedor: borrador que no se pierde al refrescar, versiones guardadas y "Mejorar con IA".
+const SIMP = { sel: '', mejora: null };
+const claveBorrador = () => 'simPrompt:' + kEmpresa;
+function borradorPrompt() { try { return localStorage.getItem(claveBorrador()) || ''; } catch (e) { return ''; } }
+function guardarBorrador(t) { try { localStorage.setItem(claveBorrador(), t); } catch (e) {} }
+function ponerPrompt(texto, sel) { SIMP.sel = sel || ''; guardarBorrador(texto); const ta = document.getElementById('simPrompt'); if (ta) ta.value = texto; pintar(); }
+function avisoPrompt(t) {
+  return /\[\s*AQU[IÍ][^\]]*PEGA/i.test(t || '') ? '<div class="k-avisos">ℹ️ No hace falta pegar tarifas: la INFORMACIÓN se agrega sola desde la carpeta 🤖 Chatbot. El marcador "[AQUÍ PEGA…]" se ignora.</div>' : '';
+}
+async function mejorarPrompt() {
+  const ultima = (SIM.simulaciones || []).find(x => x.estado === 'lista');
+  abrirModal(`<h2>✨ Mejorar el prompt con IA</h2>
+    <p class="sub" style="margin:-4px 0 10px">La IA lee tu prompt${ultima ? ' y las conversaciones de la última simulación que no cerraron venta' : ''} y propone una versión mejor. No cambia nada hasta que tú lo decidas.</p>
+    ${campo('mpPedido', '¿Qué quieres que mejore? (opcional)', '<textarea id="mpPedido" rows="3" placeholder="Ej.: que no repita preguntas, que pida la fecha antes de dar precio, que sea más corto en WhatsApp"></textarea>')}
+    <div class="error-form" id="errForm"></div>
+    <div class="pie"><button class="btn" id="mpCorrer">✨ Proponer mejora</button></div>
+    <div id="mpRes"></div>`);
+  document.getElementById('modal').classList.add('ancho');
+  document.getElementById('mpCorrer').onclick = async () => {
+    const b = document.getElementById('mpCorrer'); b.disabled = true; b.textContent = 'Pensando… (unos 20 a 60 segundos)';
+    const r = await api('/api/oficina/conocimiento/simulacion/prompt/mejorar', { empresa_id: kEmpresa, prompt: document.getElementById('simPrompt').value, pedido: document.getElementById('mpPedido').value });
+    b.disabled = false; b.textContent = '✨ Proponer otra vez';
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo.'; return; }
+    SIMP.mejora = r.data;
+    document.getElementById('mpRes').innerHTML = `<h3 style="margin:14px 0 6px;font-size:14px">Qué cambió${r.data.conversaciones ? ` (revisó ${r.data.conversaciones} conversación(es) sin venta)` : ''}</h3>
+      <ul style="margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.6">${r.data.cambios.map(c => `<li>${esc(c)}</li>`).join('') || '<li>Ajustes de redacción.</li>'}</ul>
+      <textarea readonly rows="14" style="width:100%;font-size:12.5px">${esc(r.data.prompt)}</textarea>
+      <p class="sub">${r.data.costo ? `Costó US$ ${Number(r.data.costo).toFixed(4)} en OpenRouter. ` : ''}Después pruébalo con "Simular" antes de ponerlo en el asistente.</p>
+      <div class="pie"><button class="btn-sec" data-k="sim-p-usar-mejora">Ponerlo en el editor</button><button class="btn" data-k="sim-p-guardar-mejora">💾 Guardar como versión</button></div>`;
+  };
+}
+document.addEventListener('input', e => { if (e.target.id === 'simPrompt') { guardarBorrador(e.target.value); const a = document.getElementById('simPAviso'); if (a) a.innerHTML = avisoPrompt(e.target.value); const g = document.getElementById('simPGuardado'); if (g) g.textContent = ' · borrador guardado en esta computadora'; } });
+document.addEventListener('change', e => {
+  if (e.target.id !== 'simPromptSel' || !e.target.value) return;
+  const v = e.target.value;
+  if (v === 'base') return ponerPrompt(SIM.prompt, '');
+  if (v === 'en_uso') return ponerPrompt(SIM.en_uso, '');
+  const x = (SIM.prompts || []).find(p => String(p.id) === v); if (x) ponerPrompt(x.prompt, x.id);
+});
 function tabSimularK() {
   if (!SIM || SIMEmp !== kEmpresa) { cargarSim().then(() => { if (vista === 'conocimiento' && kTab === 'simular') pintar(); }); return '<div class="caja"><div class="vacio">Cargando…</div></div>'; }
   if (SIM.error) return `<div class="caja"><div class="vacio">${esc(SIM.error)}</div></div>`;
   const e = K.empresa;
   const corriendo = SIM.simulaciones.find(s => s.estado === 'corriendo');
-  const promptActual = (SIMV && SIMV.ajustes && SIMV.ajustes.instrucciones) || SIM.prompt;
+  const promptActual = borradorPrompt() || (SIMV && SIMV.ajustes && SIMV.ajustes.instrucciones) || SIM.en_uso || SIM.prompt;
   const total = SIM.escenarios.length;
   const form = `<div class="caja"><div class="cab"><div><h2>🧪 Simulación de ventas</h2>
       <p class="sub">Una IA hace de cliente (${total} perfiles de Punta Cana y Orlando) y conversa con el asistente REAL de ${esc(e.nombre)}: sus tarifarios, su búsqueda en internet y el prompt de vendedor de abajo. Mide tokens, costo por conversación y ventas cerradas. No cambia nada del asistente hasta que pulses "Usar este vendedor".</p></div></div>
     ${e.tieneClaveIA ? '' : '<div class="k-avisos">⚠️ Esta empresa no tiene clave de IA (OpenRouter): ponla en Clientes y cobros → Editar.</div>'}
-    ${campo('simPrompt', '🎯 Prompt del vendedor (se suma a las reglas de siempre: solo precio de venta, nunca comisión, no inventar, idioma del cliente)', `<textarea id="simPrompt" rows="12" style="font-size:12.5px">${esc(promptActual)}</textarea>`, `<a href="#" data-k="sim-prompt-base">Volver al prompt de vendedor original</a>`)}
+    <div class="sim-pbar"><label>🎯 Prompt del vendedor</label>
+      <select id="simPromptSel" title="Prompts guardados"><option value="">📂 Prompts guardados…</option>${SIM.en_uso ? '<option value="en_uso">✅ El que usa el asistente ahora</option>' : ''}<option value="base">↺ Original de vendedor</option>${(SIM.prompts || []).length ? `<optgroup label="Guardados">${SIM.prompts.map(x => `<option value="${x.id}" ${String(x.id) === String(SIMP.sel) ? 'selected' : ''}>${esc(x.nombre)} · ${fechaCorta(x.actualizado)}</option>`).join('')}</optgroup>` : ''}</select>
+      <span class="sim-pacc"><button class="btn-sec" data-k="sim-p-guardar" title="${SIMP.sel ? 'Guarda los cambios en la versión elegida' : 'Guarda este prompt con un nombre'}">💾 Guardar</button>${SIMP.sel ? '<button class="btn-sec" data-k="sim-p-nueva">Guardar como nueva</button><button class="btn-sec" data-k="sim-p-borrar" title="Borrar la versión elegida">🗑</button>' : ''}
+        <button class="btn" data-k="sim-p-mejorar" title="La IA lo revisa con lo que falló en la última simulación y te propone una versión mejor">✨ Mejorar con IA</button></span></div>
+    <p class="sub" style="margin:2px 0 6px">Se suma a las reglas de siempre: solo precio de venta, nunca comisión, no inventar, idioma del cliente. ${SIMP.sel ? `Editando: <b>${esc((SIM.prompts.find(x => String(x.id) === String(SIMP.sel)) || {}).nombre || '')}</b>` : ''}<span id="simPGuardado"></span></p>
+    <div id="simPAviso">${avisoPrompt(promptActual)}</div>
+    <textarea id="simPrompt" rows="14" style="font-size:12.5px;width:100%">${esc(promptActual)}</textarea>
     <div class="fila2"><div class="campo"><label>Modelos a comparar</label>${SIM.modelos.map(m => `<label style="display:flex;gap:6px;align-items:center;font-weight:500"><input type="checkbox" data-sim-modelo="${esc(m.id)}" checked> ${esc(m.nombre)} <small style="color:var(--suave)">· ${esc(m.nota)}</small></label>`).join('')}</div>
       <div class="campo"><label>Clientes simulados <a href="#" data-k="sim-todos" style="font-weight:400">(todos / ninguno)</a></label><div style="max-height:150px;overflow:auto;font-size:12.5px">${SIM.escenarios.map(x => `<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-sim-esc="${x.id}" checked> ${x.sede === 'orl' ? '🇺🇸' : '🇩🇴'} ${x.id}. ${esc(x.titulo)}</label>`).join('')}</div></div></div>
     <div class="acciones" style="justify-content:space-between;align-items:center"><small style="color:var(--suave)">Cada conversación tiene hasta ${SIM.maxTurnos} mensajes del cliente. La prueba completa con los 2 modelos cuesta aprox. US$ 1 a 3 en OpenRouter y tarda unos 10 a 20 minutos.</small>
@@ -1324,7 +1399,28 @@ document.addEventListener('click', async ev => {
     if (r.ok) { await cargarConocimiento(); pintar(); }
     return;
   }
-  if (a === 'sim-prompt-base') { document.getElementById('simPrompt').value = SIM.prompt; return; }
+  if (a === 'sim-prompt-base') { ponerPrompt(SIM.prompt, ''); return; }
+  if (a === 'sim-p-guardar' || a === 'sim-p-nueva') {
+    const actual = SIM.prompts.find(x => String(x.id) === String(SIMP.sel));
+    const nombre = a === 'sim-p-guardar' && actual ? actual.nombre : prompt('Nombre de esta versión del prompt:', a === 'sim-p-nueva' && actual ? actual.nombre + ' (2)' : 'Vendedor ' + new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short' }));
+    if (nombre === null) return;
+    const r = await api('/api/oficina/conocimiento/simulacion/prompt/guardar', { empresa_id: kEmpresa, id: a === 'sim-p-guardar' && actual ? actual.id : undefined, nombre, prompt: document.getElementById('simPrompt').value });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
+    SIMP.sel = r.data.id; aviso(`💾 Guardado: ${r.data.nombre}`); await cargarSim(true); return pintar();
+  }
+  if (a === 'sim-p-borrar') {
+    const actual = SIM.prompts.find(x => String(x.id) === String(SIMP.sel)); if (!actual || !confirm(`¿Borrar la versión "${actual.nombre}"?`)) return;
+    await api('/api/oficina/conocimiento/simulacion/prompt/borrar', { id: actual.id }); SIMP.sel = ''; await cargarSim(true); return pintar();
+  }
+  if (a === 'sim-p-mejorar') return mejorarPrompt();
+  if (a === 'sim-p-usar-mejora') { ponerPrompt(SIMP.mejora.prompt, SIMP.sel); cerrarModal(); aviso('Listo: el prompt mejorado está en el editor. Guárdalo o pruébalo con "Simular".', 6000); return; }
+  if (a === 'sim-p-guardar-mejora') {
+    const nombre = prompt('Nombre de la versión mejorada:', 'Mejorado con IA ' + new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short' }));
+    if (nombre === null) return;
+    const r = await api('/api/oficina/conocimiento/simulacion/prompt/guardar', { empresa_id: kEmpresa, nombre, prompt: SIMP.mejora.prompt });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
+    SIMP.sel = r.data.id; ponerPrompt(SIMP.mejora.prompt, r.data.id); cerrarModal(); aviso(`💾 Guardado: ${r.data.nombre}`); await cargarSim(true); return pintar();
+  }
   if (a === 'sim-todos') { const cajas = [...document.querySelectorAll('[data-sim-esc]')]; const todas = cajas.every(x => x.checked); cajas.forEach(x => { x.checked = !todas; }); return; }
   if (a === 'sim-ver') return verChatSim(Number(t.dataset.id));
   if (a === 'sim-informe') return informeSim();
@@ -1646,17 +1742,105 @@ function probarCanal(sede, canal) {
   abrirModal(`<div class="caja" style="box-shadow:none;padding:0;margin:0">${htmlChatK(`💬 Probar ${esc(canal)}${sede ? ' · ' + esc(sede) : ''}`, 'Escribe como si fueras un cliente por este canal. Es una prueba: no le llega a nadie.', sede)}</div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
   document.getElementById('modal').classList.add('ancho');
 }
-function verArchivo(f) {
-  const q = f.quitado || {};
+/* ---------- Ver un documento como es (PDF, Excel en tabla, Word/nota como texto) y editarlo ---------- */
+let VA = null; // { f, tab, hojas, hoja, editando }
+const esExcel = n => /\.xlsx$|\.xlsm$/i.test(n || ''), esPdf = n => /\.pdf$/i.test(n || '');
+// Texto que lee el asistente, ordenado: títulos, viñetas, "Clave: valor; Clave: valor" en fichas y enlaces que se pueden abrir.
+function textoBonito(lineas) {
+  const enlazar = t => esc(t).replace(/(https?:\/\/[^\s;,]+)/g, u => `<a href="${u}" target="_blank" rel="noopener">${/drive\.google/.test(u) ? '📎 ver archivo' : u.replace(/^https?:\/\//, '').slice(0, 40) + '…'}</a>`);
+  let html = '', lista = false;
+  const cerrarLista = () => { if (lista) { html += '</ul>'; lista = false; } };
+  for (const l of lineas) {
+    const t = l.trim();
+    if (/^#{1,6}\s/.test(t)) { cerrarLista(); html += `<h4>${enlazar(t.replace(/^#+\s*/, ''))}</h4>`; continue; }
+    if (/^[-•*]\s/.test(t)) {
+      const c = t.replace(/^[-•*]\s*/, '');
+      if (!lista) { html += '<ul>'; lista = true; }
+      if (/^[^:;]{2,40}:\s[^;]+;\s/.test(c)) html += `<li class="ficha-l">${c.split(/;\s+/).map(p => { const m = p.match(/^([^:]{2,40}):\s*(.*)$/); return m ? `<span><i>${esc(m[1])}</i> ${enlazar(m[2])}</span>` : `<span>${enlazar(p)}</span>`; }).join('')}</li>`;
+      else html += `<li>${enlazar(c)}</li>`;
+      continue;
+    }
+    cerrarLista(); html += `<p>${enlazar(t)}</p>`;
+  }
+  cerrarLista();
+  return html || '<div class="vacio">Sin texto.</div>';
+}
+async function verArchivo(f) {
+  VA = { f, tab: esExcel(f.nombre) || esPdf(f.nombre) ? 'archivo' : 'texto', hojas: null, hoja: 0, editando: false };
+  if (esExcel(f.nombre)) { const r = await api('/api/oficina/conocimiento/tabla?id=' + f.id); VA.hojas = r.ok ? r.data.hojas : null; }
+  pintarVerArchivo();
+  const m = document.getElementById('modal'); m.classList.add('ancho');
+  if (VA.tab === 'archivo') { m.classList.add('grande'); const b = m.querySelector('.ctl-v [data-v="max"]'); if (b) b.innerHTML = '&#10697;'; }
+}
+function pintarVerArchivo() {
+  const { f } = VA, q = f.quitado || {};
+  const carpeta = CARPETAS_K[f.carpeta || 'chatbot'] || CARPETAS_K.chatbot;
   const quitado = (q.columnas || []).length || (q.lineas || []).length ? `<div class="k-quitado"><b>🔒 Se quitó (el cliente final nunca lo verá):</b><ul>
       ${(q.columnas || []).length ? `<li>Columnas: ${q.columnas.map(esc).join(' · ')}</li>` : ''}${(q.lineas || []).map(l => `<li>${esc(l.replace(/^#+\s*/, ''))}</li>`).join('')}</ul></div>` : '';
   const avisos = (f.avisos || []).length ? `<div class="k-avisos">${f.avisos.map(a => '⚠️ ' + esc(a)).join('<br>')}</div>` : '';
-  abrirModal(`<h2>${TIPO_K[f.tipo] || ''} ${esc(f.nombre)}</h2><p style="margin:-6px 0 12px;color:var(--suave);font-size:13px">Sede: ${esc(f.sede || 'Todas las sedes')} · ${f.estado === 'borrador' ? 'por revisar' : f.estado}</p>
-    ${avisos}${quitado}
-    ${f.documentos.map((d, i) => `<details class="k-doc" ${i === 0 ? 'open' : ''}><summary>${esc(d.titulo)} <span style="color:var(--suave);font-weight:400">· ${d.lineas.length} líneas</span></summary><pre>${esc(d.lineas.join('\n'))}</pre></details>`).join('') || '<div class="vacio">No quedó nada que el asistente pueda usar.</div>'}
-    <div class="pie">${f.estado === 'borrador' ? `<button class="btn-sec izq" data-k="quitar" data-id="${f.id}" style="color:var(--rojo)">Descartar</button>` : ''}<button class="btn-sec" data-cerrar-modal>Cerrar</button>${f.estado === 'borrador' ? `<button class="btn" data-k="publicar" data-id="${f.id}">Publicar</button>` : ''}</div>`);
-  document.getElementById('modal').classList.add('ancho');
+  const tabs = [esExcel(f.nombre) || esPdf(f.nombre) ? ['archivo', esExcel(f.nombre) ? '📊 El Excel' : '📄 El PDF'] : null, ['texto', f.carpeta === 'chatbot' || !f.carpeta ? '🤖 Lo que lee el asistente' : '📝 Texto']].filter(Boolean);
+  let cuerpo = '';
+  if (VA.tab === 'archivo' && esPdf(f.nombre)) cuerpo = `<iframe class="va-pdf" src="/api/oficina/conocimiento/original?id=${f.id}&ver=1" title="${esc(f.nombre)}"></iframe><p class="sub" style="margin-top:6px">El PDF no se puede editar aquí. Para cambiar lo que dice el asistente, ve a <a href="#" data-va-tab="texto">${tabs[tabs.length - 1][1]}</a> → ✏️ Editar.</p>`;
+  else if (VA.tab === 'archivo' && esExcel(f.nombre)) {
+    if (!VA.hojas) cuerpo = '<div class="vacio">No se pudo abrir el Excel.</div>';
+    else {
+      const h = VA.hojas[VA.hoja] || { filas: [] }, cols = Math.max(1, ...h.filas.map(r => Math.max(0, ...Object.keys(r).map(Number))));
+      const letra = n => { let t = ''; while (n > 0) { const m = (n - 1) % 26; t = String.fromCharCode(65 + m) + t; n = Math.floor((n - 1) / 26); } return t; };
+      cuerpo = `<div class="va-hojas">${VA.hojas.map((x, i) => `<button class="${i === VA.hoja ? 'a' : ''}" data-va-hoja="${i}">${esc(x.nombre)} <i>${x.filas.length}</i></button>`).join('')}</div>
+        <div class="va-tabla-c"><table class="va-tabla ${VA.editando ? 'editando' : ''}"><thead><tr><th></th>${Array.from({ length: cols }, (_, c) => `<th>${letra(c + 1)}</th>`).join('')}</tr></thead><tbody>
+        ${h.filas.map((r, i) => `<tr><th>${i + 1}</th>${Array.from({ length: cols }, (_, c) => { const x = r[c + 1]; const v = x ? x.v : ''; return `<td ${VA.editando ? 'contenteditable="true"' : ''} data-f="${i}" data-c="${c + 1}"${x && x.enlace ? ` data-enlace="${esc(x.enlace)}"` : ''}>${x && x.enlace && !VA.editando ? `<a href="${esc(x.enlace)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</td>`; }).join('')}</tr>`).join('')}
+        </tbody></table></div>${VA.editando ? `<div class="va-acc"><button class="btn-sec" data-va="fila">+ Fila</button><span class="sub">Escribe directo en las celdas. Los enlaces (📎) se conservan.</span></div>` : ''}`;
+    }
+  } else {
+    const lineas = f.documentos.flatMap(d => (f.documentos.length > 1 ? ['## ' + d.titulo + (d.hoja ? '' : '')] : []).concat(d.lineas));
+    cuerpo = VA.editando ? `<textarea id="vaTexto" class="va-edit">${esc(f.documentos.flatMap(d => d.lineas).join('\n'))}</textarea>
+        <p class="sub">Una idea por línea. "## Título" hace un título y "- " una viñeta.${f.carpeta === 'chatbot' || !f.carpeta ? ' Lo interno (comisión, neto) se quita solo.' : ''}</p>`
+      : `${avisos}${quitado}<div class="va-texto">${textoBonito(lineas)}</div>`;
+  }
+  const editable = (VA.tab === 'archivo' && esExcel(f.nombre) && VA.hojas) || (VA.tab === 'texto' && !(esExcel(f.nombre) && f.documentos.length > 1 && false));
+  abrirModal(`<h2>${esExcel(f.nombre) ? '📗' : esPdf(f.nombre) ? '📕' : /\.docx$/i.test(f.nombre) ? '📘' : '✍️'} ${esc(f.nombre)}</h2>
+    <p class="sub" style="margin:-6px 0 10px">${carpeta.i} ${carpeta.n}${f.carpeta === 'operaciones' ? '' : ' · ' + esc(f.sede || 'General')} · ${f.estado === 'borrador' ? 'por revisar' : f.estado === 'publicado' ? 'publicado' : esc(f.estado)}</p>
+    <div class="va-barra"><div class="pestanas" style="margin:0">${tabs.map(([k, n]) => `<button class="pestana ${VA.tab === k ? 'activa' : ''}" data-va-tab="${k}">${n}</button>`).join('')}</div>
+      <div class="acciones">${VA.editando ? `<button class="btn-sec" data-va="cancelar">Descartar cambios</button><button class="btn" data-va="guardar">💾 Guardar</button>`
+        : `${editable && f.estado !== 'anterior' ? `<button class="btn-sec" data-va="editar">✏️ Editar</button>` : ''}${f.tipo !== 'nota' ? `<a class="btn-sec" style="text-decoration:none" href="/api/oficina/conocimiento/original?id=${f.id}">⬇ Descargar</a>` : ''}`}</div></div>
+    <div id="errForm" class="error-form"></div>
+    ${cuerpo}
+    ${f.estado === 'borrador' && !VA.editando ? `<div class="pie"><button class="btn-sec izq" data-k="quitar" data-id="${f.id}" style="color:var(--rojo)">Descartar</button><button class="btn" data-k="publicar" data-id="${f.id}">Publicar</button></div>` : ''}`);
+  const m = document.getElementById('modal'); m.classList.add('ancho');
 }
+function leerTablaEditada() {
+  const h = VA.hojas[VA.hoja];
+  document.querySelectorAll('.va-tabla td[data-f]').forEach(td => {
+    const i = Number(td.dataset.f), c = Number(td.dataset.c), v = td.innerText.replace(/\n+$/, '');
+    const fila = h.filas[i] || (h.filas[i] = {});
+    if (v.trim()) fila[c] = { v, enlace: td.dataset.enlace || null }; else delete fila[c];
+  });
+}
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-va-tab],[data-va-hoja],[data-va]'); if (!t || !VA) return;
+  ev.preventDefault();
+  const grande = document.getElementById('modal').classList.contains('grande');
+  const repintar = () => { pintarVerArchivo(); if (grande) { const m = document.getElementById('modal'); m.classList.add('grande'); const b = m.querySelector('.ctl-v [data-v="max"]'); if (b) b.innerHTML = '&#10697;'; } };
+  if (t.dataset.vaTab) { if (VA.editando && VA.tab === 'archivo') leerTablaEditada(); VA.tab = t.dataset.vaTab; VA.editando = false; return repintar(); }
+  if (t.dataset.vaHoja) { if (VA.editando) leerTablaEditada(); VA.hoja = Number(t.dataset.vaHoja); return repintar(); }
+  const a = t.dataset.va;
+  if (a === 'editar') { VA.editando = true; return repintar(); }
+  if (a === 'cancelar') { if (!confirm('¿Descartar lo que cambiaste?')) return; if (VA.tab === 'archivo') { const r = await api('/api/oficina/conocimiento/tabla?id=' + VA.f.id); VA.hojas = r.ok ? r.data.hojas : VA.hojas; } VA.editando = false; return repintar(); }
+  if (a === 'fila') { leerTablaEditada(); VA.hojas[VA.hoja].filas.push({}); repintar(); const ult = [...document.querySelectorAll('.va-tabla tbody tr')].pop(); if (ult) { ult.scrollIntoView({ block: 'nearest' }); const td = ult.querySelector('td'); if (td) td.focus(); } return; }
+  if (a === 'guardar') {
+    const cuerpo = { id: VA.f.id };
+    if (VA.tab === 'archivo') { leerTablaEditada(); cuerpo.hojas = VA.hojas.map(h => ({ nombre: h.nombre, filas: h.filas.filter(fl => Object.keys(fl).length) })); }
+    else cuerpo.texto = document.getElementById('vaTexto').value;
+    t.disabled = true; t.textContent = 'Guardando…';
+    const r = await api('/api/oficina/conocimiento/editar', cuerpo);
+    if (!r.ok) { t.disabled = false; t.textContent = '💾 Guardar'; document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    aviso(VA.f.carpeta === 'tarifarios' && cuerpo.hojas ? 'Guardado. La versión anterior queda para volver a ella, y Operaciones carga los precios nuevos.' : 'Guardado. La versión anterior queda para volver a ella.', 6000);
+    await cargarConocimiento();
+    const n = await api('/api/oficina/conocimiento/ver?id=' + r.data.id);
+    if (n.ok) { VA.f = n.data; VA.editando = false; if (cuerpo.hojas) { const h = await api('/api/oficina/conocimiento/tabla?id=' + r.data.id); VA.hojas = h.ok ? h.data.hojas : VA.hojas; } repintar(); }
+    if (vista === 'conocimiento') { const cont = document.getElementById('vista'); if (cont) { const y = window.scrollY; await ir('conocimiento'); window.scrollTo(0, y); } }
+  }
+});
 function formNota(n = {}) {
   const carpeta = n.carpeta || kCarpeta, dest = n.carpeta ? { carpeta: n.carpeta, subcarpeta: n.subcarpeta, sede: n.sede } : destinoSubida();
   const interna = carpeta !== 'chatbot';
@@ -1856,8 +2040,35 @@ function opcionesEmpresa(elegida, vacio = 'Ninguno (general)') {
 function opciones(obj, elegida) { return Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === elegida ? 'selected' : ''}>${esc(v)}</option>`).join(''); }
 function campo(id, etiqueta, control, ayuda = '') { return `<div class="campo"><label for="${id}">${etiqueta}</label>${control}${ayuda ? `<div class="ay">${ayuda}</div>` : ''}</div>`; }
 const v = id => (document.getElementById(id) || {}).value || '';
-function abrirModal(html) { document.getElementById('modal').classList.remove('ancho'); document.getElementById('modal').innerHTML = html; document.getElementById('fondoModal').classList.add('abierto'); const p = document.querySelector('#modal input, #modal select, #modal textarea'); if (p) p.focus(); }
-function cerrarModal() { document.getElementById('fondoModal').classList.remove('abierto'); }
+// Toda ventana lleva arriba a la derecha: minimizar, agrandar y cerrar (X). Nada de botones "Cerrar".
+function controlesVentana() { return `<div class="ctl-v"><button data-v="min" title="Minimizar">&#8212;</button><button data-v="max" title="Agrandar">&#9633;</button><button data-v="x" class="x" title="Cerrar">&#10005;</button></div>`; }
+function abrirModal(html) {
+  const m = document.getElementById('modal');
+  m.classList.remove('ancho', 'grande');
+  m.innerHTML = controlesVentana() + html;
+  m.querySelectorAll('[data-cerrar-modal]').forEach(b => { if (/^\s*cerrar\s*$/i.test(b.textContent)) b.remove(); });
+  m.querySelectorAll('.pie').forEach(p => { if (!p.querySelector('button, a')) p.remove(); });
+  document.getElementById('vMin').style.display = 'none';
+  document.getElementById('fondoModal').classList.add('abierto');
+  const p = document.querySelector('#modal input, #modal select, #modal textarea'); if (p) p.focus();
+}
+function cerrarModal() { document.getElementById('fondoModal').classList.remove('abierto'); document.getElementById('modal').classList.remove('grande'); document.getElementById('vMin').style.display = 'none'; }
+document.addEventListener('click', e => {
+  const b = e.target.closest('.ctl-v [data-v]'); if (!b) return;
+  const m = document.getElementById('modal');
+  if (b.dataset.v === 'x') return cerrarModal();
+  if (b.dataset.v === 'max') { m.classList.toggle('grande'); b.innerHTML = m.classList.contains('grande') ? '&#10697;' : '&#9633;'; b.title = m.classList.contains('grande') ? 'Volver al tamaño normal' : 'Agrandar'; return; }
+  if (b.dataset.v === 'min') {
+    const t = (m.querySelector('h2') || {}).textContent || 'Ventana';
+    document.getElementById('fondoModal').classList.remove('abierto');
+    const c = document.getElementById('vMin'); c.querySelector('span').textContent = t.trim().slice(0, 60); c.style.display = 'flex';
+  }
+});
+document.addEventListener('click', e => {
+  const c = e.target.closest('#vMin'); if (!c) return;
+  if (e.target.closest('[data-vmin-x]')) return cerrarModal();
+  c.style.display = 'none'; document.getElementById('fondoModal').classList.add('abierto');
+});
 function pieModal(borrar) { return `<div class="error-form" id="errForm"></div><div class="pie">${borrar ? `<button class="btn-sec izq" id="fBorrar" style="color:var(--rojo)">Borrar</button>` : ''}<button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar</button></div>`; }
 async function enviarForm(url, cuerpo, ok) {
   const r = await api(url, cuerpo);

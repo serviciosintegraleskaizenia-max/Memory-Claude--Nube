@@ -9,7 +9,7 @@
 //   Cabecera: Authorization: Bearer <clave del asistente>
 
 const crypto = require('crypto');
-const { leerExcel, abrirZip } = require('./lector-xlsx');
+const { leerExcel, abrirZip, escribirExcel } = require('./lector-xlsx');
 
 // Carpetas de la base. SOLO "chatbot" la lee el vendedor IA; las otras son de uso interno (Operaciones, reservas, políticas).
 // En chatbot y tarifarios la subcarpeta es la sede (vacía = General). En operaciones es un tema (fijos + los que agregue el programador).
@@ -810,7 +810,9 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       ? encontrados.map((x, i) => `[${i + 1}] ${x.titulo}${x.sede && x.sede !== 'Todas' ? ` (sede ${x.sede})` : ''}\n${x.texto}`).join('\n\n')
       : '(No se encontró nada sobre esto en la base.)');
     const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
-    const extra = [aj.instrucciones, sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
+    // Lo que no sirve en el prompt: el marcador "[AQUÍ PEGA TUS TARIFAS…]" y su título (la INFORMACIÓN se agrega sola desde 🤖 Chatbot).
+    const limpiarPrompt = t => String(t || '').replace(/\[\s*AQU[IÍ][^\]]*PEGA[^\]]*\]/gi, '').replace(/^\s*#*\s*INFORMACI[ÓO]N\s*\(BASE DE CONOCIMIENTO[^)]*\)\s*$/gim, '').trim();
+    const extra = [limpiarPrompt(aj.instrucciones), sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
     // Búsqueda en internet: solo en las sedes elegidas, y solo si la pregunta es de los temas elegidos o la base no tiene la respuesta.
     const webSede = aj.web.sedes.some(x => mismaSede(x, sedeOk || ''));
     const temas = aj.web.palabras.split(',').map(x => palabras(x).join(' ')).filter(Boolean);
@@ -836,7 +838,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       textoEjemplos + `\n\nINFORMACIÓN\n${info}` +
       (idiomaCliente && idiomaCliente !== 'es' ? `\n\nIDIOMA DE ESTA RESPUESTA: el cliente escribe en ${NOMBRE_IDIOMA[idiomaCliente][0]}. Escribe el campo "respuesta" COMPLETO en ${NOMBRE_IDIOMA[idiomaCliente][0]}, saludo incluido, y pon "idioma": "${idiomaCliente}". ` +
         `IMPORTANT: the customer is writing in ${NOMBRE_IDIOMA[idiomaCliente][1]}. Write the whole "respuesta" in ${NOMBRE_IDIOMA[idiomaCliente][1]} (only resumen_para_asesor stays in Spanish).` : '');
-    const cuerpo = { model: aj.modelo, max_tokens: 1200, temperature: 0.3, usage: { include: true }, messages: [{ role: 'system', content: sistema }, ...historial] };
+    const cuerpo = { model: aj.modelo, max_tokens: 2000, temperature: 0.3, usage: { include: true }, messages: [{ role: 'system', content: sistema }, ...historial] };
     if (usarWeb) cuerpo.plugins = [{ id: 'web', engine: 'exa', max_results: 2, search_prompt: `Resultados de internet del ${new Date().toISOString().slice(0, 10)} (información general; NO son precios de ${e.nombre}). Úsalos solo como referencia y responde SIEMPRE con el objeto JSON pedido en las instrucciones:` }];
     const t0 = Date.now();
     // Llama a la IA. Si con internet no devuelve texto, se pregunta otra vez sin internet: el cliente siempre recibe respuesta.
@@ -885,6 +887,16 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
         fueConWeb = false;
       }
     } else { datos = await pedir(cuerpo); sumarUso(datos); }
+    // Si vino vacía (se quedó sin espacio o pensando), se pide una vez más con más espacio y sin razonamiento largo.
+    {
+      const c0 = (datos.choices || [])[0] || {};
+      if (!textoDe(c0.message).trim()) {
+        const otra = { ...cuerpo, max_tokens: 3500, reasoning: { effort: 'low', exclude: true } };
+        delete otra.plugins;
+        try { const d2 = await pedir(otra); sumarUso(d2); if (textoDe(((d2.choices || [])[0] || {}).message).trim()) { datos = d2; diagnostico = (diagnostico ? diagnostico + ' ' : '') + `La primera respuesta vino vacía (fin: ${c0.native_finish_reason || c0.finish_reason || 'desconocido'}); se pidió otra vez.`; } }
+        catch (err) { diagnostico = (diagnostico ? diagnostico + ' ' : '') + 'Reintento: ' + err.message; }
+      }
+    }
     const ch = (datos.choices || [])[0] || {};
     const msj = ch.message || {};
     const contenido = textoDe(msj);
@@ -897,9 +909,13 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     // Si no vino en JSON, se limpia lo que la IA haya puesto alrededor (```json, "respuesta": ...).
     // Nunca se muestran al cliente los campos internos (resumen_para_asesor, motivo, pasar_a_asesor, idioma).
     const libre = rescatarRespuesta(contenido);
+    // Nunca se le pide al cliente que repita por una falla de la IA: se le avisa con amabilidad y pasa a un asesor.
+    const sinRespuesta = !String((j && j.respuesta) || libre || '').trim();
+    const avisoFalla = { es: '¡Gracias por escribirnos! 😊 En un momento un asesor te atiende personalmente.', en: 'Thanks for reaching out! 😊 An agent will assist you personally in a moment.', pt: 'Obrigado por escrever! 😊 Em instantes um atendente vai te ajudar pessoalmente.' };
     return {
-      respuesta: String((j && j.respuesta) || libre || '').trim() || 'Disculpa, ¿me lo puedes repetir?',
-      pasar_a_asesor: Boolean(j && j.pasar_a_asesor) || Boolean(motivo),
+      respuesta: String((j && j.respuesta) || libre || '').trim() || avisoFalla[idiomaCliente] || avisoFalla.es,
+      sin_respuesta: sinRespuesta,
+      pasar_a_asesor: Boolean(j && j.pasar_a_asesor) || Boolean(motivo) || sinRespuesta,
       motivo, motivo_texto: MOTIVOS[motivo] || '',
       resumen_para_asesor: String((j && j.resumen_para_asesor) || '').trim(),
       sede: sedeOk || 'Todas',
@@ -967,9 +983,59 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     if (req.method === 'GET' && url === '/api/oficina/conocimiento/original') {
       const f = (await client.query('SELECT nombre, original FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
       if (!f || !f.original) return json(res, 404, { error: 'Ese archivo no tiene original guardado.' });
-      const tipo = /\.pdf$/i.test(f.nombre) ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      res.writeHead(200, { 'Content-Type': tipo, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(f.nombre)}`, 'X-Content-Type-Options': 'nosniff' });
+      const tipo = /\.pdf$/i.test(f.nombre) ? 'application/pdf' : /\.docx$/i.test(f.nombre) ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      // ?ver=1: el PDF se muestra dentro de la Oficina (visor) en vez de descargarse.
+      const enLinea = p.get('ver') === '1' && tipo === 'application/pdf';
+      res.writeHead(200, { 'Content-Type': tipo, 'Content-Disposition': `${enLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(f.nombre)}`, 'X-Content-Type-Options': 'nosniff' });
       return res.end(f.original);
+    }
+    if (req.method === 'GET' && url === '/api/oficina/conocimiento/tabla') {
+      // El Excel tal cual (hojas, filas y celdas) para verlo y editarlo como tabla.
+      const f = (await client.query('SELECT nombre, original FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
+      if (!f || !f.original || !/\.xlsx$|\.xlsm$/i.test(f.nombre)) return json(res, 404, { error: 'Ese archivo no es un Excel guardado.' });
+      const hojas = leerExcel(f.original).map(h => ({ nombre: h.nombre, filas: h.filas.slice(0, 5000) }));
+      return json(res, 200, { hojas });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/editar') {
+      // Guarda lo editado como versión nueva (la anterior queda para "volver a esa"). Excel: se escribe un .xlsx nuevo.
+      const f = await leerCuerpo(req);
+      const a = (await client.query('SELECT * FROM conocimiento_archivos WHERE id = $1', [Number(f.id)])).rows[0];
+      if (!a) return json(res, 404, { error: 'No encontrado.' });
+      const e = await empresa(a.empresa_id);
+      let r, original = a.original;
+      if (Array.isArray(f.hojas)) {
+        if (!/\.xlsx$|\.xlsm$/i.test(a.nombre)) throw error('Solo los Excel se editan como tabla.');
+        original = escribirExcel(f.hojas.map(h => ({ nombre: texto(h.nombre, 31), filas: (Array.isArray(h.filas) ? h.filas : []).map(fila => {
+          const o = {};
+          for (const [c, celda] of Object.entries(fila || {})) {
+            const v = celda && celda.v !== undefined ? celda.v : celda;
+            if (v === null || v === undefined || String(v).trim() === '') continue;
+            const txt = String(v).trim().slice(0, 4000);
+            o[Number(c)] = { v: /^-?\d+(\.\d+)?$/.test(txt) ? Number(txt) : txt, enlace: celda && celda.enlace ? texto(celda.enlace, 500) : null };
+          }
+          return o;
+        }) })));
+        if (original.length > MAX_ARCHIVO) throw error('El Excel quedó de más de 15 MB.');
+        try { r = convertirExcel(original, a.nombre); } catch (err) { throw error('No se pudo leer lo editado: ' + err.message); }
+      } else {
+        const lineas = String(f.texto || '').replace(/\r/g, '').split('\n').map(l => l.trimEnd()).filter(l => l.trim()).slice(0, 5000);
+        if (!lineas.length) throw error('El texto quedó vacío.');
+        const quitado = { columnas: [], lineas: [] };
+        const finales = a.carpeta === 'chatbot' ? lineas.filter(l => LINEA_INTERNA.test(l) ? (quitado.lineas.push(l), false) : true) : lineas;
+        const titulo = (a.documentos && a.documentos[0] && a.documentos[0].titulo) || nombreBase(a.nombre);
+        r = { tipo: a.tipo, documentos: [{ titulo, lineas: finales }], quitado, avisos: a.tipo === 'ficha' && /\.pdf$/i.test(a.nombre) ? ['Texto editado en la Oficina: el PDF original no cambia; el asistente usa este texto.'] : [] };
+      }
+      await client.query("DELETE FROM conocimiento_archivos WHERE empresa_id = $1 AND LOWER(nombre) = LOWER($2) AND estado = 'borrador'", [a.empresa_id, a.nombre]);
+      const nuevo = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,$10,$11,$12) RETURNING id`,
+      [a.empresa_id, a.nombre, r.tipo || a.tipo, a.sede, JSON.stringify(r.documentos), JSON.stringify(r.quitado), JSON.stringify(r.avisos || []), original,
+        original ? original.length : Buffer.byteLength(f.texto || ''), u.usuario, a.carpeta, a.subcarpeta])).rows[0].id;
+      await publicar(u, [nuevo]);
+      let operaciones = null;
+      if (a.carpeta === 'tarifarios' && Array.isArray(f.hojas)) operaciones = await enviarAOperaciones(a.empresa_id, nuevo);
+      olvidar(a.empresa_id);
+      await registrar(u, 'conocimiento_editar', 'empresa', e.slug, '', '', a.nombre);
+      return json(res, 200, { ok: true, id: nuevo, operaciones });
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/sede') {
       const f = await leerCuerpo(req);
@@ -1149,7 +1215,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       for (const [k, v] of Object.entries(f.bienvenidas || {})) { const t = String(v || '').trim().slice(0, 600); if (t && (k === '' || sedesDe(e).includes(k))) bienvenidas[k] = t; }
       const w = f.web || {};
       const web = { sedes: (Array.isArray(w.sedes) ? w.sedes : []).filter(x => sedesDe(e).includes(x) || x === ''), palabras: texto(w.palabras, 600), sitios: texto(w.sitios, 600) };
-      const aj = { nombre: texto(f.nombre, 80), modelo, instrucciones: String(f.instrucciones || '').trim().slice(0, 6000), sedes, bienvenidas, web };
+      const aj = { nombre: texto(f.nombre, 80), modelo, instrucciones: String(f.instrucciones || '').trim().slice(0, 12000), sedes, bienvenidas, web };
       await client.query('UPDATE empresas SET conocimiento_ajustes = $1 WHERE id = $2', [JSON.stringify(aj), e.id]);
       await registrar(u, 'conocimiento_instrucciones', 'empresa', e.slug, '', '', aj.modelo || MODELO_POR_DEFECTO);
       return json(res, 200, { ok: true });
