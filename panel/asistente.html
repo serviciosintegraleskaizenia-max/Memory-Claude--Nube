@@ -74,6 +74,15 @@ const IDIOMAS = { es: 'Español', pt: 'Portugués', en: 'Inglés', fr: 'Francés
 let mensajes = [];   // { rol: 'cliente'|'asistente', texto, info, voto, abierto }
 let pensando = false;
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+// Las direcciones que manda el asistente se pueden tocar: un clic abre el archivo (Drive) o la página.
+function conEnlaces(t) {
+  return esc(t).replace(/(https?:\/\/[^\s<>"';,]+)/g, u => {
+    const limpia = u.replace(/[.)]+$/, '');
+    const cola = u.slice(limpia.length);
+    const etiqueta = /drive\.google/.test(limpia) ? '📎 Abrir archivo' : limpia.replace(/^https?:\/\//, '').slice(0, 40) + (limpia.length > 46 ? '…' : '');
+    return `<a href="${limpia}" target="_blank" rel="noopener noreferrer">${etiqueta}</a>${cola}`;
+  });
+}
 function aviso(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('visible'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('visible'), 3000); }
 async function api(url, cuerpo) {
   try {
@@ -90,7 +99,7 @@ function pintar() {
     if (m.rol === 'cliente') return `<div class="burbuja cliente">${esc(m.texto)}</div>`;
     if (m.error) return `<div class="error">⛔ ${esc(m.error)}</div>`;
     const x = m.info || {};
-    return `<div class="burbuja bot">${esc(m.texto)}</div>` +
+    return `<div class="burbuja bot">${conEnlaces(m.texto)}</div>` +
       (x.pasar_a_asesor ? `<div class="asesor">👤 <b>Aquí pasaría a un asesor de ${esc(x.sede)}</b> <small>(este recuadro es solo para la prueba: el cliente no lo ve; en Messenger o Instagram le llega al asesor como nota privada)</small>${x.motivo_texto ? ' · ' + esc(x.motivo_texto) : ''}${x.resumen_para_asesor ? `<br>${esc(x.resumen_para_asesor)}` : ''}</div>` : '') +
       `<div class="meta">${x.idioma ? `<span class="chip">${esc(IDIOMAS[x.idioma] || x.idioma)}</span>` : ''}${x.web && x.web.usada ? '<span class="chip">🌐 buscó en internet</span>' : ''}
         <button class="mini ${m.voto === 'bien' ? 'elegido' : ''}" data-bien="${i}" title="Estuvo bien">👍</button>
