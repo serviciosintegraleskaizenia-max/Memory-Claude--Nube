@@ -373,6 +373,32 @@ function detectarIdioma(texto) {
 function zonaDe(sede) {
   return /orlando|miami|florida|usa|estados unidos|new york|nueva york/i.test(sinTildes(sede || '')) ? 'America/New_York' : 'America/Santo_Domingo';
 }
+// Control antes de dar un precio: si el cliente pregunta cuánto cuesta y todavía faltan fecha, adultos o niños (con edades),
+// el asistente NO da precio: solo pide lo que falta. Así no depende de que el modelo siga la instrucción.
+const PRECIO_RE = /precio|cuesta|cu[aá]nto|tarifa|costo|price|how much|quanto|custa|\bvale\b|\bcost\b|\bcustou\b/i;
+const FECHA_RE = /\b\d{1,2}\s*(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|sept|oct|nov|dic|jan|apr|aug|dec|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre|janeiro|fevereiro|mar[cç]o|maio|junho|setembro|outubro|novembro|dezembro|january|february|march|june|july|september|october|november|december)|\b\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?\b|\b(?:hoy|ma[ñn]ana|pasado ma[ñn]ana|tomorrow|today|amanh[aã]|hoje)\b|\b(?:el|on|em)\s+\d{1,2}\b/i;
+const ADULTOS_RE = /\b\d{1,2}\s*(?:adult[oa]s?|ad\b|personas?|pax|pasajeros?|viajeros?|people|persons?|pessoas?|ocupantes)|\b(?:somos|seremos|viajamos|we are|we're|somos|s[aã]o)\s+(?:\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|one|two|three|four|five|six|um|uma|dois|duas|tr[eê]s|quatro)\b|\b(?:dos|tres|cuatro|cinco|seis|two|three|four|five|six|dois|quatro)\s+adult[oa]s?\b/i;
+const NINOS_RE = /ni[nñ]o|ni[nñ]a|menor|child|kid|infant|beb[eé]|hijo|crian[cç]a|chd\b/i;
+const SIN_NINOS_RE = /solo adultos|s[oó]lo adultos|only adults|somos adultos|sin ni[nñ]os|no hay ni[nñ]os|no (?:viajan|llevo|llevamos|tengo|tenemos|hay) (?:ni[nñ]os|chicos|menores)|sem crian[cç]as|no children|no kids|no hay menores/i;
+const EDADES_RE = /\b\d{1,2}\s*(?:a[nñ]os?|years?|anos|meses|months?|meses)\b|\bedad(?:es)?\b|\bage[sd]?\b|\bidade[s]?\b/i;
+function controlPrecio(mensajesCliente) {
+  const todos = mensajesCliente.join(' \n ');
+  if (!PRECIO_RE.test(todos)) return '';
+  const faltan = [];
+  if (!FECHA_RE.test(todos)) faltan.push('la fecha del servicio');
+  // Un número suelto ("2") cuenta como respuesta de adultos: la pregunta anterior era cuántos son.
+  const numeroSuelto = mensajesCliente.length > 1 && /^\s*\d{1,2}\s*$/.test(mensajesCliente[mensajesCliente.length - 1]);
+  if (!ADULTOS_RE.test(todos) && !numeroSuelto) faltan.push('cuántos adultos viajan');
+  if (SIN_NINOS_RE.test(todos)) { /* sin niños: no hay nada más que preguntar */ }
+  else if (!NINOS_RE.test(todos)) faltan.push('si viajan niños (y cuántos)');
+  else if (!EDADES_RE.test(todos)) faltan.push('la edad de cada niño');
+  if (faltan.length) {
+    return `\n\nCONTROL DE PRECIO (obligatorio): el cliente pide precio, pero todavía faltan estos datos: ${faltan.join('; ')}. ` +
+      'NO des ningún precio, total ni tarifa en esta respuesta. Pide solo lo que falta, en un mensaje corto (una pregunta o un par de preguntas juntas). Cuando el cliente los conteste, recién ahí das el precio.';
+  }
+  return '\n\nCONTROL DE PRECIO: ya tienes fecha, adultos y niños con edades. Da el precio con el desglose: adultos × precio adulto, niños × precio de niño (según la edad), y el total. Si es traslado compartido, el precio es por persona; si es privado, es por vehículo según la cantidad de pasajeros. Aclara que es estimado, sujeto a confirmación y disponibilidad.';
+}
+
 function instruccionesBase({ nombre, empresa, sede, otras, extra, bienvenida, primera, web }) {
   return `Eres ${nombre}, que atiende los mensajes de Facebook, Instagram y WhatsApp de ${empresa}${sede ? `, oficina de ${sede}` : ''}.
 Eres un asistente virtual: si te preguntan, dilo con naturalidad. No tienes nombre propio.
@@ -846,7 +872,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const sistema = instruccionesBase({ nombre: aj.nombre, empresa: e.nombre, sede: sedeOk, otras: sedeOk ? otras : '', extra,
       bienvenida: (sedeOk && aj.bienvenidas[sedeOk]) || aj.bienvenidas[''] || '', primera, web: usarWeb ? aj.web : null }) +
       `\n\nFECHA Y HORA EN ${sedeOk ? sedeOk.toUpperCase() : 'LA OFICINA'}: ${new Date().toLocaleString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: zona })}` +
-      textoEjemplos + `\n\nINFORMACIÓN\n${info}` +
+      textoEjemplos + controlPrecio(delCliente) + `\n\nINFORMACIÓN\n${info}` +
       (idiomaCliente && idiomaCliente !== 'es' ? `\n\nIDIOMA DE ESTA RESPUESTA: el cliente escribe en ${NOMBRE_IDIOMA[idiomaCliente][0]}. Escribe el campo "respuesta" COMPLETO en ${NOMBRE_IDIOMA[idiomaCliente][0]}, saludo incluido, y pon "idioma": "${idiomaCliente}". ` +
         `IMPORTANT: the customer is writing in ${NOMBRE_IDIOMA[idiomaCliente][1]}. Write the whole "respuesta" in ${NOMBRE_IDIOMA[idiomaCliente][1]} (only resumen_para_asesor stays in Spanish).` : '');
     const cuerpo = { model: aj.modelo, max_tokens: 2000, temperature: 0.3, usage: { include: true }, messages: [{ role: 'system', content: sistema }, ...historial] };
