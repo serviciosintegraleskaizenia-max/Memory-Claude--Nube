@@ -9,7 +9,22 @@
 //   Cabecera: Authorization: Bearer <clave del asistente>
 
 const crypto = require('crypto');
-const { leerExcel } = require('./lector-xlsx');
+const { leerExcel, abrirZip } = require('./lector-xlsx');
+
+// Carpetas de la base. SOLO "chatbot" la lee el vendedor IA; las otras son de uso interno (Operaciones, reservas, políticas).
+// En chatbot y tarifarios la subcarpeta es la sede (vacía = General). En operaciones es un tema (fijos + los que agregue el programador).
+const CARPETAS = ['chatbot', 'tarifarios', 'operaciones'];
+const TEMAS_OPERACIONES = [['reservas', 'Cómo hacer una reserva'], ['procesos', 'Procesos de operaciones'], ['politicas', 'Políticas de la empresa']];
+// Palabras que delatan la sede de un documento (se suman al nombre de la sede). Sirve para cualquier empresa con estas sedes.
+const PALABRAS_SEDE = {
+  orlando: ['orlando', 'disney', 'magic kingdom', 'epcot', 'hollywood studios', 'animal kingdom', 'universal', 'islands of adventure', 'epic universe',
+    'volcano bay', 'seaworld', 'sea world', 'aquatica', 'busch gardens', 'legoland', 'kissimmee', 'florida', 'kennedy', 'nasa', 'canaveral',
+    'gatorland', 'icon park', 'outlet', 'outlets', 'miami', 'tampa', 'clearwater', 'everglades', 'typhoon lagoon', 'blizzard beach', 'international drive', 'mco'],
+  'punta cana': ['punta cana', 'bavaro', 'saona', 'catalina', 'chavon', 'la romana', 'bayahibe', 'samana', 'cayo levantado', 'cayo arena', 'puerto plata',
+    'santo domingo', 'sdq', 'puj', 'higuey', 'miches', 'uvero alto', 'cap cana', 'macao', 'juanillo', 'haitises', 'damajagua', 'hoyo azul', 'scape park',
+    'coco bongo', 'cocobongo', 'monkeyland', 'republica dominicana', 'dominicana', 'dominicano', 'montana redonda', 'cabeza de toro', 'arena gorda',
+    'boca chica', 'jarabacoa', 'constanza', 'ocean world', 'sosua', 'cabarete', 'pesos dominicanos', 'caño hondo', 'cano hondo']
+};
 
 const MAX_ARCHIVO = 15 * 1024 * 1024;
 const DINERO = ['PVP', 'NET', 'PRECIO', 'COSTO', 'ONE WAY', 'ROUND', 'PAX', 'ADULTO', 'CHILD', 'TARIFA'];
@@ -152,6 +167,23 @@ function lectorPdf() {
   return pdfParse;
 }
 // Texto de cada página, línea por línea (como lo arma pdf-parse, pero separado por página).
+// Word (.docx): párrafos y tablas como líneas de texto (sin librerías, con el mismo lector de zip del Excel).
+function textoDocx(buf) {
+  const leer = abrirZip(buf);
+  const xml = leer('word/document.xml');
+  if (!xml) throw new Error('No es un Word válido (.docx).');
+  const lineas = [];
+  const parrafo = p => (p.match(/<w:t[^>]*>[^<]*<\/w:t>|<w:tab\/>|<w:br\/>/g) || [])
+    .map(x => x.startsWith('<w:tab') ? ' ' : x.startsWith('<w:br') ? ' ' : x.replace(/<[^>]+>/g, '')).join('')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/\s+/g, ' ').trim();
+  // Primero las tablas (cada fila = una línea "a | b | c"), después el resto de párrafos en orden.
+  const cuerpo = xml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, t => '<w:p>' + (t.match(/<w:tr[\s\S]*?<\/w:tr>/g) || [])
+    .map(tr => (tr.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || []).map(tc => (tc.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map(parrafo).filter(Boolean).join(' ')).join(' | '))
+    .map(f => `<w:t>${f.replace(/</g, '&lt;')}</w:t>`).join('</w:p><w:p>') + '</w:p>');
+  for (const p of cuerpo.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []) { const t = parrafo(p); if (t && !/^[|\s]+$/.test(t)) lineas.push(t); }
+  return lineas;
+}
+
 async function paginasPdf(buf) {
   const paginas = [];
   await lectorPdf()(buf, {
@@ -431,6 +463,18 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       crudo JSONB, original BYTEA, tamano INTEGER NOT NULL DEFAULT 0,
       subido TIMESTAMPTZ NOT NULL DEFAULT NOW(), subido_por TEXT NOT NULL DEFAULT '', publicado TIMESTAMPTZ)`);
     await client.query('CREATE INDEX IF NOT EXISTS conocimiento_archivos_empresa ON conocimiento_archivos (empresa_id, estado)');
+    // Carpetas (chatbot / tarifarios / operaciones). La primera vez, lo que ya había queda en Chatbot y se ordena por sede según su contenido.
+    const conCarpetas = (await client.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'conocimiento_archivos' AND column_name = 'carpeta'")).rows.length;
+    await client.query("ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS carpeta VARCHAR(20) NOT NULL DEFAULT 'chatbot'");
+    await client.query("ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS subcarpeta TEXT NOT NULL DEFAULT ''");
+    await client.query('ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS op_estado JSONB');
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS conocimiento_carpetas JSONB NOT NULL DEFAULT '{}'");
+    if (!conCarpetas) {
+      for (const e of (await client.query('SELECT id, conocimiento_sedes FROM empresas')).rows) {
+        try { const c = await ordenarPorSede(e.id); if (Object.keys(c).length) console.log(`Base del asistente: empresa ${e.id} ordenada por sede`, JSON.stringify(c)); }
+        catch (err) { console.error('Base del asistente: no se pudo ordenar por sede', e.id, err.message); }
+      }
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS conocimiento_ejemplos (
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, sede TEXT NOT NULL DEFAULT '', cliente TEXT NOT NULL,
       contexto JSONB NOT NULL DEFAULT '[]', respuesta TEXT NOT NULL DEFAULT '', ideal TEXT NOT NULL DEFAULT '',
@@ -457,7 +501,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
   const texto = (v, max = 200) => String(v ?? '').trim().slice(0, max);
   const error = (msg, codigo = 400) => Object.assign(new Error(msg), { codigo });
   async function empresa(id) {
-    const e = (await client.query('SELECT id, nombre, slug, conocimiento_sedes, conocimiento_token, conocimiento_ajustes FROM empresas WHERE id = $1', [Number(id)])).rows[0];
+    const e = (await client.query('SELECT id, nombre, slug, conocimiento_sedes, conocimiento_token, conocimiento_ajustes, conocimiento_carpetas FROM empresas WHERE id = $1', [Number(id)])).rows[0];
     if (!e) throw error('Empresa no encontrada.', 404);
     return e;
   }
@@ -466,6 +510,89 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const n = sinTildes(nombre).toLowerCase();
     const hallada = sedes.find(s => n.includes(sinTildes(s).toLowerCase()));
     return hallada || sedes[0] || '';
+  }
+
+  // Sede de un documento según su nombre y su texto (Punta Cana, Orlando o la que tenga la empresa). Si no está claro: General ('').
+  function sedePorContenido(nombre, textoDoc, sedes) {
+    if (!sedes.length) return '';
+    const plano = t => ' ' + sinTildes(String(t || '')).toLowerCase().replace(/[^a-z0-9ñ]+/g, ' ') + ' ';
+    const n = plano(nombre), t = plano(String(textoDoc || '').slice(0, 60000));
+    const puntos = sedes.map(s => {
+      const k = sinTildes(s).toLowerCase().trim();
+      let p = 0;
+      for (const w of new Set([k, ...(PALABRAS_SEDE[k] || [])])) {
+        const pal = ' ' + sinTildes(w).toLowerCase().replace(/[^a-z0-9ñ]+/g, ' ').trim() + ' ';
+        if (n.includes(pal)) p += 12;
+        p += Math.min(t.split(pal).length - 1, 15);
+      }
+      return p;
+    });
+    const orden = [...puntos].sort((a, b) => b - a);
+    if (!orden[0] || (orden[1] && orden[1] >= orden[0] * 0.6)) return '';
+    return sedes[puntos.indexOf(orden[0])];
+  }
+  const textoDeDocs = docs => (docs || []).map(d => [d.titulo, d.hoja, ...(d.lineas || [])].filter(Boolean).join('\n')).join('\n');
+  // Ordena por sede todo lo de la carpeta Chatbot (y Tarifarios). Devuelve cuántos quedaron en cada una.
+  async function ordenarPorSede(empresaId, soloIds = null) {
+    const e = (await client.query('SELECT conocimiento_sedes FROM empresas WHERE id = $1', [empresaId])).rows[0];
+    const sedes = e ? e.conocimiento_sedes.split(',').map(x => x.trim()).filter(Boolean) : [];
+    if (!sedes.length) return {};
+    const filas = (await client.query(`SELECT id, nombre, tipo, documentos FROM conocimiento_archivos WHERE empresa_id = $1 AND carpeta IN ('chatbot', 'tarifarios')
+      AND ($2::int[] IS NULL OR id = ANY($2::int[]))`, [empresaId, soloIds])).rows;
+    const cuenta = {};
+    const elegidas = filas.map(f => ({ ...f, sede: sedePorContenido(f.nombre, textoDeDocs(f.documentos), sedes) }));
+    for (const f of elegidas) {
+      // Una ficha que no nombra ningún lugar va con sus parecidas (si casi todas las fichas son de una sede).
+      if (!f.sede && f.tipo === 'ficha') f.sede = await sedeMayoritaria(empresaId, 'ficha', elegidas);
+      await client.query('UPDATE conocimiento_archivos SET sede = $1 WHERE id = $2', [f.sede, f.id]);
+      cuenta[f.sede || 'General'] = (cuenta[f.sede || 'General'] || 0) + 1;
+    }
+    olvidar(empresaId);
+    return cuenta;
+  }
+  async function sedeMayoritaria(empresaId, tipo, lista = null) {
+    const filas = lista ? lista.filter(x => x.tipo === tipo) : (await client.query("SELECT sede FROM conocimiento_archivos WHERE empresa_id = $1 AND tipo = $2 AND carpeta = 'chatbot' AND estado = 'publicado'", [empresaId, tipo])).rows;
+    const con = filas.filter(x => x.sede);
+    if (con.length < 5) return '';
+    const c = {}; for (const x of con) c[x.sede] = (c[x.sede] || 0) + 1;
+    const [sede, n] = Object.entries(c).sort((a, b) => b[1] - a[1])[0];
+    return n / con.length >= 0.85 ? sede : '';
+  }
+
+  // Tarifario subido a la carpeta 💲 Tarifarios: se manda a la base de la empresa y su panel lo carga en los precios de Operaciones.
+  async function enviarAOperaciones(empresaId, archivoId) {
+    const a = (await client.query('SELECT nombre, original FROM conocimiento_archivos WHERE id = $1', [archivoId])).rows[0];
+    if (!a || !a.original || !/\.xlsx$|\.xlsm$/i.test(a.nombre)) return null;
+    let estado;
+    try {
+      const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [empresaId])).rows[0];
+      const cola = await central.ayudantes.conEmpresa(fila, async db => {
+        await db.query(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
+          estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
+        return (await db.query('INSERT INTO op_cola_tarifarios (origen_id, archivo, datos) VALUES ($1, $2, $3) RETURNING id', [archivoId, a.nombre, a.original])).rows[0].id;
+      });
+      estado = { estado: 'pendiente', cola, enviado: new Date().toISOString() };
+    } catch (err) { estado = { estado: 'error', error: 'No se pudo mandar a Operaciones: ' + err.message }; }
+    await client.query('UPDATE conocimiento_archivos SET op_estado = $1 WHERE id = $2', [JSON.stringify(estado), archivoId]);
+    return estado;
+  }
+  // Mira en la base de la empresa cómo terminó la carga de los tarifarios pendientes.
+  async function revisarOperaciones(empresaId) {
+    const pend = (await client.query("SELECT id, op_estado FROM conocimiento_archivos WHERE empresa_id = $1 AND op_estado->>'estado' = 'pendiente'", [empresaId])).rows;
+    if (!pend.length) return;
+    try {
+      const fila = (await client.query('SELECT * FROM empresas WHERE id = $1', [empresaId])).rows[0];
+      const filas = await central.ayudantes.conEmpresa(fila, async db => (await db.query('SELECT id, estado, resultado, procesado FROM op_cola_tarifarios WHERE id = ANY($1::int[])',
+        [pend.map(p => Number(p.op_estado.cola))])).rows);
+      for (const p of pend) {
+        const c = filas.find(x => x.id === Number(p.op_estado.cola));
+        if (c && c.estado !== 'pendiente') await client.query('UPDATE conocimiento_archivos SET op_estado = $1 WHERE id = $2', [JSON.stringify({ ...p.op_estado, estado: c.estado, resultado: c.resultado, procesado: c.procesado }), p.id]);
+      }
+    } catch (err) { /* el panel de la empresa puede estar apagado: se vuelve a mirar la próxima vez */ }
+  }
+  function temasOperaciones(e) {
+    const extra = ((e.conocimiento_carpetas || {}).operaciones || []).filter(x => x && x.k && x.n);
+    return [...TEMAS_OPERACIONES.map(([k, n]) => ({ k, n, fijo: true })), ...extra.map(x => ({ k: x.k, n: x.n }))];
   }
 
   async function reconstruirPdfs(empresaId) {
@@ -483,7 +610,9 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const nombre = texto(f.nombre, 180).replace(/[\\/]/g, ' ');
     if (!nombre) throw error('Falta el nombre del archivo.');
     const sedes = sedesDe(e);
-    const sede = f.sede !== undefined && f.sede !== null ? texto(f.sede, 60) : adivinarSede(nombre, sedes);
+    const carpeta = CARPETAS.includes(f.carpeta) ? f.carpeta : 'chatbot';
+    const subcarpeta = carpeta === 'operaciones' ? (temasOperaciones(e).find(x => x.k === f.subcarpeta) || { k: 'politicas' }).k : '';
+    let sede = carpeta === 'operaciones' ? texto(f.sede || '', 60) : f.sede !== undefined && f.sede !== null && f.sede !== '*' ? texto(f.sede, 60) : null;
     let r, buf = null, crudo = null;
     if (f.nota !== undefined) {
       const t = String(f.nota || '').replace(/\r/g, '').trim().slice(0, 50000);
@@ -514,24 +643,35 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
         r = { tipo: 'ficha', documentos: [{ ...doc, lineas }], quitado, avisos };
         crudo = { doc, paginas };
         if (nuevas.length) await reconstruirPdfs(e.id);
+      } else if (ext === 'docx') {
+        let lineas;
+        try { lineas = textoDocx(buf); } catch (err) { throw error('No se pudo leer el Word: ' + err.message); }
+        const quitado = { columnas: [], lineas: [] };
+        // En el chatbot se quita lo interno; en las carpetas internas se guarda completo.
+        if (carpeta === 'chatbot') lineas = lineas.filter(l => LINEA_INTERNA.test(l) ? (quitado.lineas.push(l), false) : true);
+        r = { tipo: 'ficha', documentos: [{ titulo: nombreBase(nombre), lineas }], quitado, avisos: lineas.length ? [] : ['El Word no tiene texto.'] };
       } else if (ext === 'xls') {
         throw error('Ese Excel es del formato viejo (.xls). Ábrelo en Excel y guárdalo como .xlsx.');
       } else {
-        throw error('Solo se pueden subir Excel (.xlsx) o PDF. Para un texto usa "Nota escrita".');
+        throw error('Solo se pueden subir Excel (.xlsx), PDF o Word (.docx). Para un texto usa "Nota escrita".');
       }
     }
+    if (sede === null) sede = sedePorContenido(nombre, textoDeDocs(r.documentos), sedes) || (carpeta === 'chatbot' && r.tipo === 'ficha' ? await sedeMayoritaria(e.id, 'ficha') : '');
     // Si ya había un borrador con el mismo nombre, se reemplaza.
     await client.query("DELETE FROM conocimiento_archivos WHERE empresa_id = $1 AND LOWER(nombre) = LOWER($2) AND estado = 'borrador'", [e.id, nombre]);
-    const fila = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    const fila = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
     [e.id, nombre, r.tipo, sede, JSON.stringify(r.documentos), JSON.stringify(r.quitado), JSON.stringify(r.avisos), crudo ? JSON.stringify(crudo) : null,
-      buf, buf ? buf.length : Buffer.byteLength(f.nota || ''), u.usuario])).rows[0];
-    await registrar(u, 'conocimiento_subir', 'empresa', e.slug, '', '', `${nombre} (${r.tipo})`);
+      buf, buf ? buf.length : Buffer.byteLength(f.nota || ''), u.usuario, carpeta, subcarpeta])).rows[0];
+    await registrar(u, 'conocimiento_subir', 'empresa', e.slug, '', '', `${nombre} (${r.tipo}) → ${carpeta}${subcarpeta ? '/' + subcarpeta : ''}`);
+    // Lo interno no pasa por "Por revisar": el chatbot no lo lee. Queda guardado de una vez.
+    if (carpeta !== 'chatbot') await publicar(u, [fila.id]);
+    if (carpeta === 'tarifarios') await enviarAOperaciones(e.id, fila.id);
     return fila.id;
   }
 
   async function lista(empresaId) {
-    return (await client.query(`SELECT id, nombre, tipo, sede, estado, avisos, tamano, subido, subido_por, publicado,
+    return (await client.query(`SELECT id, nombre, tipo, sede, estado, avisos, tamano, subido, subido_por, publicado, carpeta, subcarpeta, op_estado,
         jsonb_array_length(documentos) AS documentos,
         (SELECT COALESCE(SUM(jsonb_array_length(d->'lineas')), 0) FROM jsonb_array_elements(documentos) d)::int AS lineas,
         (SELECT COALESCE(SUM(LENGTH(d->>'lineas')), 0) FROM jsonb_array_elements(documentos) d)::int AS caracteres,
@@ -561,7 +701,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     if (indices.has(clave)) return indices.get(clave);
     const estados = conBorradores ? ['publicado', 'borrador'] : ['publicado'];
     const filas = (await client.query(`SELECT DISTINCT ON (LOWER(nombre)) id, nombre, tipo, sede, documentos, estado, COALESCE(publicado, subido) AS fecha
-      FROM conocimiento_archivos WHERE empresa_id = $1 AND estado = ANY($2) ORDER BY LOWER(nombre), (estado = 'borrador') DESC`, [empresaId, estados])).rows;
+      FROM conocimiento_archivos WHERE empresa_id = $1 AND estado = ANY($2) AND carpeta = 'chatbot' ORDER BY LOWER(nombre), (estado = 'borrador') DESC`, [empresaId, estados])).rows;
     const fragmentos = [];
     for (const f of filas) {
       for (const d of f.documentos) {
@@ -797,12 +937,13 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
   async function manejarOficina(req, res, url, u, { json, leerCuerpo }) {
     const p = new URL(req.url, 'http://localhost').searchParams;
     if (req.method === 'GET' && url === '/api/oficina/conocimiento') {
-      const empresas = (await client.query('SELECT id, nombre, es_demo, conocimiento_sedes, conocimiento_token, conocimiento_ajustes FROM empresas ORDER BY es_demo, nombre')).rows;
+      const empresas = (await client.query('SELECT id, nombre, es_demo, conocimiento_sedes, conocimiento_token, conocimiento_ajustes, conocimiento_carpetas FROM empresas ORDER BY es_demo, nombre')).rows;
       const elegida = empresas.find(e => String(e.id) === p.get('empresa')) || empresas.find(e => !e.es_demo) || empresas[0];
       if (!elegida) return json(res, 200, { empresas: [], archivos: [] });
+      await revisarOperaciones(elegida.id);
       return json(res, 200, {
         empresas: empresas.map(e => ({ id: e.id, nombre: e.nombre, es_demo: e.es_demo })),
-        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida),
+        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida), temas: temasOperaciones(elegida),
           tieneClaveIA: Boolean(claveIA && claveIA((await client.query('SELECT * FROM empresas WHERE id = $1', [elegida.id])).rows[0])) },
         archivos: await lista(elegida.id),
         ejemplos: (await client.query(`SELECT id, sede, cliente, contexto, respuesta, ideal, voto, nota, estado, autor, origen, creado, revisado
@@ -819,7 +960,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       return json(res, 200, { ok: true, archivo: (await lista(f.empresa_id)).find(x => x.id === id) });
     }
     if (req.method === 'GET' && url === '/api/oficina/conocimiento/ver') {
-      const f = (await client.query('SELECT id, nombre, tipo, sede, estado, documentos, quitado, avisos FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
+      const f = (await client.query('SELECT id, nombre, tipo, sede, estado, documentos, quitado, avisos, carpeta, subcarpeta FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
       if (!f) return json(res, 404, { error: 'No encontrado.' });
       return json(res, 200, f);
     }
@@ -835,6 +976,65 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       const r = (await client.query('UPDATE conocimiento_archivos SET sede = $1 WHERE id = $2 RETURNING empresa_id', [texto(f.sede, 60), Number(f.id)])).rows[0];
       if (r) { olvidar(r.empresa_id); }
       return json(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/mover') {
+      // Cambia un archivo de carpeta (todas sus versiones). Si sale del chatbot, el asistente deja de leerlo al instante.
+      const f = await leerCuerpo(req);
+      const a = (await client.query('SELECT id, empresa_id, nombre, carpeta, estado FROM conocimiento_archivos WHERE id = $1', [Number(f.id)])).rows[0];
+      if (!a) return json(res, 404, { error: 'No encontrado.' });
+      const e = await empresa(a.empresa_id);
+      const carpeta = CARPETAS.includes(f.carpeta) ? f.carpeta : a.carpeta;
+      const subcarpeta = carpeta === 'operaciones' ? (temasOperaciones(e).find(x => x.k === f.subcarpeta) || { k: 'politicas' }).k : '';
+      const sede = texto(f.sede || '', 60);
+      await client.query('UPDATE conocimiento_archivos SET carpeta = $1, subcarpeta = $2, sede = $3 WHERE empresa_id = $4 AND LOWER(nombre) = LOWER($5)', [carpeta, subcarpeta, sede, a.empresa_id, a.nombre]);
+      if (carpeta !== 'chatbot' && a.estado === 'borrador') await publicar(u, [a.id]);
+      let operaciones = null;
+      if (carpeta === 'tarifarios' && a.carpeta !== 'tarifarios') {
+        const pub = (await client.query("SELECT id FROM conocimiento_archivos WHERE empresa_id = $1 AND LOWER(nombre) = LOWER($2) AND estado = 'publicado'", [a.empresa_id, a.nombre])).rows[0];
+        if (pub) operaciones = await enviarAOperaciones(a.empresa_id, pub.id);
+      }
+      olvidar(a.empresa_id);
+      await registrar(u, 'conocimiento_mover', 'empresa', e.slug, a.carpeta, carpeta + (subcarpeta ? '/' + subcarpeta : '') + (sede ? ' · ' + sede : ''), a.nombre);
+      return json(res, 200, { ok: true, operaciones });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/a-operaciones') {
+      const f = await leerCuerpo(req);
+      const a = (await client.query("SELECT id, empresa_id FROM conocimiento_archivos WHERE id = $1 AND carpeta = 'tarifarios'", [Number(f.id)])).rows[0];
+      if (!a) return json(res, 404, { error: 'Ese archivo no está en Tarifarios.' });
+      const r = await enviarAOperaciones(a.empresa_id, a.id);
+      if (!r) return json(res, 400, { error: 'Solo los Excel (.xlsx) se cargan en los precios de Operaciones.' });
+      return json(res, 200, { ok: true, operaciones: r });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/tema') {
+      // Temas propios dentro de "Operaciones y políticas" (ej. "Manual del chofer"). Los fijos no se borran.
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const c = { ...(e.conocimiento_carpetas || {}) };
+      let lista = (c.operaciones || []).filter(x => x && x.k);
+      if (f.quitar) {
+        const usados = (await client.query("SELECT COUNT(*)::int AS n FROM conocimiento_archivos WHERE empresa_id = $1 AND carpeta = 'operaciones' AND subcarpeta = $2", [e.id, String(f.quitar)])).rows[0].n;
+        if (usados) throw error('Ese tema todavía tiene archivos: muévelos o bórralos primero.');
+        lista = lista.filter(x => x.k !== String(f.quitar));
+      } else {
+        const n = texto(f.nombre, 60);
+        if (!n) throw error('Escribe el nombre del tema.');
+        const k = 't_' + sinTildes(n).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30);
+        if (temasOperaciones(e).some(x => x.k === k || x.n.toLowerCase() === n.toLowerCase())) throw error('Ya existe un tema con ese nombre.');
+        if (lista.length >= 20) throw error('Máximo 20 temas propios.');
+        lista.push({ k, n });
+      }
+      c.operaciones = lista;
+      await client.query('UPDATE empresas SET conocimiento_carpetas = $1 WHERE id = $2', [JSON.stringify(c), e.id]);
+      return json(res, 200, { ok: true, temas: temasOperaciones({ conocimiento_carpetas: c }) });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/ordenar') {
+      // 🪄 Ordena Chatbot y Tarifarios en Punta Cana / Orlando / General leyendo el nombre y el contenido.
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      if (!sedesDe(e).length) throw error('Primero guarda las sedes en Configuración → Ajustes del asistente.');
+      const cuenta = await ordenarPorSede(e.id);
+      await registrar(u, 'conocimiento_ordenar', 'empresa', e.slug, '', '', JSON.stringify(cuenta));
+      return json(res, 200, { ok: true, cuenta });
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/auto-sede') {
       // Pone la sede según el nombre de cada archivo a los que están en "Todas las sedes".

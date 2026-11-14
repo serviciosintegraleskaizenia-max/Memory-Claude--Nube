@@ -140,4 +140,4 @@ function leerExcel(buf) {
   return hojas;
 }
 
-module.exports = { leerExcel };
+module.exports = { leerExcel, abrirZip };

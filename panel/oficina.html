@@ -137,6 +137,35 @@
   .k-avisos { background:#fffbeb; border:1px solid #fde68a; color:#78350f; border-radius:10px; padding:8px 12px; font-size:12.5px; margin-bottom:12px; }
   body.oscuro .k-avisos { background:#451a03; border-color:#92400e; color:#fde68a; }
   .k-res { border:1px solid var(--borde); border-radius:10px; margin-top:10px; }
+  /* Carpetas de la base */
+  .k-carpetas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
+  @media (max-width:900px) { .k-carpetas { grid-template-columns:1fr; } }
+  .k-carp { all:unset; box-sizing:border-box; cursor:pointer; background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:8px; position:relative; transition:border-color .15s, box-shadow .15s; }
+  .k-carp:hover { border-color:var(--c); }
+  .k-carp.activa { border-color:var(--c); box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+  .k-carp .ct { display:flex; gap:10px; align-items:center; }
+  .k-carp .ico { width:42px; height:42px; border-radius:11px; display:grid; place-items:center; font-size:22px; background:color-mix(in srgb, var(--c) 14%, transparent); flex:none; }
+  .k-carp b { font-size:15.5px; } .k-carp .n { margin-left:auto; font-size:22px; font-weight:800; color:var(--c); }
+  .k-carp .dsc { font-size:12.5px; color:var(--suave); line-height:1.4; }
+  .k-carp .subs { display:flex; gap:6px; flex-wrap:wrap; }
+  .k-carp .subs span { font-size:11.5px; background:var(--hover); border:1px solid var(--borde); border-radius:20px; padding:2px 9px; }
+  .k-carp .lee { position:absolute; top:-9px; right:12px; font-size:10.5px; font-weight:700; letter-spacing:.3px; padding:2px 8px; border-radius:20px; background:var(--c); color:#fff; }
+  .k-subs { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 14px; }
+  .k-sub { all:unset; cursor:pointer; font-size:13px; padding:6px 12px; border-radius:20px; border:1px solid var(--borde); background:var(--tarjeta); display:inline-flex; gap:6px; align-items:center; }
+  .k-sub:hover { background:var(--hover); } .k-sub.activa { background:var(--c, var(--azul)); border-color:var(--c, var(--azul)); color:#fff; font-weight:600; }
+  .k-sub i { font-style:normal; font-size:11px; opacity:.75; }
+  .k-ruta { font-size:13px; color:var(--suave); margin-bottom:2px; } .k-ruta b { color:var(--texto); }
+  .k-zona { border:2px dashed var(--borde); border-radius:12px; padding:12px 14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; font-size:12.5px; color:var(--suave); }
+  .k-zona.encima { border-color:var(--azul); background:color-mix(in srgb, var(--azul) 8%, transparent); }
+  .k-grupo { margin-bottom:16px; } .k-grupo h3 { font-size:13.5px; margin:0 0 8px; display:flex; gap:6px; align-items:center; }
+  .k-grupo h3 small { color:var(--suave); font-weight:400; }
+  .k-archivos { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; }
+  .k-arch { border:1px solid var(--borde); border-radius:11px; padding:10px 12px; display:flex; flex-direction:column; gap:6px; background:var(--tarjeta); min-width:0; }
+  .k-arch:hover { border-color:color-mix(in srgb, var(--azul) 45%, var(--borde)); }
+  .k-arch .t { display:flex; gap:8px; align-items:flex-start; } .k-arch .t .ic { font-size:20px; line-height:1; flex:none; }
+  .k-arch .t b { font-size:13px; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .k-arch .m { font-size:11.5px; color:var(--suave); }
+  .k-arch .a { display:flex; gap:4px; flex-wrap:wrap; margin-top:auto; }
   .k-res .t { padding:8px 12px; font-size:13px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .k-clave { font-family:Consolas,monospace; font-size:12.5px; background:var(--hover); border:1px solid var(--borde); border-radius:8px; padding:6px 9px; overflow-wrap:anywhere; }
   .pestanas { display:flex; gap:4px; border-bottom:1px solid var(--borde); margin:-4px 0 16px; flex-wrap:wrap; }
@@ -1291,37 +1320,107 @@ document.addEventListener('click', async ev => {
   }
 });
 
+/* ---------- 📚 Documentos en carpetas: 🤖 Chatbot (lo único que lee el vendedor IA) · 💲 Tarifarios · 📋 Operaciones y políticas ---------- */
+const CARPETAS_K = {
+  chatbot: { i: '🤖', n: 'Chatbot', c: '#1679c2', dsc: 'Lo ÚNICO que lee el vendedor IA en Facebook, Instagram y WhatsApp.', aviso: 'Pasa por <a href="#" data-k-tab="revisar">📝 Por revisar</a> antes de que el chatbot lo use. Lo interno (comisión, neto) se quita solo.' },
+  tarifarios: { i: '💲', n: 'Tarifarios', c: '#16a34a', dsc: 'Precios para Operaciones y reservas. El chatbot NO los lee.', aviso: 'Se guarda de una vez. Los Excel se cargan solos en los precios de Operaciones. El chatbot no los lee.' },
+  operaciones: { i: '📋', n: 'Operaciones y políticas', c: '#7c3aed', dsc: 'Uso interno: cómo hacer una reserva, procesos y políticas de la empresa.', aviso: 'Se guarda de una vez, completo (sin quitar nada). El chatbot no lo lee.' }
+};
+let kCarpeta = (() => { try { return localStorage.getItem('oficinaCarpetaK') || 'chatbot'; } catch (e) { return 'chatbot'; } })();
+let kSub = '*';
+const iconoSede = x => !x ? '🌐' : /orlando|florida|miami/i.test(x) ? '🎢' : /punta|cana|dominic|santo|bavaro/i.test(x) ? '🌴' : '📍';
+const nombreSub = (carpeta, sub) => carpeta === 'operaciones' ? ((K.empresa.temas || []).find(t => t.k === sub) || { n: sub || 'Sin tema' }).n : (sub || 'General');
+const iconoSub = (carpeta, sub) => carpeta === 'operaciones' ? ({ reservas: '🧾', procesos: '⚙️', politicas: '📜' }[sub] || '🗂️') : iconoSede(sub);
+const subDe = a => a.carpeta === 'operaciones' ? a.subcarpeta : (a.sede || '');
+function subsDe(carpeta) {
+  if (carpeta === 'operaciones') return (K.empresa.temas || []).map(t => t.k);
+  const l = [...K.empresa.sedes, '']; K.archivos.filter(a => a.carpeta === carpeta && a.sede && !l.includes(a.sede)).forEach(a => l.splice(l.length - 1, 0, a.sede));
+  return [...new Set(l)];
+}
+function estadoOperaciones(a) {
+  const o = a.op_estado; if (!o) return /\.xlsx$|\.xlsm$/i.test(a.nombre) ? `<span class="chip gris" title="No se ha cargado en Operaciones">sin cargar en precios</span>` : '';
+  if (o.estado === 'pendiente') return '<span class="chip ojo">⏳ Cargando en Operaciones…</span>';
+  if (o.estado === 'error') return `<span class="chip mal" title="${esc((o.resultado && o.resultado.error) || o.error || '')}">⚠ No se cargó en precios</span>`;
+  const r = o.resultado || {}, partes = [];
+  if (r.tarifas) partes.push(r.tarifas + ' tarifas'); if (r.hoteles) partes.push(r.hoteles + ' hoteles'); if (r.agregados) partes.push(r.agregados + ' agregados');
+  if (Array.isArray(r.actividades)) partes.push(r.actividades.length + ' tarifario(s) de actividades');
+  return `<span class="chip ok" title="${esc(JSON.stringify(r).slice(0, 400))}">✔ En precios de Operaciones${partes.length ? ': ' + partes.join(' · ') : ''}</span>`;
+}
+function tarjetaArchivo(a, conSub) {
+  const ant = K.archivos.find(x => x.estado === 'anterior' && x.nombre.toLowerCase() === a.nombre.toLowerCase());
+  const ico = a.tipo === 'nota' ? '✍️' : /\.pdf$/i.test(a.nombre) ? '📕' : /\.docx$/i.test(a.nombre) ? '📘' : '📗';
+  return `<div class="k-arch" data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + nombreSub(a.carpeta, subDe(a))).toLowerCase())}">
+    <div class="t"><span class="ic">${ico}</span><b title="${esc(a.nombre)}">${esc(a.nombre)}</b></div>
+    <div class="m">${conSub ? `${iconoSub(a.carpeta, subDe(a))} ${esc(nombreSub(a.carpeta, subDe(a)))} · ` : ''}${contenidoTexto(a)} · ${fechaCorta(a.publicado || a.subido)}${a.estado === 'borrador' ? ' · <b style="color:var(--ambar)">por revisar</b>' : ''}</div>
+    ${a.carpeta === 'tarifarios' ? `<div>${estadoOperaciones(a)}</div>` : ''}
+    ${ant ? `<div class="m">Versión anterior del ${fechaCorta(ant.publicado || ant.subido)} · <a href="#" data-k="restaurar" data-id="${ant.id}">volver a esa</a></div>` : ''}
+    <div class="a"><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}" title="Editar">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini" data-k="mover" data-id="${a.id}" title="Mover a otra carpeta">↔ Mover</button>${a.carpeta === 'tarifarios' && /\.xlsx$|\.xlsm$/i.test(a.nombre) && a.estado === 'publicado' ? `<button class="btn-mini" data-k="a-operaciones" data-id="${a.id}" title="Volver a cargar en los precios de Operaciones">↻ Precios</button>` : ''}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Borrar">✕</button></div></div>`;
+}
 function tabDocsK() {
   const e = K.empresa;
-  const borr = K.archivos.filter(a => a.estado === 'borrador');
-  const pub = K.archivos.filter(a => a.estado === 'publicado');
-  const ant = K.archivos.filter(a => a.estado === 'anterior');
-  const caracteres = pub.reduce((s, a) => s + a.caracteres, 0);
-  const ultima = pub.map(a => a.publicado).sort().pop();
-  const filaPub = a => {
-    const vieja = ant.find(x => x.nombre.toLowerCase() === a.nombre.toLowerCase());
-    return `<tr data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + (a.sede || 'todas')).toLowerCase())}">
-      <td class="envolver"><b>${esc(a.nombre)}</b>${vieja ? `<br><small style="color:var(--suave)">Versión anterior del ${fechaCorta(vieja.publicado || vieja.subido)} · <a href="#" data-k="restaurar" data-id="${vieja.id}">volver a esa</a></small>` : ''}</td>
-      <td>${TIPO_K[a.tipo] || a.tipo}</td>
-      <td><select class="k-sede" data-id="${a.id}">${opcionesSede(a.sede)}</select></td>
-      <td>${fechaCorta(a.publicado)}</td><td>${contenidoTexto(a)}</td>
-      <td><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Quitar del asistente">✕</button></td></tr>`;
+  if (!CARPETAS_K[kCarpeta]) kCarpeta = 'chatbot';
+  const activos = K.archivos.filter(a => a.estado === 'publicado' || (a.estado === 'borrador' && a.carpeta === 'chatbot'));
+  const chat = K.archivos.filter(a => a.carpeta === 'chatbot');
+  const pubChat = chat.filter(a => a.estado === 'publicado'), borr = chat.filter(a => a.estado === 'borrador');
+  const caracteres = pubChat.reduce((s, a) => s + a.caracteres, 0);
+  const ultima = pubChat.map(a => a.publicado).sort().pop();
+  const tarjetaCarpeta = k => {
+    const c = CARPETAS_K[k], l = activos.filter(a => a.carpeta === k);
+    const subs = subsDe(k).map(x => [x, l.filter(a => subDe(a) === x).length]).filter(([x, n]) => n || k !== 'operaciones' || (e.temas || []).find(t => t.k === x && t.fijo));
+    return `<button class="k-carp ${kCarpeta === k ? 'activa' : ''}" style="--c:${c.c}" data-k-carpeta="${k}">${k === 'chatbot' ? '<span class="lee">LO LEE EL CHATBOT</span>' : ''}
+      <div class="ct"><div class="ico">${c.i}</div><b>${c.n}</b><span class="n">${l.length}</span></div>
+      <div class="dsc">${c.dsc}${k === 'chatbot' ? `<br><span style="color:var(--texto)">~${Math.round(caracteres / 4 / 1000)}k tokens${ultima ? ' · publicado ' + fechaCorta(ultima) : ''}</span>${borr.length ? ` · <a href="#" data-k-tab="revisar" style="color:var(--ambar);font-weight:600">${borr.length} por revisar</a>` : ''}` : ''}</div>
+      <div class="subs">${subs.map(([x, n]) => `<span>${iconoSub(k, x)} ${esc(nombreSub(k, x))} · ${n}</span>`).join('')}</div></button>`;
   };
-  return `<div class="kpis">
-      <div class="kpi"><div class="e">Publicado</div><div class="n">${pub.length}</div><div class="d">archivo(s) que usa el asistente</div></div>
-      <div class="kpi" style="border-left-color:var(--ambar);cursor:pointer" data-k-tab="revisar"><div class="e">Por revisar</div><div class="n">${borr.length}</div><div class="d">${borr.length ? 'toca para revisar y publicar' : 'nada pendiente'}</div></div>
-      <div class="kpi" style="border-left-color:var(--verde)"><div class="e">Tamaño</div><div class="n">~${Math.round(caracteres / 4 / 1000)}k</div><div class="d">tokens si se mandara todo</div></div>
-      <div class="kpi" style="border-left-color:#7c3aed"><div class="e">Última publicación</div><div class="n" style="font-size:18px">${ultima ? fechaCorta(ultima) : '—'}</div><div class="d">${ultima ? haceCuanto(ultima) : 'todavía nada'}</div></div>
-    </div>
-    <div class="caja"><div class="cab"><div><h2>Subir</h2><p class="sub">Excel (.xlsx) y PDF de ${esc(e.nombre)}, o una nota escrita. Quedan en <a href="#" data-k-tab="revisar">📝 Por revisar</a> hasta que los publiques.</p></div></div>
-      <div class="acciones"><button class="btn" data-k="subir">📄 Subir archivos</button><button class="btn-sec" data-k="carpeta">📁 Subir carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota escrita</button></div>
-      <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
-      <div class="k-progreso" id="kProgreso"></div></div>
-    ${e.sedes.length > 1 && K.archivos.some(a => !a.sede) ? `<div class="k-avisos" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">⚠️ <span><b>${K.archivos.filter(a => !a.sede).length} archivo(s) están en "Todas las sedes"</b>: el asistente los usa en ${esc(e.sedes.join(' y '))} a la vez y mezcla la información.</span>
-      <button class="btn" data-k="auto-sede" style="margin-left:auto">🪄 Poner la sede según el nombre</button></div>` : ''}
-    <div class="caja"><div class="cab"><div><h2>Publicado (lo que usa el asistente)</h2><p class="sub">${pub.length} archivo(s) · ${e.sedes.length ? 'sedes: ' + esc(e.sedes.join(', ')) : 'sin sedes (vale para todo)'}</p></div>
-      ${pub.length > 8 ? `<input id="kFiltro" placeholder="🔎 Buscar archivo, tipo o sede…" style="min-width:240px">` : ''}</div>
-      ${pub.length ? `<table><thead><tr><th>Archivo</th><th>Tipo</th><th>Sede</th><th>Publicado</th><th>Contenido</th><th></th></tr></thead><tbody>${pub.map(filaPub).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay nada publicado: el asistente no sabe nada de esta empresa.</div>'}</div>`;
+  const c = CARPETAS_K[kCarpeta];
+  const enCarpeta = activos.filter(a => a.carpeta === kCarpeta);
+  const subs = subsDe(kCarpeta);
+  if (kSub !== '*' && !subs.includes(kSub)) kSub = '*';
+  const visibles = kSub === '*' ? enCarpeta : enCarpeta.filter(a => subDe(a) === kSub);
+  const grupos = kSub === '*' ? subs.map(x => [x, enCarpeta.filter(a => subDe(a) === x)]).filter(([, l]) => l.length) : [[kSub, visibles]];
+  const destino = kSub === '*' ? (kCarpeta === 'operaciones' ? 'el tema que elijas' : 'la sede que diga el documento (o General)') : `${iconoSub(kCarpeta, kSub)} ${nombreSub(kCarpeta, kSub)}`;
+  return `<div class="k-carpetas">${Object.keys(CARPETAS_K).map(tarjetaCarpeta).join('')}</div>
+    <div class="caja" style="--c:${c.c}">
+      <div class="cab"><div><div class="k-ruta">${c.i} <b>${c.n}</b>${kSub !== '*' ? ` › ${iconoSub(kCarpeta, kSub)} <b>${esc(nombreSub(kCarpeta, kSub))}</b>` : ''} · ${visibles.length} archivo(s)</div>
+        <p class="sub" style="margin:0">${c.dsc}</p></div>
+        <div class="acciones">${kCarpeta !== 'operaciones' && e.sedes.length ? `<button class="btn-sec" data-k="ordenar" title="Lee cada documento y lo pone en ${esc(e.sedes.join(', '))} o General">🪄 Ordenar por sede</button>` : ''}
+        ${enCarpeta.length > 6 ? `<input id="kFiltro" placeholder="🔎 Buscar en ${esc(c.n)}…" style="min-width:200px">` : ''}</div></div>
+      <div class="k-subs"><button class="k-sub ${kSub === '*' ? 'activa' : ''}" data-k-sub="*">Todo <i>${enCarpeta.length}</i></button>
+        ${subs.map(x => `<button class="k-sub ${kSub === x ? 'activa' : ''}" data-k-sub="${esc(x)}">${iconoSub(kCarpeta, x)} ${esc(nombreSub(kCarpeta, x))} <i>${enCarpeta.filter(a => subDe(a) === x).length}</i></button>`).join('')}
+        ${kCarpeta === 'operaciones' ? `<button class="k-sub" data-k="tema-nuevo" title="Crear otra subcarpeta">＋ Tema</button>` : ''}</div>
+      <div class="k-zona" id="kZona"><span style="font-size:20px">⬆️</span><div style="flex:1;min-width:200px"><b style="color:var(--texto)">Subir a ${c.i} ${c.n}${kSub !== '*' ? ' › ' + esc(nombreSub(kCarpeta, kSub)) : ''}</b><br>Va a ${destino}. ${c.aviso}</div>
+        <div class="acciones">${kCarpeta === 'operaciones' && kSub === '*' ? `<select id="kTemaSubir" title="Tema">${(e.temas || []).map(t => `<option value="${esc(t.k)}">${iconoSub('operaciones', t.k)} ${esc(t.n)}</option>`).join('')}</select>` : ''}<button class="btn" data-k="subir">📄 Archivos</button><button class="btn-sec" data-k="carpeta">📁 Carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota</button></div>
+        <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf,.docx" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
+        <div class="k-progreso" id="kProgreso" style="flex-basis:100%"></div></div>
+      ${grupos.length ? grupos.map(([x, l]) => `<div class="k-grupo">${kSub === '*' ? `<h3>${iconoSub(kCarpeta, x)} ${esc(nombreSub(kCarpeta, x))} <small>· ${l.length}</small>${kCarpeta === 'operaciones' && !((e.temas || []).find(t => t.k === x) || {}).fijo ? '' : ''}</h3>` : ''}
+        <div class="k-archivos">${l.sort((a, b) => a.nombre.localeCompare(b.nombre)).map(a => tarjetaArchivo(a, false)).join('')}</div></div>`).join('')
+        : `<div class="vacio">${kCarpeta === 'chatbot' ? 'Todavía no hay nada aquí: el asistente no sabe nada de esto.' : 'Carpeta vacía. Sube aquí los documentos de uso interno.'}</div>`}
+      ${kCarpeta === 'operaciones' && kSub !== '*' && !((e.temas || []).find(t => t.k === kSub) || { fijo: true }).fijo && !visibles.length ? `<button class="btn-mini peligro" data-k="tema-quitar" data-sub="${esc(kSub)}">Borrar este tema</button>` : ''}
+    </div>`;
+}
+function destinosMover(a) {
+  const op = (k, x) => `<option value="${k}|${esc(x)}" ${a.carpeta === k && subDe(a) === x ? 'selected' : ''}>${CARPETAS_K[k].i} ${CARPETAS_K[k].n} › ${iconoSub(k, x)} ${esc(nombreSub(k, x))}</option>`;
+  return Object.keys(CARPETAS_K).map(k => `<optgroup label="${CARPETAS_K[k].i} ${CARPETAS_K[k].n}">${subsDe(k).map(x => op(k, x)).join('')}</optgroup>`).join('');
+}
+// A dónde va lo que se sube desde la carpeta abierta.
+function destinoSubida() {
+  if (kCarpeta === 'operaciones') { const t = document.getElementById('kTemaSubir'); return { carpeta: 'operaciones', subcarpeta: kSub !== '*' ? kSub : (t ? t.value : 'politicas'), sede: '' }; }
+  return { carpeta: kCarpeta, sede: kSub === '*' ? '*' : kSub };
+}
+function formMover(a) {
+  abrirModal(`<h2>↔ Mover "${esc(a.nombre)}"</h2>
+    ${campo('mDestino', 'A dónde', `<select id="mDestino">${destinosMover(a)}</select>`)}
+    <div class="k-avisos" id="mAviso" style="display:none"></div>
+    ${pieModal(false)}`);
+  const sel = document.getElementById('mDestino'), av = document.getElementById('mAviso');
+  const pintarAviso = () => { const [k] = sel.value.split('|'); const msj = k === 'chatbot' && a.carpeta !== 'chatbot' ? '⚠️ El chatbot empezará a leerlo y a usarlo con los clientes. Revisa que no tenga precios netos ni datos internos.' : k !== 'chatbot' && a.carpeta === 'chatbot' ? 'El chatbot deja de leerlo en cuanto lo muevas.' : k === 'tarifarios' && a.carpeta !== 'tarifarios' ? 'Si es un Excel, se carga en los precios de Operaciones.' : ''; av.style.display = msj ? '' : 'none'; av.textContent = msj; };
+  sel.onchange = pintarAviso; pintarAviso();
+  document.getElementById('fGuardar').onclick = async () => {
+    const [carpeta, sub] = sel.value.split('|');
+    const r = await api('/api/oficina/conocimiento/mover', { id: a.id, carpeta, sede: carpeta === 'operaciones' ? '' : sub, subcarpeta: carpeta === 'operaciones' ? sub : '' });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'Error'; return; }
+    cerrarModal(); aviso(`Movido a ${CARPETAS_K[carpeta].n} › ${nombreSub(carpeta, sub)}.`); return ir('conocimiento');
+  };
 }
 function filaEjemplo(x) {
   return `<tr><td class="envolver" style="max-width:340px"><b>${esc(x.cliente)}</b>${x.estado === 'nuevo' && x.ideal ? `<br><small style="color:var(--suave)">💬 ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : x.estado === 'aprobado' ? `<br><small style="color:var(--suave)">→ ${esc(x.ideal.slice(0, 160))}${x.ideal.length > 160 ? '…' : ''}</small>` : ''}</td>
@@ -1542,22 +1641,27 @@ function verArchivo(f) {
   document.getElementById('modal').classList.add('ancho');
 }
 function formNota(n = {}) {
-  abrirModal(`<h2>✍️ Nota escrita</h2>
+  const carpeta = n.carpeta || kCarpeta, dest = n.carpeta ? { carpeta: n.carpeta, subcarpeta: n.subcarpeta, sede: n.sede } : destinoSubida();
+  const interna = carpeta !== 'chatbot';
+  abrirModal(`<h2>✍️ Nota escrita · ${CARPETAS_K[carpeta].i} ${CARPETAS_K[carpeta].n}</h2>
     ${campo('nTitulo', 'Título', `<input id="nTitulo" value="${esc(n.nombre || '')}" placeholder="Ej: Recargo nocturno Orlando">`, 'Si ya existe una nota con este título, la reemplaza al publicar.')}
-    ${campo('nSede', 'Sede', `<select id="nSede">${opcionesSede(n.sede ?? (K.empresa.sedes[0] || ''))}</select>`)}
+    ${carpeta === 'operaciones' ? campo('nSede', 'Tema', `<select id="nSede">${(K.empresa.temas || []).map(t => `<option value="${esc(t.k)}" ${t.k === dest.subcarpeta ? 'selected' : ''}>${esc(t.n)}</option>`).join('')}</select>`)
+      : campo('nSede', 'Sede', `<select id="nSede">${opcionesSede(n.sede ?? (dest.sede === '*' ? (K.empresa.sedes[0] || '') : dest.sede))}</select>`)}
     ${campo('nTexto', 'Texto', `<textarea id="nTexto" rows="10" placeholder="Pega aquí lo que te mandó el cliente. Ej: Traslados entre 10:00 p.m. y 6:00 a.m. tienen un recargo de US$ 20.">${esc(n.texto || '')}</textarea>`, 'Una idea por línea. Las líneas con comisión o neto se quitan solas.')}
     ${pieModal(false)}`);
   document.getElementById('fGuardar').onclick = async () => {
     const nombre = document.getElementById('nTitulo').value.trim();
     if (!nombre) { document.getElementById('errForm').textContent = 'Ponle un título.'; return; }
-    await enviarForm('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre, sede: document.getElementById('nSede').value, nota: document.getElementById('nTexto').value }, 'Nota guardada. Revísala y publícala.');
+    const v = document.getElementById('nSede').value;
+    await enviarForm('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre, carpeta, ...(carpeta === 'operaciones' ? { subcarpeta: v, sede: '' } : { sede: v }), nota: document.getElementById('nTexto').value }, interna ? 'Nota guardada.' : 'Nota guardada. Revísala y publícala.');
   };
 }
 function base64De(archivo) {
   return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => mal(r.error); r.readAsDataURL(archivo); });
 }
 async function subirArchivos(lista) {
-  const validos = [...lista].filter(f => /\.(xlsx|xlsm|pdf|xls)$/i.test(f.name) && !f.name.startsWith('~$'));
+  const validos = [...lista].filter(f => /\.(xlsx|xlsm|pdf|xls|docx)$/i.test(f.name) && !f.name.startsWith('~$'));
+  const dest = destinoSubida();
   const omitidos = lista.length - validos.length;
   const prog = document.getElementById('kProgreso');
   const errores = [];
@@ -1565,12 +1669,12 @@ async function subirArchivos(lista) {
     const f = validos[i];
     if (prog) prog.textContent = `Subiendo ${i + 1} de ${validos.length}: ${f.name}…`;
     if (f.size > 15 * 1024 * 1024) { errores.push(`${f.name}: pesa más de 15 MB`); continue; }
-    const r = await api('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre: f.name, datos: await base64De(f) });
+    const r = await api('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre: f.name, datos: await base64De(f), ...dest });
     if (!r.ok) errores.push(`${f.name}: ${r.data.error || 'error'}`);
   }
   await ir('conocimiento');
   const p = document.getElementById('kProgreso');
-  if (p) p.innerHTML = `${validos.length - errores.length} archivo(s) subido(s)${omitidos ? ` · ${omitidos} ignorado(s) (no son Excel ni PDF)` : ''}.` + (errores.length ? `<br><span style="color:var(--rojo)">${errores.map(esc).join('<br>')}</span>` : '');
+  if (p) p.innerHTML = `${validos.length - errores.length} archivo(s) subido(s)${omitidos ? ` · ${omitidos} ignorado(s) (no son Excel, PDF ni Word)` : ''}.` + (errores.length ? `<br><span style="color:var(--rojo)">${errores.map(esc).join('<br>')}</span>` : '');
 }
 async function probarConocimiento() {
   const q = document.getElementById('kPregunta').value.trim();
@@ -1597,6 +1701,10 @@ function ejemploConexion() {
 document.addEventListener('click', async ev => {
   const tb = ev.target.closest('[data-k-tab]');
   if (tb && vista === 'conocimiento') { ev.preventDefault(); kTab = tb.dataset.kTab; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} if (kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; } pintar(); if (tb.closest('#modal')) cerrarModal(); return; }
+  const kc = ev.target.closest('[data-k-carpeta]');
+  if (kc && vista === 'conocimiento') { kCarpeta = kc.dataset.kCarpeta; kSub = '*'; try { localStorage.setItem('oficinaCarpetaK', kCarpeta); } catch (e) {} return pintar(); }
+  const ks = ev.target.closest('[data-k-sub]');
+  if (ks && vista === 'conocimiento') { kSub = ks.dataset.kSub; return pintar(); }
   const ti = ev.target.closest('[data-k-tab-ir]');
   if (ti) { kTab = ti.dataset.kTabIr; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} }
   const t = ev.target.closest('[data-k]');
@@ -1606,10 +1714,23 @@ document.addEventListener('click', async ev => {
   if (accion === 'subir') return document.getElementById('kArchivos').click();
   if (accion === 'carpeta') return document.getElementById('kCarpeta').click();
   if (accion === 'nota') return formNota();
+  if (accion === 'mover') { const a = K.archivos.find(x => String(x.id) === String(id)); return a && formMover(a); }
+  if (accion === 'a-operaciones') { const r = await api('/api/oficina/conocimiento/a-operaciones', { id }); aviso(r.ok ? 'Enviado: Operaciones lo carga en los precios en menos de un minuto.' : (r.data.error || 'Error')); return ir('conocimiento'); }
+  if (accion === 'ordenar') {
+    if (!confirm(`Voy a leer cada documento de ${CARPETAS_K.chatbot.n} y ${CARPETAS_K.tarifarios.n} y ponerlo en ${K.empresa.sedes.join(', ')} o General según lo que dice. ¿Seguir?`)) return;
+    const r = await api('/api/oficina/conocimiento/ordenar', { empresa_id: kEmpresa });
+    aviso(r.ok ? 'Ordenado: ' + Object.entries(r.data.cuenta).map(([k, v]) => `${v} en ${k}`).join(' · ') : (r.data.error || 'Error'), 6000); return ir('conocimiento');
+  }
+  if (accion === 'tema-nuevo') {
+    abrirModal(`<h2>＋ Tema en Operaciones y políticas</h2>${campo('tNombre', 'Nombre', '<input id="tNombre" placeholder="Ej: Manual del chofer, Paquetes Orlando, Cobros y pagos">')}${pieModal(false)}`);
+    document.getElementById('fGuardar').onclick = async () => { const r = await api('/api/oficina/conocimiento/tema', { empresa_id: kEmpresa, nombre: document.getElementById('tNombre').value }); if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'Error'; return; } cerrarModal(); kSub = r.data.temas[r.data.temas.length - 1].k; return ir('conocimiento'); };
+    return;
+  }
+  if (accion === 'tema-quitar') { if (!confirm('¿Borrar este tema?')) return; const r = await api('/api/oficina/conocimiento/tema', { empresa_id: kEmpresa, quitar: t.dataset.sub }); if (!r.ok) return aviso(r.data.error || 'Error'); kSub = '*'; return ir('conocimiento'); }
   if (accion === 'ver') { const r = await api('/api/oficina/conocimiento/ver?id=' + id); return r.ok ? verArchivo(r.data) : aviso(r.data.error || 'Error'); }
   if (accion === 'editar-nota') {
     const r = await api('/api/oficina/conocimiento/ver?id=' + id); if (!r.ok) return;
-    return formNota({ nombre: r.data.nombre, sede: r.data.sede, texto: (r.data.documentos[0] || { lineas: [] }).lineas.join('\n') });
+    return formNota({ nombre: r.data.nombre, sede: r.data.sede, carpeta: r.data.carpeta, subcarpeta: r.data.subcarpeta, texto: (r.data.documentos[0] || { lineas: [] }).lineas.join('\n') });
   }
   if (accion === 'publicar' || accion === 'publicar-todo') {
     const ids = accion === 'publicar' ? [id] : K.archivos.filter(a => a.estado === 'borrador').map(a => a.id);
@@ -1618,7 +1739,7 @@ document.addEventListener('click', async ev => {
   }
   if (accion === 'quitar') {
     const a = K.archivos.find(x => String(x.id) === String(id));
-    if (!confirm(a && a.estado === 'publicado' ? `¿Quitar "${a.nombre}" del asistente? Dejará de usarlo.` : '¿Descartar este archivo?')) return;
+    if (!confirm(a && a.estado === 'publicado' ? (a.carpeta === 'chatbot' ? `¿Quitar "${a.nombre}" del asistente? Dejará de usarlo.` : `¿Borrar "${a.nombre}" de ${CARPETAS_K[a.carpeta].n}?`) : '¿Descartar este archivo?')) return;
     await api('/api/oficina/conocimiento/quitar', { id }); cerrarModal(); aviso('Listo.'); return ir('conocimiento');
   }
   if (accion === 'restaurar') {
@@ -1693,10 +1814,14 @@ document.addEventListener('change', async e => {
   if (e.target.id === 'kArchivos' || e.target.id === 'kCarpeta') { const l = [...e.target.files]; e.target.value = ''; if (l.length) await subirArchivos(l); return; }
   if (e.target.classList.contains('k-sede')) { await api('/api/oficina/conocimiento/sede', { id: e.target.dataset.id, sede: e.target.value }); aviso('Sede cambiada.'); return cargarConocimiento(); }
 });
+// Arrastrar archivos encima de la zona de subida.
+document.addEventListener('dragover', e => { const z = e.target.closest && e.target.closest('#kZona'); if (!z) return; e.preventDefault(); z.classList.add('encima'); });
+document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('#kZona'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('encima'); });
+document.addEventListener('drop', async e => { const z = e.target.closest && e.target.closest('#kZona'); if (!z) return; e.preventDefault(); z.classList.remove('encima'); const l = [...(e.dataTransfer.files || [])]; if (l.length) await subirArchivos(l); });
 document.addEventListener('input', e => {
   if (e.target.id !== 'kFiltro') return;
   const q = e.target.value.trim().toLowerCase();
-  document.querySelectorAll('tr[data-filtro]').forEach(tr => { tr.style.display = !q || tr.dataset.filtro.includes(q) ? '' : 'none'; });
+  document.querySelectorAll('tr[data-filtro], .k-arch[data-filtro]').forEach(tr => { tr.style.display = !q || tr.dataset.filtro.includes(q) ? '' : 'none'; });
 });
 document.addEventListener('keydown', e => {
   if (e.target.id === 'kPregunta' && e.key === 'Enter') { e.preventDefault(); probarConocimiento(); }
