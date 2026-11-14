@@ -43,8 +43,8 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 
 const ENLACES_INICIALES = [
   ['Infraestructura', 'Cloudflare', 'https://dash.cloudflare.com', '☁️', 'Túnel, portero y dominio', false],
-  ['Infraestructura', 'n8n', 'http://localhost:5678', '⚙️', 'Flujos de correo', true],
-  ['Infraestructura', 'Chatwoot', 'http://localhost:3000', '💬', 'Redes sociales de los clientes', false],
+  ['Infraestructura', 'n8n', 'https://automatizacion.kaizenia.app', '⚙️', 'Flujos de correo y automatizaciones', true],
+  ['Infraestructura', 'Chatwoot', 'https://chat.kaizenia.app', '💬', 'Redes sociales de los clientes', false],
   ['Infraestructura', 'Hostinger', 'https://hpanel.hostinger.com', '🖥️', 'Servidor', false],
   ['Infraestructura', 'OpenRouter', 'https://openrouter.ai/settings/credits', '🤖', 'Saldo y claves de IA', false],
   ['Infraestructura', 'Azure / Microsoft 365', 'https://portal.azure.com', '🔐', 'Permisos de correo', false],
@@ -115,6 +115,12 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     // Íconos que Windows no dibuja (salía un cuadrito): se cambian por unos que se ven en todas partes.
     await client.query("UPDATE oficina_enlaces SET icono = '🤖' WHERE icono = '🪙'");
     await client.query("UPDATE oficina_enlaces SET icono = '🔐' WHERE icono = '🪟'");
+    // Las direcciones de internet de n8n, Chatwoot y el panel del servidor (antes apuntaban a localhost, que solo abre dentro del servidor).
+    await client.query("UPDATE oficina_enlaces SET url = 'https://automatizacion.kaizenia.app' WHERE url ~* '^https?://(localhost|127\\.0\\.0\\.1):5678'");
+    await client.query("UPDATE oficina_enlaces SET url = 'https://chat.kaizenia.app' WHERE url ~* '^https?://(localhost|127\\.0\\.0\\.1):3000'");
+    await client.query(`INSERT INTO oficina_enlaces (grupo, nombre, url, icono, nota, vigilar, orden)
+      SELECT 'Infraestructura', 'Panel del servidor', 'https://servidor.kaizenia.app', '🖥️', 'Ver, encender y apagar cada programa', FALSE, (SELECT COALESCE(MAX(orden), 0) + 1 FROM oficina_enlaces)
+      WHERE NOT EXISTS (SELECT 1 FROM oficina_enlaces WHERE url ILIKE '%servidor.kaizenia.app%')`);
   }
 
   // Consulta a la base de una empresa que no falla si la tabla todavía no existe (versión vieja del panel).
