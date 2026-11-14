@@ -2712,6 +2712,14 @@ async function cargarEstadoSistema(revisar) {
   pintarMotor();
 }
 
+// Recuperar correos de un rango de fechas a la bandeja (los que se borraron de la base).
+function cajaRecuperar(e) {
+  const rec = e && e.recuperacion;
+  return `<div class="titulo-seccion" style="margin-top:14px">Recuperar correos a la bandeja</div>
+    <p class="etiqueta-sec">Vuelve a leer del buzón los correos de esas fechas (incluida la última) y los pone en la bandeja principal, analizados por la IA.</p>
+    <div class="pie-acciones"><input type="date" id="rDesde" value="2026-11-12"> a <input type="date" id="rHasta" value="2026-11-13"> <button class="btn" data-accion="motor-recuperar">Recuperar a la bandeja</button></div>
+    ${rec ? `<p class="etiqueta-sec">${esc(rec.mensaje || '')}</p>` : ''}`;
+}
 // Motor de correo dentro del panel: estado y, en modo sombra, la comparación con n8n.
 async function pintarMotor() {
   const caja = document.getElementById('panelMotor');
@@ -2721,15 +2729,18 @@ async function pintarMotor() {
   const e = r.data.estado;
   const c = r.data.comparacion;
   if (!e.activo && !c.total) {
-    caja.innerHTML = '<div class="titulo-seccion">Motor de correo</div><p class="etiqueta-sec">Apagado. Se enciende en config.js (motor.activo).</p>';
+    caja.innerHTML = '<div class="titulo-seccion">Motor de correo</div><p class="etiqueta-sec">Apagado. Se enciende en config.js (motor.activo).</p>' + cajaRecuperar(e);
+    if (e.recuperacion && e.recuperacion.estado === 'corriendo') setTimeout(pintarMotor, 5000);
     return;
   }
   const pct = (a, b) => b ? Math.round(100 * a / b) + ' %' : '—';
+  if (e.recuperacion && e.recuperacion.estado === 'corriendo') setTimeout(pintarMotor, 5000);
   caja.innerHTML = `
     <div class="titulo-seccion">Motor de correo ${e.sombra ? '(modo sombra: compara con n8n, no guarda reservas)' : '(lee los correos del panel)'}</div>
     <p>${esc(e.mensaje || 'Todavía no ha corrido.')}<br>
       <span class="etiqueta-sec">Última vuelta: ${e.fin ? esc(fechaHora(e.fin)) : '—'} · cada ${esc(e.intervaloMinutos)} min · ${esc((e.buzones || []).join(', '))}${e.corriendo ? ' · trabajando ahora…' : ''}</span></p>
     <div class="pie-acciones" style="margin-bottom:14px"><button class="btn-sec" data-accion="motor-ciclo">Leer correos ahora</button></div>
+    ${cajaRecuperar(e)}
     ${e.sombra ? `
       <div class="tarjetas">
         <div class="tarjeta t-total"><div class="etiqueta">Correos analizados por el motor</div><div class="numero">${c.total}</div></div>
@@ -4620,6 +4631,19 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'tab-empresas') return abrirHerramientas('empresas');
   if (a.startsWith('emp-')) return accionEmpresas(a, b);
   if (a === 'salud-revisar') return cargarEstadoSistema(true);
+  if (a === 'motor-recuperar') {
+    const d = document.getElementById('rDesde').value, h = document.getElementById('rHasta').value;
+    if (!d || !h) return mostrarAviso('Pon las dos fechas.', true);
+    // Hora de República Dominicana (UTC-4); la última fecha se incluye completa.
+    const desde = new Date(d + 'T00:00:00-04:00').toISOString();
+    const hasta = new Date(new Date(h + 'T00:00:00-04:00').getTime() + 86400000).toISOString();
+    api('/api/motor/recuperar', { desde, hasta }).then(r => {
+      if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo empezar la recuperación.', false);
+      setTimeout(pintarMotor, 2000);
+      mostrarAviso('Recuperando los correos. Puede tardar varios minutos; el avance sale en la caja Motor de correo.', true);
+    });
+    return;
+  }
   if (a === 'motor-ciclo') { api('/api/motor/ciclo', {}).then(() => setTimeout(pintarMotor, 3000)); return mostrarAviso('El motor está leyendo los correos. La tabla se actualiza en unos segundos.', true); }
   if (a === 'reparto-guardar') return guardarReparto();
   if (a === 'historico-iniciar') return accionHistorico('iniciar');

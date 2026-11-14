@@ -245,8 +245,83 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
   async function estado() {
     const a = ajustes();
     const e = (await client.query('SELECT * FROM motor_estado WHERE id = 1')).rows[0] || {};
-    return { activo: a.activo, sombra: a.sombra, buzones: cuentasDe(a).map(c => c.buzon), intervaloMinutos: a.intervaloMinutos, corriendo, ...e };
+    return { activo: a.activo, sombra: a.sombra, buzones: cuentasDe(a).map(c => c.buzon), intervaloMinutos: a.intervaloMinutos, corriendo, ...e, recuperacion };
   }
 
-  return { preparar, iniciar, ciclo, comparar, estado };
+  // Recuperación: vuelve a leer un rango de fechas de los buzones y pone esos correos en la bandeja, analizados por la IA.
+  // Sirve para correos que se borraron de la base (caché). Siempre guarda en real, aunque el motor esté en modo sombra.
+  let recuperacion = null;
+  async function recuperar(desdeISO, hastaISO) {
+    if (recuperacion && recuperacion.estado === 'corriendo') throw new Error('Ya se está recuperando un rango. Espera a que termine.');
+    if (corriendo) throw new Error('El motor está leyendo correos. Vuelve a intentar en un minuto.');
+    const a = ajustes();
+    const cuentas = cuentasDe(a);
+    if (!cuentas.length) throw new Error('No hay buzones configurados para leer.');
+    for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
+    if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter en config.js.');
+    const desde = new Date(desdeISO), hasta = new Date(hastaISO);
+    if (isNaN(desde) || isNaN(hasta) || hasta <= desde) throw new Error('El rango de fechas no es válido.');
+    recuperacion = { estado: 'corriendo', desde: desde.toISOString(), hasta: hasta.toISOString(), inicio: new Date().toISOString(), fin: null,
+      leidos: 0, total: 0, nuevos: 0, yaEstaban: 0, con_error: 0, mensaje: 'Buscando correos en los buzones…' };
+    corriendo = true;
+    (async () => {
+      const abiertas = [];
+      try {
+        const lista = [];
+        for (const cuenta of cuentas) {
+          if (cuenta.proveedor === 'imap') {
+            const sesion = await imap.abrir(cuenta.imap);
+            abiertas.push(sesion);
+            for (const m of await sesion.listar(desde.toISOString(), 2000)) {
+              const f = new Date(m.fecha);
+              if (f >= desde && f < hasta) lista.push({ id: m.id, buzon: cuenta.buzon, cuenta, uid: m.uid, sesion });
+            }
+          } else {
+            for (const m of await ms.listarRecientes(cuenta.microsoft, cuenta.buzon, desde.toISOString(), 2000)) {
+              const f = new Date(m.receivedDateTime);
+              if (f >= desde && f < hasta) { const correo = ia.desdeGraph(m, cuenta.buzon); lista.push({ id: correo.id, buzon: cuenta.buzon, cuenta, correo }); }
+            }
+          }
+        }
+        const unicos = [...new Map(lista.filter(x => x.id).map(x => [x.id, x])).values()];
+        recuperacion.leidos = unicos.length;
+        const ya = new Set((await client.query('SELECT DISTINCT message_id FROM clasificacion WHERE message_id = ANY($1::text[])', [unicos.map(x => x.id)])).rows.map(r => r.message_id));
+        const pendientes = unicos.filter(x => !ya.has(x.id));
+        recuperacion.yaEstaban = unicos.length - pendientes.length;
+        recuperacion.total = pendientes.length;
+        // Si quedaron marcados como histórico (importados antes), se quitan para que vuelvan a la bandeja.
+        if (pendientes.length) await client.query('DELETE FROM correo_historico WHERE message_id = ANY($1::text[])', [pendientes.map(p => p.id)]);
+        let n = 0;
+        for (const item of pendientes) {
+          n++;
+          recuperacion.mensaje = `Analizando ${n} de ${pendientes.length}…`;
+          try {
+            const leido = await contenido(item, true);
+            const correo = leido.correo;
+            let imagenes = [];
+            try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
+            const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
+            const filas = ia.filasDesdeRespuesta(correo, respuesta);
+            await guardar({ ...a, sombra: false }, filas, imagenes.length);
+            if (filas[0].error_ia) recuperacion.con_error++; else recuperacion.nuevos++;
+          } catch (e) {
+            recuperacion.con_error++;
+          }
+          if (a.pausaMs) await esperar(a.pausaMs);
+        }
+        recuperacion.estado = 'listo';
+        recuperacion.mensaje = `Listo: ${recuperacion.nuevos} correos a la bandeja${recuperacion.con_error ? ` (${recuperacion.con_error} con error)` : ''}; ${recuperacion.yaEstaban} ya estaban en el panel.`;
+      } catch (e) {
+        recuperacion.estado = 'error';
+        recuperacion.mensaje = 'Error: ' + e.message.slice(0, 300);
+      } finally {
+        for (const s of abiertas) await s.cerrar().catch(() => {});
+        corriendo = false;
+        recuperacion.fin = new Date().toISOString();
+      }
+    })();
+    return recuperacion;
+  }
+
+  return { preparar, iniciar, ciclo, comparar, estado, recuperar };
 };

@@ -2498,11 +2498,22 @@ http.createServer(async (req, res) => {
 
     /* ---------- Estado del sistema (alertas de fallos) ---------- */
 
-    if (url === '/api/motor' || url === '/api/motor/ciclo') {
+    if (url === '/api/motor' || url === '/api/motor/ciclo' || url === '/api/motor/recuperar') {
       if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede ver el motor de correo.' });
       if (req.method === 'POST' && url === '/api/motor/ciclo') {
         motorCorreo.ciclo().catch(e => console.log('Motor:', e.message));
         return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && url === '/api/motor/recuperar') {
+        // Vuelve a leer de los buzones un rango de fechas y lo pone en la bandeja (para correos que se borraron).
+        const b = await leerCuerpo(req);
+        try {
+          const r = await motorCorreo.recuperar(String(b.desde || ''), String(b.hasta || ''));
+          await registrar(u, 'motor_recuperar', 'motor', '', '', `${r.desde} a ${r.hasta}`, 'Recuperar correos de un rango de fechas');
+          return json(res, 200, { ok: true, recuperacion: r });
+        } catch (e) {
+          return json(res, 400, { error: e.message });
+        }
       }
       return json(res, 200, { estado: await motorCorreo.estado(), comparacion: await motorCorreo.comparar() });
     }
