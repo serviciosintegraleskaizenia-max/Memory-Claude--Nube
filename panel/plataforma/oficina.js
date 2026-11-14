@@ -98,6 +98,11 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       id SERIAL PRIMARY KEY, grupo TEXT NOT NULL DEFAULT 'Otros', nombre TEXT NOT NULL, url TEXT NOT NULL, icono VARCHAR(8) NOT NULL DEFAULT '🔗',
       nota TEXT NOT NULL DEFAULT '', vigilar BOOLEAN NOT NULL DEFAULT FALSE, orden INTEGER NOT NULL DEFAULT 0,
       creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Clientes de automatización (redes sociales): su flujo de n8n, su Chatwoot y otros accesos.
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_automatizaciones (
+      id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, estado VARCHAR(10) NOT NULL DEFAULT 'activo', redes JSONB NOT NULL DEFAULT '[]',
+      flujo_url TEXT NOT NULL DEFAULT '', chat_url TEXT NOT NULL DEFAULT '', enlaces JSONB NOT NULL DEFAULT '[]', contacto TEXT NOT NULL DEFAULT '',
+      nota TEXT NOT NULL DEFAULT '', orden INTEGER NOT NULL DEFAULT 0, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_ia_uso (
       empresa_id INTEGER NOT NULL, dia DATE NOT NULL, uso NUMERIC(14,6) NOT NULL, PRIMARY KEY (empresa_id, dia))`);
     if (!(await client.query('SELECT COUNT(*)::int AS n FROM oficina_enlaces')).rows[0].n) {
@@ -234,6 +239,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       WHERE ev.fecha BETWEEN $1 AND $2 OR (ev.hecho = FALSE AND ev.fecha < $3) ORDER BY ev.fecha, ev.hora`,
       [mesMas(mes, -1) + '-01', mesMas(mes, 2) + '-01', hoy])).rows;
     const enlaces = (await client.query('SELECT * FROM oficina_enlaces ORDER BY grupo, orden, nombre')).rows;
+    const automatizaciones = (await client.query("SELECT * FROM oficina_automatizaciones ORDER BY (estado = 'pausado'), orden, lower(nombre)")).rows;
 
     // Totales del mes elegido, por moneda.
     const t = { cobrado: {}, porCobrar: {}, vencido: {}, gastos: {}, gastosFijos: {}, ia: {}, ingresoFijo: {} };
@@ -277,7 +283,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           ia: ia.get(d.id) || { tiene: false }
         };
       }),
-      pagos, gastos, eventos, enlaces, totales: t, serie
+      pagos, gastos, eventos, enlaces, automatizaciones, totales: t, serie
     };
   }
 
@@ -408,6 +414,18 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       else await client.query('INSERT INTO oficina_enlaces (grupo, nombre, url, icono, nota, vigilar, orden) VALUES ($1,$2,$3,$4,$5,$6,(SELECT COALESCE(MAX(orden),0)+1 FROM oficina_enlaces))', v);
       return;
     }
+    if (tipo === 'automatizaciones') {
+      const url = (x, nombre) => { const u = texto(x, 400); if (u && !/^https?:\/\/\S+$/i.test(u)) throw Object.assign(new Error(`${nombre}: el enlace debe empezar con http:// o https://`), { codigo: 400 }); return u; };
+      const REDES = ['facebook', 'instagram', 'whatsapp', 'tiktok', 'messenger', 'web', 'telegram', 'google'];
+      const redes = (Array.isArray(f.redes) ? f.redes : []).filter(r => REDES.includes(r));
+      const enlaces = (Array.isArray(f.enlaces) ? f.enlaces : []).slice(0, 12).map(e => ({ n: texto(e && e.n, 60), u: url(e && e.u, 'Otro acceso') })).filter(e => e.n && e.u);
+      const v = [texto(f.nombre, 120), ['activo', 'prueba', 'pausado'].includes(f.estado) ? f.estado : 'activo', JSON.stringify(redes),
+        url(f.flujo_url, 'Flujo de n8n'), url(f.chat_url, 'Chatwoot'), JSON.stringify(enlaces), texto(f.contacto, 200), texto(f.nota, 1000)];
+      if (!v[0]) throw Object.assign(new Error('Escribe el nombre del cliente.'), { codigo: 400 });
+      if (id) await client.query('UPDATE oficina_automatizaciones SET nombre=$1, estado=$2, redes=$3, flujo_url=$4, chat_url=$5, enlaces=$6, contacto=$7, nota=$8 WHERE id=$9', [...v, id]);
+      else await client.query('INSERT INTO oficina_automatizaciones (nombre, estado, redes, flujo_url, chat_url, enlaces, contacto, nota, orden) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,(SELECT COALESCE(MAX(orden),0)+1 FROM oficina_automatizaciones))', v);
+      return;
+    }
     throw Object.assign(new Error('Tipo no válido.'), { codigo: 400 });
   }
 
@@ -416,8 +434,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url === '/api/oficina/datos') return ['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'];
     if (url === '/api/oficina/negocios') return ['negocios', 'inicio'];
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
-    const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces)$/);
-    if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces' }[g[2]]];
+    const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
+    if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
     if (url === '/api/oficina/evento-hecho') return ['calendario', 'inicio'];
     if (url.startsWith('/api/oficina/chat')) return ['chat'];
@@ -485,7 +503,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return json(res, 200, { servicios: await Promise.all(lista.map(revisarEnlace)) });
       }
 
-      const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces)$/);
+      const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
       if (g && req.method === 'POST') {
         const f = await leerCuerpo(req);
         if (g[1] === 'guardar') {

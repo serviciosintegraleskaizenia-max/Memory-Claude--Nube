@@ -113,7 +113,7 @@ tbody tr.fila{cursor:pointer}tbody tr.fila:hover td{background:rgba(31,95,174,.0
 .hoy-prox.vacia{cursor:default;background:var(--card);color:var(--suave);box-shadow:var(--sombra);border:1px solid var(--borde)}.hoy-prox.vacia:after{display:none}.hoy-prox.vacia b{display:block;margin-top:8px;color:var(--suave);font-size:15px}.hoy-prox.vacia small{color:var(--suave)}
 .hoy-nums{display:flex;gap:0;background:var(--card);border:1px solid var(--borde);border-radius:16px;box-shadow:var(--sombra);margin-bottom:14px;overflow:hidden}
 .hoy-nums>div{flex:1;padding:13px 18px;border-right:1px solid var(--borde)}.hoy-nums>div:last-child{border-right:0}
-.hoy-nums b{font-size:24px;letter-spacing:-.6px;display:block}.hoy-nums small{color:var(--suave)}.hoy-nums em{display:block;font-style:normal;font-size:11.5px;font-weight:700;color:var(--ambar);margin-top:2px}.hoy-nums em.ok{color:var(--verde)}
+.hoy-nums b{font-size:24px;letter-spacing:-.6px;display:block}.hoy-nums small{color:var(--suave)}.hoy-nums em{display:block;font-style:normal;font-size:11.5px;font-weight:700;color:var(--ambar);margin-top:2px}.hoy-nums em.bien{color:var(--verde)}
 .hoy-graf-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.hoy-graf-cab h3{margin:0}.hoy-graf-cab span{color:var(--suave);font-size:12px;display:flex;gap:6px;align-items:center}
 .pt{display:inline-block;width:10px;height:10px;border-radius:3px;margin-left:8px}.pt.in{background:var(--verde)}.pt.out{background:var(--azul)}.pt.venta{background:#c9d6ea}.pt.gan{background:var(--oro)}
 .hoy-graf svg.graf{width:100%;height:130px;margin-top:8px;overflow:visible}.b-in{fill:var(--verde);opacity:.85}.b-out{fill:var(--azul);opacity:.85}
@@ -126,6 +126,12 @@ svg .n{font-size:10px;fill:var(--suave);text-anchor:middle;font-weight:700}svg .
 .hoy-fila .p{font-weight:800;text-align:center}.hoy-fila .p small{display:block;font-size:10px;color:var(--suave);font-weight:500}
 .hoy-fila .l{font-size:12px;color:var(--suave);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hoy-fila .a{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}.hoy-fila .a.falta{color:var(--ambar)}
+.hb{display:grid;grid-template-columns:minmax(0,150px) 1fr 34px;gap:10px;align-items:center;padding:5px 0;font-size:12.5px}.hb small{grid-column:1/-1;margin-top:-6px;color:var(--suave);font-size:11px;display:none}
+.hb-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.hb-b{height:10px;background:var(--bg);border-radius:9px;overflow:hidden}.hb-b i{display:block;height:100%;border-radius:9px}.hb b{text-align:right}
+.hoy-dias{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.hoy-dia{all:unset;cursor:pointer;border:1px solid var(--borde);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0}.hoy-dia:hover{border-color:var(--oro)}
+.hoy-dia small{color:var(--suave);text-transform:capitalize;font-size:11px}.hoy-dia b{font-size:15px}.hoy-dia span{font-size:12px}.hoy-dia em{font-style:normal;font-size:11px;font-weight:700;color:var(--ambar)}.hoy-dia em.bien{color:var(--verde)}
+@media (max-width:1100px){.hoy-dias{grid-template-columns:repeat(4,minmax(0,1fr))}}
 /* Reservas */
 .rv-buscar{display:flex;gap:8px;margin-bottom:12px}.buscar.grande{margin-left:0;flex:1;width:auto;padding:4px 14px}.buscar.grande input{font-size:14px}
 .sep-v{width:1px;height:22px;background:var(--borde);margin:0 4px}
@@ -1001,10 +1007,27 @@ function faltan(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return h ? `en ${h} h ${String(m).padStart(2, '0')} min` : `en ${m} min`;
 }
+// Bloques de Hoy: cada persona elige los suyos (se guarda en su navegador).
+const BLOQUES_HOY = [
+  ['urgente', 'Lo urgente (sin asignar en las próximas 3 horas)', true], ['proximas', 'Próxima llegada y próxima salida', true],
+  ['numeros', 'Números del día', true], ['porhora', 'El día por hora (gráfica)', true], ['listas', 'Llegadas y salidas', true],
+  ['tours', 'Tours e inter-hotel', true], ['agencias', 'Pasajeros por agencia (gráfica)', false], ['quien', 'Por chofer y transportista', false],
+  ['proximos', 'Los próximos 7 días', false], ['vuelos', 'Vuelos con novedad (retrasos, cancelados)', false]];
+const claveHoy = () => 'opHoy:' + ((I && I.usuario && I.usuario.usuario) || '');
+function bloquesHoy() {
+  let g = null; try { g = JSON.parse(localStorage.getItem(claveHoy()) || 'null'); } catch (e) {}
+  return Object.fromEntries(BLOQUES_HOY.map(([k, , def]) => [k, g && k in g ? Boolean(g[k]) : def]));
+}
+function guardarBloquesHoy(b) { try { localStorage.setItem(claveHoy(), JSON.stringify(b)); } catch (e) {} }
+let PROX = null;
+async function cargarProximos() {
+  const r = await api(`/api/op/servicios?desde=${masDias(I.hoy, 1)}&hasta=${masDias(I.hoy, 7)}${S.sede ? '&sede=' + encodeURIComponent(S.sede) : ''}`);
+  PROX = r.ok ? r.data.servicios.filter(x => x.estado !== 'cancelado' && x.clase === 'transporte') : [];
+}
 async function vHoy() {
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
   if (S.filtro === 'sin_fecha') S.filtro = 'por_asignar';
-  await cargar();
+  await Promise.all([cargar(), bloquesHoy().proximos ? cargarProximos() : null]);
   pintarHoy();
   timers.reloj = setInterval(() => { if (S.vista !== 'hoy') return; const r = $('#reloj'); if (r) r.textContent = hhmm(ahoraMin()); document.querySelectorAll('[data-cuenta]').forEach(el => { el.textContent = faltan(Number(el.dataset.cuenta) - ahoraMin()); }); }, 20000);
 }
@@ -1051,25 +1074,59 @@ function pintarHoy() {
   }).join('');
   const linea = esHoy ? `<line x1="${ahora / 60 * col}" x2="${ahora / 60 * col}" y1="4" y2="${H - 12}" class="ahora"/>` : '';
   const sinFechaAviso = S.sinFecha ? `<button class="hoy-nota" data-ir-filtro="sin_fecha">${ic('calendar')}${S.sinFecha} servicio(s) registrados sin fecha: complétalos</button>` : '';
-  $('#vista').innerHTML = cabeceraDia('Hoy', `${fechaLarga(S.fecha)}${esHoy ? ` · <span id="reloj">${hhmm(ahora)}</span>` : ''}`) + `
-    ${urgentes.length ? `<div class="hoy-urge"><div class="t">${ic('triangle-alert')}<b>${urgentes.length} servicio(s) sin asignar empiezan en las próximas 3 horas</b><span>${pax(urgentes)} pax</span></div>
+  const B = bloquesHoy();
+  // Barras horizontales sencillas (agencias, choferes).
+  const barras2 = (l, color) => { const m = Math.max(1, ...l.map(x => x.v)); return l.map(x => `<div class="hb"><span class="hb-n" title="${esc(x.k)}">${esc(x.k)}</span><div class="hb-b"><i style="width:${Math.max(3, x.v / m * 100)}%;background:${color}"></i></div><b>${x.v}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</div>`).join(''); };
+  const agrupa = (f) => { const m = new Map(); for (const x of t) { const k = f(x); if (!m.has(k)) m.set(k, { k, v: 0, n: 0, sin: 0 }); const o = m.get(k); o.v += x.pax_total; o.n++; if (x.estado === 'por_asignar') o.sin++; } return [...m.values()].sort((a, b) => b.v - a.v); };
+  const porAgencia = agrupa(x => x.agencia || 'Sin agencia').slice(0, 10).map(x => ({ ...x, sub: `${x.n} serv.` }));
+  const porQuien = agrupa(x => x.chofer || x.proveedor || 'Sin asignar').map(x => ({ ...x, sub: `${x.n} serv.` }));
+  const vuelosNov = t.filter(x => x.vuelo_vivo && (x.vuelo_vivo.retraso_min > 10 || ['cancelado', 'desviado'].includes(x.vuelo_vivo.estado)));
+  const proximos = (() => { if (!PROX) return []; const dias = []; for (let i = 1; i <= 7; i++) { const f = masDias(I.hoy, i), l = PROX.filter(x => x.fecha === f); dias.push({ f, n: l.length, pax: l.reduce((a, x) => a + x.pax_total, 0), sin: l.filter(x => x.estado === 'por_asignar').length, inn: l.filter(x => x.tipo === 'IN').length, out: l.filter(x => x.tipo === 'OUT').length }); } return dias; })();
+  const html = [];
+  if (B.urgente && urgentes.length) html.push(`<div class="hoy-urge"><div class="t">${ic('triangle-alert')}<b>${urgentes.length} servicio(s) sin asignar empiezan en las próximas 3 horas</b><span>${pax(urgentes)} pax</span></div>
       <div class="l">${urgentes.slice(0, 6).map(x => `<button data-abrir="${x.id}">${esc(x.tipo === 'OUT' ? x.recogida : x.hora)} · ${x.tipo === 'IN' ? 'Llegada' : x.tipo === 'OUT' ? 'Salida' : 'Servicio'} · ${esc(x.cliente || '')}</button>`).join('')}
-      ${I.permisos.asignar_servicios ? `<button class="ir" data-ir-filtro="por_asignar">Asignar ahora ${ic('arrow-right')}</button>` : ''}</div></div>` : ''}
-    ${sinFechaAviso}
-    <div class="hoy-proximas">${tarjetaProxima(pl, 'Próxima llegada')}${tarjetaProxima(ps, 'Próxima salida')}</div>
-    <div class="hoy-nums">
-      <div><b>${t.length}</b><small>servicios</small>${pendientes.length ? `<em>${pendientes.length} sin asignar</em>` : '<em class="ok">todo asignado</em>'}</div>
+      ${I.permisos.asignar_servicios ? `<button class="ir" data-ir-filtro="por_asignar">Asignar ahora ${ic('arrow-right')}</button>` : ''}</div></div>`);
+  if (B.urgente) html.push(sinFechaAviso);
+  if (B.proximas) html.push(`<div class="hoy-proximas">${tarjetaProxima(pl, 'Próxima llegada')}${tarjetaProxima(ps, 'Próxima salida')}</div>`);
+  if (B.numeros) html.push(`<div class="hoy-nums">
+      <div><b>${t.length}</b><small>servicios</small>${pendientes.length ? `<em>${pendientes.length} sin asignar</em>` : '<em class="bien">todo asignado</em>'}</div>
       <div><b>${pax(t)}</b><small>pasajeros</small></div>
       <div><b>${llegadas.length}</b><small>llegadas · ${pax(llegadas)} pax</small></div>
       <div><b>${salidas.length}</b><small>salidas · ${pax(salidas)} pax</small></div>
-      ${otros.length ? `<div><b>${otros.length}</b><small>tours e inter-hotel</small></div>` : ''}</div>
-    <div class="caja hoy-graf"><div class="hoy-graf-cab"><h3>${ic('clock')}El día por hora</h3><span><i class="pt in"></i>llegadas <i class="pt out"></i>salidas (por recogida)</span></div>
-      <svg class="graf" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${barras}${linea}</svg></div>
-    <div class="rej r2" style="align-items:start">
+      ${otros.length ? `<div><b>${otros.length}</b><small>tours e inter-hotel</small></div>` : ''}</div>`);
+  if (B.vuelos) html.push(`<div class="caja"><h3>${ic('plane')}Vuelos con novedad <span class="tag">${vuelosNov.length}</span></h3>${vuelosNov.length ? vuelosNov.map(fila).join('') : `<div class="vacio" style="padding:10px">${I.modulos.vuelos ? 'Ningún vuelo con retraso ni cancelado.' : 'Enciende "Vuelos en vivo" en Configuración para ver retrasos.'}</div>`}</div>`);
+  if (B.porhora) html.push(`<div class="caja hoy-graf"><div class="hoy-graf-cab"><h3>${ic('clock')}El día por hora</h3><span><i class="pt in"></i>llegadas <i class="pt out"></i>salidas (por recogida)</span></div>
+      <svg class="graf" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${barras}${linea}</svg></div>`);
+  if (B.agencias || B.quien) html.push(`<div class="rej ${B.agencias && B.quien ? 'r2' : ''}" style="align-items:start">
+      ${B.agencias ? `<div class="caja"><h3>${ic('briefcase')}Pasajeros por agencia</h3>${porAgencia.length ? barras2(porAgencia, 'var(--azul)') : '<div class="vacio">Sin servicios.</div>'}</div>` : ''}
+      ${B.quien ? `<div class="caja"><h3>${ic('car')}Por chofer y transportista</h3>${porQuien.length ? barras2(porQuien.map(x => ({ ...x, sub: x.k === 'Sin asignar' ? `${x.n} por asignar` : x.sub })), 'var(--oro)') : '<div class="vacio">Sin servicios.</div>'}</div>` : ''}</div>`);
+  if (B.listas) html.push(`<div class="rej r2" style="align-items:start">
       <div class="caja hoy-lista"><h3>${ic('plane-landing')}Llegadas <span class="tag">${llegadas.length}</span></h3>${llegadas.map(fila).join('') || '<div class="vacio">Sin llegadas.</div>'}</div>
-      <div class="caja hoy-lista"><h3>${ic('plane-takeoff')}Salidas <span class="tag">${salidas.length}</span></h3>${salidas.map(fila).join('') || '<div class="vacio">Sin salidas.</div>'}</div></div>
-    ${otros.length ? `<div class="caja hoy-lista"><h3>${ic('ticket')}Tours e inter-hotel <span class="tag">${otros.length}</span></h3>${otros.map(fila).join('')}</div>` : ''}`;
+      <div class="caja hoy-lista"><h3>${ic('plane-takeoff')}Salidas <span class="tag">${salidas.length}</span></h3>${salidas.map(fila).join('') || '<div class="vacio">Sin salidas.</div>'}</div></div>`);
+  if (B.tours && otros.length) html.push(`<div class="caja hoy-lista"><h3>${ic('ticket')}Tours e inter-hotel <span class="tag">${otros.length}</span></h3>${otros.map(fila).join('')}</div>`);
+  if (B.proximos) html.push(`<div class="caja"><h3>${ic('calendar-days')}Los próximos 7 días</h3><div class="hoy-dias">${proximos.map(d => `<button class="hoy-dia" data-ir-dia="${d.f}"><small>${esc(fechaLarga(d.f).split(' ')[0])}</small><b>${esc(fechaCorta(d.f))}</b><span>${d.n} serv. · ${d.pax} pax</span><span class="sub2">↘ ${d.inn} · ↗ ${d.out}</span>${d.sin ? `<em>${d.sin} sin asignar</em>` : d.n ? '<em class="bien">asignado</em>' : ''}</button>`).join('')}</div></div>`);
+  const extra = `<button class="btn s" id="hoyPersonalizar" title="Elegir qué ver">${ic('sliders-horizontal')}Personalizar</button>`;
+  $('#vista').innerHTML = cabeceraDia('Hoy', `${fechaLarga(S.fecha)}${esHoy ? ` · <span id="reloj">${hhmm(ahora)}</span>` : ''}`, extra) + (html.join('') || '<div class="vacio">No elegiste ningún bloque. Toca "Personalizar".</div>');
 }
+function personalizarHoy() {
+  const B = bloquesHoy();
+  $('#lat').innerHTML = `<div class="cabp"><div class="tile t-az">${ic('sliders-horizontal')}</div><div style="flex:1"><b style="font-size:16px">Tu pantalla Hoy</b><div class="sub2">Elige qué quieres ver. Se guarda para tu usuario en esta computadora.</div></div><button class="btn mini s" id="cerrarLat">${ic('x')}</button></div>
+    <div class="cuerpo">${BLOQUES_HOY.map(([k, n]) => `<div class="switch"><div><b>${esc(n)}</b></div><label class="sw"><input type="checkbox" data-bloque-hoy="${k}" ${B[k] ? 'checked' : ''}><span></span></label></div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:14px"><button class="btn s" id="hoyRestablecer">Como venía</button></div></div>`;
+  $('#lat').dataset.id = '';
+  $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
+}
+document.addEventListener('change', async ev => {
+  const k = ev.target.dataset && ev.target.dataset.bloqueHoy; if (!k) return;
+  const B = bloquesHoy(); B[k] = ev.target.checked; guardarBloquesHoy(B);
+  if (k === 'proximos' && B.proximos && !PROX) await cargarProximos();
+  if (S.vista === 'hoy') pintarHoy();
+});
+document.addEventListener('click', async ev => {
+  if (ev.target.closest('#hoyPersonalizar')) return personalizarHoy();
+  if (ev.target.closest('#hoyRestablecer')) { try { localStorage.removeItem(claveHoy()); } catch (e) {} if (bloquesHoy().proximos && !PROX) await cargarProximos(); personalizarHoy(); return pintarHoy(); }
+  const d = ev.target.closest('[data-ir-dia]'); if (d) { S.fecha = d.dataset.irDia; return ir('hoy'); }
+});
 
 /* ================= Reservas: lo registrado (correo) y lo manual, con buscador y ficha ================= */
 const RV = { q: '', tipo: [], estado: [], desde: '', hasta: '', alta_desde: '', alta_hasta: '', agencia: '', asesor: '', aerolinea: '', vuelo: '', grupo: '', origen: '', mas: false, datos: null };

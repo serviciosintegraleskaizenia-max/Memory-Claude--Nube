@@ -91,6 +91,15 @@
   .enlace .accesos a { font-size:11.5px; font-weight:600; text-decoration:none; color:var(--texto); background:var(--hover); border:1px solid var(--borde); border-radius:999px; padding:2px 9px; }
   .enlace .accesos a:hover { border-color:var(--azul); color:var(--azul); }
   .enlace.cliente { align-items:flex-start; }
+  .autos { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:10px; }
+  .auto { border:1px solid var(--borde); border-radius:12px; padding:12px; background:var(--tarjeta); display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .auto-c { display:flex; gap:10px; align-items:center; position:relative; } .auto-c .ic { width:36px; height:36px; border-radius:9px; display:grid; place-items:center; font-size:18px; flex:none; }
+  .auto-c .min { flex:1; min-width:0; } .auto-c b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .auto-c small { color:var(--suave); font-size:12px; }
+  .auto-c .editar { position:static; border:none; background:none; cursor:pointer; opacity:.5; font-size:13px; }
+  .auto-r { display:flex; gap:5px; flex-wrap:wrap; } .auto-r span { font-size:11px; font-weight:700; color:var(--c); background:color-mix(in srgb, var(--c) 12%, transparent); border-radius:999px; padding:2px 9px; }
+  .auto-a { display:flex; gap:6px; flex-wrap:wrap; align-items:center; } .auto-a a { text-decoration:none; display:inline-block; } .auto-a .sin { font-size:11.5px; color:var(--suave); }
+  .auto-n { color:var(--suave); font-size:12px; }
+  .auto-chk { display:flex; gap:12px; flex-wrap:wrap; } .auto-chk label { display:flex; gap:5px; align-items:center; font-weight:500; }
   .enlace small { display:block; color:var(--suave); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .enlace .min { min-width:0; flex:1; }
   .enlace .editar { position:absolute; top:6px; right:6px; border:none; background:none; cursor:pointer; opacity:.4; font-size:13px; }
@@ -997,6 +1006,7 @@ function vEnlaces() {
   const clientes = D.empresas.map(e => `<div class="enlace cliente"><div class="ic" style="background:${colorDe(e.slug)}22">${e.es_demo ? '🎯' : '🏢'}</div><div class="min"><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.nombre)}</a><small><span class="punto p-${e.vivo ? 'bien' : 'falla'}"></span>${esc(e.url.replace(/^https?:\/\//, ''))}</small>${accesos(e)}</div></div>`).join('');
   return cabecera('🔗 Enlaces', 'Todas tus páginas y herramientas a un clic', `<button class="btn-sec" data-nueva-seccion>+ Sección</button><button class="btn" data-nuevo-enlace>+ Enlace</button>`) +
     `<div class="caja"><h2>Mis clientes</h2><p class="sub">Se arma solo con los paneles de cada empresa · accesos directos a cada sección</p><div class="enlaces">${clientes || '<div class="vacio">Sin empresas.</div>'}</div></div>` +
+    cajaAutomatizaciones() +
     Object.entries(grupos).map(([g, l]) => `<div class="caja"><div class="cab"><h2>${esc(g)}</h2><button class="btn-mini" data-nuevo-enlace data-grupo="${esc(g)}">+ Agregar aquí</button></div><div class="enlaces">${l.map(tarjeta).join('')}</div></div>`).join('');
 }
 
@@ -1910,6 +1920,42 @@ function formEvento(ev = {}, fecha) {
   document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/eventos', { id: ev.id, titulo: v('fTit'), fecha: v('fFec'), hora: v('fHora'), tipo: v('fTipo'), empresa_id: v('fEmp'), nota: v('fNota'), hecho: ev.id ? document.getElementById('fHecho').checked : false }, 'Guardado en el calendario.');
   conBorrar('eventos', ev.id, '¿Borrar esta tarea del calendario?');
 }
+/* ---------- Automatizaciones: clientes de redes sociales (su flujo de n8n y su Chatwoot) ---------- */
+const REDES_AUTO = [['facebook', 'Facebook', '#1877f2'], ['instagram', 'Instagram', '#e1306c'], ['whatsapp', 'WhatsApp', '#25d366'], ['messenger', 'Messenger', '#0084ff'],
+  ['tiktok', 'TikTok', '#111827'], ['telegram', 'Telegram', '#229ed9'], ['web', 'Chat web', '#64748b'], ['google', 'Google', '#ea4335']];
+const ESTADO_AUTO = { activo: ['● Activo', 'ok'], prueba: ['● En prueba', 'ojo'], pausado: ['● Pausado', 'gris'] };
+function cajaAutomatizaciones() {
+  const l = D.automatizaciones || [];
+  const tarjeta = a => `<div class="auto">
+    <div class="auto-c"><div class="ic" style="background:${colorDe(a.nombre)}22">🤖</div><div class="min"><b>${esc(a.nombre)}</b><small>${a.contacto ? esc(a.contacto) : 'automatización de redes'}</small></div>
+      <span class="chip ${ESTADO_AUTO[a.estado][1]}">${ESTADO_AUTO[a.estado][0]}</span><button class="editar" data-editar-auto="${a.id}" title="Editar">✏️</button></div>
+    ${(a.redes || []).length ? `<div class="auto-r">${a.redes.map(r => { const x = REDES_AUTO.find(y => y[0] === r) || [r, r, '#64748b']; return `<span style="--c:${x[2]}">${esc(x[1])}</span>`; }).join('')}</div>` : ''}
+    <div class="auto-a">${a.flujo_url ? `<a class="btn-mini" href="${esc(a.flujo_url)}" target="_blank" rel="noopener">⚙️ Flujo (n8n)</a>` : '<span class="sin">sin flujo</span>'}
+      ${a.chat_url ? `<a class="btn-mini p" href="${esc(a.chat_url)}" target="_blank" rel="noopener">💬 Chatwoot</a>` : '<span class="sin">sin Chatwoot</span>'}
+      ${(a.enlaces || []).map(e => `<a class="btn-mini" href="${esc(e.u)}" target="_blank" rel="noopener">🔗 ${esc(e.n)}</a>`).join('')}</div>
+    ${a.nota ? `<small class="auto-n">${esc(a.nota)}</small>` : ''}</div>`;
+  return `<div class="caja"><div class="cab"><div><h2>🤖 Automatizaciones</h2><p class="sub">Clientes de automatización de redes sociales · su flujo y su panel de chat</p></div><button class="btn-mini" data-nuevo-auto>+ Cliente</button></div>
+    ${l.length ? `<div class="autos">${l.map(tarjeta).join('')}</div>` : '<div class="vacio">Todavía no hay clientes de automatización. Toca "+ Cliente".</div>'}</div>`;
+}
+function formAuto(a = {}) {
+  const redes = a.redes || [];
+  abrirModal(`<h2>${a.id ? esc(a.nombre) : 'Nuevo cliente de automatización'}</h2>
+    <div class="fila2">${campo('aNom', 'Cliente', `<input id="aNom" value="${esc(a.nombre || '')}" placeholder="Ej.: Pizzería Don Luis">`)}
+      ${campo('aEst', 'Estado', `<select id="aEst">${Object.entries(ESTADO_AUTO).map(([k, [n]]) => `<option value="${k}" ${(a.estado || 'activo') === k ? 'selected' : ''}>${n.replace('● ', '')}</option>`).join('')}</select>`)}</div>
+    <div class="campo"><label>Redes que se automatizan</label><div class="auto-chk">${REDES_AUTO.map(([k, n]) => `<label><input type="checkbox" data-red-auto="${k}" ${redes.includes(k) ? 'checked' : ''}> ${n}</label>`).join('')}</div></div>
+    ${campo('aFlujo', 'Flujo de n8n', `<input id="aFlujo" value="${esc(a.flujo_url || '')}" placeholder="https://…/workflow/123">`, 'Abre el flujo de este cliente en n8n.')}
+    ${campo('aChat', 'Su panel de Chatwoot', `<input id="aChat" value="${esc(a.chat_url || '')}" placeholder="https://…/app/accounts/5/dashboard">`, 'La cuenta o bandeja de Chatwoot donde se trabajan sus conversaciones.')}
+    ${campo('aMas', 'Otros accesos (uno por línea: Nombre | dirección)', `<textarea id="aMas" rows="3" placeholder="Meta Business | https://business.facebook.com/...
+Google Drive | https://drive.google.com/...">${esc((a.enlaces || []).map(e => e.n + ' | ' + e.u).join('\n'))}</textarea>`)}
+    <div class="fila2">${campo('aCont', 'Contacto', `<input id="aCont" value="${esc(a.contacto || '')}" placeholder="Nombre y teléfono">`)}${campo('aNota', 'Nota', `<input id="aNota" value="${esc(a.nota || '')}" placeholder="Ej.: paga el 5 de cada mes">`)}</div>
+    ${pieModal(a.id)}`);
+  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/automatizaciones', {
+    id: a.id, nombre: v('aNom'), estado: v('aEst'), redes: [...document.querySelectorAll('[data-red-auto]:checked')].map(c => c.dataset.redAuto),
+    flujo_url: v('aFlujo'), chat_url: v('aChat'), contacto: v('aCont'), nota: v('aNota'),
+    enlaces: v('aMas').split('\n').map(l => l.split('|')).filter(p => p.length >= 2).map(([n, ...u]) => ({ n: n.trim(), u: u.join('|').trim() }))
+  }, 'Cliente guardado.');
+  conBorrar('automatizaciones', a.id, '¿Borrar este cliente de automatización?');
+}
 function formEnlace(x = {}) {
   const grupos = [...new Set(D.enlaces.map(e => e.grupo).concat(['Infraestructura', 'Mis redes', 'Cobros', 'Mi negocio']))];
   abrirModal(`<h2>${x.id ? 'Editar enlace' : 'Nuevo enlace' + (x.grupo ? ' en ' + esc(x.grupo) : '')}</h2>
@@ -1951,7 +1997,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-editar-enlace],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
+  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente) return;
   ev.preventDefault();
@@ -1970,6 +2016,8 @@ document.addEventListener('click', async ev => {
   if (d.editarEvento) { const e = buscar(D.eventos, d.editarEvento); return e && formEvento(e); }
   if (d.hecho) { await api('/api/oficina/evento-hecho', { id: d.hecho, hecho: true }); aviso('Marcado como hecho.'); return ir(vista); }
   if ('nuevoEnlace' in d) return formEnlace(d.grupo ? { grupo: d.grupo } : {});
+  if ('nuevoAuto' in d) return formAuto();
+  if (d.editarAuto) { const a = buscar(D.automatizaciones || [], d.editarAuto); return a && formAuto(a); }
   if ('nuevaSeccion' in d) { const n = (prompt('Nombre de la sección nueva (ej.: Mis redes, Proveedores, Bancos):') || '').trim(); if (n) formEnlace({ grupo: n.slice(0, 60) }); return; }
   if (d.editarEnlace) { const x = buscar(D.enlaces, d.editarEnlace); return x && formEnlace(x); }
   if (d.editarCliente) { const e = buscar(D.empresas, d.editarCliente); return e && formCliente(e); }
