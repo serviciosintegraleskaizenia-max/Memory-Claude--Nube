@@ -1483,6 +1483,8 @@ const CARPETAS_K = {
 };
 let kCarpeta = (() => { try { return localStorage.getItem('oficinaCarpetaK') || 'chatbot'; } catch (e) { return 'chatbot'; } })();
 let kSub = '*';
+// Carpeta con nombre dentro de Chatbot o Tarifarios: '' = todas, '__sin__' = sin carpeta, o el nombre.
+let kGrupo = '';
 const iconoSede = x => !x ? '🌐' : /orlando|florida|miami/i.test(x) ? '🎢' : /punta|cana|dominic|santo|bavaro/i.test(x) ? '🌴' : '📍';
 const nombreSub = (carpeta, sub) => carpeta === 'operaciones' ? ((K.empresa.temas || []).find(t => t.k === sub) || { n: sub || 'Sin tema' }).n : (sub || 'General');
 const iconoSub = (carpeta, sub) => carpeta === 'operaciones' ? ({ reservas: '🧾', procesos: '⚙️', politicas: '📜' }[sub] || '🗂️') : iconoSede(sub);
@@ -1506,7 +1508,7 @@ function tarjetaArchivo(a, conSub) {
   const ico = a.tipo === 'nota' ? '✍️' : /\.pdf$/i.test(a.nombre) ? '📕' : /\.docx$/i.test(a.nombre) ? '📘' : '📗';
   return `<div class="k-arch" data-filtro="${esc((a.nombre + ' ' + (TIPO_K[a.tipo] || '') + ' ' + nombreSub(a.carpeta, subDe(a))).toLowerCase())}">
     <div class="t"><span class="ic">${ico}</span><b title="${esc(a.nombre)}">${esc(a.nombre)}</b></div>
-    <div class="m">${conSub ? `${iconoSub(a.carpeta, subDe(a))} ${esc(nombreSub(a.carpeta, subDe(a)))} · ` : ''}${contenidoTexto(a)} · ${fechaCorta(a.publicado || a.subido)}${a.estado === 'borrador' ? ' · <b style="color:var(--ambar)">por revisar</b>' : ''}</div>
+    <div class="m">${conSub ? `${iconoSub(a.carpeta, subDe(a))} ${esc(nombreSub(a.carpeta, subDe(a)))} · ` : ''}${a.grupo ? `📁 ${esc(a.grupo)} · ` : ''}${contenidoTexto(a)} · ${fechaCorta(a.publicado || a.subido)}${a.estado === 'borrador' ? ' · <b style="color:var(--ambar)">por revisar</b>' : ''}</div>
     ${a.carpeta === 'tarifarios' ? `<div>${estadoOperaciones(a)}</div>` : ''}
     ${ant ? `<div class="m">Versión anterior del ${fechaCorta(ant.publicado || ant.subido)} · <a href="#" data-k="restaurar" data-id="${ant.id}">volver a esa</a></div>` : ''}
     <div class="a"><button class="btn-mini" data-k="ver" data-id="${a.id}">👁 Ver</button>${a.tipo === 'nota' ? `<button class="btn-mini" data-k="editar-nota" data-id="${a.id}" title="Editar">✏️</button>` : `<a class="btn-mini" style="text-decoration:none;display:inline-block" href="/api/oficina/conocimiento/original?id=${a.id}" title="Descargar el original">⬇</a>`}<button class="btn-mini" data-k="mover" data-id="${a.id}" title="Mover a otra carpeta">↔ Mover</button>${a.carpeta === 'tarifarios' && /\.xlsx$|\.xlsm$/i.test(a.nombre) && a.estado === 'publicado' ? `<button class="btn-mini" data-k="a-operaciones" data-id="${a.id}" title="Volver a cargar en los precios de Operaciones">↻ Precios</button>` : ''}<button class="btn-mini peligro" data-k="quitar" data-id="${a.id}" title="Borrar">✕</button></div></div>`;
@@ -1530,10 +1532,14 @@ function tabDocsK() {
   const c = CARPETAS_K[kCarpeta];
   const enCarpeta = activos.filter(a => a.carpeta === kCarpeta);
   const subs = subsDe(kCarpeta);
+  const carpetasK = (e.grupos || {})[kCarpeta] || [];
   if (kSub !== '*' && !subs.includes(kSub)) kSub = '*';
-  const visibles = kSub === '*' ? enCarpeta : enCarpeta.filter(a => subDe(a) === kSub);
-  const grupos = kSub === '*' ? subs.map(x => [x, enCarpeta.filter(a => subDe(a) === x)]).filter(([, l]) => l.length) : [[kSub, visibles]];
-  const destino = kSub === '*' ? (kCarpeta === 'operaciones' ? 'el tema que elijas' : 'la sede que diga el documento (o General)') : `${iconoSub(kCarpeta, kSub)} ${nombreSub(kCarpeta, kSub)}`;
+  if (kGrupo && kGrupo !== '__sin__' && !carpetasK.includes(kGrupo)) kGrupo = '';
+  const enGrupo = kGrupo === '' ? enCarpeta : kGrupo === '__sin__' ? enCarpeta.filter(a => !a.grupo) : enCarpeta.filter(a => a.grupo === kGrupo);
+  const visibles = kSub === '*' ? enGrupo : enGrupo.filter(a => subDe(a) === kSub);
+  const grupos = kSub === '*' ? subs.map(x => [x, enGrupo.filter(a => subDe(a) === x)]).filter(([, l]) => l.length) : [[kSub, visibles]];
+  const conCarpetas = kCarpeta !== 'operaciones';
+  const destino = (kSub === '*' ? (kCarpeta === 'operaciones' ? 'el tema que elijas' : 'la sede que diga el documento (o General)') : `${iconoSub(kCarpeta, kSub)} ${nombreSub(kCarpeta, kSub)}`) + (conCarpetas && kGrupo && kGrupo !== '__sin__' ? ` · 📁 ${kGrupo}` : '');
   return `<div class="k-carpetas">${Object.keys(CARPETAS_K).map(tarjetaCarpeta).join('')}</div>
     <div class="caja" style="--c:${c.c}">
       <div class="cab"><div><div class="k-ruta">${c.i} <b>${c.n}</b>${kSub !== '*' ? ` › ${iconoSub(kCarpeta, kSub)} <b>${esc(nombreSub(kCarpeta, kSub))}</b>` : ''} · ${visibles.length} archivo(s)</div>
@@ -1543,6 +1549,11 @@ function tabDocsK() {
       <div class="k-subs"><button class="k-sub ${kSub === '*' ? 'activa' : ''}" data-k-sub="*">Todo <i>${enCarpeta.length}</i></button>
         ${subs.map(x => `<button class="k-sub ${kSub === x ? 'activa' : ''}" data-k-sub="${esc(x)}">${iconoSub(kCarpeta, x)} ${esc(nombreSub(kCarpeta, x))} <i>${enCarpeta.filter(a => subDe(a) === x).length}</i></button>`).join('')}
         ${kCarpeta === 'operaciones' ? `<button class="k-sub" data-k="tema-nuevo" title="Crear otra subcarpeta">＋ Tema</button>` : ''}</div>
+      ${conCarpetas ? `<div class="k-subs k-grupos"><span class="k-etq">📁 Carpetas</span>
+        <button class="k-sub ${kGrupo === '' ? 'activa' : ''}" data-k-grupo="">Todas <i>${enCarpeta.length}</i></button>
+        <button class="k-sub ${kGrupo === '__sin__' ? 'activa' : ''}" data-k-grupo="__sin__">Sin carpeta <i>${enCarpeta.filter(a => !a.grupo).length}</i></button>
+        ${carpetasK.map(g => `<button class="k-sub ${kGrupo === g ? 'activa' : ''}" data-k-grupo="${esc(g)}">📁 ${esc(g)} <i>${enCarpeta.filter(a => a.grupo === g).length}</i></button>`).join('')}
+        <button class="k-sub" data-k="grupo-nuevo" title="Crear una carpeta con nombre, por ejemplo Traslados, Tours o Políticas">＋ Crear carpeta</button></div>` : ''}
       <div class="k-zona" id="kZona"><span style="font-size:20px">⬆️</span><div style="flex:1;min-width:200px"><b style="color:var(--texto)">Subir a ${c.i} ${c.n}${kSub !== '*' ? ' › ' + esc(nombreSub(kCarpeta, kSub)) : ''}</b><br>Va a ${destino}. ${c.aviso}</div>
         <div class="acciones">${kCarpeta === 'operaciones' && kSub === '*' ? `<select id="kTemaSubir" title="Tema">${(e.temas || []).map(t => `<option value="${esc(t.k)}">${iconoSub('operaciones', t.k)} ${esc(t.n)}</option>`).join('')}</select>` : ''}<button class="btn" data-k="subir">📄 Archivos</button><button class="btn-sec" data-k="carpeta">📁 Carpeta</button><button class="btn-sec" data-k="nota">✍️ Nota</button></div>
         <input type="file" id="kArchivos" multiple accept=".xlsx,.xlsm,.pdf,.docx" style="display:none"><input type="file" id="kCarpeta" webkitdirectory multiple style="display:none">
@@ -1551,6 +1562,7 @@ function tabDocsK() {
         <div class="k-archivos">${l.sort((a, b) => a.nombre.localeCompare(b.nombre)).map(a => tarjetaArchivo(a, false)).join('')}</div></div>`).join('')
         : `<div class="vacio">${kCarpeta === 'chatbot' ? 'Todavía no hay nada aquí: el asistente no sabe nada de esto.' : 'Carpeta vacía. Sube aquí los documentos de uso interno.'}</div>`}
       ${kCarpeta === 'operaciones' && kSub !== '*' && !((e.temas || []).find(t => t.k === kSub) || { fijo: true }).fijo && !visibles.length ? `<button class="btn-mini peligro" data-k="tema-quitar" data-sub="${esc(kSub)}">Borrar este tema</button>` : ''}
+      ${conCarpetas && kGrupo && kGrupo !== '__sin__' ? `<button class="btn-mini peligro" data-k="grupo-quitar" data-nombre="${esc(kGrupo)}">Quitar la carpeta "${esc(kGrupo)}" (sus archivos quedan sin carpeta)</button>` : ''}
     </div>`;
 }
 function destinosMover(a) {
@@ -1560,19 +1572,33 @@ function destinosMover(a) {
 // A dónde va lo que se sube desde la carpeta abierta.
 function destinoSubida() {
   if (kCarpeta === 'operaciones') { const t = document.getElementById('kTemaSubir'); return { carpeta: 'operaciones', subcarpeta: kSub !== '*' ? kSub : (t ? t.value : 'politicas'), sede: '' }; }
-  return { carpeta: kCarpeta, sede: kSub === '*' ? '*' : kSub };
+  return { carpeta: kCarpeta, sede: kSub === '*' ? '*' : kSub, grupo: kGrupo && kGrupo !== '__sin__' ? kGrupo : '' };
+}
+// Opciones de carpeta con nombre para una sección (Chatbot o Tarifarios).
+function opcionesGrupo(k, actual) {
+  const l = (K.empresa.grupos || {})[k] || [];
+  return `<option value="">Sin carpeta</option>${l.map(g => `<option value="${esc(g)}" ${g === actual ? 'selected' : ''}>📁 ${esc(g)}</option>`).join('')}`;
 }
 function formMover(a) {
   abrirModal(`<h2>↔ Mover "${esc(a.nombre)}"</h2>
     ${campo('mDestino', 'A dónde', `<select id="mDestino">${destinosMover(a)}</select>`)}
+    <div id="mGrupoCaja">${campo('mGrupo', 'Carpeta con nombre (opcional)', `<select id="mGrupo"></select>`, 'Por ejemplo Traslados o Tours. Crea nuevas con ＋ Crear carpeta.')}</div>
     <div class="k-avisos" id="mAviso" style="display:none"></div>
     ${pieModal(false)}`);
   const sel = document.getElementById('mDestino'), av = document.getElementById('mAviso');
+  const pintarGrupo = () => {
+    const [k] = sel.value.split('|');
+    const caja = document.getElementById('mGrupoCaja');
+    caja.style.display = k === 'operaciones' ? 'none' : '';
+    if (k !== 'operaciones') document.getElementById('mGrupo').innerHTML = opcionesGrupo(k, k === a.carpeta ? a.grupo : '');
+  };
+  sel.addEventListener('change', pintarGrupo); pintarGrupo();
   const pintarAviso = () => { const [k] = sel.value.split('|'); const msj = k === 'chatbot' && a.carpeta !== 'chatbot' ? '⚠️ El chatbot empezará a leerlo y a usarlo con los clientes. Revisa que no tenga precios netos ni datos internos.' : k !== 'chatbot' && a.carpeta === 'chatbot' ? 'El chatbot deja de leerlo en cuanto lo muevas.' : k === 'tarifarios' && a.carpeta !== 'tarifarios' ? 'Si es un Excel, se carga en los precios de Operaciones.' : ''; av.style.display = msj ? '' : 'none'; av.textContent = msj; };
   sel.onchange = pintarAviso; pintarAviso();
   document.getElementById('fGuardar').onclick = async () => {
     const [carpeta, sub] = sel.value.split('|');
-    const r = await api('/api/oficina/conocimiento/mover', { id: a.id, carpeta, sede: carpeta === 'operaciones' ? '' : sub, subcarpeta: carpeta === 'operaciones' ? sub : '' });
+    const grupo = carpeta === 'operaciones' ? '' : (document.getElementById('mGrupo') || { value: '' }).value;
+    const r = await api('/api/oficina/conocimiento/mover', { id: a.id, carpeta, sede: carpeta === 'operaciones' ? '' : sub, subcarpeta: carpeta === 'operaciones' ? sub : '', grupo });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'Error'; return; }
     cerrarModal(); aviso(`Movido a ${CARPETAS_K[carpeta].n} › ${nombreSub(carpeta, sub)}.`); return ir('conocimiento');
   };
@@ -1884,7 +1910,7 @@ document.addEventListener('click', async ev => {
   }
 });
 function formNota(n = {}) {
-  const carpeta = n.carpeta || kCarpeta, dest = n.carpeta ? { carpeta: n.carpeta, subcarpeta: n.subcarpeta, sede: n.sede } : destinoSubida();
+  const carpeta = n.carpeta || kCarpeta, dest = n.carpeta ? { carpeta: n.carpeta, subcarpeta: n.subcarpeta, sede: n.sede, grupo: n.grupo || '' } : destinoSubida();
   const interna = carpeta !== 'chatbot';
   abrirModal(`<h2>✍️ Nota escrita · ${CARPETAS_K[carpeta].i} ${CARPETAS_K[carpeta].n}</h2>
     ${campo('nTitulo', 'Título', `<input id="nTitulo" value="${esc(n.nombre || '')}" placeholder="Ej: Recargo nocturno Orlando">`, 'Si ya existe una nota con este título, la reemplaza al publicar.')}
@@ -1896,7 +1922,7 @@ function formNota(n = {}) {
     const nombre = document.getElementById('nTitulo').value.trim();
     if (!nombre) { document.getElementById('errForm').textContent = 'Ponle un título.'; return; }
     const v = document.getElementById('nSede').value;
-    await enviarForm('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre, carpeta, ...(carpeta === 'operaciones' ? { subcarpeta: v, sede: '' } : { sede: v }), nota: document.getElementById('nTexto').value }, interna ? 'Nota guardada.' : 'Nota guardada. Revísala y publícala.');
+    await enviarForm('/api/oficina/conocimiento/subir', { empresa_id: kEmpresa, nombre, carpeta, ...(carpeta === 'operaciones' ? { subcarpeta: v, sede: '' } : { sede: v, grupo: dest.grupo || '' }), nota: document.getElementById('nTexto').value }, interna ? 'Nota guardada.' : 'Nota guardada. Revísala y publícala.');
   };
 }
 function base64De(archivo) {
@@ -1948,6 +1974,8 @@ document.addEventListener('click', async ev => {
   if (kc && vista === 'conocimiento') { kCarpeta = kc.dataset.kCarpeta; kSub = '*'; try { localStorage.setItem('oficinaCarpetaK', kCarpeta); } catch (e) {} return pintar(); }
   const ks = ev.target.closest('[data-k-sub]');
   if (ks && vista === 'conocimiento') { kSub = ks.dataset.kSub; return pintar(); }
+  const kg = ev.target.closest('[data-k-grupo]');
+  if (kg && vista === 'conocimiento') { kGrupo = kg.dataset.kGrupo; return pintar(); }
   const ti = ev.target.closest('[data-k-tab-ir]');
   if (ti) { kTab = ti.dataset.kTabIr; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} }
   const t = ev.target.closest('[data-k]');
@@ -1969,11 +1997,27 @@ document.addEventListener('click', async ev => {
     document.getElementById('fGuardar').onclick = async () => { const r = await api('/api/oficina/conocimiento/tema', { empresa_id: kEmpresa, nombre: document.getElementById('tNombre').value }); if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'Error'; return; } cerrarModal(); kSub = r.data.temas[r.data.temas.length - 1].k; return ir('conocimiento'); };
     return;
   }
+  if (accion === 'grupo-nuevo') {
+    abrirModal(`<h2>📁 Crear carpeta en ${CARPETAS_K[kCarpeta].i} ${CARPETAS_K[kCarpeta].n}</h2>
+      ${campo('gNombre', 'Nombre de la carpeta', '<input id="gNombre" placeholder="Ej: Traslados, Tours, Políticas, Hoteles">', 'Después puedes subir archivos aquí o moverlos desde ↔ Mover.')}${pieModal(false)}`);
+    document.getElementById('fGuardar').onclick = async () => {
+      const r = await api('/api/oficina/conocimiento/grupo', { empresa_id: kEmpresa, carpeta: kCarpeta, nombre: document.getElementById('gNombre').value });
+      if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'Error'; return; }
+      cerrarModal(); kGrupo = document.getElementById('gNombre').value.trim(); return ir('conocimiento');
+    };
+    return;
+  }
+  if (accion === 'grupo-quitar') {
+    if (!confirm(`¿Quitar la carpeta "${t.dataset.nombre}"? Sus archivos no se borran: quedan sin carpeta.`)) return;
+    const r = await api('/api/oficina/conocimiento/grupo', { empresa_id: kEmpresa, carpeta: kCarpeta, quitar: t.dataset.nombre });
+    if (!r.ok) return aviso(r.data.error || 'Error');
+    kGrupo = ''; return ir('conocimiento');
+  }
   if (accion === 'tema-quitar') { if (!confirm('¿Borrar este tema?')) return; const r = await api('/api/oficina/conocimiento/tema', { empresa_id: kEmpresa, quitar: t.dataset.sub }); if (!r.ok) return aviso(r.data.error || 'Error'); kSub = '*'; return ir('conocimiento'); }
   if (accion === 'ver') { const r = await api('/api/oficina/conocimiento/ver?id=' + id); return r.ok ? verArchivo(r.data) : aviso(r.data.error || 'Error'); }
   if (accion === 'editar-nota') {
     const r = await api('/api/oficina/conocimiento/ver?id=' + id); if (!r.ok) return;
-    return formNota({ nombre: r.data.nombre, sede: r.data.sede, carpeta: r.data.carpeta, subcarpeta: r.data.subcarpeta, texto: (r.data.documentos[0] || { lineas: [] }).lineas.join('\n') });
+    return formNota({ nombre: r.data.nombre, sede: r.data.sede, carpeta: r.data.carpeta, subcarpeta: r.data.subcarpeta, grupo: r.data.grupo || '', texto: (r.data.documentos[0] || { lineas: [] }).lineas.join('\n') });
   }
   if (accion === 'publicar' || accion === 'publicar-todo') {
     const ids = accion === 'publicar' ? [id] : K.archivos.filter(a => a.estado === 'borrador').map(a => a.id);

@@ -1871,6 +1871,8 @@ function pintar() {
 
   if (vistaActual === 'calendario') pintarCalendario();
 
+  // En Histórico la lista es solo el archivo: los números de las pestañas se quedan con los de la bandeja, no se borran.
+  if (vistaActual === 'historico') return;
   // Los números cuentan reservas (correos), no servicios sueltos.
   const unaPor = l => agruparReservas(l).length;
   const completos = datos.filter(esCompleto);

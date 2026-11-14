@@ -467,6 +467,8 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const conCarpetas = (await client.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'conocimiento_archivos' AND column_name = 'carpeta'")).rows.length;
     await client.query("ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS carpeta VARCHAR(20) NOT NULL DEFAULT 'chatbot'");
     await client.query("ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS subcarpeta TEXT NOT NULL DEFAULT ''");
+    // Carpetas con nombre que crea el usuario dentro de Chatbot o Tarifarios (no cambian la sede que usa el asistente).
+    await client.query("ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS grupo TEXT NOT NULL DEFAULT ''");
     await client.query('ALTER TABLE conocimiento_archivos ADD COLUMN IF NOT EXISTS op_estado JSONB');
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS conocimiento_carpetas JSONB NOT NULL DEFAULT '{}'");
     if (!conCarpetas) {
@@ -594,6 +596,13 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const extra = ((e.conocimiento_carpetas || {}).operaciones || []).filter(x => x && x.k && x.n);
     return [...TEMAS_OPERACIONES.map(([k, n]) => ({ k, n, fijo: true })), ...extra.map(x => ({ k: x.k, n: x.n }))];
   }
+  // Carpetas con nombre por carpeta: { chatbot: ['Traslados', …], tarifarios: [...] }
+  function gruposDe(e) {
+    const g = (e.conocimiento_carpetas || {}).grupos || {};
+    const salida = {};
+    for (const k of ['chatbot', 'tarifarios']) salida[k] = (Array.isArray(g[k]) ? g[k] : []).filter(x => typeof x === 'string' && x.trim()).slice(0, 30);
+    return salida;
+  }
 
   async function reconstruirPdfs(empresaId) {
     const cab = (await client.query('SELECT linea FROM conocimiento_cabeceras WHERE empresa_id = $1', [empresaId])).rows.map(r => r.linea);
@@ -613,6 +622,8 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const carpeta = CARPETAS.includes(f.carpeta) ? f.carpeta : 'chatbot';
     const subcarpeta = carpeta === 'operaciones' ? (temasOperaciones(e).find(x => x.k === f.subcarpeta) || { k: 'politicas' }).k : '';
     let sede = carpeta === 'operaciones' ? texto(f.sede || '', 60) : f.sede !== undefined && f.sede !== null && f.sede !== '*' ? texto(f.sede, 60) : null;
+    const grupo = carpeta === 'operaciones' ? '' : texto(f.grupo || '', 60);
+    if (grupo && !gruposDe(e)[carpeta].includes(grupo)) throw error('Primero crea la carpeta "' + grupo + '".');
     let r, buf = null, crudo = null;
     if (f.nota !== undefined) {
       const t = String(f.nota || '').replace(/\r/g, '').trim().slice(0, 50000);
@@ -659,10 +670,10 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     if (sede === null) sede = sedePorContenido(nombre, textoDeDocs(r.documentos), sedes) || (carpeta === 'chatbot' && r.tipo === 'ficha' ? await sedeMayoritaria(e.id, 'ficha') : '');
     // Si ya había un borrador con el mismo nombre, se reemplaza.
     await client.query("DELETE FROM conocimiento_archivos WHERE empresa_id = $1 AND LOWER(nombre) = LOWER($2) AND estado = 'borrador'", [e.id, nombre]);
-    const fila = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+    const fila = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta, grupo)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
     [e.id, nombre, r.tipo, sede, JSON.stringify(r.documentos), JSON.stringify(r.quitado), JSON.stringify(r.avisos), crudo ? JSON.stringify(crudo) : null,
-      buf, buf ? buf.length : Buffer.byteLength(f.nota || ''), u.usuario, carpeta, subcarpeta])).rows[0];
+      buf, buf ? buf.length : Buffer.byteLength(f.nota || ''), u.usuario, carpeta, subcarpeta, grupo])).rows[0];
     await registrar(u, 'conocimiento_subir', 'empresa', e.slug, '', '', `${nombre} (${r.tipo}) → ${carpeta}${subcarpeta ? '/' + subcarpeta : ''}`);
     // Lo interno no pasa por "Por revisar": el chatbot no lo lee. Queda guardado de una vez.
     if (carpeta !== 'chatbot') await publicar(u, [fila.id]);
@@ -671,7 +682,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
   }
 
   async function lista(empresaId) {
-    return (await client.query(`SELECT id, nombre, tipo, sede, estado, avisos, tamano, subido, subido_por, publicado, carpeta, subcarpeta, op_estado,
+    return (await client.query(`SELECT id, nombre, tipo, sede, estado, avisos, tamano, subido, subido_por, publicado, carpeta, subcarpeta, grupo, op_estado,
         jsonb_array_length(documentos) AS documentos,
         (SELECT COALESCE(SUM(jsonb_array_length(d->'lineas')), 0) FROM jsonb_array_elements(documentos) d)::int AS lineas,
         (SELECT COALESCE(SUM(LENGTH(d->>'lineas')), 0) FROM jsonb_array_elements(documentos) d)::int AS caracteres,
@@ -959,7 +970,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       await revisarOperaciones(elegida.id);
       return json(res, 200, {
         empresas: empresas.map(e => ({ id: e.id, nombre: e.nombre, es_demo: e.es_demo })),
-        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida), temas: temasOperaciones(elegida),
+        empresa: { id: elegida.id, nombre: elegida.nombre, sedes: sedesDe(elegida), token: elegida.conocimiento_token, ajustes: ajustesDe(elegida), temas: temasOperaciones(elegida), grupos: gruposDe(elegida),
           tieneClaveIA: Boolean(claveIA && claveIA((await client.query('SELECT * FROM empresas WHERE id = $1', [elegida.id])).rows[0])) },
         archivos: await lista(elegida.id),
         ejemplos: (await client.query(`SELECT id, sede, cliente, contexto, respuesta, ideal, voto, nota, estado, autor, origen, creado, revisado
@@ -976,7 +987,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       return json(res, 200, { ok: true, archivo: (await lista(f.empresa_id)).find(x => x.id === id) });
     }
     if (req.method === 'GET' && url === '/api/oficina/conocimiento/ver') {
-      const f = (await client.query('SELECT id, nombre, tipo, sede, estado, documentos, quitado, avisos, carpeta, subcarpeta FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
+      const f = (await client.query('SELECT id, nombre, tipo, sede, estado, documentos, quitado, avisos, carpeta, subcarpeta, grupo FROM conocimiento_archivos WHERE id = $1', [Number(p.get('id'))])).rows[0];
       if (!f) return json(res, 404, { error: 'No encontrado.' });
       return json(res, 200, f);
     }
@@ -1026,10 +1037,10 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
         r = { tipo: a.tipo, documentos: [{ titulo, lineas: finales }], quitado, avisos: a.tipo === 'ficha' && /\.pdf$/i.test(a.nombre) ? ['Texto editado en la Oficina: el PDF original no cambia; el asistente usa este texto.'] : [] };
       }
       await client.query("DELETE FROM conocimiento_archivos WHERE empresa_id = $1 AND LOWER(nombre) = LOWER($2) AND estado = 'borrador'", [a.empresa_id, a.nombre]);
-      const nuevo = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,$10,$11,$12) RETURNING id`,
+      const nuevo = (await client.query(`INSERT INTO conocimiento_archivos (empresa_id, nombre, tipo, sede, documentos, quitado, avisos, crudo, original, tamano, subido_por, carpeta, subcarpeta, grupo)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,$10,$11,$12,$13) RETURNING id`,
       [a.empresa_id, a.nombre, r.tipo || a.tipo, a.sede, JSON.stringify(r.documentos), JSON.stringify(r.quitado), JSON.stringify(r.avisos || []), original,
-        original ? original.length : Buffer.byteLength(f.texto || ''), u.usuario, a.carpeta, a.subcarpeta])).rows[0].id;
+        original ? original.length : Buffer.byteLength(f.texto || ''), u.usuario, a.carpeta, a.subcarpeta, a.grupo || ''])).rows[0].id;
       await publicar(u, [nuevo]);
       let operaciones = null;
       if (a.carpeta === 'tarifarios' && Array.isArray(f.hojas)) operaciones = await enviarAOperaciones(a.empresa_id, nuevo);
@@ -1052,7 +1063,10 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       const carpeta = CARPETAS.includes(f.carpeta) ? f.carpeta : a.carpeta;
       const subcarpeta = carpeta === 'operaciones' ? (temasOperaciones(e).find(x => x.k === f.subcarpeta) || { k: 'politicas' }).k : '';
       const sede = texto(f.sede || '', 60);
-      await client.query('UPDATE conocimiento_archivos SET carpeta = $1, subcarpeta = $2, sede = $3 WHERE empresa_id = $4 AND LOWER(nombre) = LOWER($5)', [carpeta, subcarpeta, sede, a.empresa_id, a.nombre]);
+      // Carpeta con nombre (solo Chatbot y Tarifarios). Si se cambia de carpeta y no se indica otra, queda sin carpeta.
+      const grupo = carpeta === 'operaciones' ? '' : texto(f.grupo || '', 60);
+      if (grupo && !gruposDe(e)[carpeta].includes(grupo)) throw error('Primero crea la carpeta "' + grupo + '".');
+      await client.query('UPDATE conocimiento_archivos SET carpeta = $1, subcarpeta = $2, sede = $3, grupo = $4 WHERE empresa_id = $5 AND LOWER(nombre) = LOWER($6)', [carpeta, subcarpeta, sede, grupo, a.empresa_id, a.nombre]);
       if (carpeta !== 'chatbot' && a.estado === 'borrador') await publicar(u, [a.id]);
       let operaciones = null;
       if (carpeta === 'tarifarios' && a.carpeta !== 'tarifarios') {
@@ -1070,6 +1084,32 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       const r = await enviarAOperaciones(a.empresa_id, a.id);
       if (!r) return json(res, 400, { error: 'Solo los Excel (.xlsx) se cargan en los precios de Operaciones.' });
       return json(res, 200, { ok: true, operaciones: r });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/conocimiento/grupo') {
+      // Carpetas con nombre dentro de Chatbot o Tarifarios (ej. "Traslados", "Tours", "Políticas").
+      // Quitar una carpeta no borra archivos: sus archivos quedan sin carpeta.
+      const f = await leerCuerpo(req);
+      const e = await empresa(f.empresa_id);
+      const carpeta = String(f.carpeta || '');
+      if (!['chatbot', 'tarifarios'].includes(carpeta)) throw error('Las carpetas con nombre son solo para Chatbot y Tarifarios.');
+      const c = { ...(e.conocimiento_carpetas || {}) };
+      const grupos = gruposDe(e);
+      let lista = grupos[carpeta];
+      if (f.quitar) {
+        const nombreQuitar = texto(f.quitar, 60);
+        lista = lista.filter(x => x !== nombreQuitar);
+        await client.query('UPDATE conocimiento_archivos SET grupo = $1 WHERE empresa_id = $2 AND carpeta = $3 AND grupo = $4', ['', e.id, carpeta, nombreQuitar]);
+      } else {
+        const n = texto(f.nombre, 60);
+        if (!n) throw error('Escribe el nombre de la carpeta.');
+        if (lista.some(x => x.toLowerCase() === n.toLowerCase())) throw error('Ya existe una carpeta con ese nombre.');
+        if (lista.length >= 30) throw error('Máximo 30 carpetas por sección.');
+        lista = [...lista, n];
+      }
+      c.grupos = { ...grupos, [carpeta]: lista };
+      await client.query('UPDATE empresas SET conocimiento_carpetas = $1 WHERE id = $2', [JSON.stringify(c), e.id]);
+      olvidar(e.id);
+      return json(res, 200, { ok: true, grupos: gruposDe({ conocimiento_carpetas: c }) });
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/tema') {
       // Temas propios dentro de "Operaciones y políticas" (ej. "Manual del chofer"). Los fijos no se borran.

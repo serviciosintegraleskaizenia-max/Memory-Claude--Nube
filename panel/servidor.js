@@ -262,9 +262,26 @@ async function inicializarTablas() {
       END IF;
       RETURN NEW;
     END $$ LANGUAGE plpgsql`);
+  // Al pasar a Histórico con UPDATE (uno a uno o en bloque desde la bandeja) también se guarda el estado anterior.
+  await client.query(`CREATE OR REPLACE FUNCTION clasificacion_a_historico() RETURNS trigger AS $$
+    BEGIN
+      IF NEW.estado = 'historico' AND OLD.estado IS DISTINCT FROM 'historico' THEN
+        NEW.estado_antes := OLD.estado;
+      END IF;
+      RETURN NEW;
+    END $$ LANGUAGE plpgsql`);
   await client.query('DROP TRIGGER IF EXISTS clasificacion_historico ON clasificacion');
   await client.query(`CREATE TRIGGER clasificacion_historico BEFORE INSERT ON clasificacion
     FOR EACH ROW EXECUTE PROCEDURE clasificacion_historico()`);
+  await client.query('DROP TRIGGER IF EXISTS clasificacion_a_historico ON clasificacion');
+  await client.query(`CREATE TRIGGER clasificacion_a_historico BEFORE UPDATE ON clasificacion
+    FOR EACH ROW EXECUTE PROCEDURE clasificacion_a_historico()`);
+  // Histórico que ya existía sin estado anterior: se recupera del registro de cambios (cuando quedó guardado).
+  await client.query(`UPDATE clasificacion c SET estado_antes = a.anterior
+    FROM (SELECT DISTINCT ON (entidad_id) entidad_id, anterior FROM auditoria
+          WHERE entidad = 'reserva' AND accion IN ('cambiar_estado', 'pasar_historico') AND nuevo = 'historico' AND COALESCE(anterior, '') <> ''
+          ORDER BY entidad_id, id DESC) a
+    WHERE c.estado = 'historico' AND COALESCE(c.estado_antes, '') = '' AND c.id::text = a.entidad_id`);
   // Reanálisis seguro: las filas viejas con error de un correo se borran justo cuando llega su análisis nuevo
   // (en el mismo guardado), no antes. Si la IA o n8n fallan a mitad, el correo sigue marcado y se reintenta.
   await client.query(`CREATE OR REPLACE FUNCTION clasificacion_reemplazo() RETURNS trigger AS $$
@@ -2246,9 +2263,13 @@ http.createServer(async (req, res) => {
       const filas = (await client.query(
         `UPDATE clasificacion SET estado = 'historico' WHERE estado <> 'historico' AND (id = ANY($1)
            OR (COALESCE(message_id, '') <> '' AND message_id IN (SELECT message_id FROM clasificacion WHERE id = ANY($1))))
-         RETURNING id, estado`, [ids])).rows;
+         RETURNING id, estado, estado_antes`, [ids])).rows;
       for (const f of filas) await cerrarTramos(f.id);
-      for (const id of ids) await registrar(u, 'pasar_historico', 'reserva', id, '', 'historico', 'En bloque desde la bandeja');
+      // El estado anterior (registrada, revisar…) queda en el registro, igual que en el cambio uno a uno.
+      for (const id of ids) {
+        const previa = filas.find(x => x.id === id);
+        await registrar(u, 'pasar_historico', 'reserva', id, previa ? previa.estado_antes || '' : '', 'historico', 'En bloque desde la bandeja');
+      }
       return json(res, 200, { ok: true, reservas: ids.length, servicios: filas.length });
     }
 
