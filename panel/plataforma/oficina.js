@@ -98,6 +98,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       id SERIAL PRIMARY KEY, grupo TEXT NOT NULL DEFAULT 'Otros', nombre TEXT NOT NULL, url TEXT NOT NULL, icono VARCHAR(8) NOT NULL DEFAULT '🔗',
       nota TEXT NOT NULL DEFAULT '', vigilar BOOLEAN NOT NULL DEFAULT FALSE, orden INTEGER NOT NULL DEFAULT 0,
       creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Gastos ya pagados en una fecha (para apagar la alarma de ese vencimiento).
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_gastos_pagados (
+      gasto_id INTEGER NOT NULL, vence DATE NOT NULL, pagado TIMESTAMPTZ NOT NULL DEFAULT NOW(), usuario TEXT NOT NULL DEFAULT '', PRIMARY KEY (gasto_id, vence))`);
     // Clientes de automatización (redes sociales): su flujo de n8n, su Chatwoot y otros accesos.
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_automatizaciones (
       id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, estado VARCHAR(10) NOT NULL DEFAULT 'activo', redes JSONB NOT NULL DEFAULT '[]',
@@ -202,6 +205,28 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           WHERE empresa_id = $1 AND auto_mes IS NOT NULL AND auto_mes <= $2 AND pagado_el IS NULL`, [e.id, e.cuenta.pagado]);
       }
     }
+  }
+
+  // ---------- Alarma de pagos: desde 2 días antes del vencimiento hasta que se marque pagado (máx. 5 días después) ----------
+  const DIAS_ANTES = 2, DIAS_DESPUES = 5;
+  async function alarmasGastos() {
+    const hoy = hoyLocal();
+    const dif = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 864e5);
+    const gastos = (await client.query("SELECT id, nombre, monto, moneda, frecuencia, dia, TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha, url, categoria FROM oficina_gastos WHERE activo")).rows;
+    const pagados = new Set((await client.query("SELECT gasto_id || ':' || TO_CHAR(vence, 'YYYY-MM-DD') AS k FROM oficina_gastos_pagados WHERE vence >= $1::date - 40", [hoy])).rows.map(r => r.k));
+    const lista = [];
+    for (const g of gastos) {
+      const fechas = [];
+      if (g.frecuencia === 'mensual' && g.dia) for (const m of [mesMas(hoy.slice(0, 7), -1), hoy.slice(0, 7), mesMas(hoy.slice(0, 7), 1)]) fechas.push(m + '-' + String(Math.min(28, g.dia)).padStart(2, '0'));
+      else if (g.frecuencia === 'anual' && g.fecha) for (const y of [-1, 0, 1]) fechas.push((Number(hoy.slice(0, 4)) + y) + g.fecha.slice(4));
+      else if (g.fecha) fechas.push(g.fecha);
+      for (const vence of fechas) {
+        const dias = dif(vence, hoy);
+        if (dias > DIAS_ANTES || dias < -DIAS_DESPUES || pagados.has(g.id + ':' + vence)) continue;
+        lista.push({ id: g.id, nombre: g.nombre, monto: Number(g.monto), moneda: g.moneda, vence, dias, url: g.url || '', categoria: g.categoria });
+      }
+    }
+    return lista.sort((a, b) => a.dias - b.dias);
   }
 
   // ---------- Gastos de un mes ----------
@@ -440,6 +465,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // Qué sección de la Oficina usa cada ruta (para quien no es Programador: su socio u otro usuario con "Entrar a la Oficina").
   function seccionesDe(url, metodo, cuerpoTipo) {
     if (url === '/api/oficina/datos') return ['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'];
+    if (url === '/api/oficina/alarmas' || url === '/api/oficina/gastos/pagado') return ['gastos', 'inicio'];
     if (url === '/api/oficina/negocios') return ['negocios', 'inicio'];
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
@@ -500,7 +526,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
         // "Actualizar ahora": se vuelve a preguntar a OpenRouter sin esperar.
         if (p.get('fresco') === '1') cacheClaves.clear();
-        return json(res, 200, { ...(await datos(mes)), leido: new Date().toISOString() });
+        return json(res, 200, { ...(await datos(mes)), alarmas: await alarmasGastos(), leido: new Date().toISOString() });
+      }
+      if (req.method === 'GET' && url === '/api/oficina/alarmas') return json(res, 200, { alarmas: await alarmasGastos() });
+      if (req.method === 'POST' && url === '/api/oficina/gastos/pagado') {
+        const f = await leerCuerpo(req);
+        if (!fechaValida(f.vence)) return json(res, 400, { error: 'Fecha no válida.' });
+        if (f.deshacer) await client.query('DELETE FROM oficina_gastos_pagados WHERE gasto_id = $1 AND vence = $2', [Number(f.id), f.vence]);
+        else await client.query('INSERT INTO oficina_gastos_pagados (gasto_id, vence, usuario) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [Number(f.id), f.vence, u.usuario]);
+        await registrar(u, f.deshacer ? 'gasto_no_pagado' : 'gasto_pagado', 'gasto', Number(f.id), '', f.vence, '');
+        return json(res, 200, { ok: true, alarmas: await alarmasGastos() });
       }
       if (req.method === 'GET' && url === '/api/oficina/negocios') {
         const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;

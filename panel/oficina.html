@@ -127,6 +127,14 @@
   /* Ventana de formulario */
   .fondo-modal { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
   .fondo-modal.abierto { display:flex; }
+  .alarma-pagos { border:1px solid #fcd34d; background:#fffbeb; color:#78350f; border-radius:12px; padding:10px 14px; margin-bottom:16px; }
+  .alarma-pagos.urg { border-color:#fca5a5; background:#fef2f2; color:#7f1d1d; }
+  body.oscuro .alarma-pagos { background:#422006; border-color:#92400e; color:#fde68a; } body.oscuro .alarma-pagos.urg { background:#450a0a; border-color:#991b1b; color:#fecaca; }
+  .alarma-pagos .t { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px; } .alarma-pagos .t span { opacity:.8; font-size:12.5px; } .alarma-pagos .t button { margin-left:auto; }
+  .alarma-pagos .al { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:6px 0; border-top:1px solid rgba(120,53,15,.15); font-size:13px; }
+  .alarma-pagos .al .d { font-weight:700; min-width:118px; } .alarma-pagos .al.urg .d { color:#dc2626; } body.oscuro .alarma-pagos .al.urg .d { color:#fca5a5; }
+  .alarma-pagos .al .m { font-weight:700; } .alarma-pagos .al small { opacity:.7; } .alarma-pagos .al a, .alarma-pagos .al button:first-of-type { margin-left:auto; } .alarma-pagos .al a + button { margin-left:0; }
+  .alarma-pagos .al a { text-decoration:none; }
   .modal { background:var(--tarjeta); border-radius:14px; width:min(560px,100%); max-height:92vh; overflow-y:auto; padding:18px 20px; box-shadow:0 20px 50px rgba(0,0,0,.3); position:relative; }
   .modal > h2:first-of-type, .modal > .caja:first-of-type { padding-right:104px; }
   .modal.grande { width:96vw !important; max-width:none; height:92vh; max-height:92vh; }
@@ -253,7 +261,7 @@
   <button class="nav" data-ir="inicio">🏠 Inicio</button>
   <button class="nav" data-ir="negocios">🩺 Estado de cada negocio <span class="num" id="numNegocios" style="display:none"></span></button>
   <button class="nav" data-ir="clientes">🏢 Clientes y cobros <span class="num" id="numCobros" style="display:none"></span></button>
-  <button class="nav" data-ir="gastos">💸 Gastos</button>
+  <button class="nav" data-ir="gastos">💸 Gastos <span class="num" id="numGastos" style="display:none"></span></button>
   <button class="nav" data-ir="calendario">📅 Calendario</button>
   <button class="nav" data-ir="chat">💬 Chat con los negocios <span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
@@ -381,11 +389,45 @@ function selectorMes() {
   return `<select id="selMes" title="Mes">${ops.reverse().join('')}</select>`;
 }
 
+/* ---------- Alarma de pagos: 2 días antes del vencimiento hasta que lo marques pagado ---------- */
+let ALARMAS = [];
+const textoDias = d => d > 1 ? `vence en ${d} días` : d === 1 ? 'vence mañana' : d === 0 ? 'vence HOY' : `venció hace ${-d} día${d === -1 ? '' : 's'}`;
+function cajaAlarmas() {
+  if (!ALARMAS.length || !puedeSec('gastos')) return '';
+  const urg = ALARMAS.some(a => a.dias <= 0);
+  return `<div class="alarma-pagos ${urg ? 'urg' : ''}"><div class="t">⏰ <b>${ALARMAS.length === 1 ? 'Hay un pago por hacer' : `Hay ${ALARMAS.length} pagos por hacer`}</b> <span>para que no se corte ningún servicio</span>
+      ${typeof Notification !== 'undefined' && Notification.permission === 'default' ? '<button class="btn-mini" data-alarma-notif>🔔 Avisarme también en Windows</button>' : ''}</div>
+    ${ALARMAS.map(a => `<div class="al ${a.dias <= 0 ? 'urg' : ''}"><span class="d">${textoDias(a.dias)}</span><b>${esc(a.nombre)}</b><span class="m">${esc(a.moneda)} ${Number(a.monto).toLocaleString('en-US')}</span><small>${esc(fechaCorta(a.vence))}</small>
+      ${a.url ? `<a class="btn-mini" href="${esc(a.url)}" target="_blank" rel="noopener">Ir a pagar</a>` : ''}<button class="btn-mini p" data-alarma-pagado="${a.id}" data-vence="${a.vence}">✓ Ya lo pagué</button></div>`).join('')}</div>`;
+}
+function avisarAlarmas() {
+  const n = document.getElementById('numGastos');
+  if (n) { n.textContent = ALARMAS.length; n.style.display = ALARMAS.length && puedeSec('gastos') ? '' : 'none'; n.style.background = ALARMAS.some(a => a.dias <= 0) ? '' : '#d97706'; }
+  // Notificación de Windows: una vez al día por cada pago (si diste permiso).
+  if (!ALARMAS.length || typeof Notification === 'undefined' || Notification.permission !== 'granted' || !puedeSec('gastos')) return;
+  const hoyK = hoy();
+  for (const a of ALARMAS) {
+    const k = `alarmaPago:${a.id}:${a.vence}:${hoyK}`;
+    try { if (localStorage.getItem(k)) continue; localStorage.setItem(k, '1'); } catch (e) {}
+    try { new Notification(`⏰ ${a.nombre}: ${textoDias(a.dias)}`, { body: `${a.moneda} ${a.monto} · ${fechaCorta(a.vence)}. Págalo para que no se corte el servicio.`, tag: 'pago-' + a.id }); } catch (e) {}
+  }
+}
+setInterval(async () => { if (document.hidden) return; const r = await api('/api/oficina/alarmas'); if (r.ok) { const antes = ALARMAS.length; ALARMAS = r.data.alarmas; avisarAlarmas(); if (antes !== ALARMAS.length) pintar(); } }, 30 * 60 * 1000);
+document.addEventListener('click', async e => {
+  if (e.target.closest('[data-alarma-notif]')) { try { await Notification.requestPermission(); } catch (err) {} avisarAlarmas(); return pintar(); }
+  const b = e.target.closest('[data-alarma-pagado]'); if (!b) return;
+  const r = await api('/api/oficina/gastos/pagado', { id: b.dataset.alarmaPagado, vence: b.dataset.vence });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo marcar.');
+  ALARMAS = r.data.alarmas; avisarAlarmas(); pintar(); aviso('✓ Marcado como pagado. La alarma vuelve el próximo vencimiento.');
+});
+
 /* ---------- Carga ---------- */
 async function cargarDatos(fresco) {
   const r = await api('/api/oficina/datos?mes=' + encodeURIComponent(mes) + (fresco ? '&fresco=1' : ''));
   if (!r.ok) { document.getElementById('vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar la Oficina.')}</div>`; return false; }
   D = r.data;
+  ALARMAS = D.alarmas || [];
+  avisarAlarmas();
   const vencidos = D.pagos.filter(p => p.estado === 'vencido' || p.estado === 'hoy').length;
   const n = document.getElementById('numCobros'); n.textContent = vencidos; n.style.display = vencidos ? '' : 'none';
   return true;
@@ -443,7 +485,7 @@ function pintar() {
   const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
   if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
-  document.getElementById('vista').innerHTML = f();
+  document.getElementById('vista').innerHTML = cajaAlarmas() + f();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
 }
