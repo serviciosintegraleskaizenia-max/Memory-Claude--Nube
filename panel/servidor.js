@@ -251,9 +251,12 @@ async function inicializarTablas() {
     actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   // El análisis con IA del historial cuesta dinero: empieza en pausa hasta que el programador lo active.
   await client.query('ALTER TABLE historico_importacion ADD COLUMN IF NOT EXISTS analizar BOOLEAN NOT NULL DEFAULT FALSE');
+  // Guarda el estado real (registrada, revisar…) antes de marcarlo como histórico, para mostrarlo en Histórico.
+  await client.query('ALTER TABLE clasificacion ADD COLUMN IF NOT EXISTS estado_antes TEXT');
   await client.query(`CREATE OR REPLACE FUNCTION clasificacion_historico() RETURNS trigger AS $$
     BEGIN
       IF COALESCE(NEW.message_id, '') <> '' AND EXISTS (SELECT 1 FROM correo_historico h WHERE h.message_id = NEW.message_id) THEN
+        IF NEW.estado IS DISTINCT FROM 'historico' THEN NEW.estado_antes := NEW.estado; END IF;
         NEW.estado := 'historico';
         NEW.aviso_procesado := TRUE;
       END IF;
@@ -1992,7 +1995,7 @@ http.createServer(async (req, res) => {
       if (!puede('ver_reservas')) return json(res, 403, { error: 'No tienes permiso para ver las reservas.' });
       const p = new URL(req.url, 'http://localhost').searchParams;
       const historico = p.get('historico') === '1';
-      const columnas = `c.id, c.categoria, c.agencia, c.remitente, c.asunto, c.fecha, c.estado, c.error_ia, c.motivo, c.message_id, c.buzon,
+      const columnas = `c.id, c.categoria, c.agencia, c.remitente, c.asunto, c.fecha, c.estado, c.estado_antes, c.error_ia, c.motivo, c.message_id, c.buzon,
         c.aeropuerto, c.actividad, c.nombre_cliente, c.telefono, c.tipo_servicio, c.fecha_servicio, c.hora_servicio, c.vuelo, c.hotel,
         c.punto_partida, c.punto_llegada, c.adultos, c.ninos, c.infantes, c.numero_servicio,
         c.creado >= (SELECT reparto_desde FROM empresa_datos WHERE id = 1) AS tras_reparto,

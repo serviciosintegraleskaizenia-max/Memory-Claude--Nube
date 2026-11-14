@@ -1658,7 +1658,9 @@ const COLUMNAS_SIMPLE = [
   { k: 'hotel', t: 'Hotel', peso: 14 }, { k: 'estado', t: 'Estado', peso: 13 }
 ];
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const ESTADO_CORTO = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', 'sin accion': 'Sin acción', historico: 'Histórico' };
+const ESTADO_CORTO = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', 'sin accion': 'Sin acción', historico: 'Histórico', transcrita: 'Transcrita' };
+// En Histórico se muestra el estado que tenía antes de pasar al archivo (no todo como "Histórico").
+const estadoMostrado = r => r.estado === 'historico' && r.estado_antes ? r.estado_antes : r.estado;
 function iconoTipo(t) { return t === 'OTRO' ? '📋' : TIPOS_SRV[t].split(' ')[0]; }
 // "🛬 2 · 🛫 1 · 🎟 1" y, en gris, si es un cambio, una cancelación o si ya la cancelaron.
 function serviciosSimple(g) {
@@ -1725,7 +1727,10 @@ function quienSimple(r, g) {
   return '';
 }
 function estadoSimple(g) {
-  const e = estadoReserva(g);
+  const real = estadoReserva(g);
+  // En Histórico se muestra el estado que tenía antes (registrada, revisar…), no solo "Histórico".
+  const antes = real === 'historico' ? (g.map(s => s.estado_antes).find(Boolean) || '') : '';
+  const e = antes || real;
   const clases = { 'pendiente de transcribir': 'etq-pendiente', registrada: 'etq-registrada', revisar: 'etq-revisar', actualizada: 'etq-actualizada', historico: 'etq-historico' };
   return `<span class="etq ${clases[e] || 'etq-sinaccion'}">${esc(ESTADO_CORTO[e] || e)}</span>${circuloAvisos(g)}`;
 }
@@ -1871,9 +1876,9 @@ function pintar() {
   const completos = datos.filter(esCompleto);
   document.getElementById('n-reservas').textContent = unaPor(completos.filter(r => r.categoria === 'RESERVA'));
   document.getElementById('n-pendientes').textContent = unaPor(datos.filter(r => r.estado === 'pendiente de transcribir'));
-  document.getElementById('n-registradas').textContent = unaPor(datos.filter(r => r.estado === 'registrada'));
-  document.getElementById('n-revisar').textContent = unaPor(datos.filter(r => r.estado === 'actualizada' || (r.estado === 'revisar'
-    && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.error_ia))));
+  // Las tarjetas usan las mismas reglas que las pestañas, para que nunca den números distintos.
+  document.getElementById('n-registradas').textContent = unaPor(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION')));
+  document.getElementById('n-revisar').textContent = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
   document.getElementById('n-total').textContent = unaPor(datos);
   actualizarContadores();
 }
