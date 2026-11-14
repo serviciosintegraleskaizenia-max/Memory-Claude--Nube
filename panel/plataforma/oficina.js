@@ -308,6 +308,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const motor = (await q(db, 'SELECT * FROM motor_estado WHERE id = 1'))[0];
         const num = (await q(db, `SELECT
             (SELECT MAX(creado) FROM clasificacion) AS ultimo,
+            (SELECT ROUND(EXTRACT(EPOCH FROM (LOCALTIMESTAMP - MAX(creado)::timestamp)) / 60) FROM clasificacion) AS ultimo_min,
             (SELECT COUNT(*)::int FROM clasificacion WHERE creado >= date_trunc('day', NOW())) AS hoy,
             (SELECT COUNT(*)::int FROM clasificacion WHERE error_ia = TRUE AND creado >= NOW() - INTERVAL '1 hour') AS errores,
             (SELECT COUNT(*)::int FROM clasificacion WHERE categoria IN ('RESERVA','MODIFICACION') AND estado = ANY($1::text[])) AS pendientes`, [ESTADOS_ABIERTOS]))[0] || {};
@@ -323,7 +324,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const conError = /^error|falta|no hay conexi/i.test(motor.mensaje || '');
           fila('Motor de correo' + (sombra ? ' (modo sombra)' : ''), conError ? 'falla' : mm <= 15 ? 'bien' : 'aviso', `${motor.mensaje || ''} · última vuelta hace ${mm} min`);
         }
-        const mu = minutosDesde(num.ultimo);
+        // Los minutos los calcula la base (mismo reloj con que se guardó): así no sale "hace -229 min" por la zona horaria.
+        const mu = num.ultimo_min === null || num.ultimo_min === undefined ? minutosDesde(num.ultimo) : Math.max(0, Number(num.ultimo_min));
         fila('Correos', num.hoy ? 'bien' : 'gris', `${num.hoy || 0} hoy · último hace ${mu === null ? '—' : mu < 60 ? mu + ' min' : Math.round(mu / 60) + ' h'}`);
         fila('IA (lectura de reservas)', (num.errores || 0) >= 5 ? 'falla' : 'bien', num.errores ? `${num.errores} error(es) en la última hora` : 'Sin errores en la última hora');
         r.pendientes = num.pendientes || 0;
