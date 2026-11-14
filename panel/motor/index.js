@@ -17,7 +17,7 @@ const COMPARAR = ['categoria', 'agencia', 'nombre_cliente', 'adultos', 'ninos', 
 const MAXIMO_FALLOS = 6;
 const esperar = ms_ => new Promise(r => setTimeout(r, ms_));
 
-module.exports = function crearMotor({ client, config, registrar, SISTEMA, habilitado = async () => true }) {
+module.exports = function crearMotor({ client, config, registrar, SISTEMA, habilitado = async () => true, leerClave = null }) {
   const ajustes = () => Object.assign({
     activo: false, sombra: true, intervaloMinutos: 10, ventanaDias: 2, buzones: [], microsoft: {},
     maximoPorCiclo: 60, pausaMs: 1000, modelo: 'anthropic/claude-haiku-5.5'
@@ -37,8 +37,11 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
   }
   const claveIA = () => {
     const a = ajustes();
-    return { apiKey: (a.ia && a.ia.apiKey) || (config.openrouter && config.openrouter.apiKey) || '', url: a.ia && a.ia.url, esperaReintento: a.ia && a.ia.esperaReintento };
+    return { apiKey: (a.ia && a.ia.apiKey) || claveBase || (config.openrouter && config.openrouter.apiKey) || '', url: a.ia && a.ia.url, esperaReintento: a.ia && a.ia.esperaReintento };
   };
+  // La clave de OpenRouter que se guardó en Oficina (se lee al empezar cada vuelta).
+  let claveBase = '';
+  async function cargarClaveBase() { claveBase = (leerClave ? await leerClave().catch(() => '') : '') || ''; }
   let corriendo = false;
   let reloj = null;
 
@@ -149,6 +152,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     const abiertas = []; // conexiones IMAP de esta vuelta
     await client.query("UPDATE motor_estado SET inicio = NOW(), mensaje = 'Leyendo correos…' WHERE id = 1").catch(() => {});
     try {
+      await cargarClaveBase();
       const cuentas = cuentasDe(a);
       if (!cuentas.length) throw new Error('No hay buzones para leer (motor.cuentas en config.js).');
       for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
@@ -258,7 +262,8 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     const cuentas = cuentasDe(a);
     if (!cuentas.length) throw new Error('No hay buzones configurados para leer.');
     for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
-    if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter en config.js.');
+    await cargarClaveBase();
+    if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter (en Oficina → Clientes y cobros → Editar, o en config.js).');
     const desde = new Date(desdeISO), hasta = new Date(hastaISO);
     if (isNaN(desde) || isNaN(hasta) || hasta <= desde) throw new Error('El rango de fechas no es válido.');
     recuperacion = { estado: 'corriendo', desde: desde.toISOString(), hasta: hasta.toISOString(), inicio: new Date().toISOString(), fin: null,

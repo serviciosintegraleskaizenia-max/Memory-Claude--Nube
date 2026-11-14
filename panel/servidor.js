@@ -19,7 +19,8 @@ const client = new Client(config.db);
 const motorCorreo = crearMotor({
   client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' },
   // La demo nunca lee buzones reales; y solo lee si la empresa tiene el módulo de correo.
-  habilitado: async () => !config.demo && await cuenta.tiene('correo')
+  habilitado: async () => !config.demo && await cuenta.tiene('correo'),
+  leerClave: () => claveIAGuardada()
 });
 
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada', 'historico'];
@@ -1458,8 +1459,17 @@ async function chequearN8n() {
 // ¿Está ENCENDIDO (publicado) el flujo "Correos - leer y clasificar"? n8n puede responder y tener el flujo apagado.
 // Usa la clave de la API de n8n: config.n8n.apiKey, o la que guardó el actualizador (cifrada con el usuario de Windows).
 let claveN8nCache = null;
-function claveApiN8n() {
+// Clave de OpenRouter que mandó Oficina (tabla zentralia_ajustes). Si no hay, se usa config.js.
+async function claveIAGuardada() {
+  try { const r = await client.query("SELECT valor FROM zentralia_ajustes WHERE clave = 'ia_clave'"); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
+}
+async function claveApiN8n() {
   if (config.n8n && config.n8n.apiKey) return config.n8n.apiKey;
+  // La clave que pone el central en Oficina → Clientes y cobros → Editar (se guarda en esta misma base).
+  try {
+    const r = await client.query("SELECT valor FROM zentralia_ajustes WHERE clave = 'n8n_clave'");
+    if (r.rows[0] && r.rows[0].valor) return r.rows[0].valor;
+  } catch (e) { /* la tabla todavía no existe: se usa lo de abajo */ }
   if (claveN8nCache !== null) return claveN8nCache;
   claveN8nCache = '';
   const archivo = (config.n8n && config.n8n.archivoClave) || 'C:\\kaizen-actualizacion\\n8n-api.clave';
@@ -1475,7 +1485,7 @@ function claveApiN8n() {
 async function chequearFlujoActivo() {
   const base = { clave: 'n8n_flujo', nombre: 'Flujo de n8n encendido' };
   const origen = origenN8n();
-  const clave = claveApiN8n();
+  const clave = await claveApiN8n();
   if (!origen || !clave) return { ...base, estado: 'sin datos', detalle: 'Falta la clave de la API de n8n para revisar si el flujo está encendido.' };
   try {
     const r = await conTiempo(origen + '/api/v1/workflows?limit=100', { headers: { 'X-N8N-API-KEY': clave, Accept: 'application/json' } }, 10000);
@@ -1518,7 +1528,7 @@ async function chequearIa() {
 }
 
 async function chequearSaldo() {
-  const clave = config.openrouter && config.openrouter.apiKey;
+  const clave = (await claveIAGuardada()) || (config.openrouter && config.openrouter.apiKey);
   if (!clave) return { clave: 'saldo', nombre: 'Saldo de OpenRouter', estado: 'sin datos', detalle: 'Para vigilar el saldo, agrega openrouter.apiKey en config.js.' };
   try {
     const r = await conTiempo('https://openrouter.ai/api/v1/credits', { headers: { Authorization: 'Bearer ' + clave } }, 10000);

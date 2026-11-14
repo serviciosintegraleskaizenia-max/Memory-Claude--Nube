@@ -2277,17 +2277,19 @@ function formCliente(e) {
     ${campo('fIa', 'Clave de OpenRouter de este cliente (para medir su gasto de IA)', `<input id="fIa" type="password" autocomplete="off" placeholder="${e.tieneClaveIA ? '•••• guardada · déjalo vacío para no cambiarla' : 'sk-or-v1-…'}">`,
       e.externa ? 'Es la misma que está en su config.js. Créala en openrouter.ai → Keys (una por cliente) y ponle un límite.' : (e.tieneClaveIA && !e.claveIAPropia ? 'Se está usando la clave de su config.js. Solo pon una aquí si quieres medir con otra.' : 'Crea una en openrouter.ai → Keys (una por cliente) y ponle un límite.'))}
     ${e.claveIAPropia ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarIa"> Quitar la clave guardada aquí</label></div>' : ''}
+    ${campo('fN8n', 'Clave de la API de n8n (para ver si su flujo de correo está encendido)', `<input id="fN8n" type="password" autocomplete="off" placeholder="${e.tieneN8n ? '•••• guardada · déjalo vacío para no cambiarla' : 'Pégala aquí'}">`, 'En n8n: Settings → n8n API → Create an API key. Se manda al panel de este cliente y no se muestra completa.')}
+    ${e.tieneN8n ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarN8n"> Quitar la clave de n8n</label></div>' : ''}
     ${campo('fNotas', 'Notas', `<textarea id="fNotas" rows="3">${esc(e.notas || '')}</textarea>`)}
     ${pieModal(false)}`);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/empresa/' + e.id, { plan: v('fPlan'), contacto: v('fCont'), telefono: v('fTel'), correo_contacto: v('fMail'), notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked });
+    const r = await api('/api/oficina/empresa/' + e.id, { plan: v('fPlan'), contacto: v('fCont'), telefono: v('fTel'), correo_contacto: v('fMail'), notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked, n8n_clave: v('fN8n'), borrarN8n: !!(document.getElementById('fBorrarN8n') || {}).checked });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     const cambioCobro = !!p.activo !== document.getElementById('fCobrar').checked || String(p.monto || '') !== v('fCuota') || Number(p.dia || 5) !== Number(v('fDia')) || (p.moneda || 'US$') !== v('fMone');
     if (cambioCobro) {
       const r2 = await api(`/api/central/empresas/${e.id}/pago`, { ...p, activo: document.getElementById('fCobrar').checked, monto: v('fCuota'), dia: Number(v('fDia')), moneda: v('fMone'), diasAntes: p.diasAntes ?? 3 });
       if (!r2.ok) { document.getElementById('errForm').textContent = r2.data.error || 'No se pudo guardar la cuota.'; return; }
     }
-    cerrarModal(); aviso('Cliente guardado.'); ir(vista);
+    cerrarModal(); aviso(r.data.aviso || 'Cliente guardado.', !r.data.aviso); ir(vista);
   };
 }
 

@@ -77,7 +77,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await conocimiento.preparar();
     await redes.preparar();
     await proyectos.preparar();
-    for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave']) {
+    for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave', 'n8n_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_pagos (
@@ -308,7 +308,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return {
           id: d.id, nombre: d.nombre, slug: d.slug, url: d.url, estado: d.estado, vivo: d.vivo, es_demo: d.es_demo, externa: d.externa,
           plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
-          tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave),
+          tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave),
           pago: d.pagoCentral || {}, pagado: (d.cuenta || {}).pagado || '', etapaPago: d.etapaPago,
           usuarios: (d.numeros || {}).usuarios ?? null, correosHoy: (d.numeros || {}).correos_hoy ?? null, error: d.error || '',
           ia: ia.get(d.id) || { tiene: false }
@@ -600,7 +600,25 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           [texto(f.plan, 60), texto(f.contacto, 100), texto(f.telefono, 40), texto(f.correo_contacto, 120), texto(f.notas, 2000), f.borrarClave ? '__borrar__' : clave, e.id]);
         cacheClaves.clear();
         await registrar(u, 'oficina_editar_cliente', 'empresa', e.slug, '', '', clave ? 'con clave de IA nueva' : '');
-        return json(res, 200, { ok: true });
+        // Claves que se mandan a la base del panel del cliente (ahí las usa el panel): n8n y OpenRouter.
+        const empujar = (nombre, valor) => A.conEmpresa(e, async db => {
+          await db.query("CREATE TABLE IF NOT EXISTS zentralia_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')");
+          await db.query('INSERT INTO zentralia_ajustes (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor', [nombre, valor]);
+        });
+        const avisos = [];
+        if (f.borrarN8n || texto(f.n8n_clave || '', 300)) {
+          const valor = f.borrarN8n ? '' : texto(f.n8n_clave, 300);
+          await client.query('UPDATE empresas SET n8n_clave = $1 WHERE id = $2', [valor, e.id]);
+          try { await empujar('n8n_clave', valor); await registrar(u, 'oficina_editar_cliente', 'empresa', e.slug, '', '', valor ? 'clave de n8n guardada' : 'clave de n8n quitada'); }
+          catch (err) { avisos.push('clave de n8n: ' + err.message); }
+        }
+        if (f.borrarClave || clave) {
+          const valor = f.borrarClave ? '' : clave;
+          try { await empujar('ia_clave', valor); await registrar(u, 'oficina_editar_cliente', 'empresa', e.slug, '', '', valor ? 'clave de OpenRouter enviada al panel' : 'clave de OpenRouter quitada del panel'); }
+          catch (err) { avisos.push('clave de OpenRouter: ' + err.message); }
+        }
+        const aviso = avisos.length ? 'Guardado en Oficina, pero no se pudo enviar al panel del cliente (¿está encendido?): ' + avisos.join('; ') : '';
+        return json(res, 200, { ok: true, aviso });
       }
 
       if (req.method === 'GET' && url === '/api/oficina/chat/contactos') {
