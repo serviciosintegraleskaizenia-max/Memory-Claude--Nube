@@ -1732,6 +1732,9 @@ function estadoSimple(g) {
   const antes = real === 'historico' ? (g.map(s => s.estado_antes).find(Boolean) || '') : '';
   const e = antes || real;
   const clases = { 'pendiente de transcribir': 'etq-pendiente', registrada: 'etq-registrada', revisar: 'etq-revisar', actualizada: 'etq-actualizada', historico: 'etq-historico' };
+  // Correo importado del historial que la IA todavía no analiza: no tiene estado real aún, así que no se muestra como "Histórico".
+  const sinAnalizar = !antes && real === 'historico' && g.some(s => /^Histórico: pendiente/.test(s.motivo || ''));
+  if (sinAnalizar) return `<span class="etq etq-sinaccion" title="Importado del historial: la IA todavía no lo analiza">Sin analizar</span>${circuloAvisos(g)}`;
   return `<span class="etq ${clases[e] || 'etq-sinaccion'}">${esc(ESTADO_CORTO[e] || e)}</span>${circuloAvisos(g)}`;
 }
 function htmlSimple(grupos, cols) {
