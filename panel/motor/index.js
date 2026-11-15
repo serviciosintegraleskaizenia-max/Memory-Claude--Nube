@@ -267,7 +267,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     const desde = new Date(desdeISO), hasta = new Date(hastaISO);
     if (isNaN(desde) || isNaN(hasta) || hasta <= desde) throw new Error('El rango de fechas no es válido.');
     recuperacion = { estado: 'corriendo', desde: desde.toISOString(), hasta: hasta.toISOString(), inicio: new Date().toISOString(), fin: null,
-      leidos: 0, total: 0, nuevos: 0, yaEstaban: 0, con_error: 0, mensaje: 'Buscando correos en los buzones…' };
+      leidos: 0, total: 0, nuevos: 0, restaurados: 0, yaEstaban: 0, con_error: 0, mensaje: 'Buscando correos en los buzones…' };
     corriendo = true;
     (async () => {
       const abiertas = [];
@@ -290,12 +290,20 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
         }
         const unicos = [...new Map(lista.filter(x => x.id).map(x => [x.id, x])).values()];
         recuperacion.leidos = unicos.length;
-        const ya = new Set((await client.query('SELECT DISTINCT message_id FROM clasificacion WHERE message_id = ANY($1::text[])', [unicos.map(x => x.id)])).rows.map(r => r.message_id));
-        const pendientes = unicos.filter(x => !ya.has(x.id));
-        recuperacion.yaEstaban = unicos.length - pendientes.length;
+        const ids = unicos.map(x => x.id);
+        // 1) Lo que ya está en la bandeja (no en Histórico): no se toca.
+        const bandeja = new Set((await client.query("SELECT DISTINCT message_id FROM clasificacion WHERE message_id = ANY($1::text[]) AND estado <> 'historico'", [ids])).rows.map(r => r.message_id));
+        // 2) Lo que está en Histórico con estado real guardado: vuelve a ese estado.
+        const volvieron = new Set((await client.query(`UPDATE clasificacion SET estado = estado_antes, estado_antes = NULL
+          WHERE estado = 'historico' AND estado_antes IS NOT NULL AND estado_antes <> 'historico'
+            AND message_id = ANY($1::text[]) AND NOT (message_id = ANY($2::text[]))
+          RETURNING message_id`, [ids, [...bandeja]])).rows.map(r => r.message_id));
+        // 3) Lo demás se analiza de nuevo. Quedan marcados como histórico para que no vuelvan allí.
+        const pendientes = unicos.filter(x => !bandeja.has(x.id) && !volvieron.has(x.id));
+        recuperacion.yaEstaban = bandeja.size;
+        recuperacion.restaurados = volvieron.size;
         recuperacion.total = pendientes.length;
-        // Si quedaron marcados como histórico (importados antes), se quitan para que vuelvan a la bandeja.
-        if (pendientes.length) await client.query('DELETE FROM correo_historico WHERE message_id = ANY($1::text[])', [pendientes.map(p => p.id)]);
+        await client.query('DELETE FROM correo_historico WHERE message_id = ANY($1::text[])', [[...volvieron, ...pendientes.map(p => p.id)]]);
         let n = 0;
         for (const item of pendientes) {
           n++;
@@ -307,6 +315,8 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
             try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
             const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
             const filas = ia.filasDesdeRespuesta(correo, respuesta);
+            // La fila de Histórico (sin análisis) se quita justo antes de guardar el resultado: si la IA falla, el correo sigue ahí.
+            await client.query("DELETE FROM clasificacion WHERE message_id = $1 AND estado = 'historico' AND estado_antes IS NULL", [correo.id]);
             await guardar({ ...a, sombra: false }, filas, imagenes.length);
             if (filas[0].error_ia) recuperacion.con_error++; else recuperacion.nuevos++;
           } catch (e) {
@@ -315,7 +325,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
           if (a.pausaMs) await esperar(a.pausaMs);
         }
         recuperacion.estado = 'listo';
-        recuperacion.mensaje = `Listo: ${recuperacion.nuevos} correos a la bandeja${recuperacion.con_error ? ` (${recuperacion.con_error} con error)` : ''}; ${recuperacion.yaEstaban} ya estaban en el panel.`;
+        recuperacion.mensaje = `Listo: ${recuperacion.nuevos} correos analizados a la bandeja; ${recuperacion.restaurados} vueltos de Histórico; ${recuperacion.yaEstaban} ya estaban en la bandeja${recuperacion.con_error ? `; ${recuperacion.con_error} con error` : ''}.`;
       } catch (e) {
         recuperacion.estado = 'error';
         recuperacion.mensaje = 'Error: ' + e.message.slice(0, 300);

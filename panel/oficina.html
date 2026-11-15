@@ -656,6 +656,26 @@ function grafica(serie) {
 }
 
 /* ---------- Estado de cada negocio ---------- */
+// Ventana con cada error de la IA del negocio: qué pasó, cuándo, en qué correo y qué hacer.
+async function verErroresIA(id) {
+  const r = await api('/api/oficina/errores-ia?empresa=' + id);
+  if (!r.ok) return aviso(r.data.error || 'No se pudieron cargar los errores.');
+  const lista = r.data.errores || [];
+  abrirModal(`<h2>Errores de la IA · últimas 24 horas</h2>
+    <p class="sub">${lista.length} error(es). Cada uno dice qué pasó y qué hacer.</p>
+    ${lista.length ? `<ol style="padding-left:20px;line-height:1.5">${lista.map(x => `<li style="margin-bottom:12px">
+      <b>${esc(new Date(x.creado).toLocaleString('es-DO'))}</b> · ${esc(x.asunto || '(sin asunto)')}<br>
+      <small style="color:var(--suave)">${esc(x.remitente || '')}${x.fecha ? ' · correo del ' + esc(String(x.fecha).slice(0, 16)) : ''}</small><br>
+      <span class="chip mal">${esc(x.motivo || 'Sin detalle')}</span><br>
+      <small><b>Qué hacer:</b> ${esc(x.solucion)}</small></li>`).join('')}</ol>`
+      : '<div class="vacio">No hay errores en las últimas 24 horas.</div>'}`);
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-errores-ia]');
+  if (!t) return;
+  ev.preventDefault();
+  verErroresIA(t.dataset.erroresIa);
+});
 function vNegocios() {
   if (!negocios) return cabecera('🩺 Estado de cada negocio', 'Cargando…');
   return cabecera('🩺 Estado de cada negocio', 'Panel, n8n, motor de correo, IA, alertas y quién está conectado · se revisa cada minuto', `<button class="btn-sec" data-recargar>Revisar ahora</button>`) +
@@ -666,6 +686,7 @@ function vNegocios() {
         <span class="chip ${peor === 'falla' ? 'mal' : peor === 'aviso' ? 'ojo' : peor === 'gris' ? 'gris' : 'ok'}">${peor === 'falla' ? 'Con fallas' : peor === 'aviso' ? 'Revisar' : peor === 'gris' ? 'Apagado' : 'Todo bien'}</span></h3>
       <div class="url"><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.url)}</a>${n.pendientes !== undefined ? ` · ${n.pendientes} reserva(s) pendiente(s)` : ''}</div>
       <div style="margin-top:8px">${n.revisiones.map(r => `<div class="revision"><span class="punto p-${r.estado}" style="margin-top:5px"></span><span class="nom">${esc(r.nombre)}</span><span class="det">${esc(r.detalle)}</span></div>`).join('')}</div>
+      ${n.errores ? `<div style="margin-top:8px"><button class="btn-mini" data-errores-ia="${n.id}">Ver los errores de la IA (${n.errores})</button></div>` : ''}
       ${(n.alertas || []).length ? `<div style="margin-top:8px">${n.alertas.map(a => `<div class="alerta"><span class="i">⚠️</span><div><b>${esc(a.texto)}</b><small>${esc(haceCuanto(a.creada))}</small></div></div>`).join('')}</div>` : ''}
       <div style="margin-top:8px;font-size:12px;color:var(--suave)">Conectados ahora:</div>
       <div>${(n.conectados || []).length ? n.conectados.map(p => `<span class="persona"><span class="punto p-${p.estado === 'ausente' ? 'aviso' : 'bien'}"></span>${esc(p.nombre || p.usuario)} <small style="color:var(--suave)">${esc(p.grupo)}</small><button class="btn-mini" data-chat-empresa="${n.id}" data-chat-usuario="${esc(p.usuario)}" data-chat-nombre="${esc(p.nombre || p.usuario)}" title="Escribirle">💬</button></span>`).join('') : '<span style="font-size:12px;color:var(--suave)">Nadie conectado (o el panel todavía no tiene la versión que lo informa).</span>'}</div>

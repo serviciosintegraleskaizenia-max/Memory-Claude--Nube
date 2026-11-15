@@ -322,6 +322,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
 
   const minutosDesde = f => (f ? Math.round((Date.now() - new Date(f).getTime()) / 60000) : null);
 
+  // Qué significa un error de la IA y qué hacer, según el texto que dejó el motor.
+  function solucionError(motivo) {
+    const m = String(motivo || '').toLowerCase();
+    if (/401|403|unauthori|invalid api key|no autorizad|clave/.test(m)) return 'La clave de OpenRouter no sirve. Ponla de nuevo en Clientes y cobros → Editar.';
+    if (/402|saldo|credit|insufficient|quota|429|límite|limite/.test(m)) return 'Se acabó el saldo o el límite de OpenRouter. Recarga la cuenta en openrouter.ai → Credits.';
+    if (/timeout|timed out|504|503|overload|sobrecarg|abort|network|fetch/.test(m)) return 'OpenRouter tardó o no respondió. El panel lo vuelve a intentar solo.';
+    if (/no se pudo leer la respuesta/.test(m)) return 'La IA respondió algo que no se pudo leer. Se vuelve a intentar sola.';
+    if (/no se pudo leer|adjunto|pdf|imagen/.test(m)) return 'El correo o un adjunto no se pudo leer. Ábrelo y revisa que tenga contenido normal.';
+    return 'Revisa el texto del error. Si se repite, mándame ese texto y lo arreglo.';
+  }
   async function estadoNegocio(e) {
     const vivo = await A.responde(e);
     const r = { id: e.id, nombre: e.nombre, url: A.urlDe(e), es_demo: e.es_demo, externa: e.externa, estado: e.estado, vivo, revisiones: [] };
@@ -354,6 +364,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         fila('Correos', num.hoy ? 'bien' : 'gris', `${num.hoy || 0} hoy · último hace ${mu === null ? '—' : mu < 60 ? mu + ' min' : Math.round(mu / 60) + ' h'}`);
         fila('IA (lectura de reservas)', (num.errores || 0) >= 5 ? 'falla' : 'bien', num.errores ? `${num.errores} error(es) en la última hora` : 'Sin errores en la última hora');
         r.pendientes = num.pendientes || 0;
+        r.errores = num.errores || 0;
         r.alertas = alertas;
         r.conectados = conectados;
       });
@@ -536,6 +547,15 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         else await client.query('INSERT INTO oficina_gastos_pagados (gasto_id, vence, usuario) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [Number(f.id), f.vence, u.usuario]);
         await registrar(u, f.deshacer ? 'gasto_no_pagado' : 'gasto_pagado', 'gasto', Number(f.id), '', f.vence, '');
         return json(res, 200, { ok: true, alarmas: await alarmasGastos() });
+      }
+      // Errores de la IA de un negocio (últimas 24 h), con qué significa cada uno y qué hacer.
+      if (req.method === 'GET' && url === '/api/oficina/errores-ia') {
+        const e = await A.empresa(p.get('empresa'));
+        if (!e) return json(res, 404, { error: 'No encontrado.' });
+        const filas = await A.conEmpresa(e, async db => q(db,
+          `SELECT id, creado, fecha, remitente, asunto, message_id, motivo FROM clasificacion
+           WHERE error_ia = TRUE AND creado >= NOW() - INTERVAL '24 hours' ORDER BY creado DESC LIMIT 200`));
+        return json(res, 200, { errores: filas.map(x => ({ ...x, solucion: solucionError(x.motivo) })) });
       }
       if (req.method === 'GET' && url === '/api/oficina/negocios') {
         const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
