@@ -77,7 +77,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await conocimiento.preparar();
     await redes.preparar();
     await proyectos.preparar();
-    for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave', 'n8n_clave']) {
+    for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave', 'n8n_clave', 'correo_lectura', 'correo_host', 'correo_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_pagos (
@@ -308,7 +308,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return {
           id: d.id, nombre: d.nombre, slug: d.slug, url: d.url, estado: d.estado, vivo: d.vivo, es_demo: d.es_demo, externa: d.externa,
           plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
-          tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave),
+          tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave), correo_lectura: e.correo_lectura || '', correo_host: e.correo_host || '', tieneCorreo: Boolean(e.correo_clave),
           pago: d.pagoCentral || {}, pagado: (d.cuenta || {}).pagado || '', etapaPago: d.etapaPago,
           usuarios: (d.numeros || {}).usuarios ?? null, correosHoy: (d.numeros || {}).correos_hoy ?? null, error: d.error || '',
           ia: ia.get(d.id) || { tiene: false }
@@ -636,6 +636,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const valor = f.borrarClave ? '' : clave;
           try { await empujar('ia_clave', valor); await registrar(u, 'oficina_editar_cliente', 'empresa', e.slug, '', '', valor ? 'clave de OpenRouter enviada al panel' : 'clave de OpenRouter quitada del panel'); }
           catch (err) { avisos.push('clave de OpenRouter: ' + err.message); }
+        }
+        // Correo para leer (Yahoo u otro IMAP): se guarda aquí y el panel del cliente lo lee como un buzón más.
+        if (f.borrarCorreo || texto(f.correo_usuario || '', 120)) {
+          const usuario = f.borrarCorreo ? '' : texto(f.correo_usuario, 120).trim();
+          const host = f.borrarCorreo ? '' : (texto(f.correo_host || '', 120).trim() || 'imap.mail.yahoo.com');
+          const clave = f.borrarCorreo ? '' : (f.correo_clave ? texto(f.correo_clave, 200) : (e.correo_clave || ''));
+          await client.query('UPDATE empresas SET correo_lectura = $1, correo_host = $2, correo_clave = $3 WHERE id = $4', [usuario, host, clave, e.id]);
+          const valor = usuario && clave ? JSON.stringify({ buzon: usuario, imap: { host, puerto: 993, usuario, clave } }) : '';
+          try { await empujar('imap_cuenta', valor); await registrar(u, 'oficina_editar_cliente', 'empresa', e.slug, '', '', valor ? 'correo de lectura guardado' : 'correo de lectura quitado'); }
+          catch (err) { avisos.push('correo de lectura: ' + err.message); }
         }
         const aviso = avisos.length ? 'Guardado en Oficina, pero no se pudo enviar al panel del cliente (¿está encendido?): ' + avisos.join('; ') : '';
         return json(res, 200, { ok: true, aviso });

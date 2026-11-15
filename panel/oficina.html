@@ -2300,10 +2300,13 @@ function formCliente(e) {
     ${e.claveIAPropia ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarIa"> Quitar la clave guardada aquí</label></div>' : ''}
     ${campo('fN8n', 'Clave de la API de n8n (para ver si su flujo de correo está encendido)', `<input id="fN8n" type="password" autocomplete="off" placeholder="${e.tieneN8n ? '•••• guardada · déjalo vacío para no cambiarla' : 'Pégala aquí'}">`, 'En n8n: Settings → n8n API → Create an API key. Se manda al panel de este cliente y no se muestra completa.')}
     ${e.tieneN8n ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarN8n"> Quitar la clave de n8n</label></div>' : ''}
+    <div class="fila2">${campo('fCorreoUsuario', 'Correo para leer (Yahoo, Gmail u otro)', `<input id="fCorreoUsuario" value="${esc(e.correo_lectura || '')}" placeholder="nombre@yahoo.com">`)}${campo('fCorreoHost', 'Servidor IMAP', `<input id="fCorreoHost" value="${esc(e.correo_host || 'imap.mail.yahoo.com')}">`, 'Yahoo: imap.mail.yahoo.com · Gmail: imap.gmail.com')}</div>
+    ${campo('fCorreoClave', 'Contraseña de aplicación del correo', `<input id="fCorreoClave" type="password" autocomplete="off" placeholder="${e.tieneCorreo ? '•••• guardada · déjalo vacío para no cambiarla' : 'Pégala aquí'}">`, 'En Yahoo: Seguridad de la cuenta → Generar contraseña de aplicación. No es la contraseña normal del correo.')}
+    ${e.tieneCorreo ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarCorreo"> Quitar el correo de lectura</label></div>' : ''}
     ${campo('fNotas', 'Notas', `<textarea id="fNotas" rows="3">${esc(e.notas || '')}</textarea>`)}
     ${pieModal(false)}`);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/empresa/' + e.id, { plan: v('fPlan'), contacto: v('fCont'), telefono: v('fTel'), correo_contacto: v('fMail'), notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked, n8n_clave: v('fN8n'), borrarN8n: !!(document.getElementById('fBorrarN8n') || {}).checked });
+    const r = await api('/api/oficina/empresa/' + e.id, { plan: v('fPlan'), contacto: v('fCont'), telefono: v('fTel'), correo_contacto: v('fMail'), notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked, n8n_clave: v('fN8n'), borrarN8n: !!(document.getElementById('fBorrarN8n') || {}).checked, correo_usuario: v('fCorreoUsuario'), correo_host: v('fCorreoHost'), correo_clave: v('fCorreoClave'), borrarCorreo: !!(document.getElementById('fBorrarCorreo') || {}).checked });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     const cambioCobro = !!p.activo !== document.getElementById('fCobrar').checked || String(p.monto || '') !== v('fCuota') || Number(p.dia || 5) !== Number(v('fDia')) || (p.moneda || 'US$') !== v('fMone');
     if (cambioCobro) {

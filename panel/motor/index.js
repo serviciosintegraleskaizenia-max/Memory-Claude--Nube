@@ -17,7 +17,7 @@ const COMPARAR = ['categoria', 'agencia', 'nombre_cliente', 'adultos', 'ninos', 
 const MAXIMO_FALLOS = 6;
 const esperar = ms_ => new Promise(r => setTimeout(r, ms_));
 
-module.exports = function crearMotor({ client, config, registrar, SISTEMA, habilitado = async () => true, leerClave = null }) {
+module.exports = function crearMotor({ client, config, registrar, SISTEMA, habilitado = async () => true, leerClave = null, leerCuentaImap = null }) {
   const ajustes = () => Object.assign({
     activo: false, sombra: true, intervaloMinutos: 10, ventanaDias: 2, buzones: [], microsoft: {},
     maximoPorCiclo: 60, pausaMs: 1000, modelo: 'anthropic/claude-haiku-5.5'
@@ -76,10 +76,17 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     return r.rows[0].n;
   }
 
-  async function correosPendientes(a, abiertas) {
+  // Buzones de la configuración + la cuenta que se guardó en Oficina (Yahoo u otro IMAP), si hay.
+  async function cuentasTodas(a) {
+    const base = cuentasDe(a);
+    const extra = leerCuentaImap ? await leerCuentaImap().catch(() => null) : null;
+    if (extra && extra.buzon && extra.imap && !base.some(c => c.buzon === extra.buzon)) base.push(extra);
+    return base;
+  }
+  async function correosPendientes(a, abiertas, cuentas) {
     const desde = new Date(Date.now() - a.ventanaDias * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     const leidos = [];
-    for (const cuenta of cuentasDe(a)) {
+    for (const cuenta of cuentas) {
       if (cuenta.proveedor === 'imap') {
         const sesion = await imap.abrir(cuenta.imap);
         abiertas.push(sesion);
@@ -100,7 +107,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
          WHERE error_ia = TRUE AND estado = 'historico' AND COALESCE(message_id, '') <> '' AND COALESCE(motivo, '') NOT LIKE 'No se pudo leer%'
          ORDER BY message_id, id DESC LIMIT 25)`
     )).rows.map(x => ({
-      id: x.message_id, buzon: x.buzon, cuenta: cuentasDe(a).find(c => c.buzon === x.buzon) || null, reintento: true,
+      id: x.message_id, buzon: x.buzon, cuenta: cuentas.find(c => c.buzon === x.buzon) || null, reintento: true,
       correo: { id: x.message_id, buzon: x.buzon, from: x.remitente || '', subject: x.asunto || '', date: x.fecha || '', textPlain: x.cuerpo || '', reintento: true }
     }));
     const vistosIds = new Set();
@@ -153,11 +160,11 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     await client.query("UPDATE motor_estado SET inicio = NOW(), mensaje = 'Leyendo correos…' WHERE id = 1").catch(() => {});
     try {
       await cargarClaveBase();
-      const cuentas = cuentasDe(a);
+      const cuentas = await cuentasTodas(a);
       if (!cuentas.length) throw new Error('No hay buzones para leer (motor.cuentas en config.js).');
       for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
       if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter en config.js (openrouter.apiKey o motor.ia.apiKey).');
-      const { leidos, pendientes } = await correosPendientes(a, abiertas);
+      const { leidos, pendientes } = await correosPendientes(a, abiertas, cuentas);
       cuenta.leidos = leidos;
       // Aviso de vida: el panel sabe que la lectura de correos funciona (solo en modo real; en sombra lo sigue dando n8n).
       if (!a.sombra) await client.query('INSERT INTO salud_n8n (id, visto) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET visto = NOW()');
@@ -259,7 +266,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     if (recuperacion && recuperacion.estado === 'corriendo') throw new Error('Ya se está recuperando un rango. Espera a que termine.');
     if (corriendo) throw new Error('El motor está leyendo correos. Vuelve a intentar en un minuto.');
     const a = ajustes();
-    const cuentas = cuentasDe(a);
+    const cuentas = await cuentasTodas(a);
     if (!cuentas.length) throw new Error('No hay buzones configurados para leer.');
     for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
     await cargarClaveBase();

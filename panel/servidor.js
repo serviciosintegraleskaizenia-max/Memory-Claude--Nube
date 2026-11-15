@@ -20,7 +20,8 @@ const motorCorreo = crearMotor({
   client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' },
   // La demo nunca lee buzones reales; y solo lee si la empresa tiene el módulo de correo.
   habilitado: async () => !config.demo && await cuenta.tiene('correo'),
-  leerClave: () => claveIAGuardada()
+  leerClave: () => claveIAGuardada(),
+  leerCuentaImap: () => cuentaImapGuardada()
 });
 
 const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisar', 'sin accion', 'actualizada', 'historico'];
@@ -1459,6 +1460,15 @@ async function chequearN8n() {
 // ¿Está ENCENDIDO (publicado) el flujo "Correos - leer y clasificar"? n8n puede responder y tener el flujo apagado.
 // Usa la clave de la API de n8n: config.n8n.apiKey, o la que guardó el actualizador (cifrada con el usuario de Windows).
 let claveN8nCache = null;
+// Cuenta de correo (Yahoo u otro IMAP) que mandó Oficina: { buzon, imap: { host, port, usuario, clave } }.
+async function cuentaImapGuardada() {
+  try {
+    const r = await client.query("SELECT valor FROM zentralia_ajustes WHERE clave = 'imap_cuenta'");
+    if (!r.rows[0] || !r.rows[0].valor) return null;
+    const c = JSON.parse(r.rows[0].valor);
+    return c && c.buzon && c.imap ? { proveedor: 'imap', buzon: c.buzon, imap: c.imap } : null;
+  } catch (e) { return null; }
+}
 // Clave de OpenRouter que mandó Oficina (tabla zentralia_ajustes). Si no hay, se usa config.js.
 async function claveIAGuardada() {
   try { const r = await client.query("SELECT valor FROM zentralia_ajustes WHERE clave = 'ia_clave'"); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
