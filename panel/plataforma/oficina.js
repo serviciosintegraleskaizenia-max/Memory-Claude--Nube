@@ -548,6 +548,31 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         await registrar(u, f.deshacer ? 'gasto_no_pagado' : 'gasto_pagado', 'gasto', Number(f.id), '', f.vence, '');
         return json(res, 200, { ok: true, alarmas: await alarmasGastos() });
       }
+      // Usuarios del panel de un cliente: ver, y activar o desactivar (no se crean ni se borran desde aquí).
+      if (req.method === 'GET' && url === '/api/oficina/usuarios') {
+        const e = await A.empresa(p.get('empresa'));
+        if (!e) return json(res, 404, { error: 'No encontrado.' });
+        const filas = await A.conEmpresa(e, async db => q(db,
+          'SELECT id, usuario, nombre, grupo, activo, debe_cambiar, email FROM usuarios ORDER BY id'));
+        return json(res, 200, { usuarios: filas });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/usuarios/activo') {
+        const f = await leerCuerpo(req);
+        const e = await A.empresa(Number(f.empresa_id));
+        if (!e) return json(res, 404, { error: 'No encontrado.' });
+        const id = Number(f.usuario_id);
+        const activar = Boolean(f.activo);
+        const error = await A.conEmpresa(e, async db => {
+          const fila = (await q(db, 'SELECT id, grupo FROM usuarios WHERE id = $1', [id]))[0];
+          if (!fila) return 'Ese usuario ya no existe.';
+          if (!activar && fila.grupo === 'Programador') return 'No se puede desactivar al Programador.';
+          await db.query('UPDATE usuarios SET activo = $1 WHERE id = $2', [activar, id]);
+          return '';
+        });
+        if (error) return json(res, 400, { error });
+        await registrar(u, activar ? 'oficina_usuario_activar' : 'oficina_usuario_desactivar', 'empresa', e.slug, '', '', 'usuario #' + id);
+        return json(res, 200, { ok: true });
+      }
       // Errores de la IA de un negocio (últimas 24 h), con qué significa cada uno y qué hacer.
       if (req.method === 'GET' && url === '/api/oficina/errores-ia') {
         const e = await A.empresa(p.get('empresa'));

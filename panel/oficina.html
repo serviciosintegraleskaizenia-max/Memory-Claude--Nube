@@ -670,6 +670,30 @@ async function verErroresIA(id) {
       <small><b>Qué hacer:</b> ${esc(x.solucion)}</small></li>`).join('')}</ol>`
       : '<div class="vacio">No hay errores en las últimas 24 horas.</div>'}`);
 }
+// Usuarios del panel de un cliente: ver quién entra, y activar o desactivar.
+async function verUsuariosCliente(id) {
+  const r = await api('/api/oficina/usuarios?empresa=' + id);
+  if (!r.ok) return aviso(r.data.error || 'No se pudieron leer los usuarios.');
+  const lista = r.data.usuarios || [];
+  abrirModal(`<h2>Usuarios del panel</h2>
+    <p class="sub">Aquí puedes ver quién entra y activar o desactivar cuentas. Crear usuarios o cambiar claves todavía se hace en el panel del cliente.</p>
+    <div class="tabla-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Grupo</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${lista.map(x => `<tr><td>${esc(x.usuario)}</td><td>${esc(x.nombre || '')}</td><td>${esc(x.grupo || '')}</td>
+      <td>${x.activo ? '<span class="chip ok">Activo</span>' : '<span class="chip gris">Desactivado</span>'}</td>
+      <td>${x.grupo === 'Programador' ? '' : `<button class="btn-mini" data-usuario-activo="${x.id}" data-empresa="${id}" data-activo="${x.activo ? '0' : '1'}">${x.activo ? 'Desactivar' : 'Activar'}</button>`}</td></tr>`).join('')}
+    </tbody></table></div>`);
+}
+document.addEventListener('click', async ev => {
+  const ub = ev.target.closest('[data-usuarios-cliente]');
+  if (ub) { ev.preventDefault(); return verUsuariosCliente(ub.dataset.usuariosCliente); }
+  const ua = ev.target.closest('[data-usuario-activo]');
+  if (!ua) return;
+  ev.preventDefault();
+  const r = await api('/api/oficina/usuarios/activo', { empresa_id: ua.dataset.empresa, usuario_id: ua.dataset.usuarioActivo, activo: ua.dataset.activo === '1' });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar.');
+  aviso('Listo.');
+  return verUsuariosCliente(ua.dataset.empresa);
+});
 document.addEventListener('click', ev => {
   const t = ev.target.closest('[data-errores-ia]');
   if (!t) return;
@@ -721,7 +745,7 @@ function vClientes() {
         <td class="n"><b>${cuota ? dinero(Math.round((cuota - gasto) * 100) / 100, e.pago.moneda || 'US$') : '—'}</b></td>
         <td>${e.usuarios ?? '—'}</td>
         <td class="envolver">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ') || '—')}</td>
-        <td><button class="btn-mini" data-editar-cliente="${e.id}">Editar</button></td></tr>`; }).join('')}
+        <td><button class="btn-mini" data-editar-cliente="${e.id}">Editar</button> <button class="btn-mini" data-usuarios-cliente="${e.id}">Usuarios</button></td></tr>`; }).join('')}
     </tbody></table>` : '<div class="vacio">Todavía no hay clientes. Créalos en <b>Empresas y demo</b>.</div>'}
   </div>
   <div class="caja"><div class="cab"><div><h2>🧾 Cobros</h2><p class="sub">Las mensualidades se crean solas cada mes · al marcar Pagado ✔ se quita el aviso en el panel del cliente</p></div>
