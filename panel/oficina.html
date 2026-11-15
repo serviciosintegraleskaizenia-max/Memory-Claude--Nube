@@ -680,12 +680,25 @@ async function verUsuariosCliente(id) {
     <div class="tabla-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Grupo</th><th>Estado</th><th></th></tr></thead><tbody>
     ${lista.map(x => `<tr><td>${esc(x.usuario)}</td><td>${esc(x.nombre || '')}</td><td>${esc(x.grupo || '')}</td>
       <td>${x.activo ? '<span class="chip ok">Activo</span>' : '<span class="chip gris">Desactivado</span>'}</td>
-      <td>${x.grupo === 'Programador' ? '' : `<button class="btn-mini" data-usuario-activo="${x.id}" data-empresa="${id}" data-activo="${x.activo ? '0' : '1'}">${x.activo ? 'Desactivar' : 'Activar'}</button>`}</td></tr>`).join('')}
+      <td>${x.grupo === 'Programador' ? '' : `<button class="btn-mini" data-usuario-activo="${x.id}" data-empresa="${id}" data-activo="${x.activo ? '0' : '1'}">${x.activo ? 'Desactivar' : 'Activar'}</button>`} <button class="btn-mini" data-usuario-clave="${x.id}" data-empresa="${id}" data-usuario="${esc(x.usuario)}">Cambiar clave</button></td></tr>`).join('')}
     </tbody></table></div>`);
 }
 document.addEventListener('click', async ev => {
   const ub = ev.target.closest('[data-usuarios-cliente]');
   if (ub) { ev.preventDefault(); return verUsuariosCliente(ub.dataset.usuariosCliente); }
+  const uc = ev.target.closest('[data-usuario-clave]');
+  if (uc) {
+    ev.preventDefault();
+    abrirModal(`<h2>Nueva clave para ${esc(uc.dataset.usuario)}</h2>
+      ${campo('uClave', 'Clave temporal (mínimo 8 caracteres)', '<input id="uClave" type="password" autocomplete="new-password">', 'Al entrar, el usuario tendrá que cambiarla.')}
+      ${pieModal(false)}`);
+    document.getElementById('fGuardar').onclick = async () => {
+      const r = await api('/api/oficina/usuarios/clave', { empresa_id: uc.dataset.empresa, usuario_id: uc.dataset.usuarioClave, clave: document.getElementById('uClave').value });
+      if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo cambiar.'; return; }
+      cerrarModal(); aviso('Clave cambiada. Tendrá que ponerla de nuevo al entrar.');
+    };
+    return;
+  }
   const ua = ev.target.closest('[data-usuario-activo]');
   if (!ua) return;
   ev.preventDefault();

@@ -573,6 +573,23 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         await registrar(u, activar ? 'oficina_usuario_activar' : 'oficina_usuario_desactivar', 'empresa', e.slug, '', '', 'usuario #' + id);
         return json(res, 200, { ok: true });
       }
+      // Cambiar la clave de un usuario del panel: se guarda con el mismo método del panel y debe cambiarla al entrar.
+      if (req.method === 'POST' && url === '/api/oficina/usuarios/clave') {
+        const f = await leerCuerpo(req);
+        const e = await A.empresa(Number(f.empresa_id));
+        if (!e) return json(res, 404, { error: 'No encontrado.' });
+        const clave = String(f.clave || '');
+        if (clave.length < 8) return json(res, 400, { error: 'La clave debe tener al menos 8 caracteres.' });
+        const id = Number(f.usuario_id);
+        const hash = require('bcryptjs').hashSync(clave, 10);
+        const error = await A.conEmpresa(e, async db => {
+          const cambiadas = await db.query('UPDATE usuarios SET password_hash = $1, debe_cambiar = TRUE WHERE id = $2', [hash, id]);
+          return cambiadas.rowCount ? '' : 'Ese usuario ya no existe.';
+        });
+        if (error) return json(res, 400, { error });
+        await registrar(u, 'oficina_usuario_clave', 'empresa', e.slug, '', '', 'usuario #' + id);
+        return json(res, 200, { ok: true });
+      }
       // Errores de la IA de un negocio (últimas 24 h), con qué significa cada uno y qué hacer.
       if (req.method === 'GET' && url === '/api/oficina/errores-ia') {
         const e = await A.empresa(p.get('empresa'));
