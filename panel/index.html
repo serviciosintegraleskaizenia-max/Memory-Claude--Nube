@@ -485,6 +485,11 @@
   .caja-login .btn { width: 100%; margin-top: 18px; padding: 11px; font-size: 14px; }
   .error-login { color: #dc2626; font-size: 13px; min-height: 18px; margin-top: 10px; }
   .btn-cancelar { background: none; border: none; color: var(--texto-suave); cursor: pointer; font-size: 13px; margin-top: 10px; width: 100%; }
+.pag-fila{padding:14px 10px!important;background:var(--card)}
+.pag{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap}
+.pag span{font-size:15px;color:var(--suave)}
+.pag-btn{font-size:16px;font-weight:700;padding:12px 22px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;cursor:pointer}
+.pag-btn:disabled{opacity:.35;cursor:default;background:transparent;color:var(--suave);border-color:var(--borde)}
 </style>
 </head>
 <body>
@@ -1864,7 +1869,14 @@ function pintarTarjetas(grupos, ks) {
 }
 
 const PAGINA_FILAS = 25;
-let limiteFilas = PAGINA_FILAS, claveVistaPrev = '', firmaPintada = '';
+let paginaFilas = 1, claveVistaPrev = '', firmaPintada = '';
+// Páginas de 25: calcula qué reservas van en cada página (función pura, se puede probar sola).
+function rebanadaPagina(total, pagina, tam) {
+  const paginas = Math.max(1, Math.ceil(total / tam));
+  const p = Math.min(Math.max(1, pagina), paginas);
+  const inicio = (p - 1) * tam;
+  return { pagina: p, paginas, inicio, fin: Math.min(total, inicio + tam) };
+}
 // Botón en la fila: solo si faltan datos. Abre el borrador para la agencia con lo que falta.
 function botonPedirFila(r) {
   if (!puede('responder_correo')) return '';
@@ -1872,10 +1884,12 @@ function botonPedirFila(r) {
   return faltan.length ? `<button class="btn-mini" data-pedir-fila="${r.id}" title="Faltan: ${esc(faltan.join(', '))}">📩 Pedir datos</button>` : '';
 }
 document.addEventListener('click', ev => {
-  if (ev.target.closest('[data-mas-filas]')) {
+  const bp = ev.target.closest('[data-pag]');
+  if (bp && !bp.disabled) {
     ev.preventDefault();
-    limiteFilas += PAGINA_FILAS;
+    paginaFilas += Number(bp.dataset.pag);
     pintar();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
   const pf = ev.target.closest('[data-pedir-fila]');
@@ -1899,8 +1913,10 @@ function pintar() {
   const grupos = agruparReservas(lista);
   // Rendimiento: se dibujan por páginas (150 reservas). Al cambiar un filtro se vuelve a la primera página.
   const clave = [vistaActual, ...['filtroIntencion', 'filtroEstado', 'filtroRevision', 'filtroOrden', 'desde', 'hasta', 'buscarHistorico'].map(id => (document.getElementById(id) || {}).value || '')].join('|');
-  if (clave !== claveVistaPrev) { limiteFilas = PAGINA_FILAS; claveVistaPrev = clave; }
-  const pagina = grupos.slice(0, limiteFilas);
+  if (clave !== claveVistaPrev) { paginaFilas = 1; claveVistaPrev = clave; }
+  const rebanada = rebanadaPagina(grupos.length, paginaFilas, PAGINA_FILAS);
+  paginaFilas = rebanada.pagina;
+  const pagina = grupos.slice(rebanada.inicio, rebanada.fin);
   const faltan = grupos.length - pagina.length;
   ordenVisible = pagina.map(g => g[0].id);
   if (seleccionado) pintarPosicion();
@@ -1941,7 +1957,7 @@ function pintar() {
       <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k](c)).join('')}
       </tr>`;
         }).join('');
-      }).join('') + (faltan > 0 ? `<tr><td colspan="${cols.length}" class="vacio-total"><button class="btn-sec" data-mas-filas>Mostrar ${Math.min(PAGINA_FILAS, faltan)} más (quedan ${faltan})</button></td></tr>` : '')
+      }).join('') + (rebanada.paginas > 1 ? `<tr><td colspan="${cols.length}" class="pag-fila"><div class="pag"><button class="pag-btn" data-pag="-1" ${rebanada.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button><span>Página <b>${rebanada.pagina}</b> de ${rebanada.paginas} · ${grupos.length} reservas</span><button class="pag-btn" data-pag="1" ${rebanada.pagina >= rebanada.paginas ? 'disabled' : ''}>Siguiente ›</button></div></td></tr>` : '')
     : `<tr><td colspan="${cols.length}" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
