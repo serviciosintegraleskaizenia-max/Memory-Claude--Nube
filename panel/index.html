@@ -490,11 +490,16 @@
 .pag span{font-size:15px;color:var(--suave)}
 .pag-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;cursor:pointer}
 .pag-btn:disabled{opacity:.35;cursor:default;background:transparent;color:var(--suave);border-color:var(--borde)}
-.barra-pag{position:relative;display:flex;align-items:center;justify-content:center;gap:16px;width:fit-content;margin:16px auto 24px;background:var(--card);border:1px solid var(--borde);border-radius:999px;padding:8px 12px}
-.barra-pag button{width:50px;height:50px;border-radius:50%;border:none;background:var(--azul);color:#fff;display:grid;place-items:center;cursor:pointer}
-.barra-pag button:disabled{opacity:.3;cursor:default}
-.barra-pag svg{width:28px;height:28px}
-.barra-pag span{font-size:15px;font-weight:600;color:var(--txt);white-space:nowrap}
+.barra-pag{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;width:100%;margin:12px 0 24px;background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:10px 14px}
+.pb-info{font-size:13.5px;color:var(--suave)}.pb-info b{color:var(--txt)}
+.pb-btns{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pb-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:9px;border:1px solid var(--borde);background:var(--bg);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer}
+.pb-btn:hover:not(:disabled){border-color:var(--azul)}
+.pb-btn:disabled{opacity:.35;cursor:default}
+.pb-btn svg{width:18px;height:18px}
+.pb-num{min-width:36px;height:36px;padding:0 8px;border-radius:9px;border:1px solid var(--borde);background:var(--bg);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer}
+.pb-num.a{background:var(--azul);border-color:var(--azul);color:#fff}
+.pb-puntos{color:var(--suave);padding:0 4px}
 </style>
 </head>
 <body>
@@ -1892,6 +1897,14 @@ function botonPedirFila(r) {
   return faltan.length ? `<button class="btn-mini" data-pedir-fila="${r.id}" title="Faltan: ${esc(faltan.join(', '))}">📩 Pedir datos</button>` : '';
 }
 document.addEventListener('click', ev => {
+  const bn = ev.target.closest('[data-pag-ir]');
+  if (bn) {
+    ev.preventDefault();
+    paginaFilas = Number(bn.dataset.pagIr);
+    pintar();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   const bp = ev.target.closest('[data-pag]');
   if (bp && !bp.disabled) {
     ev.preventDefault();
@@ -1909,17 +1922,29 @@ document.addEventListener('click', ev => {
   }
 });
 // Barra fija abajo de la pantalla: siempre visible, con flechas grandes y el número de página.
+// Números de página con puntos suspensivos: 1 2 3 … 9
+function numerosDePagina(actual, total) {
+  const salida = [];
+  for (let p = 1; p <= total; p++) {
+    if (p === 1 || p === total || Math.abs(p - actual) <= 1) salida.push(p);
+    else if (salida[salida.length - 1] !== '…') salida.push('…');
+  }
+  return salida;
+}
+// Barra debajo de la lista: texto a la izquierda, Anterior / números / Siguiente a la derecha.
 function pintarBarraPaginas(r) {
   let barra = document.getElementById('barraPaginas');
   if (r.paginas <= 1) { if (barra) barra.remove(); return; }
   if (!barra) { barra = document.createElement('div'); barra.id = 'barraPaginas'; barra.className = 'barra-pag'; }
-  // Va debajo de la tabla (no encima de los correos).
   const tabla = document.getElementById('cuerpo').closest('table');
   const sitio = tabla ? (tabla.closest('.tabla-wrap') || tabla) : null;
   if (sitio) sitio.insertAdjacentElement('afterend', barra); else document.body.appendChild(barra);
-  barra.innerHTML = `<button data-pag="-1" title="Página anterior" aria-label="Página anterior" ${r.pagina <= 1 ? 'disabled' : ''}>${FLECHA_IZQ}</button>
-    <span>Página <b>${r.pagina}</b> de ${r.paginas} · ${r.total} reservas</span>
-    <button data-pag="1" title="Página siguiente" aria-label="Página siguiente" ${r.pagina >= r.paginas ? 'disabled' : ''}>${FLECHA_DER}</button>`;
+  barra.innerHTML = `<span class="pb-info">Mostrando <b>${r.inicio + 1}–${r.fin}</b> de <b>${r.total}</b> reservas</span>
+    <div class="pb-btns">
+      <button class="pb-btn" data-pag="-1" title="Página anterior" ${r.pagina <= 1 ? 'disabled' : ''}>${FLECHA_IZQ}<span>Anterior</span></button>
+      ${numerosDePagina(r.pagina, r.paginas).map(p => p === '…' ? '<span class="pb-puntos">…</span>' : `<button class="pb-num ${p === r.pagina ? 'a' : ''}" data-pag-ir="${p}" title="Página ${p}">${p}</button>`).join('')}
+      <button class="pb-btn" data-pag="1" title="Página siguiente" ${r.pagina >= r.paginas ? 'disabled' : ''}><span>Siguiente</span>${FLECHA_DER}</button>
+    </div>`;
 }
 function pintar() {
   const lista = filtrar();
