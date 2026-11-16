@@ -168,6 +168,7 @@ svg .n{font-size:10px;fill:var(--suave);text-anchor:middle;font-weight:700}svg .
 @media (max-width:1100px){.app{grid-template-columns:72px 1fr}.item span.t,.marca div,.sec,.pie .quien div,.lnk span{display:none}.kpis{grid-template-columns:repeat(2,1fr)}.r3,.r4{grid-template-columns:1fr 1fr}}
 @media (max-width:760px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;overflow-x:auto}.r2,.r3,.r4{grid-template-columns:1fr}main{padding:14px}}
 @media print{aside,.no-imprimir{display:none!important}.app{display:block}main{padding:0}body{background:#fff}}
+.rv-as{display:inline-flex;align-items:center;margin-right:3px;vertical-align:middle}.rv-as svg{width:12px;height:12px}.as-chofer{color:var(--azul)}.as-proveedor{color:var(--suave)}.as-no{color:var(--oro)}
 </style>
 </head>
 <body>
@@ -1156,6 +1157,7 @@ document.addEventListener('click', async ev => {
 const RV = { q: '', tipo: [], estado: [], desde: '', hasta: '', alta_desde: '', alta_hasta: '', agencia: '', asesor: '', aerolinea: '', vuelo: '', grupo: '', origen: '', mas: false, datos: null };
 const ESTADO_RV = { activa: ['Activa', 'e-asignado'], completada: ['Completada', 'e-completado'], cancelada: ['Cancelada', 'e-cancelado'], parcial: ['Parcial', 'e-por_asignar'] };
 const TIPO_CORTO = { IN: ['plane-landing', 'Llegada'], OUT: ['plane-takeoff', 'Salida'], INTERHOTEL: ['route', 'Inter-hotel'], ACTIVIDAD: ['ticket', 'Tour'], OTRO: ['circle-dot', 'Servicio'] };
+const ASIG_ICONO = { chofer: 'car', proveedor: 'bus' };
 function consultaRV() {
   const p = new URLSearchParams();
   for (const k of ['q', 'desde', 'hasta', 'alta_desde', 'alta_hasta', 'agencia', 'asesor', 'aerolinea', 'vuelo', 'grupo', 'origen']) if (RV[k]) p.set(k, RV[k]);
@@ -1180,12 +1182,12 @@ function pintarReservas() {
   const chip = (grupo, k, n) => `<button class="pill ${RV[grupo].includes(k) ? 'a' : ''}" data-rv-chip="${grupo}" data-k="${k}">${n}</button>`;
   const fila = r => {
     const [en, cls] = ESTADO_RV[r.estado] || ['', ''];
-    const servs = r.servicios.slice(0, 4).map(x => `<span class="rv-s ${x.estado === 'cancelado' ? 'x' : ''}" title="${esc(TIPO_CORTO[x.tipo] ? TIPO_CORTO[x.tipo][1] : '')} ${esc(x.vuelo)}">${ic((TIPO_CORTO[x.tipo] || TIPO_CORTO.OTRO)[0])}${esc(fechaCorta(x.fecha))}${x.hora ? ' ' + esc(x.hora) : ''}</span>`).join('') + (r.servicios.length > 4 ? `<span class="rv-s">+${r.servicios.length - 4}</span>` : '');
+    const servs = r.servicios.slice(0, 4).map(x => `<span class="rv-s ${x.estado === 'cancelado' ? 'x' : ''}" title="${esc(TIPO_CORTO[x.tipo] ? TIPO_CORTO[x.tipo][1] : '')} ${esc(x.vuelo)}">${ASIG_ICONO[x.asigna] ? `<span class="rv-as as-${x.asigna}" title="${x.asigna === 'chofer' ? 'Con chofer' : x.asigna === 'proveedor' ? 'Con transportista' : 'Sin asignar'}">${ic(ASIG_ICONO[x.asigna])}</span>` : `<span class="rv-as as-no" title="Sin asignar">${ic('triangle-alert')}</span>`}${ic((TIPO_CORTO[x.tipo] || TIPO_CORTO.OTRO)[0])}${esc(fechaCorta(x.fecha))}${x.hora ? ' ' + esc(x.hora) : ''}</span>`).join('') + (r.servicios.length > 4 ? `<span class="rv-s">+${r.servicios.length - 4}</span>` : '');
     return `<tr class="fila" data-rv="${r.op_id}"><td><b>#${r.numero}</b><br><small class="sub2">${esc(new Date(r.creado).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' }))} · ${esc(r.canal)}</small></td>
       <td class="cli"><b>${esc(r.clientes[0] || 'Sin nombre')}${r.clientes.length > 1 ? ` <span class="sub2">+${r.clientes.length - 1}</span>` : ''}</b><small>${esc(r.agencia || '—')}</small></td>
       <td><div class="rv-ss">${servs}</div></td><td><span class="pax">${ic('users')}${r.pax}</span></td>
       <td>${r.asesor ? `<span class="sub2">${esc(r.asesor)}</span>` : '<span class="sub2">—</span>'}</td>
-      <td><span class="estado ${cls}">${en}</span></td>${precios ? `<td style="text-align:right;white-space:nowrap"><b>${dinero(r.venta)}</b>${r.sin_precio ? `<br><small style="color:var(--ambar)">${r.sin_precio} sin precio</small>` : ''}</td>` : ''}</tr>`;
+      <td><span class="estado ${cls}">${en}</span></td>${precios ? `<td style="text-align:right;white-space:nowrap"><b>${dinero(r.venta)}</b>${r.sin_precio ? `<br><small style="color:var(--suave)">${r.sin_precio} sin precio</small>` : ''}</td>` : ''}</tr>`;
   };
   const n = filtrosActivosRV();
   $('#vista').innerHTML = `<div class="cab"><div><h1>Reservas</h1><div class="sub">Lo registrado en el panel de correo y las reservas hechas aquí · ${RV.desde || RV.hasta || RV.alta_desde || RV.alta_hasta ? 'con fechas elegidas' : 'últimos 30 días y lo que viene'}</div></div>
@@ -1204,7 +1206,7 @@ function pintarReservas() {
       <div class="campo"><label>Reserva</label><select data-rvf="grupo"><option value="">Individuales y grupos</option><option value="individual" ${RV.grupo === 'individual' ? 'selected' : ''}>Individuales</option><option value="grupo" ${RV.grupo === 'grupo' ? 'selected' : ''}>Grupos (10 pax o más)</option></select></div>
       <div class="campo"><label>Llegó por</label><select data-rvf="origen"><option value="">Correo y manual</option><option value="correo" ${RV.origen === 'correo' ? 'selected' : ''}>Correo</option><option value="manual" ${RV.origen === 'manual' ? 'selected' : ''}>Manual (oficina, teléfono, WhatsApp)</option></select></div>
       </div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn s mini" id="rvLimpiar">Limpiar</button><button class="btn p mini" id="rvAplicar">Aplicar</button></div></div>` : ''}
-    <div class="rv-res">${d.resumen.reservas} reserva(s) · ${d.resumen.pax} pax · ${d.resumen.servicios} servicio(s)${precios && d.resumen.venta !== undefined ? ` · <b>${dinero(d.resumen.venta)}</b> en ventas` : ''}${precios && d.resumen.sin_precio ? ` · <b style="color:#e0a040">${d.resumen.sin_precio} servicio(s) sin precio</b> (por confirmar)` : ''}${d.total > d.reservas.length ? ` · se muestran las ${d.reservas.length} más recientes` : ''}</div>
+    <div class="rv-res">${d.resumen.reservas} reserva(s) · ${d.resumen.pax} pax · ${d.resumen.servicios} servicio(s)${precios && d.resumen.venta !== undefined ? ` · <b>${dinero(d.resumen.venta)}</b> en ventas` : ''}${precios && d.resumen.sin_precio ? ` · <b style="color:var(--suave)">${d.resumen.sin_precio} servicio(s) sin precio</b> (por confirmar)` : ''}${d.total > d.reservas.length ? ` · se muestran las ${d.reservas.length} más recientes` : ''}</div>
     <div class="card"><table><thead><tr><th>Reserva</th><th>Cliente y agencia</th><th>Servicios</th><th>Pax</th><th>Asesor</th><th>Estado</th>${precios ? '<th style="text-align:right">Venta</th>' : ''}</tr></thead>
       <tbody>${d.reservas.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>`;
 }

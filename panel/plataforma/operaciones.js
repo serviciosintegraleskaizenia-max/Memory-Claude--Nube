@@ -1188,7 +1188,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         canal: manual ? ((String(l[0].asunto || '').match(/^Reserva manual \(([^)]+)\)/) || [])[1] || 'Oficina').trim() : 'Correo',
         desde: fechas[0] || '', hasta: fechas[fechas.length - 1] || '',
         servicios: l.map(x => ({ id: x.id, tipo: tipoDe(x), fecha: x.fecha, hora: x.hora_servicio || '', vuelo: x.vuelo || '', estado: x.estado, pax: paxTotal(x),
-          asignado: Boolean(x.chofer_id || x.proveedor_id), cliente: x.nombre_cliente || '', lugar: x.hotel || x.actividad || x.punto_llegada || '' })),
+          asignado: Boolean(x.chofer_id || x.proveedor_id), asigna: x.chofer_id ? 'chofer' : (x.proveedor_id ? 'proveedor' : ''), cliente: x.nombre_cliente || '', lugar: x.hotel || x.actividad || x.punto_llegada || '' })),
         ...(conPrecios ? { venta: dinero(venta), costo: dinero(costo), ganancia: dinero(venta - costo), sin_precio: vivos.filter(x => x.precio === null).length, sin_costo: vivos.filter(x => x.costo === null).length } : {})
       };
     });

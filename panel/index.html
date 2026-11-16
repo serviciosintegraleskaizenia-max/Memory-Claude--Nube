@@ -1809,7 +1809,7 @@ function htmlSimple(grupos, cols) {
       servicios: () => `<td>${serviciosSimple(g)}</td>`,
       fechas: () => `<td>${fechasSimple(g)}</td>`,
       hotel: () => `<td class="recortar">${hotelSimple(g)}</td>`,
-      estado: () => `<td class="col-estado">${estadoSimple(g)}${quienSimple(r, g)}</td>`
+      estado: () => `<td class="col-estado">${estadoSimple(g)}${botonPedirFila(r)}${quienSimple(r, g)}</td>`
     };
     return `<tr data-id="${r.id}" class="srv-pri fila-simple${gi % 2 ? ' res-par' : ''}${cancelacionDe(g) ? ' fila-cancelada' : ''}">${cols.map(c => celda[c.k]()).join('')}</tr>`;
   }).join('');
@@ -1865,11 +1865,26 @@ function pintarTarjetas(grupos, ks) {
 
 const PAGINA_FILAS = 150;
 let limiteFilas = PAGINA_FILAS, claveVistaPrev = '', firmaPintada = '';
+// Botón en la fila: solo si faltan datos. Abre el borrador para la agencia con lo que falta.
+function botonPedirFila(r) {
+  if (!puede('responder_correo')) return '';
+  const faltan = datosQueFaltan(r);
+  return faltan.length ? `<button class="btn-mini" data-pedir-fila="${r.id}" title="Faltan: ${esc(faltan.join(', '))}">📩 Pedir datos</button>` : '';
+}
 document.addEventListener('click', ev => {
-  if (!ev.target.closest('[data-mas-filas]')) return;
-  ev.preventDefault();
-  limiteFilas += PAGINA_FILAS;
-  pintar();
+  if (ev.target.closest('[data-mas-filas]')) {
+    ev.preventDefault();
+    limiteFilas += PAGINA_FILAS;
+    pintar();
+    return;
+  }
+  const pf = ev.target.closest('[data-pedir-fila]');
+  if (pf) {
+    ev.preventDefault();
+    const id = Number(pf.dataset.pedirFila);
+    const r = datos.find(x => x.id === id);
+    if (r) { seleccionado = r; pedirDatos(); }
+  }
 });
 function pintar() {
   const lista = filtrar();
@@ -1920,7 +1935,7 @@ function pintar() {
             aerolinea: () => `<td>${campoSrv(s, aerolineaDe(s.vuelo))}</td>`,
             vuelo: c => `<td>${dudoso(s, 'vuelo', campoSrv(s, s.vuelo))}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo))}</div>` : ''}</td>`,
             hotel: () => `<td>${dudoso(s, 'hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td>`,
-            estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}`)
+            estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}${botonPedirFila(r)}`)
           };
           return `
       <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k](c)).join('')}
