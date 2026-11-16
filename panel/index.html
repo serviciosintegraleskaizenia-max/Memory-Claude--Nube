@@ -1046,6 +1046,8 @@ const INCRUSTADO = ['empresas', 'herramientas'].includes(new URLSearchParams(loc
 
 function mostrarApp(s) {
   sesionActual = s;
+  // Avisos del navegador: se suscribe si ya dio permiso, y vigila el chat con la página abierta.
+  setTimeout(() => { activarPush(); vigilarChatNuevo(); }, 1500);
   pintarToggleVista();
   // Programador o Gerente sin correo: la verificación en dos pasos no puede funcionar todavía.
   if (s.dos_pasos === 'sin_correo' && !sessionStorage.getItem('avisoDosPasos')) {
@@ -1256,7 +1258,52 @@ function filaRedForm(x = {}) {
   </div>`;
 }
 
+// Avisos del navegador. Si el push ya está activo, el service worker los muestra (así no salen dos veces).
+let pushActivo = false;
+function uint8De(base64u) {
+  const s = (base64u + '='.repeat((4 - base64u.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+// Suscribe este navegador a los avisos (aunque el panel esté cerrado). Requiere permiso de notificaciones.
+async function activarPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return false;
+  if (Notification.permission !== 'granted') return false;
+  try {
+    const reg = await navigator.serviceWorker.register('/panel-sw.js');
+    await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const clave = await api('/api/push/clave');
+      if (!clave.ok) return false;
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: uint8De(clave.data.clave) });
+    }
+    const r = await api('/api/push/suscribir', { suscripcion: sub.toJSON() });
+    pushActivo = Boolean(r.ok);
+    return pushActivo;
+  } catch (e) {
+    return false;
+  }
+}
+// Con el panel abierto: si el push no está activo, revisa cada 10 segundos si llegó un mensaje nuevo del chat.
+let timerChatNuevo = null;
+function vigilarChatNuevo() {
+  clearInterval(timerChatNuevo);
+  if (!sesionActual || !puede('usar_chat')) return;
+  const clave = 'chatUltimoId_' + sesionActual.usuario;
+  let desde = 0;
+  try { desde = Number(localStorage.getItem(clave)) || 0; } catch (e) {}
+  const revisar = async () => {
+    if (pushActivo) return;
+    const r = await api('/api/chat/nuevos?desde=' + desde);
+    if (!r.ok) return;
+    for (const m of r.data.mensajes || []) avisoEscritorio('Mensaje de ' + m.de + ': ' + m.texto);
+    if (r.data.ultimo) { desde = r.data.ultimo; try { localStorage.setItem(clave, String(desde)); } catch (e) {} }
+  };
+  revisar();
+  timerChatNuevo = setInterval(revisar, 10000);
+}
 function avisoEscritorio(texto) {
+  if (pushActivo) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const n = new Notification((empresaActual.nombre || 'Panel') + ' - Reservas', { body: texto, tag: 'aviso-' + Date.now() });
   n.onclick = () => { window.focus(); n.close(); };
@@ -4788,6 +4835,7 @@ document.getElementById('btnChatFlotante').addEventListener('click', abrirChat);
 document.getElementById('btnAvisos').addEventListener('click', async () => {
   await Notification.requestPermission();
   document.getElementById('btnAvisos').style.display = 'none';
+  activarPush();
 });
 document.getElementById('btnCerrarChat').addEventListener('click', cerrarChat);
 document.getElementById('btnEnviarChat').addEventListener('click', enviarChat);

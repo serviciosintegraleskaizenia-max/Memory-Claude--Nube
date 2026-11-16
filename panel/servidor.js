@@ -13,9 +13,11 @@ const viator = require('./viator');
 const crearCentral = require('./plataforma/central');
 const crearOficina = require('./plataforma/oficina');
 const crearMotor = require('./motor');
+const crearPush = require('./push');
 
 const client = new Client(config.db);
 // Motor de correo dentro del panel (reemplaza al flujo de n8n cuando se active en config.js).
+const pushAvisos = crearPush({ client });
 const motorCorreo = crearMotor({
   client, config, registrar: (...a) => registrar(...a), SISTEMA: { usuario: 'sistema', nombre: 'Sistema' },
   // La demo nunca lee buzones reales; y solo lee si la empresa tiene el módulo de correo.
@@ -872,6 +874,7 @@ async function procesarModificaciones() {
             `Llegó un cambio para la reserva de ${original.nombre_cliente} (#${original.id}). Revisa el correo #${mod.id} antes de seguir.`,
             original.id
           ]);
+          pushAvisos.avisarUsuario(quien, 'Zentralia · Reservas', `Llegó un cambio para la reserva de ${original.nombre_cliente} (#${original.id}).`);
         }
         await registrar(SISTEMA, 'modificacion_recibida', 'reserva', original.id, original.estado, 'actualizada',
           'Cambio en el correo #' + mod.id + (quien ? '. Aviso a ' + quien : '. Nadie la tenía abierta'));
@@ -1097,6 +1100,7 @@ function claveDe(x) {
 async function avisar(usuarios, texto, reservaId) {
   for (const para of new Set(usuarios)) {
     await client.query('INSERT INTO avisos (para, texto, reserva_id) VALUES ($1, $2, $3)', [para, texto, reservaId || null]);
+    pushAvisos.avisarUsuario(para, 'Zentralia · Reservas', texto);
   }
 }
 
@@ -1765,6 +1769,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/chofer.webmanifest') return archivo(res, path.join(CARPETA, 'chofer.webmanifest'), 'application/manifest+json');
     if (req.method === 'GET' && url === '/chofer-icono.svg') return archivo(res, path.join(CARPETA, 'chofer-icono.svg'), 'image/svg+xml');
     if (req.method === 'GET' && url === '/chofer-sw.js') return archivo(res, path.join(CARPETA, 'chofer-sw.js'), 'text/javascript; charset=utf-8');
+    if (req.method === 'GET' && url === '/panel-sw.js') return archivo(res, path.join(CARPETA, 'panel-sw.js'), 'text/javascript; charset=utf-8');
     if (req.method === 'GET' && url === '/iconos-op.js') return archivo(res, path.join(CARPETA, 'iconos-op.js'), 'text/javascript; charset=utf-8');
     if (url.startsWith('/api/chofer/')) return operaciones.manejarChofer(req, res, url, { json, leerCuerpo, esLocal });
     if (req.method === 'GET' && url === '/asistente') {
@@ -2416,6 +2421,30 @@ http.createServer(async (req, res) => {
       return res.end(Buffer.from(m[2], 'base64'));
     }
 
+    // Avisos del navegador: suscripción (Web Push) y mensajes nuevos para el aviso de la página abierta.
+    if (req.method === 'GET' && url === '/api/push/clave') {
+      return json(res, 200, { clave: await pushAvisos.clavePublica() });
+    }
+    if (req.method === 'POST' && url === '/api/push/suscribir') {
+      const b = await leerCuerpo(req);
+      try { await pushAvisos.suscribir(u.usuario, b.suscripcion || {}); return json(res, 200, { ok: true }); }
+      catch (e) { return json(res, 400, { error: e.message }); }
+    }
+    if (req.method === 'POST' && url === '/api/push/quitar') {
+      const b = await leerCuerpo(req);
+      await pushAvisos.quitar(u.usuario, b.endpoint);
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === 'GET' && url === '/api/chat/nuevos') {
+      if (!puede('usar_chat')) return json(res, 200, { mensajes: [], ultimo: 0 });
+      const desde = Number(new URL(req.url, 'http://localhost').searchParams.get('desde')) || 0;
+      if (!desde) {
+        const m = (await client.query('SELECT COALESCE(MAX(id), 0)::int AS id FROM mensajes WHERE para = $1', [u.usuario])).rows[0];
+        return json(res, 200, { mensajes: [], ultimo: m.id });
+      }
+      const r = await client.query('SELECT id, de, texto FROM mensajes WHERE para = $1 AND id > $2 ORDER BY id LIMIT 5', [u.usuario, desde]);
+      return json(res, 200, { mensajes: r.rows, ultimo: r.rows.length ? r.rows[r.rows.length - 1].id : desde });
+    }
     if (req.method === 'POST' && url === '/api/chat/enviar') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const { para, texto: contenido, imagen } = await leerCuerpo(req);
@@ -2429,6 +2458,7 @@ http.createServer(async (req, res) => {
       const existe = (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [para || ''])).rowCount > 0;
       if (!existe || para === u.usuario) return json(res, 400, { error: 'Destinatario no válido.' });
       await client.query('INSERT INTO mensajes (de, para, texto, imagen) VALUES ($1, $2, $3, $4)', [u.usuario, para, limpio, imagen || null]);
+      pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), '/');
       await registrar(u, 'mensaje_enviado', 'chat', para, '', '', 'Mensaje privado a ' + para);
       return json(res, 200, { ok: true });
     }
