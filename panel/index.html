@@ -500,6 +500,14 @@
 .pb-num{min-width:36px;height:36px;padding:0 8px;border-radius:9px;border:1px solid var(--borde);background:var(--bg);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer}
 .pb-num.a{background:var(--azul);border-color:var(--azul);color:#fff}
 .pb-puntos{color:var(--suave);padding:0 4px}
+.k-card{position:relative;overflow:hidden;border-left:5px solid var(--c)}
+.k-card .k-bg{position:absolute;right:-10px;top:-8px;opacity:.10;color:var(--c);pointer-events:none}
+.k-card .k-bg svg{width:96px;height:96px}
+.k-lab{display:flex;align-items:center;gap:7px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--texto-suave)}
+.k-lab svg{color:var(--c);flex:none}
+.k-delta{font-size:12px;color:var(--texto-suave);margin-top:4px}.k-delta.sube{color:#16a34a}.k-delta.baja{color:#dc2626}
+.k-spark{margin-top:8px}.k-spark svg{display:block}.k-semana{font-size:10.5px;color:var(--texto-suave);margin-top:2px}
+body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
 </style>
 </head>
 <body>
@@ -576,11 +584,11 @@
   <div id="franjas"></div>
   <div id="alertasSistema" class="alertas-sistema" style="display:none;"></div>
   <div class="tarjetas">
-    <div class="tarjeta t-reservas"><div class="etiqueta">Reservas</div><div class="numero" id="n-reservas">0</div></div>
-    <div class="tarjeta t-pendientes"><div class="etiqueta">Pendientes de transcribir</div><div class="numero" id="n-pendientes">0</div></div>
-    <div class="tarjeta t-registradas"><div class="etiqueta">Registradas</div><div class="numero" id="n-registradas">0</div></div>
-    <div class="tarjeta t-revisar"><div class="etiqueta">Para revisar</div><div class="numero" id="n-revisar">0</div></div>
-    <div class="tarjeta t-total"><div class="etiqueta">Correos procesados</div><div class="numero" id="n-total">0</div></div>
+    <div class="tarjeta k-card t-reservas" style="--c:#3b82f6"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg><span>Reservas</span></div><div class="numero" id="n-reservas">0</div><div class="k-delta" id="d-reservas"></div><div class="k-spark" id="s-reservas"></div></div>
+    <div class="tarjeta k-card t-pendientes" style="--c:#f59e0b"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Pendientes de transcribir</span></div><div class="numero" id="n-pendientes">0</div><div class="k-delta" id="d-pendientes"></div><div class="k-spark" id="s-pendientes"></div></div>
+    <div class="tarjeta k-card t-registradas" style="--c:#22c55e"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Registradas</span></div><div class="numero" id="n-registradas">0</div><div class="k-delta" id="d-registradas"></div><div class="k-spark" id="s-registradas"></div></div>
+    <div class="tarjeta k-card t-revisar" style="--c:#ef4444"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>Para revisar</span></div><div class="numero" id="n-revisar">0</div><div class="k-delta" id="d-revisar"></div><div class="k-spark" id="s-revisar"></div></div>
+    <div class="tarjeta k-card t-total" style="--c:#94a3b8"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg><span>Correos procesados</span></div><div class="numero" id="n-total">0</div><div class="k-delta" id="d-total"></div><div class="k-spark" id="s-total"></div></div>
   </div>
 
   <div class="conectados" id="conectados"></div>
@@ -1601,6 +1609,42 @@ function filtrar() {
   return ordenar(lista);
 }
 
+// Tarjetas del correo: línea de los últimos 7 días (correos recibidos por día) y variación de hoy contra ayer.
+const DIAS_KPI = 7;
+function claveDia(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function serieKpi(lista) {
+  const hoy = new Date();
+  const dias = [];
+  for (let i = DIAS_KPI - 1; i >= 0; i--) { const d = new Date(hoy); d.setDate(d.getDate() - i); dias.push(claveDia(d)); }
+  return dias.map(k => agruparReservas(lista.filter(r => diaLocal(r.fecha) === k)).length);
+}
+function dibujarKpi(id, valores, color) {
+  const el = document.getElementById('s-' + id);
+  if (!el) return;
+  const w = 160, h = 40, max = Math.max(...valores), min = Math.min(...valores);
+  const span = max - min || 1;
+  const pts = valores.map((v, i) => `${(i / (valores.length - 1)) * w},${h - ((v - min) / span) * (h - 6) - 3}`).join(' ');
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" width="100%" height="${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg><div class="k-semana">Últimos 7 días</div>`;
+}
+function deltaKpi(id, valores) {
+  const el = document.getElementById('d-' + id);
+  if (!el) return;
+  const t = valores[valores.length - 1], y = valores[valores.length - 2];
+  const dif = t === y ? 'igual que ayer' : `${t > y ? '▲' : '▼'} ${Math.abs(t - y)} ${t > y ? 'más' : 'menos'} que ayer`;
+  el.textContent = `Llegaron hoy: ${t} · ${dif}`;
+  el.className = 'k-delta ' + (t > y ? 'sube' : t < y ? 'baja' : '');
+}
+function pintarKpis() {
+  const series = {
+    reservas: serieKpi(datos.filter(r => r.categoria === 'RESERVA')),
+    pendientes: serieKpi(datos.filter(r => r.estado === 'pendiente de transcribir')),
+    registradas: serieKpi(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION'))),
+    revisar: serieKpi(datos.filter(r => revisiones.has(r.id))),
+    total: serieKpi(datos)
+  };
+  const colores = { reservas: '#3b82f6', pendientes: '#f59e0b', registradas: '#22c55e', revisar: '#ef4444', total: '#94a3b8' };
+  for (const k of Object.keys(series)) { dibujarKpi(k, series[k], colores[k]); deltaKpi(k, series[k]); }
+}
 function actualizarContadores() {
   const completos = datos.filter(esCompleto);
   const enRevision = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
@@ -2036,6 +2080,7 @@ function pintar() {
   document.getElementById('n-registradas').textContent = unaPor(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION')));
   document.getElementById('n-revisar').textContent = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
   document.getElementById('n-total').textContent = unaPor(datos);
+  pintarKpis();
   actualizarContadores();
 }
 
