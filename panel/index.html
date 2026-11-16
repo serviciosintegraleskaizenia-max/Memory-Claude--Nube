@@ -1559,7 +1559,9 @@ function filtrar() {
     if (conRevision === 'puntos' && !(r.revision && r.revision.puntos.length)) return false;
     if (conRevision === 'urgente' && !(r.revision && r.revision.urgente)) return false;
     // Requiere atención: lo que sigue abierto (pendiente, para revisar, actualizada) o tiene puntos por revisar.
-    if (conRevision === 'accion' && !(ESTADOS_ABIERTOS.includes(r.estado) || revisiones.has(r.id) || (r.revision && (r.revision.puntos.length || r.revision.urgente)))) return false;
+    // Requiere atención: lo que necesita una decisión (para revisar, error de la IA, puntos por revisar, urgente,
+    // o datos que faltan: cliente o fecha). Lo pendiente normal sigue en «Todas».
+    if (conRevision === 'accion' && !(r.estado === 'revisar' || r.error_ia || revisiones.has(r.id) || (r.revision && (r.revision.puntos.length || r.revision.urgente)) || !r.nombre_cliente || !r.fecha_servicio)) return false;
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
     if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
