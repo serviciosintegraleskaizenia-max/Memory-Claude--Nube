@@ -1868,7 +1868,8 @@ function pintarTarjetas(grupos, ks) {
   caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
 }
 
-const PAGINA_FILAS = 25;
+// Paginación desactivada por ahora: todos los correos en una sola lista, como antes.
+const PAGINA_FILAS = 100000;
 let paginaFilas = 1, claveVistaPrev = '', firmaPintada = '';
 // Páginas de 25: calcula qué reservas van en cada página (función pura, se puede probar sola).
 function rebanadaPagina(total, pagina, tam) {
