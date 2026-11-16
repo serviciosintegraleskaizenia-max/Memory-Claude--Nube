@@ -601,6 +601,7 @@
     <select id="filtroAsesor" style="display:none;" title="Asesor asignado"></select>
     <select id="filtroBuzon" style="display:none;" title="Buzón donde llegó el correo"></select>
     <select id="filtroRevision" title="Revisión automática">
+      <option value="accion" selected>⚡ Requiere atención</option>
       <option value="">Todas (revisión)</option>
       <option value="puntos">⚠ Con puntos para revisar</option>
       <option value="urgente">⏰ Urgentes (menos de 48 h)</option>
@@ -1557,6 +1558,8 @@ function filtrar() {
     if (buzon && r.buzon !== buzon) return false;
     if (conRevision === 'puntos' && !(r.revision && r.revision.puntos.length)) return false;
     if (conRevision === 'urgente' && !(r.revision && r.revision.urgente)) return false;
+    // Requiere atención: lo que sigue abierto (pendiente, para revisar, actualizada) o tiene puntos por revisar.
+    if (conRevision === 'accion' && !(ESTADOS_ABIERTOS.includes(r.estado) || revisiones.has(r.id) || (r.revision && (r.revision.puntos.length || r.revision.urgente)))) return false;
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
     if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
@@ -1850,6 +1853,14 @@ function pintarTarjetas(grupos, ks) {
   caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
 }
 
+const PAGINA_FILAS = 150;
+let limiteFilas = PAGINA_FILAS, claveVistaPrev = '';
+document.addEventListener('click', ev => {
+  if (!ev.target.closest('[data-mas-filas]')) return;
+  ev.preventDefault();
+  limiteFilas += PAGINA_FILAS;
+  pintar();
+});
 function pintar() {
   const lista = filtrar();
   const simple = vistaSimple();
@@ -1861,11 +1872,16 @@ function pintar() {
   const cuerpo = document.getElementById('cuerpo');
 
   const grupos = agruparReservas(lista);
-  ordenVisible = grupos.map(g => g[0].id);
+  // Rendimiento: se dibujan por páginas (150 reservas). Al cambiar un filtro se vuelve a la primera página.
+  const clave = [vistaActual, ...['filtroIntencion', 'filtroEstado', 'filtroRevision', 'filtroOrden', 'desde', 'hasta', 'buscarHistorico'].map(id => (document.getElementById(id) || {}).value || '')].join('|');
+  if (clave !== claveVistaPrev) { limiteFilas = PAGINA_FILAS; claveVistaPrev = clave; }
+  const pagina = grupos.slice(0, limiteFilas);
+  const faltan = grupos.length - pagina.length;
+  ordenVisible = pagina.map(g => g[0].id);
   if (seleccionado) pintarPosicion();
-  if (simple && grupos.length) cuerpo.innerHTML = htmlSimple(grupos, cols);
-  else cuerpo.innerHTML = grupos.length
-    ? grupos.map((g, gi) => {
+  if (simple && pagina.length) cuerpo.innerHTML = htmlSimple(pagina, cols);
+  else cuerpo.innerHTML = pagina.length
+    ? pagina.map((g, gi) => {
         const r = g[0];
         const rev = revisiones.get(r.id) || g.map(s => revisiones.get(s.id)).find(Boolean);
         const tarde = rev && rev.segundos > rev.limite;
@@ -1900,7 +1916,7 @@ function pintar() {
       <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k](c)).join('')}
       </tr>`;
         }).join('');
-      }).join('')
+      }).join('') + (faltan > 0 ? `<tr><td colspan="${cols.length}" class="vacio-total"><button class="btn-sec" data-mas-filas>Mostrar ${Math.min(PAGINA_FILAS, faltan)} más (quedan ${faltan})</button></td></tr>` : '')
     : `<tr><td colspan="${cols.length}" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'

@@ -1199,7 +1199,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     if (aerolinea) lista = lista.filter(r => r.servicios.some(x => x.vuelo.replace(/\s+/g, '').toUpperCase().startsWith(aerolinea)));
     if (origen) lista = lista.filter(r => r.origen === origen);
     const resumen = { reservas: lista.length, pax: lista.reduce((a, r) => a + r.pax, 0), servicios: lista.reduce((a, r) => a + r.servicios.length, 0) };
-    if (conPrecios) Object.assign(resumen, { venta: dinero(lista.reduce((a, r) => a + r.venta, 0)), costo: dinero(lista.reduce((a, r) => a + r.costo, 0)) });
+    if (conPrecios) Object.assign(resumen, { venta: dinero(lista.reduce((a, r) => a + r.venta, 0)), costo: dinero(lista.reduce((a, r) => a + r.costo, 0)), sin_precio: lista.reduce((a, r) => a + (r.sin_precio || 0), 0) });
     const asesores = [...new Set(lista.map(r => r.asesor).filter(Boolean))].sort();
     return { reservas: lista.slice(0, admin ? 1500 : 600), resumen, asesores, total: lista.length };
   }
