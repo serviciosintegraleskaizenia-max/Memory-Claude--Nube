@@ -169,6 +169,14 @@ svg .n{font-size:10px;fill:var(--suave);text-anchor:middle;font-weight:700}svg .
 @media (max-width:760px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;overflow-x:auto}.r2,.r3,.r4{grid-template-columns:1fr}main{padding:14px}}
 @media print{aside,.no-imprimir{display:none!important}.app{display:block}main{padding:0}body{background:#fff}}
 .rv-as{display:inline-flex;align-items:center;margin-right:3px;vertical-align:middle}.rv-as svg{width:12px;height:12px}.as-chofer{color:var(--azul)}.as-proveedor{color:var(--suave)}.as-no{color:var(--oro)}
+.tablero{display:grid;grid-template-columns:repeat(6,minmax(170px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
+.col-tab{background:var(--card);border:1px solid var(--borde);border-radius:14px;padding:10px;min-height:200px;display:flex;flex-direction:column;gap:8px}
+.cab-tab{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--suave)}
+.cab-tab span{background:var(--bg);border-radius:999px;padding:1px 8px;font-size:12px}
+.tarj-tab{all:unset;cursor:pointer;box-sizing:border-box;background:var(--bg);border:1px solid var(--borde);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:2px}
+.tarj-tab:hover{border-color:var(--azul)}
+.tarj-tab .h{font-size:11px;color:var(--suave)}.tarj-tab small{color:var(--suave);font-size:11.5px}.tarj-tab .q{color:var(--txt)}
+.vacio-tab{color:var(--suave);font-size:12px;padding:8px 2px}
 </style>
 </head>
 <body>
@@ -232,6 +240,7 @@ const VISTAS = [
   ['hoy', 'sun', 'Hoy', 'ver_operaciones', 'operaciones'],
   ['reservas', 'book-open', 'Reservas', 'ver_reservas_op', null],
   ['operaciones', 'route', 'Asignar servicios', 'ver_operaciones', 'operaciones'],
+  ['tablero', 'layout-dashboard', 'Tablero', 'ver_operaciones', 'operaciones'],
   ['vivo', 'navigation', 'Mapa en vivo', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
   ['nueva', 'plus', 'Nueva reserva', 'crear_reservas', 'reserva_manual'],
   ['paquetes', 'package', 'Paquetes', 'crear_paquetes', 'paquetes'],
@@ -267,7 +276,7 @@ async function ir(v) {
   S.vista = v; guardarEstado(); pintarMenu();
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
-  const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
+  const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
     ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
@@ -287,6 +296,32 @@ function cabeceraDia(titulo, sub, extra = '') {
     <div class="fecha">${S.filtro === 'sin_fecha' ? '' : `<button data-dia="-1" title="Día anterior">${ic('chevron-left')}</button>`}<input type="date" id="fFecha" value="${S.fecha}"><button data-dia="1" title="Día siguiente">${ic('chevron-right')}</button><button data-dia="0" class="btn mini s" style="margin-left:2px">Hoy</button></div>
     <div class="seg" id="segSede">${['', 'Punta Cana', 'Orlando'].map(x => `<button class="${S.sede === x ? 'a' : ''}" data-sede="${x}">${x ? ic('map-pin') + x : 'Todas'}</button>`).join('')}</div>${extra}</div></div>`;
 }
+
+/* ---------- vista: Tablero por estado (cada servicio en la columna de su estado) ---------- */
+const COLUMNAS_TABLERO = [['por_asignar', 'Por asignar'], ['asignado', 'Asignado'], ['en_camino', 'En camino'], ['en_sitio', 'En el lugar'], ['recogido', 'Recogido'], ['completado', 'Completado']];
+async function vTablero() {
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  await cargar();
+  pintarTablero();
+}
+function pintarTablero() {
+  const activos = S.servicios.filter(x => x.estado !== 'cancelado' && x.estado !== 'no_show');
+  const tarjeta = x => `<button class="tarj-tab" data-tab-id="${x.id}">
+      <span class="h">${esc(x.hora || x.hora_servicio || '--:--')}</span>
+      <b>${esc(x.cliente || x.nombre_cliente || 'Sin nombre')}</b>
+      <small>${esc(x.lugar || x.hotel || x.actividad || '')}${x.pax ? ' · ' + esc(x.pax) + ' pax' : ''}</small>
+      <small class="q">${esc(x.chofer || x.proveedor || 'Sin asignar')}</small></button>`;
+  $('#vista').innerHTML = cabeceraDia('Tablero', 'Cada servicio está en la columna de su estado. Toca uno para verlo o cambiarlo.') +
+    `<div class="tablero">${COLUMNAS_TABLERO.map(([k, nombre]) => {
+      const lista = activos.filter(x => x.estado === k);
+      return `<div class="col-tab e-${k}"><div class="cab-tab"><b>${nombre}</b><span>${lista.length}</span></div>
+        ${lista.length ? lista.map(tarjeta).join('') : '<div class="vacio-tab">Nada aquí</div>'}</div>`;
+    }).join('')}</div>`;
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-tab-id]');
+  if (t) abrirDetalle(Number(t.dataset.tabId));
+});
 
 /* ---------- vista: Operaciones ---------- */
 async function vOperaciones() {
