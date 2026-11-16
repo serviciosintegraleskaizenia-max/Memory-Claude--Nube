@@ -1148,10 +1148,18 @@ async function cargarReservas(forzar) {
   }
 
   datos = r.data.map(sinEntidades);
-  pintarFiltroAsesor();
-  pintarFiltroBuzon();
-  pintar();
-  abrirDesdeEnlace();
+  // Rendimiento: el refresco cada 15 s solo redibuja la tabla si algo de lo que se ve cambió.
+  const CAMPOS_VISTOS = ['id', 'estado', 'categoria', 'asignado_a', 'error_ia', 'fecha', 'fecha_servicio', 'hora_servicio', 'hotel', 'vuelo',
+    'nombre_cliente', 'agencia', 'adultos', 'ninos', 'infantes', 'punto_llegada', 'punto_partida', 'aeropuerto', 'tipo_servicio', 'numero_servicio',
+    'actividad', 'motivo', 'cambio_id', 'cancelada_por', 'original_id', 'urgente', 'puntos', 'texto'];
+  const firma = JSON.stringify([vistaActual, datos, [...revisiones.keys()].join(','), av.ok ? av.data.length : 0], CAMPOS_VISTOS.concat(['0', '1', '2', '3']));
+  if (firma !== firmaPintada) {
+    firmaPintada = firma;
+    pintarFiltroAsesor();
+    pintarFiltroBuzon();
+    pintar();
+    abrirDesdeEnlace();
+  }
   // Un aviso por correo, no por cada servicio (llegada, salida...) del mismo correo.
   const correosVistos = new Set();
   const avisosNuevos = nuevas.filter(x => {
@@ -1856,7 +1864,7 @@ function pintarTarjetas(grupos, ks) {
 }
 
 const PAGINA_FILAS = 150;
-let limiteFilas = PAGINA_FILAS, claveVistaPrev = '';
+let limiteFilas = PAGINA_FILAS, claveVistaPrev = '', firmaPintada = '';
 document.addEventListener('click', ev => {
   if (!ev.target.closest('[data-mas-filas]')) return;
   ev.preventDefault();
