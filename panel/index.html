@@ -488,7 +488,7 @@
 .pag-fila{padding:14px 10px!important;background:var(--card)}
 .pag{display:flex;justify-content:center;align-items:center;gap:18px;flex-wrap:wrap}
 .pag span{font-size:15px;color:var(--suave)}
-.pag-btn{font-size:16px;font-weight:700;padding:12px 22px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;cursor:pointer}
+.pag-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:12px;border:1px solid var(--azul);background:var(--azul);color:#fff;cursor:pointer}
 .pag-btn:disabled{opacity:.35;cursor:default;background:transparent;color:var(--suave);border-color:var(--borde)}
 </style>
 </head>
@@ -1868,8 +1868,10 @@ function pintarTarjetas(grupos, ks) {
   caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
 }
 
-// Paginación desactivada por ahora: todos los correos en una sola lista, como antes.
-const PAGINA_FILAS = 100000;
+// Páginas de 25 correos: la navegación va al final de la lista.
+const PAGINA_FILAS = 25;
+const FLECHA_IZQ = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
+const FLECHA_DER = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
 let paginaFilas = 1, claveVistaPrev = '', firmaPintada = '';
 // Páginas de 25: calcula qué reservas van en cada página (función pura, se puede probar sola).
 function rebanadaPagina(total, pagina, tam) {
@@ -1958,7 +1960,7 @@ function pintar() {
       <tr data-id="${r.id}" class="${i ? 'srv-sig' : 'srv-pri'}${gi % 2 ? ' res-par' : ''}">${cols.map(c => celda[c.k](c)).join('')}
       </tr>`;
         }).join('');
-      }).join('') + (rebanada.paginas > 1 ? `<tr><td colspan="${cols.length}" class="pag-fila"><div class="pag"><button class="pag-btn" data-pag="-1" ${rebanada.pagina <= 1 ? 'disabled' : ''}>‹ Anterior</button><span>Página <b>${rebanada.pagina}</b> de ${rebanada.paginas} · ${grupos.length} reservas</span><button class="pag-btn" data-pag="1" ${rebanada.pagina >= rebanada.paginas ? 'disabled' : ''}>Siguiente ›</button></div></td></tr>` : '')
+      }).join('') + (rebanada.paginas > 1 ? `<tr><td colspan="${cols.length}" class="pag-fila"><div class="pag"><button class="pag-btn" data-pag="-1" title="Página anterior" aria-label="Página anterior" ${rebanada.pagina <= 1 ? 'disabled' : ''}>${FLECHA_IZQ}</button><span>Página <b>${rebanada.pagina}</b> de ${rebanada.paginas} · ${grupos.length} reservas</span><button class="pag-btn" data-pag="1" title="Página siguiente" aria-label="Página siguiente" ${rebanada.pagina >= rebanada.paginas ? 'disabled' : ''}>${FLECHA_DER}</button></div></td></tr>` : '')
     : `<tr><td colspan="${cols.length}" class="vacio-total">${
         vistaActual === 'revision' ? 'Ninguna reserva está en revisión en este momento.'
         : vistaActual === 'registradas' ? 'No hay reservas registradas con estos filtros.'
