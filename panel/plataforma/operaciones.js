@@ -1277,6 +1277,27 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   async function manejar(req, res, url, u, { json, leerCuerpo, puede }) {
     const p = new URL(req.url, 'http://localhost').searchParams;
     const est = await estadoPublico(u);
+    // Vistas guardadas de Reservas: cada usuario ve solo las suyas.
+    if (req.method === 'GET' && url === '/api/op/vistas') {
+      await client.query("CREATE TABLE IF NOT EXISTS op_vistas_usuario (id SERIAL PRIMARY KEY, usuario TEXT NOT NULL, nombre TEXT NOT NULL, filtros JSONB NOT NULL DEFAULT '{}', creado TIMESTAMP NOT NULL DEFAULT NOW())");
+      const r = await client.query('SELECT id, nombre, filtros FROM op_vistas_usuario WHERE usuario = $1 ORDER BY id', [u.usuario]);
+      return json(res, 200, r.rows);
+    }
+    if (req.method === 'POST' && url === '/api/op/vistas') {
+      await client.query("CREATE TABLE IF NOT EXISTS op_vistas_usuario (id SERIAL PRIMARY KEY, usuario TEXT NOT NULL, nombre TEXT NOT NULL, filtros JSONB NOT NULL DEFAULT '{}', creado TIMESTAMP NOT NULL DEFAULT NOW())");
+      const f = await leerCuerpo(req);
+      const nombre = String(f.nombre || '').trim().slice(0, 60);
+      if (!nombre) return json(res, 400, { error: 'Ponle un nombre a la vista.' });
+      const filtros = f.filtros && typeof f.filtros === 'object' ? f.filtros : {};
+      await client.query('INSERT INTO op_vistas_usuario (usuario, nombre, filtros) VALUES ($1, $2, $3)', [u.usuario, nombre, JSON.stringify(filtros)]);
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url === '/api/op/vistas/quitar') {
+      await client.query("CREATE TABLE IF NOT EXISTS op_vistas_usuario (id SERIAL PRIMARY KEY, usuario TEXT NOT NULL, nombre TEXT NOT NULL, filtros JSONB NOT NULL DEFAULT '{}', creado TIMESTAMP NOT NULL DEFAULT NOW())");
+      const f = await leerCuerpo(req);
+      await client.query('DELETE FROM op_vistas_usuario WHERE id = $1 AND usuario = $2', [Number(f.id), u.usuario]);
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && url === '/api/op/estado') return json(res, 200, { ...est, ok: true });
     if (!est.puedeVer) return json(res, 403, { error: 'Operaciones está en construcción. ¡Próximamente!', proximamente: true });
     const prog = u.grupo === 'Programador';

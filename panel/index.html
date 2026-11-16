@@ -1568,17 +1568,17 @@ function ordenar(lista) {
   });
 }
 
-function filtrar() {
+function filtrar(vista = vistaActual) {
   const intencion = document.getElementById('filtroIntencion').value;
   const estado = document.getElementById('filtroEstado').value;
   const desde = document.getElementById('desde').value;
   const hasta = document.getElementById('hasta').value;
-  const soloCompletos = document.getElementById('soloCompletos').checked && vistaActual !== 'historico';
+  const soloCompletos = document.getElementById('soloCompletos').checked && vista !== 'historico';
   const asesor = puede('supervisar') ? document.getElementById('filtroAsesor').value : '';
   const buzon = document.getElementById('filtroBuzon').value;
   const conRevision = document.getElementById('filtroRevision').value;
   // En el histórico la búsqueda la hace el servidor; en las demás pestañas se filtra aquí mismo.
-  const busqueda = vistaActual === 'historico' ? '' : normalizarBusqueda(document.getElementById('buscarHistorico').value);
+  const busqueda = vista === 'historico' ? '' : normalizarBusqueda(document.getElementById('buscarHistorico').value);
   const numero = /^#?\d+$/.test(busqueda) ? Number(busqueda.replace('#', '')) : null;
 
   const lista = datos.filter(r => {
@@ -1595,11 +1595,11 @@ function filtrar() {
     if (conRevision === 'accion' && !(r.estado === 'revisar' || r.error_ia || revisiones.has(r.id) || (r.revision && (r.revision.puntos.length || r.revision.urgente)) || !r.nombre_cliente || !r.fecha_servicio)) return false;
     if (asesor && asesor !== '-' && r.asignado_a !== asesor) return false;
     const dia = diaLocal(r.fecha);
-    if (vistaActual === 'revision' && !revisiones.has(r.id)) return false;
-    if (vistaActual === 'registradas' && r.estado !== 'registrada') return false;
+    if (vista === 'revision' && !revisiones.has(r.id)) return false;
+    if (vista === 'registradas' && r.estado !== 'registrada') return false;
     // La lista principal es lo que falta trabajar: lo registrado pasa a "Reservas registradas".
     // Si se busca por nombre o número, se muestra igual para que nunca se pierda una reserva.
-    if (vistaActual === 'todas' && r.estado === 'registrada' && !busqueda && estado !== 'registrada') return false;
+    if (vista === 'todas' && r.estado === 'registrada' && !busqueda && estado !== 'registrada') return false;
     return (!intencion || r.categoria === intencion)
       && (!estado || r.estado === estado)
       && (!desde || dia >= desde)
@@ -1646,12 +1646,10 @@ function pintarKpis() {
   for (const k of Object.keys(series)) { dibujarKpi(k, series[k], colores[k]); deltaKpi(k, series[k]); }
 }
 function actualizarContadores() {
-  const completos = datos.filter(esCompleto);
-  const enRevision = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
-  const registradas = agruparReservas(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION'))).length;
-  document.getElementById('cnt-todas').textContent = agruparReservas(completos.filter(r => r.categoria === 'RESERVA' && r.estado !== 'registrada')).length;
-  document.getElementById('cnt-revision').textContent = enRevision;
-  document.getElementById('cnt-registradas').textContent = registradas;
+  // Cada número usa el mismo filtro que su pestaña: el número y la lista siempre coinciden.
+  document.getElementById('cnt-todas').textContent = agruparReservas(filtrar('todas')).length;
+  document.getElementById('cnt-revision').textContent = agruparReservas(filtrar('revision')).length;
+  document.getElementById('cnt-registradas').textContent = agruparReservas(filtrar('registradas')).length;
 }
 
 /* ---------- Columnas de la tabla de reservas: cada usuario elige cuáles ve (y exporta) ---------- */
