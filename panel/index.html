@@ -1863,7 +1863,7 @@ function pintarTarjetas(grupos, ks) {
   caja.querySelectorAll('.tarjeta-reserva').forEach(x => x.addEventListener('click', () => abrirModal(Number(x.dataset.id))));
 }
 
-const PAGINA_FILAS = 150;
+const PAGINA_FILAS = 50;
 let limiteFilas = PAGINA_FILAS, claveVistaPrev = '', firmaPintada = '';
 // Botón en la fila: solo si faltan datos. Abre el borrador para la agencia con lo que falta.
 function botonPedirFila(r) {
