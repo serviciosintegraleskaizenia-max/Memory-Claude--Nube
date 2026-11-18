@@ -365,7 +365,7 @@ const VISTAS = [
   ['paquetes', 'package', 'Paquetes', 'crear_paquetes', 'paquetes'],
   ['entradas', 'ticket', 'Entradas por emitir', 'crear_paquetes', 'paquetes'],
   ['operativo', 'printer', 'Operativo del día', 'imprimir_operativo', 'operativo'],
-  ['ganancias', 'trending-up', 'Ganancias', 'ver_administracion', null, 'Administración'],
+  ['ganancias', 'trending-up', 'Ganancias', ['ver_administracion', 'ver_pagos'], null, 'Administración'],
   ['boletas', 'receipt', 'Boletas', 'ver_boletas', null, 'Administración'],
   ['agencias', 'briefcase', 'Agencias', 'ver_agencias', null, 'Administración'],
   ['reportes', 'chart-column', 'Reportes', 'ver_reportes_op', 'reportes', 'Administración'],
@@ -1433,10 +1433,12 @@ function rangoGN() {
 }
 async function vGanancias() {
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  if (!I.permisos.ver_administracion) { await cargarPagos(); $('#vista').innerHTML = htmlPagos(); return; }
   const [desde, hasta] = rangoGN();
   const r = await api(`/api/op/admin/ganancias?desde=${desde}&hasta=${hasta}${S.sede ? '&sede=' + encodeURIComponent(S.sede) : ''}`);
   if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
   GN.datos = r.data; pintarGanancias();
+  await cargarPagos(); $('#vista').insertAdjacentHTML('beforeend', htmlPagos());
 }
 function selectorRango(id) {
   return `<div class="seg" id="${id}">${[['7', '7 días'], ['30', '30 días'], ['mes', 'Este mes'], ['pasado', 'Mes pasado'], ['anio', 'Este año'], ['otro', 'Fechas']].map(([k, n]) => `<button class="${GN.rango === k ? 'a' : ''}" data-gn-rango="${k}">${n}</button>`).join('')}</div>
@@ -1724,6 +1726,74 @@ document.addEventListener('input', ev => {
 document.addEventListener('input', ev => { if (ev.target.id === 'fBuscar') { S.q = ev.target.value; clearTimeout(timers.q); timers.q = setTimeout(() => { const pos = ev.target.selectionStart; pintarOperaciones(); const b = $('#fBuscar'); b.focus(); b.setSelectionRange(pos, pos); }, 250); } });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { cerrarPop(); cerrarLat(); } });
 iniciar();
+/* ---------- Pagos (permiso "Ver pagos"), dentro de Ganancias ---------- */
+let PAGOS = null;
+const val = id => (document.getElementById(id) || {}).value || '';
+async function cargarPagos() { const r = await api('/api/op/pagos'); PAGOS = r.ok ? r.data : null; }
+function htmlPagos() {
+  if (!I.permisos.ver_pagos) return '';
+  if (!PAGOS) return '<div class="caja" style="margin-top:16px"><div class="vacio">No se pudieron cargar los pagos.</div></div>';
+  const activas = PAGOS.cuentas.filter(c => c.activa);
+  const opcCuenta = '<option value="">Sin cuenta</option>' + activas.map(c => `<option value="${c.id}">${esc(c.nombre)}${c.cuenta_fin ? ' · ••••' + esc(c.cuenta_fin) : ''}</option>`).join('');
+  const chip = e => e === 'verificado' ? '<b style="color:var(--verde)">Verificado</b>' : e === 'rechazado' ? '<b style="color:var(--rojo)">Rechazado</b>' : '<b style="color:var(--ambar)">Por verificar</b>';
+  const t = PAGOS.totales;
+  const cuentas = PAGOS.cuentas.map(c => `<div class="caja" style="flex:1;min-width:220px;margin:0;${c.activa ? '' : 'opacity:.5'}"><b>${esc(c.nombre)}</b> <span class="sub2">${esc(c.tipo)}</span><div class="sub2">${esc(c.titular || '')}${c.cuenta_fin ? ' · ••••' + esc(c.cuenta_fin) : ''}</div><div class="sub2">${esc(c.detalle || '')}</div>${c.activa ? `<button class="btn-mini" data-cuenta-borrar="${c.id}" style="margin-top:6px">Desactivar</button>` : '<small>Desactivada</small>'}</div>`).join('');
+  const filas = PAGOS.pagos.map(p => `<tr><td>${esc(p.fecha || p.creado)}</td><td>#${esc(p.reserva)}</td><td>${esc(p.moneda)} ${Number(p.monto).toFixed(2)}</td><td>${esc(p.metodo)}${p.referencia ? `<div class="sub2">Ref. ${esc(p.referencia)}</div>` : ''}</td><td>${esc(p.cuenta || '—')}</td><td>${p.voucher_nombre ? `<a href="/api/op/pagos/voucher?id=${p.id}" target="_blank" rel="noopener">📎 ${esc(p.voucher_nombre)}</a>` : '<span class="sub2">Sin comprobante</span>'}</td><td>${chip(p.estado)}${p.verificado_por ? `<div class="sub2">por ${esc(p.verificado_por)}</div>` : ''}</td><td>${p.estado === 'por_verificar' ? `<button class="btn-mini" data-pago-verificar="${p.id}">Verificar</button> <button class="btn-mini" data-pago-rechazar="${p.id}">Rechazar</button>` : ''}</td></tr>`).join('');
+  return `<div class="caja" style="margin-top:16px"><div class="cab"><h3>${ic('receipt')}Pagos y comprobantes</h3></div>
+    <p class="sub" style="margin:0 0 10px">Cada pago queda con su reserva y su comprobante. Solo quien tiene el permiso "Ver pagos" los ve y los verifica.</p>
+    <div class="ay" style="margin-bottom:10px">Por verificar: <b>${t.por_verificar}</b> · Verificado: <b>${dinero(t.verificado_usd)}</b> · Rechazados: <b>${t.rechazados}</b></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">${cuentas || '<div class="vacio">Todavía no hay cuentas. Agrega la cuenta bancaria o la plataforma donde te pagan.</div>'}</div>
+    <details style="margin-bottom:10px"><summary><b>+ Agregar cuenta bancaria o plataforma</b></summary>
+      <div class="fila2" style="margin-top:8px"><select id="pgTipoCuenta"><option value="banco">Cuenta bancaria</option><option value="paypal">PayPal</option><option value="otro">Otra plataforma</option></select><input id="pgNomCuenta" placeholder="Nombre (ej.: Banco ahorros)"></div>
+      <div class="fila2"><input id="pgTitCuenta" placeholder="Titular"><input id="pgNumCuenta" placeholder="Número de cuenta o correo (se guarda cifrado)"></div>
+      <div class="fila2"><input id="pgDetCuenta" placeholder="Detalle (ej.: solo para pagos en dólares)"><button class="btn" id="pgGuardarCuenta">Guardar cuenta</button></div>
+    </details>
+    <details open style="margin-bottom:10px"><summary><b>+ Registrar pago de una reserva</b></summary>
+      <div class="fila2" style="margin-top:8px"><input id="pgRes" placeholder="Número de reserva"><input id="pgMonto" type="number" step="0.01" min="0" placeholder="Monto"></div>
+      <div class="fila2"><select id="pgMoneda"><option>US$</option><option>RD$</option><option>€</option></select><select id="pgMetodo">${['Transferencia', 'PayPal', 'Efectivo', 'Depósito', 'Otro'].map(m => `<option>${m}</option>`).join('')}</select></div>
+      <div class="fila2"><select id="pgCuenta">${opcCuenta}</select><input id="pgRef" placeholder="Referencia o número de confirmación"></div>
+      <div class="fila2"><input id="pgFecha" type="date" value="${esc(I.hoy || '')}"><input id="pgVoucher" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf"></div>
+      <button class="btn" id="pgGuardarPago" style="margin-top:6px">Guardar pago</button>
+    </details>
+    <div style="overflow-x:auto"><table><thead><tr><th>Fecha</th><th>Reserva</th><th>Monto</th><th>Método</th><th>Cuenta</th><th>Comprobante</th><th>Estado</th><th></th></tr></thead><tbody>${filas || '<tr><td colspan="8" class="vacio">Todavía no hay pagos registrados.</td></tr>'}</tbody></table></div>
+  </div>`;
+}
+async function guardarCuenta() {
+  const r = await api('/api/op/pagos/cuenta/guardar', { tipo: val('pgTipoCuenta'), nombre: val('pgNomCuenta'), titular: val('pgTitCuenta'), numero: val('pgNumCuenta'), detalle: val('pgDetCuenta') });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo guardar la cuenta.');
+  aviso('Cuenta guardada.'); await vGanancias();
+}
+function leerArchivoBase64(f) { return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = no; fr.readAsDataURL(f); }); }
+async function guardarPago() {
+  const files = (document.getElementById('pgVoucher') || {}).files;
+  const archivo = files && files[0];
+  const cuerpo = { reserva: val('pgRes'), monto: val('pgMonto'), moneda: val('pgMoneda'), metodo: val('pgMetodo'), cuenta_id: val('pgCuenta'), referencia: val('pgRef'), fecha: val('pgFecha') };
+  if (archivo) {
+    if (archivo.size > 5 * 1024 * 1024) return aviso('El comprobante tiene que pesar menos de 5 MB.');
+    cuerpo.voucher = { nombre: archivo.name, base64: await leerArchivoBase64(archivo) };
+  }
+  const r = await api('/api/op/pagos/registrar', cuerpo);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo registrar el pago.');
+  aviso('Pago registrado. Queda por verificar.'); await vGanancias();
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('#pgGuardarCuenta,#pgGuardarPago,[data-pago-verificar],[data-pago-rechazar],[data-cuenta-borrar]');
+  if (!b) return;
+  if (b.id === 'pgGuardarCuenta') return guardarCuenta();
+  if (b.id === 'pgGuardarPago') return guardarPago();
+  if (b.dataset.cuentaBorrar) {
+    if (!confirm('¿Desactivar esta cuenta? El historial de pagos se conserva.')) return;
+    await api('/api/op/pagos/cuenta/borrar', { id: b.dataset.cuentaBorrar }); return vGanancias();
+  }
+  const decision = b.dataset.pagoVerificar ? 'verificado' : 'rechazado';
+  const id = b.dataset.pagoVerificar || b.dataset.pagoRechazar;
+  if (decision === 'verificado' && !confirm('¿Confirmas que este pago ya está en tu cuenta?')) return;
+  const nota = decision === 'rechazado' ? (prompt('Motivo del rechazo (opcional):') || '') : '';
+  const r = await api('/api/op/pagos/verificar', { id, decision, nota });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
+  aviso(decision === 'verificado' ? 'Pago verificado.' : 'Pago rechazado.'); await vGanancias();
+});
+
 </script>
 </body>
 </html>

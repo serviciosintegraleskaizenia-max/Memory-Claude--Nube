@@ -42,7 +42,7 @@ const ZONA_HORARIA = 'America/Santo_Domingo';
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
   'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
-  'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias',
+  'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos',
   // Oficina de Kaizen IA (solo en el panel central): entrar y cada sección por separado. El Programador las tiene todas.
   'ver_oficina', 'oficina_inicio', 'oficina_negocios', 'oficina_clientes', 'oficina_gastos', 'oficina_creacion', 'oficina_calendario', 'oficina_chat', 'oficina_enlaces',
   'oficina_asistente', 'oficina_redes', 'oficina_respaldos'];

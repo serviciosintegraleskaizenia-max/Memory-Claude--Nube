@@ -83,6 +83,8 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   const aeropuertoDe = s => (String(s || '').toUpperCase().match(/\b[A-Z]{3}\b/) || [''])[0];
 
   // Llaves (vuelos, Chatwoot): cifradas con el secreto de sesión del panel; nunca vuelven al navegador.
+  // Comprobantes de pago: carpeta propia (se puede cambiar con vouchers_carpeta en config.js).
+  const CARPETA_VOUCHERS = config.vouchers_carpeta || path.join(__dirname, '..', 'vouchers');
   const llaveCifrado = () => crypto.createHash('sha256').update('operaciones|' + String((config.sesion && config.sesion.secreto) || 'zentralia')).digest();
   function cifrar(t) {
     if (!t) return '';
@@ -149,6 +151,8 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     await q(`CREATE TABLE IF NOT EXISTS op_cortesias (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, precio NUMERIC NOT NULL DEFAULT 0,
       cobra BOOLEAN NOT NULL DEFAULT FALSE, por_persona BOOLEAN NOT NULL DEFAULT FALSE, activo BOOLEAN NOT NULL DEFAULT TRUE, orden INTEGER NOT NULL DEFAULT 0, notas TEXT NOT NULL DEFAULT '')`);
     // Tarifarios que el programador sube en la Oficina (Base del asistente → 💲 Tarifarios): llegan aquí y se cargan en los precios.
+    await q(`CREATE TABLE IF NOT EXISTS op_cuentas_pago (id SERIAL PRIMARY KEY, tipo TEXT NOT NULL DEFAULT 'otro', nombre TEXT NOT NULL, titular TEXT NOT NULL DEFAULT '', cuenta_fin TEXT NOT NULL DEFAULT '', numero_enc TEXT, detalle TEXT NOT NULL DEFAULT '', activa BOOLEAN NOT NULL DEFAULT TRUE, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS op_pagos (id SERIAL PRIMARY KEY, reserva TEXT NOT NULL, monto NUMERIC NOT NULL, moneda TEXT NOT NULL DEFAULT 'US$', metodo TEXT NOT NULL DEFAULT 'Otro', cuenta_id INTEGER, referencia TEXT NOT NULL DEFAULT '', fecha DATE, voucher_ruta TEXT, voucher_nombre TEXT, voucher_hash TEXT, estado TEXT NOT NULL DEFAULT 'por_verificar', registrado_por TEXT NOT NULL DEFAULT '', verificado_por TEXT, verificado_en TIMESTAMP, nota TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
     await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
@@ -1315,7 +1319,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           client.query('SELECT * FROM op_cortesias WHERE activo ORDER BY orden, nombre')]);
         const empresa = ((await client.query('SELECT nombre, marca_nombre, logo IS NOT NULL AS logo, rnc, direccion FROM empresa_datos WHERE id = 1').catch(() => ({ rows: [] }))).rows[0] || {});
         const perms = ['ver_operaciones', 'asignar_servicios', 'crear_reservas', 'ver_precios', 'ver_reportes_op', 'ver_choferes_vivo', 'imprimir_operativo', 'crear_paquetes', 'configurar_operaciones',
-          'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias']
+          'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos']
           .reduce((a, k) => ({ ...a, [k]: prog || puede(k) }), {});
         return json(res, 200, { ...est, permisos: perms, usuario: { nombre: u.nombre, grupo: u.grupo, usuario: u.usuario }, empresa, hoy: hoyLocal(),
           choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
@@ -1389,6 +1393,97 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       if (req.method === 'GET' && url === '/api/op/reservas') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await listaReservas(p, prog || puede('ver_precios'))); }
       if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
       // ---------- Administración (gerencia) ----------
+      // ---------- Pagos (permiso "Ver pagos"): cuentas, pagos por reserva, comprobantes y verificación ----------
+      if (req.method === 'GET' && url === '/api/op/pagos') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede ver los pagos.');
+        const cuentas = (await client.query('SELECT id, tipo, nombre, titular, cuenta_fin, detalle, activa FROM op_cuentas_pago ORDER BY activa DESC, id')).rows;
+        const pagos = (await client.query(`SELECT p.id, p.reserva, p.monto, p.moneda, p.metodo, p.cuenta_id, p.referencia, to_char(p.fecha, 'YYYY-MM-DD') AS fecha, p.voucher_nombre, p.estado, p.registrado_por, p.verificado_por, p.nota, to_char(p.creado, 'YYYY-MM-DD HH24:MI') AS creado, c.nombre AS cuenta FROM op_pagos p LEFT JOIN op_cuentas_pago c ON c.id = p.cuenta_id ORDER BY p.creado DESC LIMIT 300`)).rows;
+        const suma = estado => pagos.filter(x => x.estado === estado).reduce((s, x) => s + Number(x.monto), 0);
+        return json(res, 200, {
+          cuentas,
+          pagos: pagos.map(p => ({ ...p, monto: Number(p.monto) })),
+          totales: { por_verificar: pagos.filter(x => x.estado === 'por_verificar').length, verificado_usd: suma('verificado'), rechazados: pagos.filter(x => x.estado === 'rechazado').length }
+        });
+      }
+      if (req.method === 'POST' && url === '/api/op/pagos/cuenta/guardar') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede cambiar las cuentas.');
+        const f = await leerCuerpo(req);
+        const nombre = String(f.nombre || '').trim().slice(0, 80);
+        if (!nombre) return json(res, 400, { error: 'Escribe el nombre de la cuenta (por ejemplo: Banco ahorros o PayPal de cobros).' });
+        const tipo = ['banco', 'paypal', 'otro'].includes(f.tipo) ? f.tipo : 'otro';
+        const titular = String(f.titular || '').trim().slice(0, 100);
+        const numero = String(f.numero || '').replace(/\s+/g, '');
+        const cuentaFin = numero ? numero.slice(-4) : '';
+        const numeroEnc = numero ? cifrar(numero) : null;
+        const detalle = String(f.detalle || '').trim().slice(0, 300);
+        const id = Number(f.id) || 0;
+        if (id) {
+          await client.query('UPDATE op_cuentas_pago SET tipo=$2, nombre=$3, titular=$4, cuenta_fin=COALESCE(NULLIF($5, \'\'), cuenta_fin), numero_enc=COALESCE($6, numero_enc), detalle=$7 WHERE id=$1', [id, tipo, nombre, titular, cuentaFin, numeroEnc, detalle]);
+        } else {
+          await client.query('INSERT INTO op_cuentas_pago (tipo, nombre, titular, cuenta_fin, numero_enc, detalle) VALUES ($1,$2,$3,$4,$5,$6)', [tipo, nombre, titular, cuentaFin, numeroEnc, detalle]);
+        }
+        await registrar(u, 'op_pago_cuenta', 'pagos', nombre, '', '', id ? 'cuenta editada' : 'cuenta nueva');
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && url === '/api/op/pagos/cuenta/borrar') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede cambiar las cuentas.');
+        const f = await leerCuerpo(req);
+        await client.query('UPDATE op_cuentas_pago SET activa = FALSE WHERE id = $1', [Number(f.id) || 0]);
+        await registrar(u, 'op_pago_cuenta', 'pagos', f.id, '', '', 'cuenta desactivada (el historial de pagos se conserva)');
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && url === '/api/op/pagos/registrar') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede registrar pagos.');
+        const f = await leerCuerpo(req);
+        const reserva = String(f.reserva || '').trim().slice(0, 40);
+        if (!reserva) return json(res, 400, { error: 'Escribe el número de reserva.' });
+        const monto = Number(f.monto);
+        if (!Number.isFinite(monto) || monto <= 0) return json(res, 400, { error: 'El monto tiene que ser mayor que cero.' });
+        const moneda = ['US$', 'RD$', '€'].includes(f.moneda) ? f.moneda : 'US$';
+        const metodo = ['Transferencia', 'PayPal', 'Efectivo', 'Depósito', 'Otro'].includes(f.metodo) ? f.metodo : 'Otro';
+        const cuentaId = Number(f.cuenta_id) || null;
+        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha || '')) ? String(f.fecha) : hoyLocal();
+        const referencia = String(f.referencia || '').trim().slice(0, 80);
+        let vRuta = null, vNombre = null, vHash = null;
+        if (f.voucher && f.voucher.base64) {
+          const buf = Buffer.from(String(f.voucher.base64), 'base64');
+          if (!buf.length || buf.length > 5 * 1024 * 1024) return json(res, 400, { error: 'El comprobante tiene que pesar menos de 5 MB.' });
+          const ext = path.extname(String(f.voucher.nombre || '')).toLowerCase();
+          if (!['.jpg', '.jpeg', '.png', '.webp', '.pdf'].includes(ext)) return json(res, 400, { error: 'El comprobante tiene que ser JPG, PNG, WEBP o PDF.' });
+          const carpeta = path.join(CARPETA_VOUCHERS, fecha.slice(0, 4), fecha.slice(5, 7));
+          fs.mkdirSync(carpeta, { recursive: true });
+          vRuta = path.join(carpeta, crypto.randomBytes(8).toString('hex') + ext);
+          fs.writeFileSync(vRuta, buf);
+          vNombre = String(f.voucher.nombre).replace(/[^\w.\- ]/g, '_').slice(0, 120);
+          vHash = crypto.createHash('sha256').update(buf).digest('hex');
+        }
+        const r = await client.query(`INSERT INTO op_pagos (reserva, monto, moneda, metodo, cuenta_id, referencia, fecha, voucher_ruta, voucher_nombre, voucher_hash, estado, registrado_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'por_verificar',$11) RETURNING id`,
+          [reserva, monto, moneda, metodo, cuentaId, referencia, fecha, vRuta, vNombre, vHash, u.usuario]);
+        await registrar(u, 'op_pago', 'pagos', reserva, '', '', `${moneda} ${monto} · ${metodo}${vNombre ? ' · con comprobante' : ' · sin comprobante'}`);
+        return json(res, 200, { ok: true, id: r.rows[0].id });
+      }
+      if (req.method === 'POST' && url === '/api/op/pagos/verificar') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede verificar pagos.');
+        const f = await leerCuerpo(req);
+        const decision = f.decision === 'verificado' ? 'verificado' : f.decision === 'rechazado' ? 'rechazado' : '';
+        if (!decision) return json(res, 400, { error: 'Elige verificar o rechazar el pago.' });
+        const nota = String(f.nota || '').trim().slice(0, 300);
+        const r = await client.query('UPDATE op_pagos SET estado = $2, verificado_por = $3, verificado_en = NOW(), nota = $4 WHERE id = $1 RETURNING id', [Number(f.id) || 0, decision, u.usuario, nota]);
+        if (!r.rowCount) return json(res, 404, { error: 'No existe ese pago.' });
+        await registrar(u, 'op_pago_verificar', 'pagos', f.id, '', '', decision + (nota ? ' · ' + nota : ''));
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'GET' && url === '/api/op/pagos/voucher') {
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede ver los comprobantes.');
+        const id = Number(new URL(req.url, 'http://localhost').searchParams.get('id')) || 0;
+        const p = (await client.query('SELECT voucher_ruta, voucher_nombre, voucher_hash FROM op_pagos WHERE id = $1', [id])).rows[0];
+        if (!p || !p.voucher_ruta || !fs.existsSync(p.voucher_ruta)) return json(res, 404, { error: 'Este pago no tiene comprobante.' });
+        const buf = fs.readFileSync(p.voucher_ruta);
+        if (crypto.createHash('sha256').update(buf).digest('hex') !== p.voucher_hash) return json(res, 409, { error: 'El comprobante cambió desde que se guardó. No lo uses hasta revisarlo.' });
+        const tipos = { '.pdf': 'application/pdf', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+        res.writeHead(200, { 'Content-Type': tipos[path.extname(p.voucher_ruta).toLowerCase()] || 'application/octet-stream', 'Content-Disposition': 'inline; filename="' + String(p.voucher_nombre || 'comprobante').replace(/"/g, '') + '"' });
+        return res.end(buf);
+      }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }
       if (req.method === 'POST' && url === '/api/op/admin/costo') {
