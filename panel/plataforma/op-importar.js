@@ -217,28 +217,36 @@ module.exports = function crearImportador({ client }) {
     const base = archivo.split(/[\\/]/).pop().replace(/\.xlsx?$/i, '');
     const nombre = (/^traslados/i.test(base) ? base : 'Traslados ' + base) + ' · regular y privado';
     const id = await tarifario(nombre, { tipo: 'venta', notas: `Importado de ${archivo} (hoja ${hoja.nombre || 'TARIFA'})` });
-    let total = 0;
+    let total = 0, interhotel = 0;
+    const omitidas = [];
     for (const f of filas.slice(cab.i + 1)) {
       const trayecto = String(f[iT] ?? '').trim();
       const partes = trayecto.split(/\s+-\s+/);
       if (partes.length < 2) continue;
       const origen = punto(partes[0]);
       const destino = punto(partes.slice(1).join(' - '));
-      if (!origen.aeropuerto) continue;
-      const zona = destino.zona || destino.aeropuerto || '';
+      // Aeropuerto/puerto → hotel: TRASLADO (IN). Hotel → hotel: INTERHOTEL (origen = zona de salida, zona = destino).
+      // Hotel → aeropuerto no aparece en este archivo; si llega, se cuenta en vez de perderse en silencio.
+      let ruta;
+      if (origen.aeropuerto) ruta = { servicio: 'TRASLADO', aeropuerto: origen.aeropuerto, origen: '', zona: destino.zona || destino.aeropuerto || '', nota: 'IN/OUT' };
+      else if (origen.zona && destino.zona && !destino.aeropuerto) ruta = { servicio: 'INTERHOTEL', aeropuerto: '', origen: origen.zona, zona: destino.zona, nota: 'inter-hotel' };
+      else { omitidas.push(trayecto); continue; }
       const adulto = precioTxt(f[iA]), nino = precioTxt(f[iN]);
       if (adulto !== null) {
-        await tarifa(id, { servicio: 'TRASLADO', nombre: trayecto, aeropuerto: origen.aeropuerto, zona, cobro: 'persona', pax_desde: 1, pax_hasta: 99, precio_adulto: adulto, precio_nino: nino || 0, modalidad: 'compartido', notas: 'Regular por persona · IN/OUT' });
+        // nombre queda vacío: el motor descarta una tarifa con nombre si el servicio no tiene actividad (traslados se casan por aeropuerto/origen/zona).
+        await tarifa(id, { servicio: ruta.servicio, nombre: '', aeropuerto: ruta.aeropuerto, origen: ruta.origen, zona: ruta.zona, cobro: 'persona', pax_desde: 1, pax_hasta: 99, precio_adulto: adulto, precio_nino: nino || 0, modalidad: 'compartido', notas: `Regular por persona · ${trayecto} · ${ruta.nota}` });
         total++;
+        if (ruta.servicio === 'INTERHOTEL') interhotel++;
       }
       for (const g of rangos) {
         const pv = precioTxt(f[g.i]);
         if (pv === null) continue;
-        await tarifa(id, { servicio: 'TRASLADO', nombre: trayecto, aeropuerto: origen.aeropuerto, zona, cobro: 'vehiculo', pax_desde: g.desde, pax_hasta: g.hasta, precio_vehiculo: pv, modalidad: 'privado', notas: 'Privado por ruta · ' + raw[g.i] });
+        await tarifa(id, { servicio: ruta.servicio, nombre: '', aeropuerto: ruta.aeropuerto, origen: ruta.origen, zona: ruta.zona, cobro: 'vehiculo', pax_desde: g.desde, pax_hasta: g.hasta, precio_vehiculo: pv, modalidad: 'privado', notas: `Privado por ruta · ${trayecto} · ${raw[g.i]}` });
         total++;
+        if (ruta.servicio === 'INTERHOTEL') interhotel++;
       }
     }
-    return { tarifario: nombre, tarifas: total };
+    return { tarifario: nombre, tarifas: total, interhotel, omitidas: omitidas.length, omitidasEjemplos: omitidas.slice(0, 5) };
   }
 
   async function importar(archivo, buf) {
