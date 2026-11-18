@@ -83,6 +83,10 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   const aeropuertoDe = s => (String(s || '').toUpperCase().match(/\b[A-Z]{3}\b/) || [''])[0];
 
   // Llaves (vuelos, Chatwoot): cifradas con el secreto de sesión del panel; nunca vuelven al navegador.
+  // Llaves de Oficina (APIs y suscripciones): llegan a esta empresa en zentralia_ajustes. Sin llave de Oficina: ''.
+  async function llaveDeOficina(clave) {
+    try { const r = await client.query('SELECT valor FROM zentralia_ajustes WHERE clave = $1', [clave]); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
+  }
   // Comprobantes de pago: carpeta propia (se puede cambiar con vouchers_carpeta en config.js).
   const CARPETA_VOUCHERS = config.vouchers_carpeta || path.join(__dirname, '..', 'vouchers');
   const llaveCifrado = () => crypto.createHash('sha256').update('operaciones|' + String((config.sesion && config.sesion.secreto) || 'zentralia')).digest();
@@ -873,7 +877,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   async function consultarVuelo(vc, ident, fecha) {
     const conf = await cfg('vuelos', VUELOS_INICIAL);
     const prov = vc || conf.proveedor;
-    const llave = descifrar((await cfg('llaves', {}))[prov] || '');
+    const llave = (await llaveDeOficina('api_vuelos')) || descifrar((await cfg('llaves', {}))[prov] || '');
     if (!llave) throw error(`Falta la llave de ${prov === 'flightaware' ? 'FlightAware' : 'AeroDataBox'} (Configuración → Vuelos).`);
     const control = new AbortController(); const reloj = setTimeout(() => control.abort(), 20000);
     try {
@@ -1557,6 +1561,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         for (let i = 0; i < 100; i++) { const n = await archivarPendientes(); guardadas += n; if (!n) break; }
         return json(res, 200, { ok: true, guardadas });
       }
+      if (req.method === 'GET' && url === '/api/op/mapas-config') { pide('ver_choferes_vivo', 'No tienes permiso para el mapa.'); return json(res, 200, { mapbox: await llaveDeOficina('api_mapas') }); }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }
       if (req.method === 'POST' && url === '/api/op/admin/costo') {

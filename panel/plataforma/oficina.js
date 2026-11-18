@@ -69,6 +69,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // Base de conocimiento del asistente de redes (tarifarios, fichas y notas de cada empresa).
   const conocimiento = crearConocimiento({ client, config, registrar, central, claveIA: e => claveDe(e) });
 
+  // Llaves que Oficina manda a cada empresa (tabla zentralia_ajustes del panel de la empresa).
+  const CLAVE_APIS = { Vuelos: 'api_vuelos', Mapas: 'api_mapas' };
+  async function enviarLlaveAEmpresa(empresaId, clave, valor) {
+    const e = await A.empresa(empresaId);
+    if (!e || !clave) return;
+    await A.conEmpresa(e, async db => {
+      await db.query("CREATE TABLE IF NOT EXISTS zentralia_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')");
+      await db.query('INSERT INTO zentralia_ajustes (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor', [clave, valor]);
+    });
+  }
   // APIs y suscripciones: las llaves se guardan cifradas (AES-256-GCM) con una clave derivada del secreto del panel.
   const llaveApis = () => crypto.createHash('sha256').update('apis|' + String((config.sesion && config.sesion.secreto) || 'zentralia')).digest();
   function cifrarLlave(t) {
@@ -647,12 +657,19 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           id = (await client.query('INSERT INTO oficina_apis (empresa_id, nombre, tipo, proveedor, plan, costo_mensual, limite_mes, renovacion, llave_enc, llave_fin) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [eid, nombre, tipo, proveedor, plan, costo, limite, renov, llaveEnc, llaveFin])).rows[0].id;
         }
         await registrar(u, 'oficina_apis', 'apis', nombre, '', '', llave ? 'llave guardada (cifrada)' : 'sin cambio de llave');
+        if (llave && eid) await enviarLlaveAEmpresa(eid, CLAVE_APIS[tipo], llave);
         return json(res, 200, { ok: true, id });
       }
       if (req.method === 'POST' && url === '/api/oficina/apis/borrar') {
         const f = await leerCuerpo(req);
+        const previo = (await client.query('SELECT empresa_id, tipo FROM oficina_apis WHERE id = $1', [Number(f.id) || 0])).rows[0];
         await client.query('DELETE FROM oficina_apis WHERE id = $1', [Number(f.id) || 0]);
         await registrar(u, 'oficina_apis', 'apis', f.id, '', '', 'borrado');
+        // Si ya no queda ningún servicio de ese tipo en la empresa, se quita la llave que tenía.
+        if (previo && previo.empresa_id && CLAVE_APIS[previo.tipo]) {
+          const quedan = (await client.query('SELECT 1 FROM oficina_apis WHERE empresa_id = $1 AND tipo = $2 LIMIT 1', [previo.empresa_id, previo.tipo])).rowCount;
+          if (!quedan) await enviarLlaveAEmpresa(previo.empresa_id, CLAVE_APIS[previo.tipo], '');
+        }
         return json(res, 200, { ok: true });
       }
       if (req.method === 'GET' && url === '/api/oficina/servicios') {
