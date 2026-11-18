@@ -359,6 +359,7 @@ const VISTAS = [
   ['hoy', 'sun', 'Hoy', 'ver_operaciones', 'operaciones'],
   ['reservas', 'book-open', 'Reservas', 'ver_reservas_op', null],
   ['archivo', 'search', 'Archivo de reservas', 'ver_reservas_op', null],
+  ['proformas', 'ticket', 'Proformas de asesores', 'asignar_servicios', null],
   ['operaciones', 'route', 'Asignar servicios', 'ver_operaciones', 'operaciones'],
   ['tablero', 'layout-dashboard', 'Tablero', 'ver_operaciones', 'operaciones'],
   ['vivo', 'navigation', 'Mapa de choferes', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
@@ -398,7 +399,7 @@ async function ir(v) {
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
   const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
-    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo }[v];
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
@@ -1878,6 +1879,47 @@ async function verificarVuelosEnPantalla() {
   }
 }
 new MutationObserver(() => verificarVuelosEnPantalla()).observe(document.body, { childList: true, subtree: true });
+
+/* ---------- Proformas de los asesores (app de asesores) ---------- */
+const ESTADO_PROFORMA = { enviada: 'Enviada', pago_pendiente: 'Esperando pago', pagada: 'Pagada', cancelada: 'Cancelada' };
+let PROF = [];
+async function vProformas() {
+  const r = await api('/api/op/proformas?todas=1');
+  PROF = r.ok ? r.data.proformas : [];
+  $('#vista').innerHTML = cabeceraDia('Proformas de asesores', 'Lo que mandan los asesores desde la calle. Pide el pago y, cuando llegue el comprobante, regístralo en Ganancias → Pagos con la referencia.') +
+    `<div class="caja"><div style="overflow-x:auto"><table><thead><tr><th>Ref.</th><th>Asesor</th><th>Cliente</th><th>Parque</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody>${PROF.map(p => `<tr><td>${esc(p.referencia)}</td><td>${esc(p.asesor_nombre)}</td><td>${esc(p.cliente)}<div class="sub2">${esc(p.telefono || '')}</div></td><td>${esc(p.parque || '')}</td><td>${dinero(p.total)}</td><td>${esc(ESTADO_PROFORMA[p.estado] || p.estado)}</td><td>${p.estado !== 'pagada' ? `<button class="btn-mini" data-pedir-pago="${p.id}">Pedir pago</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Todavía no hay proformas.</td></tr>'}</tbody></table></div></div><div id="pagoTexto"></div>`;
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-pedir-pago]');
+  if (!b) return;
+  const r = await api('/api/op/proforma/pedir-pago', { id: b.dataset.pedirPago });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo pedir el pago.');
+  const texto = r.data.texto;
+  await vProformas();
+  $('#pagoTexto').innerHTML = `<div class="caja" style="margin-top:12px"><h3>Mensaje para el cliente</h3><textarea rows="5" style="width:100%" readonly>${esc(texto)}</textarea><p class="sub2">Cópialo y mándalo por WhatsApp o correo. Si no hay cuentas registradas, agrégalas en Ganancias → Pagos.</p></div>`;
+});
+/* Aviso con prioridad cuando llega una proforma nueva */
+let ULTIMA_PROFORMA = null;
+async function revisarProformasNuevas() {
+  if (!I || !I.permisos || !I.permisos.asignar_servicios) return;
+  const r = await api('/api/op/proformas/nuevas?desde=' + (ULTIMA_PROFORMA || 0));
+  if (!r.ok) return;
+  if (ULTIMA_PROFORMA !== null) for (const p of r.data.nuevas) mostrarAvisoProforma(p);
+  ULTIMA_PROFORMA = r.data.ultima;
+}
+function mostrarAvisoProforma(p) {
+  const d = document.createElement('div');
+  d.className = 'aviso-proforma';
+  d.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;background:#fff;color:#0f1b2d;border:2px solid #c9a24a;border-radius:14px;padding:14px 16px;box-shadow:0 12px 30px rgba(0,0,0,.25);max-width:340px;font-size:14px';
+  d.innerHTML = `<div style="font-weight:800;color:#0b4f8a;margin-bottom:4px">🧭 Experiencias · Somos Viajes</div><div><b>Nueva proforma ${esc(p.referencia)}</b> de ${esc(p.asesor_nombre)}</div><div style="margin-top:4px">${esc(p.cliente)}${p.parque ? ' · ' + esc(p.parque) : ''} · <b>${dinero(p.total)}</b></div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn-mini" data-ver-proformas="1">Ver</button><button class="btn-mini" data-cerrar-aviso="1">Cerrar</button></div>`;
+  document.body.appendChild(d);
+}
+document.addEventListener('click', ev => {
+  if (ev.target.closest('[data-ver-proformas]')) { ev.target.closest('.aviso-proforma').remove(); ir('proformas'); }
+  if (ev.target.closest('[data-cerrar-aviso]')) ev.target.closest('.aviso-proforma').remove();
+});
+setTimeout(revisarProformasNuevas, 4000);
+setInterval(revisarProformasNuevas, 30000);
 
 </script>
 </body>

@@ -201,6 +201,41 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     }
     return nuevas;
   }
+  // ---------- App de asesores (proformas): precios de venta al público, calculados por el servidor ----------
+  // Catálogo que ve el asesor en la calle: solo precio público directo y traslados de Punta Cana (nunca netos ni de agencias).
+  async function catalogoAsesor(busca) {
+    const b = String(busca || '').trim().slice(0, 60).replace(/[%_\\]/g, '\\$&');
+    return (await client.query(`SELECT f.id, f.nombre, f.servicio, f.aeropuerto, f.zona, f.cobro, f.pax_desde, f.pax_hasta, f.precio_vehiculo, f.precio_adulto, f.precio_nino, t.nombre AS tarifario
+      FROM op_tarifas f JOIN op_tarifarios t ON t.id = f.tarifario_id
+      WHERE t.tipo = 'venta' AND t.activo AND (t.nombre ILIKE '%precio público (directo)%' OR t.nombre ILIKE '%Traslados SV-Punta Cana%')
+        AND ($1 = '' OR (f.nombre || ' ' || COALESCE(f.zona, '') || ' ' || COALESCE(f.aeropuerto, '')) ILIKE '%' || $1 || '%')
+      ORDER BY f.nombre, f.id LIMIT 80`, [b])).rows.map(r => ({ ...r, precio_adulto: num2(r.precio_adulto), precio_nino: num2(r.precio_nino), precio_vehiculo: num2(r.precio_vehiculo) }));
+  }
+  const num2 = v => (v === null || v === undefined ? null : Number(v));
+  // Calcula cada línea con los precios de la base. El asesor solo manda el id de la tarifa y la cantidad.
+  async function calcularLineas(items, adultos, ninos) {
+    const pax = adultos + ninos;
+    const lineas = [];
+    for (const it of (Array.isArray(items) ? items : []).slice(0, 30)) {
+      const id = Number(it.tarifa_id) || 0;
+      const cant = Math.max(1, Math.min(20, parseInt(it.cantidad, 10) || 1));
+      const r = (await client.query(`SELECT f.id, f.nombre, f.cobro, f.pax_desde, f.pax_hasta, f.precio_vehiculo, f.precio_adulto, f.precio_nino, t.nombre AS tarifario
+        FROM op_tarifas f JOIN op_tarifarios t ON t.id = f.tarifario_id WHERE f.id = $1 AND t.tipo = 'venta' AND t.activo
+          AND (t.nombre ILIKE '%precio público (directo)%' OR t.nombre ILIKE '%Traslados SV-Punta Cana%')`, [id])).rows[0];
+      if (!r) throw error('Una de las tarifas ya no está disponible. Actualiza el catálogo.', 400);
+      let linea;
+      if (r.cobro === 'vehiculo') {
+        if (r.pax_desde && pax < r.pax_desde) throw error(`${r.nombre}: el rango de pasajeros no aplica (${pax} pax).`, 400);
+        if (r.pax_hasta && pax > r.pax_hasta) throw error(`${r.nombre}: el rango de pasajeros no aplica (${pax} pax).`, 400);
+        linea = { cantidad: cant, unidad: 'vehículo', precio: Number(r.precio_vehiculo) || 0, total: (Number(r.precio_vehiculo) || 0) * cant };
+      } else {
+        const total = adultos * (Number(r.precio_adulto) || 0) + ninos * (Number(r.precio_nino) || 0);
+        linea = { cantidad: pax, unidad: 'persona', precio: Number(r.precio_adulto) || 0, total };
+      }
+      lineas.push({ tarifa_id: r.id, nombre: r.nombre, tarifario: r.tarifario, ...linea });
+    }
+    return lineas;
+  }
   // Llaves de Oficina (APIs y suscripciones): llegan a esta empresa en zentralia_ajustes. Sin llave de Oficina: ''.
   async function llaveDeOficina(clave) {
     try { const r = await client.query('SELECT valor FROM zentralia_ajustes WHERE clave = $1', [clave]); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
@@ -281,6 +316,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     await q(`CREATE TABLE IF NOT EXISTS op_lugares (texto TEXT PRIMARY KEY, lat DOUBLE PRECISION, lng DOUBLE PRECISION, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_rutas (clave TEXT PRIMARY KEY, km NUMERIC NOT NULL, minutos NUMERIC NOT NULL, geometria JSONB NOT NULL, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_vuelos_verif (clave TEXT PRIMARY KEY, estado TEXT NOT NULL, datos JSONB NOT NULL DEFAULT '{}', avisos TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS op_proformas (id SERIAL PRIMARY KEY, asesor TEXT NOT NULL, asesor_nombre TEXT NOT NULL DEFAULT '', cliente TEXT NOT NULL, telefono TEXT NOT NULL DEFAULT '', parque TEXT NOT NULL DEFAULT '', fecha TEXT NOT NULL DEFAULT '', adultos INTEGER NOT NULL DEFAULT 1, ninos INTEGER NOT NULL DEFAULT 0, lineas JSONB NOT NULL DEFAULT '[]', total NUMERIC NOT NULL DEFAULT 0, moneda TEXT NOT NULL DEFAULT 'US$', notas TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'enviada', creado TIMESTAMP NOT NULL DEFAULT NOW(), actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
     await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
@@ -1642,8 +1678,9 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         const decision = f.decision === 'verificado' ? 'verificado' : f.decision === 'rechazado' ? 'rechazado' : '';
         if (!decision) return json(res, 400, { error: 'Elige verificar o rechazar el pago.' });
         const nota = String(f.nota || '').trim().slice(0, 300);
-        const r = await client.query('UPDATE op_pagos SET estado = $2, verificado_por = $3, verificado_en = NOW(), nota = $4 WHERE id = $1 RETURNING id', [Number(f.id) || 0, decision, u.usuario, nota]);
+        const r = await client.query('UPDATE op_pagos SET estado = $2, verificado_por = $3, verificado_en = NOW(), nota = $4 WHERE id = $1 RETURNING id, reserva', [Number(f.id) || 0, decision, u.usuario, nota]);
         if (!r.rowCount) return json(res, 404, { error: 'No existe ese pago.' });
+        if (decision === 'verificado' && /^PRO-\d+$/.test(r.rows[0].reserva)) await client.query("UPDATE op_proformas SET estado = 'pagada', actualizado = NOW() WHERE id = $1", [Number(r.rows[0].reserva.slice(4))]);
         await registrar(u, 'op_pago_verificar', 'pagos', f.id, '', '', decision + (nota ? ' · ' + nota : ''));
         return json(res, 200, { ok: true });
       }
@@ -1703,6 +1740,72 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         const fecha = String(new URL(req.url, 'http://localhost').searchParams.get('fecha') || hoyLocal());
         const filas = (await client.query("SELECT clave FROM op_vuelos_verif WHERE estado = 'verificado' AND clave LIKE '%|' || $1", [fecha])).rows;
         return json(res, 200, { numeros: filas.map(r => r.clave.split('|')[0]) });
+      }
+      // ---------- App de asesores (proformas) ----------
+      if (req.method === 'GET' && url === '/api/op/asesor/catalogo') {
+        pide('crear_reservas', 'Esta app es para los asesores con permiso de crear reservas.');
+        return json(res, 200, { items: await catalogoAsesor(new URL(req.url, 'http://localhost').searchParams.get('q') || '') });
+      }
+      if (req.method === 'POST' && url === '/api/op/asesor/proforma/guardar') {
+        pide('crear_reservas', 'Esta app es para los asesores con permiso de crear reservas.');
+        const f = await leerCuerpo(req);
+        const cliente = String(f.cliente || '').trim().slice(0, 100);
+        if (!cliente) return json(res, 400, { error: 'Escribe el nombre del cliente.' });
+        const adultos = Math.max(1, parseInt(f.adultos, 10) || 0), ninos = Math.max(0, parseInt(f.ninos, 10) || 0);
+        if (!Array.isArray(f.items) || !f.items.length) return json(res, 400, { error: 'Agrega al menos un servicio.' });
+        const lineas = await calcularLineas(f.items, adultos, ninos);
+        const total = Math.round(lineas.reduce((s, l) => s + l.total, 0) * 100) / 100;
+        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha || '')) ? String(f.fecha) : '';
+        const r = await client.query(`INSERT INTO op_proformas (asesor, asesor_nombre, cliente, telefono, parque, fecha, adultos, ninos, lineas, total, notas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+          [u.usuario, String(u.nombre || u.usuario).slice(0, 80), cliente, String(f.telefono || '').slice(0, 40), String(f.parque || '').slice(0, 120), fecha, adultos, ninos, JSON.stringify(lineas), total, String(f.notas || '').slice(0, 300)]);
+        await registrar(u, 'op_proforma', 'proformas', r.rows[0].id, '', '', `${cliente} · US$ ${total}`);
+        return json(res, 200, { ok: true, id: r.rows[0].id, referencia: 'PRO-' + r.rows[0].id, total, lineas });
+      }
+      if (req.method === 'GET' && url === '/api/op/proformas') {
+        const p = new URL(req.url, 'http://localhost').searchParams;
+        const todas = p.get('todas') === '1';
+        if (todas) pide('asignar_servicios', 'Solo la oficina ve las proformas de todos los asesores.');
+        else pide('crear_reservas', 'Esta app es para los asesores con permiso de crear reservas.');
+        const filas = (await client.query(`SELECT id, asesor, asesor_nombre, cliente, telefono, parque, fecha, adultos, ninos, lineas, total, moneda, notas, estado, to_char(creado, 'YYYY-MM-DD HH24:MI') AS creado FROM op_proformas WHERE ($1 OR asesor = $2) ORDER BY id DESC LIMIT 200`, [todas, u.usuario])).rows;
+        return json(res, 200, { proformas: filas.map(x => ({ ...x, total: Number(x.total), referencia: 'PRO-' + x.id })) });
+      }
+      if (req.method === 'GET' && url === '/api/op/proformas/nuevas') {
+        pide('asignar_servicios', 'Solo la oficina recibe las proformas nuevas.');
+        const desde = Number(new URL(req.url, 'http://localhost').searchParams.get('desde')) || 0;
+        const filas = (await client.query(`SELECT id, asesor_nombre, cliente, parque, total FROM op_proformas WHERE id > $1 AND estado = 'enviada' ORDER BY id LIMIT 20`, [desde])).rows;
+        return json(res, 200, { nuevas: filas.map(x => ({ ...x, total: Number(x.total), referencia: 'PRO-' + x.id })), ultima: filas.length ? filas[filas.length - 1].id : desde });
+      }
+      if (req.method === 'POST' && url === '/api/op/proforma/pedir-pago') {
+        pide('asignar_servicios', 'Solo la oficina pide el pago.');
+        const f = await leerCuerpo(req);
+        const pr = (await client.query('SELECT * FROM op_proformas WHERE id = $1', [Number(f.id) || 0])).rows[0];
+        if (!pr) return json(res, 404, { error: 'No existe esa proforma.' });
+        if (pr.estado === 'pagada') return json(res, 400, { error: 'Esa proforma ya está pagada.' });
+        await client.query("UPDATE op_proformas SET estado = 'pago_pendiente', actualizado = NOW() WHERE id = $1", [pr.id]);
+        const cuentas = (await client.query('SELECT nombre, titular, numero_enc, detalle FROM op_cuentas_pago WHERE activa ORDER BY id')).rows
+          .map(c => ({ nombre: c.nombre, titular: c.titular, numero: c.numero_enc ? descifrar(c.numero_enc) : '', detalle: c.detalle }));
+        const texto = `Hola ${pr.cliente}, tu reserva PRO-${pr.id} por US$ ${Number(pr.total).toFixed(2)} está lista. Para confirmarla, paga a: ` +
+          cuentas.map(c => `${c.nombre}${c.titular ? ' (' + c.titular + ')' : ''}${c.numero ? ' ' + c.numero : ''}`).join(' o ') + '. Luego envíanos el comprobante.';
+        await registrar(u, 'op_proforma_pago', 'proformas', pr.id, '', '', 'se pidió el pago');
+        return json(res, 200, { ok: true, cuentas, texto });
+      }
+      if (req.method === 'POST' && url === '/api/op/asesor/chat') {
+        pide('crear_reservas', 'Esta app es para los asesores con permiso de crear reservas.');
+        const f = await leerCuerpo(req);
+        const pregunta = String(f.mensaje || '').trim().slice(0, 1000);
+        if (!pregunta) return json(res, 400, { error: 'Escribe tu pregunta.' });
+        const clave = await llaveDeOficina('ia_clave');
+        if (!clave) return json(res, 200, { respuesta: 'La IA todavía no está activada para esta empresa. Pídela en Oficina.' });
+        const cat = await catalogoAsesor('');
+        const lista = cat.slice(0, 60).map(c => `- ${c.nombre}${c.zona ? ' (' + c.zona + ')' : ''}: ${c.cobro === 'vehiculo' ? 'US$ ' + c.precio_vehiculo + ' por vehículo' : 'US$ ' + c.precio_adulto + ' adulto' + (c.precio_nino ? ', US$ ' + c.precio_nino + ' niño' : '')}`).join('\n');
+        const sistema = 'Eres el asistente de apoyo de los asesores de Somos Viajes en Punta Cana. Responde corto y en español. Usa SOLO estos precios de venta al público; si algo no está en la lista, dilo y sugiere consultar a la oficina. No inventes precios ni políticas.\n\nCatálogo:\n' + lista;
+        const base = String(config.openrouterUrl || 'https://openrouter.ai/api/v1');
+        try {
+          const r = await fetch(base + '/chat/completions', { method: 'POST', headers: { Authorization: 'Bearer ' + clave, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: config.modeloAsesor || 'anthropic/claude-haiku-5.5', messages: [{ role: 'system', content: sistema }, { role: 'user', content: pregunta }] }) });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) return json(res, 502, { error: 'La IA no respondió (' + r.status + '). Intenta de nuevo.' });
+          return json(res, 200, { respuesta: (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || 'Sin respuesta.' });
+        } catch (e) { return json(res, 502, { error: 'No pude conectar con la IA. Intenta de nuevo.' }); }
       }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }

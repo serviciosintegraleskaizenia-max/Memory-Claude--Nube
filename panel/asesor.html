@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiencias · Somos Viajes</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--txt:#0f1b2d;--suave:#64748b;--borde:#e2e8f0;--azul:#0b4f8a;--oro:#c9a24a;--verde:#0f766e;--ambar:#b45309;--rojo:#b91c1c}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1322;--card:#101d31;--txt:#e7edf6;--suave:#94a3b8;--borde:#1e2b42}}
+:root[data-theme="dark"]{--bg:#0b1322;--card:#101d31;--txt:#e7edf6;--suave:#94a3b8;--borde:#1e2b42}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:15px}
+header{background:linear-gradient(135deg,#0b4f8a,#0c1a2e);color:#fff;padding:18px 16px 14px}
+header h1{margin:0;font-size:20px}
+header .sub{color:#cbd5e1;font-size:13px;margin-top:2px}
+main{padding:14px 16px 40px;max-width:720px;margin:0 auto}
+section{background:var(--card);border:1px solid var(--borde);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{font-size:16px;margin:0 0 10px;color:var(--azul)}
+label{display:block;font-size:12px;color:var(--suave);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid var(--borde);border-radius:10px;background:var(--bg);color:var(--txt);font-size:16px}
+.fila{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--azul);color:#fff;font-weight:700;cursor:pointer}
+button.s{background:transparent;color:var(--azul);border:1px solid var(--azul)}
+button.p{width:100%;padding:14px;font-size:16px;margin-top:12px}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--borde)}
+.item:last-child{border-bottom:0}
+.item small{color:var(--suave);display:block}
+.chip{display:inline-block;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:700}
+.c-env{background:#e0f2fe;color:#075985}.c-pen{background:#fef3c7;color:#92400e}.c-pag{background:#dcfce7;color:#166534}
+.total{font-size:20px;font-weight:800;color:var(--azul);text-align:right;margin-top:10px}
+.aviso{background:#fffbeb;border-left:3px solid var(--oro);padding:10px;border-radius:8px;font-size:13px;margin-top:8px}
+.msg{padding:9px 11px;border-radius:10px;margin:6px 0;font-size:14px;max-width:92%}
+.msg.yo{background:var(--azul);color:#fff;margin-left:auto}
+.msg.ia{background:var(--bg);border:1px solid var(--borde)}
+.vacio{color:var(--suave);font-size:14px;padding:8px 0}
+.ok{color:var(--verde);font-weight:700}.err{color:var(--rojo);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>Experiencias · Somos Viajes</h1>
+  <div class="sub" id="quien">Cargando…</div>
+</header>
+<main>
+  <section>
+    <h2>Nueva proforma</h2>
+    <label for="cliente">Cliente</label>
+    <input id="cliente" placeholder="Nombre completo" autocomplete="off">
+    <div class="fila">
+      <div><label for="telefono">Teléfono</label><input id="telefono" placeholder="+1 809…" inputmode="tel"></div>
+      <div><label for="fecha">Fecha</label><input id="fecha" type="date"></div>
+    </div>
+    <label for="parque">Parque o destino</label>
+    <input id="parque" placeholder="Ej.: Hoyo Azul, Isla Saona, hotel…">
+    <div class="fila">
+      <div><label for="adultos">Adultos</label><input id="adultos" type="number" min="1" value="2" inputmode="numeric"></div>
+      <div><label for="ninos">Niños</label><input id="ninos" type="number" min="0" value="0" inputmode="numeric"></div>
+    </div>
+
+    <label for="buscar">Buscar servicio o precio</label>
+    <input id="buscar" placeholder="Escribe: saona, traslado, buggy, uvero…" autocomplete="off">
+    <div id="catalogo" style="margin-top:8px"></div>
+
+    <label>Servicios en la proforma</label>
+    <div id="lineas"><div class="vacio">Todavía no agregas servicios.</div></div>
+    <div class="total" id="total">US$ 0.00</div>
+
+    <label for="notas">Notas para la oficina</label>
+    <textarea id="notas" rows="2" placeholder="Opcional"></textarea>
+    <button class="p" id="enviar">Enviar a Experiencias</button>
+    <div id="estado" style="margin-top:8px"></div>
+    <div class="aviso">Los precios son de venta al público y los pone el sistema, no tú. La oficina manda el link de pago cuando la confirme.</div>
+  </section>
+
+  <section>
+    <h2>Mis proformas</h2>
+    <div id="mias"><div class="vacio">Cargando…</div></div>
+  </section>
+
+  <section>
+    <h2>Pregunta a la IA de apoyo</h2>
+    <div id="chat"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="pregunta" placeholder="Ej.: ¿cuánto cuesta el traslado a Bayahibe para 4 personas?">
+      <button id="preguntar" style="white-space:nowrap">Preguntar</button>
+    </div>
+    <div class="vacio" style="margin-top:6px">La IA usa solo los precios del catálogo. Lo que no esté ahí, consúltalo con la oficina.</div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const usd = n => 'US$ ' + Number(n || 0).toFixed(2);
+let ITEMS = [];
+let CATALOGO = [];
+
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  let data = {}; try { data = await r.json(); } catch (e) {}
+  if (r.status === 401) { location.href = '/'; }
+  return { ok: r.ok, status: r.status, data };
+}
+
+// Precio de una línea, igual que el servidor (el servidor es el que cuenta al enviar).
+function lineaTotal(it) {
+  const ad = Number($('adultos').value) || 0, ni = Number($('ninos').value) || 0;
+  if (it.cobro === 'vehiculo') return (Number(it.precio_vehiculo) || 0) * (it.cantidad || 1);
+  return ad * (Number(it.precio_adulto) || 0) + ni * (Number(it.precio_nino) || 0);
+}
+function pintarLineas() {
+  $('lineas').innerHTML = ITEMS.length ? ITEMS.map((it, i) => `<div class="item"><div><b>${esc(it.nombre)}</b><small>${esc(it.zona || '')}${it.cobro === 'vehiculo' ? ' · ' + (it.cantidad || 1) + ' vehículo(s)' : ' · por persona'} · ${usd(lineaTotal(it))}</small></div><button class="s" data-quitar="${i}">Quitar</button></div>`).join('') : '<div class="vacio">Todavía no agregas servicios.</div>';
+  $('total').textContent = usd(ITEMS.reduce((s, it) => s + lineaTotal(it), 0));
+}
+function pintarCatalogo() {
+  $('catalogo').innerHTML = CATALOGO.slice(0, 25).map(c => `<div class="item"><div><b>${esc(c.nombre)}</b><small>${esc(c.zona || '')}${c.aeropuerto ? ' · ' + esc(c.aeropuerto) : ''} · ${c.cobro === 'vehiculo' ? usd(c.precio_vehiculo) + ' por vehículo' : usd(c.precio_adulto) + ' adulto' + (c.precio_nino ? ' · ' + usd(c.precio_nino) + ' niño' : '')}</small></div><button class="s" data-agregar="${c.id}">Agregar</button></div>`).join('') || '<div class="vacio">Sin resultados.</div>';
+}
+async function buscarCatalogo() {
+  const r = await api('/api/op/asesor/catalogo?q=' + encodeURIComponent($('buscar').value.trim()));
+  if (r.ok) { CATALOGO = r.data.items; pintarCatalogo(); }
+}
+let tBuscar; $('buscar').addEventListener('input', () => { clearTimeout(tBuscar); tBuscar = setTimeout(buscarCatalogo, 250); });
+['adultos', 'ninos'].forEach(id => $(id).addEventListener('input', pintarLineas));
+
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('[data-agregar]'), q = ev.target.closest('[data-quitar]');
+  if (a) {
+    const c = CATALOGO.find(x => String(x.id) === a.dataset.agregar);
+    if (!c) return;
+    ITEMS.push({ ...c, cantidad: 1 });
+    pintarLineas();
+  }
+  if (q) { ITEMS.splice(Number(q.dataset.quitar), 1); pintarLineas(); }
+});
+
+$('enviar').addEventListener('click', async () => {
+  $('estado').innerHTML = '';
+  const cuerpo = { cliente: $('cliente').value, telefono: $('telefono').value, parque: $('parque').value, fecha: $('fecha').value, adultos: $('adultos').value, ninos: $('ninos').value, notas: $('notas').value, items: ITEMS.map(it => ({ tarifa_id: it.id, cantidad: it.cantidad || 1 })) };
+  const r = await api('/api/op/asesor/proforma/guardar', cuerpo);
+  if (!r.ok) { $('estado').innerHTML = `<span class="err">${esc(r.data.error || 'No se pudo enviar.')}</span>`; return; }
+  $('estado').innerHTML = `<span class="ok">Enviada a Experiencias: ${esc(r.data.referencia)} · ${usd(r.data.total)}</span>`;
+  ITEMS = []; pintarLineas(); $('cliente').value = ''; $('notas').value = '';
+  cargarMias();
+});
+
+const ESTADO = { enviada: ['c-env', 'Enviada'], pago_pendiente: ['c-pen', 'Esperando pago'], pagada: ['c-pag', 'Pagada'], cancelada: ['c-pen', 'Cancelada'] };
+async function cargarMias() {
+  const r = await api('/api/op/proformas');
+  if (!r.ok) { $('mias').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudieron cargar.')}</div>`; return; }
+  $('mias').innerHTML = r.data.proformas.map(p => `<div class="item"><div><b>${esc(p.referencia)} · ${esc(p.cliente)}</b><small>${esc(p.parque || '')}${p.fecha ? ' · ' + esc(p.fecha) : ''} · ${usd(p.total)}</small></div><span class="chip ${ESTADO[p.estado]?.[0] || ''}">${ESTADO[p.estado]?.[1] || esc(p.estado)}</span></div>`).join('') || '<div class="vacio">Todavía no has enviado proformas.</div>';
+}
+
+function burbuja(texto, clase) { const d = document.createElement('div'); d.className = 'msg ' + clase; d.textContent = texto; $('chat').appendChild(d); d.scrollIntoView({ block: 'end' }); }
+$('preguntar').addEventListener('click', async () => {
+  const p = $('pregunta').value.trim();
+  if (!p) return;
+  burbuja(p, 'yo'); $('pregunta').value = '';
+  const r = await api('/api/op/asesor/chat', { mensaje: p });
+  burbuja(r.ok ? r.data.respuesta : (r.data.error || 'No pude responder ahora.'), 'ia');
+});
+
+(async function arrancar() {
+  const r = await api('/api/op/inicio');
+  if (!r.ok) { $('quien').textContent = r.data.error || 'Entra con tu usuario para usar esta app.'; $('enviar').disabled = true; return; }
+  $('quien').textContent = (r.data.usuario && r.data.usuario.nombre ? r.data.usuario.nombre : 'Asesor') + ' · ' + (r.data.empresa && r.data.empresa.nombre ? r.data.empresa.nombre : 'Somos Viajes');
+  $('fecha').value = r.data.hoy || '';
+  await buscarCatalogo();
+  pintarLineas();
+  cargarMias();
+})();
+</script>
+</body>
+</html>

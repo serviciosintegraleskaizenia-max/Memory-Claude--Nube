@@ -1765,6 +1765,7 @@ http.createServer(async (req, res) => {
     }
     // Operaciones (pantalla de la oficina) y la app web del chofer.
     if (req.method === 'GET' && url === '/operaciones') return archivo(res, path.join(CARPETA, 'operaciones.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/asesor') return archivo(res, path.join(CARPETA, 'asesor.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer') return archivo(res, path.join(CARPETA, 'chofer.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer.webmanifest') return archivo(res, path.join(CARPETA, 'chofer.webmanifest'), 'application/manifest+json');
     if (req.method === 'GET' && url === '/chofer-icono.svg') return archivo(res, path.join(CARPETA, 'chofer-icono.svg'), 'image/svg+xml');
