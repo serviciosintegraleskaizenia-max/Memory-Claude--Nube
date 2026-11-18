@@ -360,7 +360,7 @@ const VISTAS = [
   ['reservas', 'book-open', 'Reservas', 'ver_reservas_op', null],
   ['operaciones', 'route', 'Asignar servicios', 'ver_operaciones', 'operaciones'],
   ['tablero', 'layout-dashboard', 'Tablero', 'ver_operaciones', 'operaciones'],
-  ['vivo', 'navigation', 'Mapa en vivo', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
+  ['vivo', 'navigation', 'Mapa de choferes', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
   ['nueva', 'plus', 'Nueva reserva', 'crear_reservas', 'reserva_manual'],
   ['paquetes', 'package', 'Paquetes', 'crear_paquetes', 'paquetes'],
   ['entradas', 'ticket', 'Entradas por emitir', 'crear_paquetes', 'paquetes'],
@@ -677,7 +677,7 @@ function estadoAvion(a) {
 function pintarVivo() {
   const conCarros = I.modulos.app_chofer && I.permisos.ver_choferes_vivo, conAviones = I.modulos.aviones && I.permisos.ver_vuelos;
   const vuelos = (AV.lista || []).slice().sort((a, b) => String(a.hora).localeCompare(String(b.hora)));
-  $('#vista').innerHTML = cabeceraDia('Mapa en vivo', 'Carros de Somos Viajes y aviones de las llegadas y salidas de hoy', conAviones ? `<button class="btn s" id="btnAvionesAhora">${ic('refresh-cw')}Buscar aviones ahora</button>` : '') + `
+  $('#vista').innerHTML = cabeceraDia('Mapa de choferes', 'Ubicación en vivo de los carros de Somos Viajes',conAviones ? `<button class="btn s" id="btnAvionesAhora">${ic('refresh-cw')}Buscar aviones ahora</button>` : '') + `
     <div class="rej" style="grid-template-columns:minmax(0,1fr) 380px;align-items:start">
       <div class="caja" style="padding:12px">${conCarros || conAviones ? `<div id="mapa"></div><div class="nota-pie">${conCarros ? '🚐 Carros: ubicación del celular del chofer (cada minuto mientras tiene la app abierta). ' : ''}${conAviones ? `✈ Aviones: OpenSky, gratis, se actualiza cada ${I.vuelosCada || 10} minutos${AV.consultado ? ' · última vez ' + new Date(AV.consultado).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }) : ''}.` : ''}${AV.error ? ` <b style="color:var(--rojo)">${esc(AV.error)}</b>` : ''}</div>`
         : `<div class="vacio" style="padding:60px 20px">${ic('map')}<br><b>Enciende el mapa</b><br>Configuración → Módulos → "App del chofer y mapa" y "Aviones en el mapa".</div>`}</div>
