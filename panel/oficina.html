@@ -265,6 +265,7 @@
   <button class="nav" data-ir="calendario">📅 Calendario</button>
   <button class="nav" data-ir="chat">💬 Chat con los negocios <span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
+  <button class="nav" data-ir="apis">🧩 APIs y suscripciones</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
   <button class="nav" data-ir="redes">📲 Redes sociales</button>
   <button class="nav" data-ir="respaldos">💾 Respaldos <span class="num" id="numRespaldo" style="display:none"></span></button>
@@ -473,6 +474,7 @@ async function ir(v, recargar = true) {
     if (v === 'inicio' || v === 'negocios') await cargarNegocios();
     if (v === 'gastos') await cargarProyectos();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
+    if (v === 'apis') await cargarApis();
     if (v === 'chat') await cargarChatContactos();
     if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
     if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
@@ -482,7 +484,7 @@ async function ir(v, recargar = true) {
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
   if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
@@ -2224,6 +2226,32 @@ function conBorrar(tipo, id, texto) {
   if (b) b.onclick = async () => { if (!confirm(texto)) return; await enviarForm(`/api/oficina/borrar/${tipo}`, { id }, 'Borrado.'); };
 }
 
+// ---------- APIs y suscripciones (solo Programador) ----------
+let APIS = [], apisEmpresa = 0;
+const TIPOS_API = ['Vuelos', 'Mapas', 'IA', 'WhatsApp', 'Correo', 'Pagos', 'Otro'];
+async function cargarApis() { const r = await api('/api/oficina/apis?empresa=' + apisEmpresa); if (r.ok) APIS = r.data.apis; }
+function vApis() {
+  const total = APIS.reduce((s, x) => s + (Number(x.costo_mensual) || 0), 0);
+  const avisos = APIS.filter(x => x.aviso);
+  const estado = x => x.aviso === 'vencido' ? '<b style="color:var(--rojo)">Vencido</b>' : x.aviso === 'por_vencer' ? `<b style="color:var(--ambar)">Vence en ${x.dias_para_renovar} día(s)</b>` : 'Al día';
+  return cabecera('🧩 APIs y suscripciones', 'Lo que pagas cada mes por cada servicio, su plan y su llave', '<button class="btn" data-nueva-api>+ API</button>') +
+    `<div class="caja"><div class="fila2"><div class="campo" style="margin:0"><label for="apisEmp">Empresa</label><select id="apisEmp" onchange="apisEmpresa=Number(this.value)||0;cargarApis().then(()=>ir('apis',false))">${opcionesEmpresa(apisEmpresa, 'General (Kaizen)')}</select></div><div style="text-align:right"><b>${dinero(total, 'US$')}</b><div class="ay">costo mensual de esta empresa</div></div></div>` +
+    (avisos.length ? `<div class="ay" style="margin-top:8px">⚠ ${avisos.map(x => `${esc(x.nombre)}: ${x.aviso === 'vencido' ? 'venció' : 'vence pronto'}`).join(' · ')}</div>` : '') + '</div>' +
+    `<div class="caja"><table><thead><tr><th>Servicio</th><th>Tipo</th><th>Plan</th><th>Costo/mes</th><th>Límite</th><th>Renovación</th><th>Llave</th><th>Estado</th><th></th></tr></thead><tbody>${APIS.map(x => `<tr><td><b>${esc(x.nombre)}</b><div class="ay">${esc(x.proveedor || '')}</div></td><td>${esc(x.tipo)}</td><td>${esc(x.plan)}</td><td>${dinero(x.costo_mensual, 'US$')}</td><td>${x.limite_mes ?? '—'}</td><td>${esc(x.renovacion || '—')}</td><td>${x.llave_fin ? '••••' + esc(x.llave_fin) : '<span class="ay">sin llave</span>'}</td><td>${estado(x)}</td><td><button class="btn-mini" data-editar-api="${x.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="9" class="vacio">Todavía no hay servicios registrados para esta empresa.</td></tr>'}</tbody></table></div>`;
+}
+function formApi(a = {}) {
+  abrirModal(`<h2>${a.id ? 'Editar servicio' : 'Nuevo servicio'}</h2>
+    ${campo('aNom', 'Nombre', `<input id="aNom" value="${esc(a.nombre || '')}" placeholder="Ej.: AeroDataBox">`)}
+    <div class="fila2">${campo('aTip', 'Tipo', `<select id="aTip">${TIPOS_API.map(t => `<option ${t === (a.tipo || 'Otro') ? 'selected' : ''}>${t}</option>`).join('')}</select>`)}${campo('aPro', 'Proveedor', `<input id="aPro" value="${esc(a.proveedor || '')}" placeholder="Ej.: RapidAPI">`)}</div>
+    <div class="fila2">${campo('aPla', 'Plan', `<select id="aPla">${['Gratis', 'Prueba', 'Pago'].map(t => `<option ${t === (a.plan || 'Gratis') ? 'selected' : ''}>${t}</option>`).join('')}</select>`)}${campo('aCos', 'Costo al mes (US$)', `<input id="aCos" type="number" step="0.01" min="0" value="${a.costo_mensual ?? 0}">`)}</div>
+    <div class="fila2">${campo('aLim', 'Límite de uso al mes', `<input id="aLim" type="number" min="0" value="${a.limite_mes ?? ''}" placeholder="Sin límite">`)}${campo('aRen', 'Renovación', `<input id="aRen" type="date" value="${esc(a.renovacion || '')}">`)}</div>
+    ${campo('aEmp', 'Empresa', `<select id="aEmp">${opcionesEmpresa(a.empresa_id ?? apisEmpresa, 'General (Kaizen)')}</select>`)}
+    ${campo('aLla', 'Llave', `<input id="aLla" type="password" autocomplete="off" placeholder="${a.llave_fin ? '•••• ' + a.llave_fin + ' (escribe para cambiarla)' : 'Pega la llave aquí'}">`, 'Se guarda cifrada. Nunca se muestra completa.')}
+    ${pieModal(Boolean(a.id))}`);
+  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/apis/guardar', { id: a.id, nombre: v('aNom'), tipo: v('aTip'), proveedor: v('aPro'), plan: v('aPla'), costo_mensual: v('aCos'), limite_mes: v('aLim'), renovacion: v('aRen'), empresa_id: v('aEmp'), llave: v('aLla') }, 'Guardado.');
+  if (a.id) document.getElementById('fBorrar').onclick = async () => { if (!confirm('¿Borrar este servicio?')) return; await enviarForm('/api/oficina/apis/borrar', { id: a.id }, 'Borrado.'); };
+}
+
 function formPago(p = {}) {
   abrirModal(`<h2>${p.id ? 'Editar cobro' : 'Nuevo cobro'}</h2>
     ${campo('fEmp', 'Cliente', `<select id="fEmp">${opcionesEmpresa(p.empresa_id, 'Sin cliente')}</select>`)}
@@ -2357,9 +2385,11 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
+  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente) return;
+  if (t.hasAttribute('data-nueva-api')) return formApi();
+  if (t.hasAttribute('data-editar-api')) return formApi(APIS.find(x => String(x.id) === t.dataset.editarApi) || {});
   ev.preventDefault();
   const d = t.dataset;
   if (d.ir) return ir(d.ir);

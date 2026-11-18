@@ -5,6 +5,7 @@
 // Todo se guarda en la base del central. De cada empresa solo se LEE su base (y se escribe el chat y el "pagado").
 
 const { hoyLocal } = require('./cuenta');
+const crypto = require('crypto');
 const crearConocimiento = require('./conocimiento');
 const crearRedes = require('./redes');
 const crearProyectos = require('./proyectos');
@@ -67,6 +68,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const A = central.ayudantes;
   // Base de conocimiento del asistente de redes (tarifarios, fichas y notas de cada empresa).
   const conocimiento = crearConocimiento({ client, config, registrar, central, claveIA: e => claveDe(e) });
+
+  // APIs y suscripciones: las llaves se guardan cifradas (AES-256-GCM) con una clave derivada del secreto del panel.
+  const llaveApis = () => crypto.createHash('sha256').update('apis|' + String((config.sesion && config.sesion.secreto) || 'zentralia')).digest();
+  function cifrarLlave(t) {
+    const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', llaveApis(), iv);
+    const x = Buffer.concat([c.update(String(t), 'utf8'), c.final()]);
+    return Buffer.concat([iv, c.getAuthTag(), x]).toString('base64');
+  }
   // Conector con Chatwoot: el asistente sugiere (o responde) en Facebook, Instagram y WhatsApp.
   const redes = crearRedes({ client, registrar, central, conocimiento });
   // Gastos de creación de cada sistema y reparto entre socios (aparte de los gastos del negocio).
@@ -77,6 +86,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await conocimiento.preparar();
     await redes.preparar();
     await proyectos.preparar();
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_apis (
+      id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL DEFAULT 0, nombre TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'Otro',
+      proveedor TEXT NOT NULL DEFAULT '', plan TEXT NOT NULL DEFAULT 'Gratis', costo_mensual NUMERIC NOT NULL DEFAULT 0,
+      limite_mes INTEGER, renovacion DATE, llave_enc TEXT, llave_fin TEXT, creado TIMESTAMP NOT NULL DEFAULT NOW(), actualizado TIMESTAMP)`);
     for (const col of ['plan', 'contacto', 'telefono', 'correo_contacto', 'ia_clave', 'n8n_clave', 'correo_lectura', 'correo_host', 'correo_clave']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
     }
@@ -479,6 +492,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url === '/api/oficina/alarmas' || url === '/api/oficina/gastos/pagado') return ['gastos', 'inicio'];
     if (url === '/api/oficina/negocios') return ['negocios', 'inicio'];
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
+    if (url.startsWith('/api/oficina/apis')) return ['apis_programador'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
@@ -602,6 +616,44 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       if (req.method === 'GET' && url === '/api/oficina/negocios') {
         const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
         return json(res, 200, { negocios: await Promise.all(filas.map(estadoNegocio)) });
+      }
+      if (req.method === 'GET' && url === '/api/oficina/apis') {
+        const eid = Number(new URL(req.url, 'http://localhost').searchParams.get('empresa')) || 0;
+        const filas = (await client.query("SELECT id, empresa_id, nombre, tipo, proveedor, plan, costo_mensual, limite_mes, to_char(renovacion, 'YYYY-MM-DD') AS renovacion, llave_fin FROM oficina_apis WHERE empresa_id = $1 ORDER BY tipo, nombre", [eid])).rows;
+        const hoyD = hoyLocal();
+        return json(res, 200, { apis: filas.map(r => {
+          const dias = r.renovacion ? Math.round((Date.parse(r.renovacion) - Date.parse(hoyD)) / 86400000) : null;
+          return { ...r, costo_mensual: Number(r.costo_mensual), dias_para_renovar: dias, aviso: dias === null ? '' : dias < 0 ? 'vencido' : dias <= 7 ? 'por_vencer' : '' };
+        }) });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/apis/guardar') {
+        const f = await leerCuerpo(req);
+        const nombre = String(f.nombre || '').trim().slice(0, 80);
+        if (!nombre) return json(res, 400, { error: 'Escribe el nombre del servicio.' });
+        const tipo = ['Vuelos', 'Mapas', 'IA', 'WhatsApp', 'Correo', 'Pagos', 'Otro'].includes(f.tipo) ? f.tipo : 'Otro';
+        const plan = ['Gratis', 'Prueba', 'Pago'].includes(f.plan) ? f.plan : 'Gratis';
+        const costo = Math.max(0, Number(f.costo_mensual) || 0);
+        const limite = f.limite_mes === '' || f.limite_mes == null ? null : Math.max(0, parseInt(f.limite_mes, 10) || 0);
+        const renov = /^\d{4}-\d{2}-\d{2}$/.test(String(f.renovacion || '')) ? String(f.renovacion) : null;
+        const eid = Number(f.empresa_id) || 0;
+        const proveedor = String(f.proveedor || '').trim().slice(0, 80);
+        const llave = String(f.llave || '').trim();
+        const llaveEnc = llave ? cifrarLlave(llave) : null;
+        const llaveFin = llave ? llave.slice(-4) : null;
+        let id = Number(f.id) || 0;
+        if (id) {
+          await client.query('UPDATE oficina_apis SET empresa_id=$2, nombre=$3, tipo=$4, proveedor=$5, plan=$6, costo_mensual=$7, limite_mes=$8, renovacion=$9, llave_enc=COALESCE($10, llave_enc), llave_fin=COALESCE($11, llave_fin), actualizado=NOW() WHERE id=$1', [id, eid, nombre, tipo, proveedor, plan, costo, limite, renov, llaveEnc, llaveFin]);
+        } else {
+          id = (await client.query('INSERT INTO oficina_apis (empresa_id, nombre, tipo, proveedor, plan, costo_mensual, limite_mes, renovacion, llave_enc, llave_fin) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [eid, nombre, tipo, proveedor, plan, costo, limite, renov, llaveEnc, llaveFin])).rows[0].id;
+        }
+        await registrar(u, 'oficina_apis', 'apis', nombre, '', '', llave ? 'llave guardada (cifrada)' : 'sin cambio de llave');
+        return json(res, 200, { ok: true, id });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/apis/borrar') {
+        const f = await leerCuerpo(req);
+        await client.query('DELETE FROM oficina_apis WHERE id = $1', [Number(f.id) || 0]);
+        await registrar(u, 'oficina_apis', 'apis', f.id, '', '', 'borrado');
+        return json(res, 200, { ok: true });
       }
       if (req.method === 'GET' && url === '/api/oficina/servicios') {
         const lista = (await client.query('SELECT * FROM oficina_enlaces WHERE vigilar = TRUE')).rows;
