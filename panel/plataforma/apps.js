@@ -5,6 +5,7 @@
 // con su icono, sus accesos directos y su estado (prueba o publicada).
 
 const crypto = require('crypto');
+const { pngIcono } = require('./icono-png');
 
 // Pantallas que una app puede abrir. Cada una define el alcance de la app instalada.
 const INICIOS = { '/chofer': 'App del chofer', '/asesor': 'App de asesores' };
@@ -162,7 +163,7 @@ module.exports = function crearApps({ client, registrar }) {
       name: app.nombre, short_name: app.nombre.slice(0, 12), description: app.descripcion || app.nombre,
       start_url: app.inicio, scope: app.inicio, display: 'standalone', orientation: 'portrait',
       background_color: color(app.color), theme_color: color(app.color), lang: 'es',
-      icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
+      icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml', purpose: 'any' }, ...[192, 512].map(t => ({ src: `/app/${app.slug}/icono-${t}.png`, sizes: `${t}x${t}`, type: 'image/png', purpose: 'any maskable' }))],
       shortcuts: accesos.map(a => ({ name: a.nombre, url: a.ruta, icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml' }] }))
     };
   }
@@ -179,7 +180,7 @@ button{width:100%;padding:12px;border:0;border-radius:10px;background:#fff;color
   function paginaInstalar(app) {
     const accesos = (Array.isArray(app.accesos) ? app.accesos : []).map(a => `<li><a href="${esc(a.ruta)}" style="color:#fff">${esc(a.nombre)}</a></li>`).join('');
     return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(app.nombre)}</title><link rel="manifest" href="/app/${esc(app.slug)}/manifest.webmanifest"><link rel="icon" href="/app/${esc(app.slug)}/icono.svg">
+<title>${esc(app.nombre)}</title><link rel="manifest" href="/app/${esc(app.slug)}/manifest.webmanifest"><link rel="icon" href="/app/${esc(app.slug)}/icono.svg"><link rel="apple-touch-icon" href="/app/${esc(app.slug)}/icono-180.png">
 <meta name="theme-color" content="${color(app.color)}"><style>body{font-family:system-ui,sans-serif;background:${color(app.color)};color:#fff;margin:0;display:grid;place-items:center;min-height:100vh;padding:16px;box-sizing:border-box}
 main{width:100%;max-width:380px;text-align:center}a.boton{display:block;padding:14px;border-radius:12px;background:#fff;color:${color(app.color)};font-weight:700;text-decoration:none;margin:12px 0}
 ol{text-align:left;line-height:1.6}.p{opacity:.85}</style></head>
@@ -203,7 +204,7 @@ self.addEventListener('fetch', e => { e.respondWith(fetch(e.request)); });`;
   }
 
   async function manejarPublico(req, res, url, { json, leerCuerpo }) {
-    const m = url.match(/^\/app\/([a-z0-9-]+)\/?(manifest\.webmanifest|sw\.js|icono\.svg)?$/);
+    const m = url.match(/^\/app\/([a-z0-9-]+)\/?(manifest\.webmanifest|sw\.js|icono\.svg|icono-(180|192|512)\.png)?$/);
     if (!m) return json(res, 404, { error: 'No existe.' });
     const app = await appPorSlug(m[1]);
     if (!app) return enviar(res, 404, 'text/plain; charset=utf-8', 'No existe esta app.');
@@ -231,6 +232,7 @@ self.addEventListener('fetch', e => { e.respondWith(fetch(e.request)); });`;
     if (recurso === 'manifest.webmanifest') return enviar(res, 200, 'application/manifest+json; charset=utf-8', JSON.stringify(manifiesto(app)));
     if (recurso === 'sw.js') return enviar(res, 200, 'text/javascript; charset=utf-8', SW, { 'Service-Worker-Allowed': app.inicio });
     if (recurso === 'icono.svg') return enviar(res, 200, 'image/svg+xml', icono(app));
+    if (recurso && recurso.endsWith('.png')) return enviar(res, 200, 'image/png', pngIcono({ color: color(app.color), letra: app.letra || app.nombre, tam: Number(m[3]) }));
     return enviar(res, 200, 'text/html; charset=utf-8', paginaInstalar(app));
   }
 
