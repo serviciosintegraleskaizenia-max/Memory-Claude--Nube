@@ -184,11 +184,69 @@ module.exports = function crearImportador({ client }) {
   }
 
   // Reconoce el formato y lo importa.
+  // Cabecera de traslados: una fila con ADULTOS y con TRAYECTO o RUTA (en las primeras 15 filas).
+  function cabTraslado(filas) {
+    for (let i = 0; i < Math.min(filas.length, 15); i++) {
+      const n = filas[i].map(norm);
+      if (n.some(c => c.startsWith('adult')) && n.some(c => c === 'trayecto' || c === 'ruta' || c.startsWith('trayecto'))) return { i, cols: n };
+    }
+    return null;
+  }
+  // Precio en el formato del Excel: 359,00 · 1.250,00 · 45 · X (no disponible) → número o null.
+  const precioTxt = v => {
+    if (v === null || v === undefined) return null;
+    let t = String(v).trim();
+    if (!t || /^x$/i.test(t) || t === '-') return null;
+    if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d+,\d{1,2}$/.test(t)) t = t.replace(',', '.');
+    const n = Number(t.replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  // Tarifario de traslados (hoja TARIFA): TRAYECTO | ADULTOS | CHILDS | rangos de vehículo privado (1-6, 7-21, ...).
+  // Tarifa regular: precio por persona, igual en ida y vuelta. Tarifa privada: precio por vehículo y rango de pasajeros.
+  async function traslados(archivo, hojas) {
+    const hoja = hojas.find(h => cabTraslado(hojaDatos(h)));
+    if (!hoja) return { error: 'No encontré la hoja de traslados (TRAYECTO / ADULTOS).' };
+    const filas = hojaDatos(hoja);
+    const cab = cabTraslado(filas);
+    const raw = filas[cab.i].map(v => String(v ?? '').trim());
+    const iT = raw.findIndex(c => /trayecto|ruta/i.test(c));
+    const iA = raw.findIndex(c => /adult/i.test(c));
+    const iN = raw.findIndex(c => /child|ni[nñ]o|menor/i.test(c));
+    const rangos = raw.map((c, i) => { const m = c.match(/p?(\d+)\s*[_\- ]\s*(\d+)/i); return m && i !== iT && i !== iA && i !== iN ? { i, desde: Number(m[1]), hasta: Number(m[2]) } : null; }).filter(Boolean);
+    const base = archivo.split(/[\\/]/).pop().replace(/\.xlsx?$/i, '');
+    const nombre = (/^traslados/i.test(base) ? base : 'Traslados ' + base) + ' · regular y privado';
+    const id = await tarifario(nombre, { tipo: 'venta', notas: `Importado de ${archivo} (hoja ${hoja.nombre || 'TARIFA'})` });
+    let total = 0;
+    for (const f of filas.slice(cab.i + 1)) {
+      const trayecto = String(f[iT] ?? '').trim();
+      const partes = trayecto.split(/\s+-\s+/);
+      if (partes.length < 2) continue;
+      const origen = punto(partes[0]);
+      const destino = punto(partes.slice(1).join(' - '));
+      if (!origen.aeropuerto) continue;
+      const zona = destino.zona || destino.aeropuerto || '';
+      const adulto = precioTxt(f[iA]), nino = precioTxt(f[iN]);
+      if (adulto !== null) {
+        await tarifa(id, { servicio: 'TRASLADO', nombre: trayecto, aeropuerto: origen.aeropuerto, zona, cobro: 'persona', pax_desde: 1, pax_hasta: 99, precio_adulto: adulto, precio_nino: nino || 0, modalidad: 'compartido', notas: 'Regular por persona · IN/OUT' });
+        total++;
+      }
+      for (const g of rangos) {
+        const pv = precioTxt(f[g.i]);
+        if (pv === null) continue;
+        await tarifa(id, { servicio: 'TRASLADO', nombre: trayecto, aeropuerto: origen.aeropuerto, zona, cobro: 'vehiculo', pax_desde: g.desde, pax_hasta: g.hasta, precio_vehiculo: pv, modalidad: 'privado', notas: 'Privado por ruta · ' + raw[g.i] });
+        total++;
+      }
+    }
+    return { tarifario: nombre, tarifas: total };
+  }
+
   async function importar(archivo, buf) {
     const hojas = leerExcel(buf);
     const todas = hojas.map(h => ({ h, filas: hojaDatos(h) }));
     const tiene = (...p) => todas.some(({ filas }) => encabezado(filas, p));
     if (todas.some(({ filas }) => { const e = encabezado(filas, ['ruta']) || encabezado(filas, ['route']) || encabezado(filas, ['trayecto']); return e && e.cols.some(c => /^p\d+ \d+$/.test(c)); })) return { archivo, ...(await traslados(archivo, hojas)) };
+    if (todas.some(({ filas }) => cabTraslado(filas))) return { archivo, ...(await traslados(archivo, hojas)) };
     if (tiene('producto', 'pvp adulto', 'net adulto')) return { archivo, ...(await actividades(archivo, hojas, 'neto_pvp')) };
     if (tiene('producto', 'net adulto')) return { archivo, ...(await actividades(archivo, hojas, 'costo')) };
     if (tiene('destino', 'nombre del servicio')) return { archivo, ...(await actividades(archivo, hojas, 'hotelbeds')) };
