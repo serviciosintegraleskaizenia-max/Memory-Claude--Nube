@@ -1145,14 +1145,13 @@ function cfVuelos() {
   const v = CF.vuelos;
   $('#cfCuerpo').innerHTML = `<div class="rej r2" style="align-items:start"><div class="caja"><h3>${ic('plane')}Servicio de vuelos</h3>
       <div class="campo"><label>Usar</label><select id="vuProv"><option value="aerodatabox" ${v.proveedor === 'aerodatabox' ? 'selected' : ''}>AeroDataBox (RapidAPI)</option><option value="flightaware" ${v.proveedor === 'flightaware' ? 'selected' : ''}>FlightAware AeroAPI</option></select></div>
-      <div class="campo"><label>Llave de AeroDataBox ${CF.llaves.aerodatabox ? '<span class="tag t-ve">guardada</span>' : ''}</label><input type="password" id="vuAdb" placeholder="${CF.llaves.aerodatabox ? '•••••• (escribe para cambiarla)' : 'X-RapidAPI-Key'}"></div>
+      <p class="sub2" style="margin:0 0 10px">Las llaves de vuelos y mapas se controlan desde Oficina (APIs y suscripciones).</p>
       <div class="campo"><label>Host de RapidAPI</label><input id="vuHost" value="${esc(v.rapidapi_host || 'aerodatabox.p.rapidapi.com')}"></div>
-      <div class="campo"><label>Llave de FlightAware ${CF.llaves.flightaware ? '<span class="tag t-ve">guardada</span>' : ''}</label><input type="password" id="vuFa" placeholder="${CF.llaves.flightaware ? '•••••• (escribe para cambiarla)' : 'x-apikey'}"></div>
       <h3 style="margin-top:14px">${ic('map')}Aviones en el mapa (OpenSky, gratis)</h3>
       <p class="sub2">Funciona sin cuenta, con un límite de consultas al día. Con una cuenta gratis de opensky-network.org (Account → API Client) el límite sube 10 veces.</p>
       <div class="rej r2" style="gap:8px"><div class="campo"><label>Client ID de OpenSky (opcional)</label><input id="vuSkyId" value="${esc(v.opensky_cliente || '')}"></div><div class="campo"><label>Client secret ${CF.llaves.opensky ? '<span class="tag t-ve">guardado</span>' : ''}</label><input type="password" id="vuSkySec" placeholder="${CF.llaves.opensky ? '•••••• (escribe para cambiarlo)' : 'opcional'}"></div></div>
       <div class="campo"><label>Buscar aviones cada (minutos)</label><input id="vuSkyCada" type="number" min="2" value="${esc(v.opensky_cada_min || 10)}" style="width:110px"><small class="sub2">Sin cuenta, 10 minutos o más.</small></div>
-      <button class="btn p" id="vuGuardar">${ic('save')}Guardar</button><p class="sub2">Las llaves se guardan cifradas en el servidor y nunca se vuelven a mostrar. Enciende "Vuelos en vivo" en General y módulos.</p></div>
+      <button class="btn p" id="vuGuardar">${ic('save')}Guardar</button><p class="sub2">Las llaves de vuelos y mapas ya no se pegan aquí: se controlan desde Oficina. Enciende "Vuelos en vivo" en General y módulos.</p></div>
     <div class="caja"><h3>${ic('search')}Probar un vuelo</h3><div style="display:flex;gap:6px"><input id="vuVuelo" placeholder="CM 241"><input type="date" id="vuFecha" value="${I.hoy}"><button class="btn s" id="vuProbar">Probar</button></div><pre id="vuRes" style="white-space:pre-wrap;font-size:12px;color:var(--suave)"></pre></div></div>`;
 }
 function cfWhatsapp() {
@@ -1685,7 +1684,7 @@ document.addEventListener('click', async ev => {
     d.tiempos_zona = Object.fromEntries($('#rgZonas').value.split('\n').map(l => l.split('=')).filter(x => x.length === 2 && x[0].trim()).map(([z, m]) => [z.trim(), Number(m) || 0]));
     const r = await api('/api/op/config/reglas', d); aviso(r.ok ? '✔ Reglas guardadas.' : r.data.error); return;
   }
-  if (t.closest('#vuGuardar')) { const r = await api('/api/op/config/vuelos', { proveedor: $('#vuProv').value, rapidapi_host: $('#vuHost').value, llave_aerodatabox: $('#vuAdb').value, llave_flightaware: $('#vuFa').value, opensky_cliente: $('#vuSkyId').value, llave_opensky: $('#vuSkySec').value, opensky_cada_min: $('#vuSkyCada').value }); aviso(r.ok ? '✔ Guardado.' : r.data.error); return vConfig(); }
+  if (t.closest('#vuGuardar')) { const r = await api('/api/op/config/vuelos', { proveedor: $('#vuProv').value, rapidapi_host: $('#vuHost').value, opensky_cliente: $('#vuSkyId').value, llave_opensky: $('#vuSkySec').value, opensky_cada_min: $('#vuSkyCada').value }); aviso(r.ok ? '✔ Guardado.' : r.data.error); return vConfig(); }
   if (t.closest('#vuProbar')) { $('#vuRes').textContent = 'Consultando…'; const r = await api('/api/op/config/vuelos/probar', { proveedor: $('#vuProv').value, vuelo: $('#vuVuelo').value, fecha: $('#vuFecha').value }); $('#vuRes').textContent = r.ok ? JSON.stringify(r.data.resultado, null, 2) || 'Sin datos para ese vuelo y fecha.' : r.data.error; return; }
   if (t.closest('#waGuardar')) { const d = {}; ['chatwoot_url', 'cuenta', 'inbox_id', 'plantilla', 'idioma', 'token'].forEach(k => { d[k] = $('#wa_' + k).value; }); d.mensaje = $('#wa_mensaje').value; d.auto_al_asignar = $('#wa_auto').checked; const r = await api('/api/op/config/whatsapp', d); aviso(r.ok ? '✔ Guardado.' : r.data.error); return vConfig(); }
 });
