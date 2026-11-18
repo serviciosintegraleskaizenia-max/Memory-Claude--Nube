@@ -93,6 +93,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const proyectos = crearProyectos({ client });
   // Apps instalables (PWA) para probar y publicar desde la Oficina.
   const apps = crearApps({ client, registrar });
+  const apiExterna = require('./api-externa');
 
   async function preparar() {
     if (!activo) return;
@@ -508,6 +509,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
     if (url.startsWith('/api/oficina/apis')) return ['apis_programador'];
     if (url.startsWith('/api/oficina/apps')) return ['apps_programador'];
+    if (url.startsWith('/api/oficina/integraciones')) return ['apis_programador'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
@@ -634,6 +636,27 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       if (req.method === 'GET' && url === '/api/oficina/negocios') {
         const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
         return json(res, 200, { negocios: await Promise.all(filas.map(estadoNegocio)) });
+      }
+      if (url === '/api/oficina/integraciones' || url.startsWith('/api/oficina/integraciones/')) {
+        const f = req.method === 'POST' ? await leerCuerpo(req) : {};
+        const eid = Number(req.method === 'GET' ? new URL(req.url, 'http://localhost').searchParams.get('empresa') : f.empresa_id) || 0;
+        const e = eid ? await A.empresa(eid) : null;
+        if (!e) return json(res, 400, { error: 'Elige la empresa a la que se conecta el sistema.' });
+        if (req.method === 'GET' && url === '/api/oficina/integraciones') return json(res, 200, { llaves: await A.conEmpresa(e, db => apiExterna.listarLlaves(db)), alcances: apiExterna.ALCANCES, empresa: e.nombre });
+        if (req.method === 'POST' && url === '/api/oficina/integraciones/crear') {
+          try {
+            const r = await A.conEmpresa(e, db => apiExterna.crearLlave(db, f));
+            await registrar(u, 'oficina_integraciones', 'integraciones', f.nombre, '', '', 'llave creada para ' + e.nombre);
+            return json(res, 200, { ...r, empresa: e.nombre });
+          } catch (err) { return json(res, err.codigo || 500, { error: err.codigo ? err.message : 'No se pudo crear la llave.' }); }
+        }
+        if (req.method === 'POST' && url === '/api/oficina/integraciones/revocar') {
+          const nombre = await A.conEmpresa(e, db => apiExterna.revocarLlave(db, f.id));
+          if (!nombre) return json(res, 404, { error: 'Esa llave ya no existe.' });
+          await registrar(u, 'oficina_integraciones', 'integraciones', nombre, '', '', 'llave revocada en ' + e.nombre);
+          return json(res, 200, { ok: true });
+        }
+        return json(res, 404, { error: 'No existe.' });
       }
       if (req.method === 'GET' && url === '/api/oficina/apis') {
         const eid = Number(new URL(req.url, 'http://localhost').searchParams.get('empresa')) || 0;

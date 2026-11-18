@@ -267,6 +267,7 @@
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
   <button class="nav" data-ir="apis">🧩 APIs y suscripciones</button>
   <button class="nav" data-ir="apps">📱 Apps</button>
+  <button class="nav" data-ir="integraciones">🔌 Integraciones</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
   <button class="nav" data-ir="redes">📲 Redes sociales</button>
   <button class="nav" data-ir="respaldos">💾 Respaldos <span class="num" id="numRespaldo" style="display:none"></span></button>
@@ -477,6 +478,7 @@ async function ir(v, recargar = true) {
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'apis') await cargarApis();
     if (v === 'apps') await cargarApps();
+    if (v === 'integraciones') await cargarIntegraciones();
     if (v === 'chat') await cargarChatContactos();
     if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
     if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
@@ -486,7 +488,7 @@ async function ir(v, recargar = true) {
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
   if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
@@ -2335,6 +2337,47 @@ document.addEventListener('click', async ev => {
     if (!r.ok) return aviso(r.data.error || 'No se pudo quitar.');
     await cargarApps(); return ir('apps', false);
   }
+});
+
+// ---------- Integraciones (solo Programador): llaves de la API para sistemas externos ----------
+let INTEG = { llaves: [], empresa: '' }, integEmpresa = 0;
+async function cargarIntegraciones() { const r = await api('/api/oficina/integraciones?empresa=' + integEmpresa); if (r.ok) INTEG = r.data; }
+function vIntegraciones() {
+  const vigentes = (INTEG.llaves || []).filter(x => x.vigente).length;
+  const tabla = !integEmpresa ? '<div class="caja ay">Elige una empresa para ver sus sistemas conectados.</div>'
+    : !INTEG.llaves.length ? '<div class="caja ay">Esta empresa no tiene sistemas conectados.</div>'
+    : `<div class="caja"><table><thead><tr><th>Sistema</th><th>Llave</th><th>Alcance</th><th>Vence</th><th>Último uso</th><th>Estado</th><th></th></tr></thead><tbody>${INTEG.llaves.map(x => `<tr><td><b>${esc(x.nombre)}</b></td><td>••••${esc(x.fin)}</td><td>${esc(INTEG.alcances && INTEG.alcances[x.alcance] || x.alcance)}</td><td>${esc(x.vence)}</td><td>${esc(x.ultimo_uso || '—')}</td><td>${x.vigente ? '<b>Activa</b>' : 'Vencida o revocada'}</td><td>${x.activo ? `<button class="btn-sec" data-revocar-integracion="${x.id}">Revocar</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  return cabecera('🔌 Integraciones', 'Llaves para que otros sistemas (SYSSTOURS u otros) lean reservas y operaciones. Solo lectura.', '<button class="btn" data-nueva-integracion>+ Conectar sistema</button>') +
+    `<div class="caja"><div class="fila2"><div class="campo" style="margin:0"><label for="integEmp">Empresa</label><select id="integEmp" onchange="integEmpresa=Number(this.value)||0;cargarIntegraciones().then(()=>ir('integraciones',false))">${opcionesEmpresa(integEmpresa, 'Elige una empresa')}</select></div><div style="text-align:right"><b>${vigentes}</b><div class="ay">llaves vigentes en esta empresa</div></div></div></div>` + tabla;
+}
+function formIntegracion() {
+  abrirModal(`<h2>Conectar sistema</h2>
+    ${campo('inNom', 'Nombre del sistema', '<input id="inNom" placeholder="Ej.: SYSSTOURS">')}
+    ${campo('inEmp', 'Empresa', `<select id="inEmp">${opcionesEmpresa(integEmpresa, 'Elige una empresa')}</select>`)}
+    ${campo('inDia', 'Días de vigencia', '<input id="inDia" type="number" min="1" max="365" value="365">')}
+    <div class="ay">Solo lectura de reservas y servicios. No incluye precios, costos ni datos de contacto.</div>
+    <div class="error-form" id="errForm"></div>
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Crear llave</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const eid = Number(v('inEmp')) || 0;
+    const r = await api('/api/oficina/integraciones/crear', { empresa_id: eid, nombre: v('inNom'), alcance: 'reservas:leer', dias: v('inDia') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo crear.'; return; }
+    abrirModal(`<h2>Llave creada</h2><p>Cópiala ahora. No se vuelve a mostrar completa.</p>
+      <div class="campo"><label>Llave</label><input readonly value="${esc(r.data.clave)}" onclick="this.select()"></div>
+      <div class="ay">Empresa: ${esc(r.data.empresa)} · vence el ${esc(r.data.vence)}</div>
+      <div class="pie"><button class="btn" data-cerrar-modal>Listo</button></div>`);
+    integEmpresa = eid; await cargarIntegraciones(); ir('integraciones', false);
+  };
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-nueva-integracion],[data-revocar-integracion]');
+  if (!b) return;
+  ev.preventDefault();
+  if ('nuevaIntegracion' in b.dataset) return formIntegracion();
+  if (!confirm('¿Revocar esta llave? El sistema dejará de poder leer.')) return;
+  const r = await api('/api/oficina/integraciones/revocar', { empresa_id: integEmpresa, id: Number(b.dataset.revocarIntegracion) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo revocar.');
+  await cargarIntegraciones(); ir('integraciones', false);
 });
 
 function formPago(p = {}) {

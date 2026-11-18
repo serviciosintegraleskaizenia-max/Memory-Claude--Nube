@@ -12,6 +12,7 @@ const { revisarReservas } = require('./revision');
 const viator = require('./viator');
 const crearCentral = require('./plataforma/central');
 const crearOficina = require('./plataforma/oficina');
+const apiExterna = require('./plataforma/api-externa');
 const crearMotor = require('./motor');
 const crearPush = require('./push');
 
@@ -362,6 +363,7 @@ client.connect()
   .then(() => central.preparar().catch(e => console.log('Panel central:', e.message)))
   .then(() => oficina.preparar().catch(e => console.log('Oficina:', e.message)))
   .then(() => operaciones.preparar().catch(e => console.log('Operaciones:', e.message)))
+  .then(() => apiExterna.preparar(client).catch(e => console.log('API externa:', e.message)))
   .then(() => {
     motorCorreo.iniciar();
     operaciones.iniciar();
@@ -1890,6 +1892,10 @@ http.createServer(async (req, res) => {
     // Apps de Oficina (instalables): página de instalación, manifiesto e icono; las apps en prueba piden código.
     if (oficina.activo && (url === '/app' || url.startsWith('/app/'))) {
       return oficina.apps.manejarPublico(req, res, url, { json, leerCuerpo });
+    }
+    // API para sistemas externos (SYSSTOURS u otros): llave propia de solo lectura, sin sesión del panel.
+    if (url.startsWith('/api/v1/')) {
+      if (await apiExterna.manejarApi(client, req, res, url, { json })) return;
     }
     if (url.startsWith('/api/conocimiento/')) {
       return oficina.conocimiento.manejarPublico(req, res, url, { json, leerCuerpo });
