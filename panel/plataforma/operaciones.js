@@ -153,6 +153,9 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     // Tarifarios que el programador sube en la Oficina (Base del asistente → 💲 Tarifarios): llegan aquí y se cargan en los precios.
     await q(`CREATE TABLE IF NOT EXISTS op_cuentas_pago (id SERIAL PRIMARY KEY, tipo TEXT NOT NULL DEFAULT 'otro', nombre TEXT NOT NULL, titular TEXT NOT NULL DEFAULT '', cuenta_fin TEXT NOT NULL DEFAULT '', numero_enc TEXT, detalle TEXT NOT NULL DEFAULT '', activa BOOLEAN NOT NULL DEFAULT TRUE, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_pagos (id SERIAL PRIMARY KEY, reserva TEXT NOT NULL, monto NUMERIC NOT NULL, moneda TEXT NOT NULL DEFAULT 'US$', metodo TEXT NOT NULL DEFAULT 'Otro', cuenta_id INTEGER, referencia TEXT NOT NULL DEFAULT '', fecha DATE, voucher_ruta TEXT, voucher_nombre TEXT, voucher_hash TEXT, estado TEXT NOT NULL DEFAULT 'por_verificar', registrado_por TEXT NOT NULL DEFAULT '', verificado_por TEXT, verificado_en TIMESTAMP, nota TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS archivo_reservas (reserva_id INTEGER PRIMARY KEY, anio INTEGER NOT NULL DEFAULT 0, cliente TEXT NOT NULL DEFAULT '', agencia TEXT NOT NULL DEFAULT '', buscable TEXT NOT NULL DEFAULT '', fecha_servicio TEXT NOT NULL DEFAULT '', total NUMERIC NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, huella TEXT NOT NULL, snapshot JSONB NOT NULL, creado TIMESTAMP NOT NULL DEFAULT NOW(), actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS archivo_reservas_versiones (id SERIAL PRIMARY KEY, reserva_id INTEGER NOT NULL, version INTEGER NOT NULL, huella TEXT NOT NULL, snapshot JSONB NOT NULL, cambios TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE (reserva_id, version))`);
+    await q(`CREATE INDEX IF NOT EXISTS archivo_reservas_anio ON archivo_reservas (anio)`);
     await q(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
     await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
@@ -481,6 +484,49 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       costo, tarifa_costo: tCosto, zona, modalidad: modalidadFinal, agencia, aviso: avisoPuerto({ ...s, zona }, reglas) };
   }
 
+  // ---------- Archivo de reservas: copia de cada reserva con su historial de versiones. Nunca se borra nada. ----------
+  const CATEGORIAS_ARCHIVO = ['RESERVA', 'MODIFICACION'];
+  function diferencias(a, b) {
+    const claves = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    return [...claves].filter(k => JSON.stringify((a || {})[k]) !== JSON.stringify((b || {})[k])).join(', ');
+  }
+  // Guarda la reserva tal como está ahora. Si no cambió desde la última copia, no hace nada.
+  async function archivarReservas(ids) {
+    if (!ids || !ids.length) return 0;
+    const filas = (await client.query('SELECT c.* FROM clasificacion c WHERE c.id = ANY($1::int[]) AND c.categoria = ANY($2::text[]) ORDER BY c.id', [ids, CATEGORIAS_ARCHIVO])).rows;
+    let guardadas = 0;
+    for (const c of filas) {
+      const servicios = (await client.query(`SELECT o.id, o.estado, o.fecha, o.hora, o.precio, o.costo, ch.nombre AS chofer, v.nombre AS vehiculo, pr.nombre AS proveedor
+        FROM op_servicios o LEFT JOIN op_choferes ch ON ch.id = o.chofer_id LEFT JOIN op_vehiculos v ON v.id = o.vehiculo_id LEFT JOIN op_proveedores pr ON pr.id = o.proveedor_id
+        WHERE o.servicio_id = $1 ORDER BY o.id`, [c.id])).rows.map(s => ({ ...s, precio: s.precio === null ? null : Number(s.precio), costo: s.costo === null ? null : Number(s.costo) }));
+      const snap = { reserva: c.id, recibido: c.creado, buzon: c.buzon || '', remitente: c.remitente || '', asunto: c.asunto || '', categoria: c.categoria || '', estado_correo: c.estado || '', agencia: c.agencia || '', cliente: c.nombre_cliente || '', telefono: c.telefono || '', tipo: c.tipo_servicio || '', fecha_servicio: c.fecha_servicio || '', hora: c.hora_servicio || '', hotel: c.hotel || '', desde: c.punto_partida || '', hasta: c.punto_llegada || '', vuelo: c.vuelo || '', aeropuerto: c.aeropuerto || '', actividad: c.actividad || '', adultos: c.adultos || 0, ninos: c.ninos || 0, infantes: c.infantes || 0, servicios };
+      const huella = crypto.createHash('sha256').update(JSON.stringify(snap)).digest('hex');
+      const anio = Number((String(c.fecha_servicio || '').match(/\d{4}/) || [])[0]) || new Date(c.creado).getFullYear();
+      const total = servicios.reduce((s, x) => s + (x.precio || 0), 0);
+      const buscable = [c.nombre_cliente, c.agencia, c.hotel, c.vuelo, c.asunto, c.remitente, c.punto_partida, c.punto_llegada, String(c.id)].filter(Boolean).join(' | ').toLowerCase();
+      const previa = (await client.query('SELECT version, huella, snapshot FROM archivo_reservas WHERE reserva_id = $1', [c.id])).rows[0];
+      if (!previa) {
+        await client.query('INSERT INTO archivo_reservas (reserva_id, anio, cliente, agencia, buscable, fecha_servicio, total, version, huella, snapshot) VALUES ($1,$2,$3,$4,$5,$6,$7,1,$8,$9)', [c.id, anio, snap.cliente, snap.agencia, buscable, snap.fecha_servicio, total, huella, JSON.stringify(snap)]);
+        await client.query('INSERT INTO archivo_reservas_versiones (reserva_id, version, huella, snapshot, cambios) VALUES ($1,1,$2,$3,$4)', [c.id, huella, JSON.stringify(snap), 'Primera copia en el archivo']);
+        guardadas++;
+      } else if (previa.huella !== huella) {
+        const version = previa.version + 1;
+        const cambios = diferencias(previa.snapshot, snap);
+        await client.query('UPDATE archivo_reservas SET anio=$2, cliente=$3, agencia=$4, buscable=$5, fecha_servicio=$6, total=$7, version=$8, huella=$9, snapshot=$10, actualizado=NOW() WHERE reserva_id=$1', [c.id, anio, snap.cliente, snap.agencia, buscable, snap.fecha_servicio, total, version, huella, JSON.stringify(snap)]);
+        await client.query('INSERT INTO archivo_reservas_versiones (reserva_id, version, huella, snapshot, cambios) VALUES ($1,$2,$3,$4,$5)', [c.id, version, huella, JSON.stringify(snap), 'Cambió: ' + cambios]);
+        guardadas++;
+      }
+    }
+    return guardadas;
+  }
+  // Reservas que todavía no están en el archivo, y las de los últimos 3 días (por si cambiaron).
+  async function archivarPendientes() {
+    const ids = (await client.query(`SELECT c.id FROM clasificacion c WHERE c.categoria = ANY($1::text[]) AND NOT COALESCE(c.error_ia, FALSE)
+      AND (c.creado > NOW() - INTERVAL '3 days' OR NOT EXISTS (SELECT 1 FROM archivo_reservas a WHERE a.reserva_id = c.id))
+      ORDER BY c.id LIMIT 400`, [CATEGORIAS_ARCHIVO])).rows.map(x => x.id);
+    return archivarReservas(ids);
+  }
+
   // ---------- sincronizar: servicios "Registrada" → Operaciones ----------
   function snapDe(s) { return { fecha: s.fecha_servicio || '', hora: s.hora_servicio || '', vuelo: s.vuelo || '', pax: paxTotal(s), hotel: s.hotel || '', tipo: s.tipo_servicio || '', cancelado: /^\s*(CANCELAD[OA]|EN ESPERA|STANDBY)/i.test(s.motivo || '') }; }
   async function sincronizar(forzar) {
@@ -558,6 +604,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           [fecha, s.hora_servicio || '', tm.recogida, JSON.stringify(nuevo), asignado ? texto + '. Revisa el chofer.' : '', s.op_id]);
         await evento(s.op_id, 'cambio', texto, 'sistema');
       }
+      await archivarPendientes().catch(e => console.log('Archivo de reservas:', e.message));
       ultimaSync = Date.now();
     })().finally(() => { sincronizando = null; });
     return sincronizando;
@@ -1483,6 +1530,32 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         const tipos = { '.pdf': 'application/pdf', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
         res.writeHead(200, { 'Content-Type': tipos[path.extname(p.voucher_ruta).toLowerCase()] || 'application/octet-stream', 'Content-Disposition': 'inline; filename="' + String(p.voucher_nombre || 'comprobante').replace(/"/g, '') + '"' });
         return res.end(buf);
+      }
+      // ---------- Archivo de reservas: búsqueda de cualquier reserva, de cualquier año ----------
+      if (req.method === 'GET' && url === '/api/op/archivo') {
+        pide('ver_reservas_op', 'No tienes permiso para ver las reservas.');
+        const p = new URL(req.url, 'http://localhost').searchParams;
+        const busca = String(p.get('q') || '').trim().toLowerCase().slice(0, 80).replace(/[%_\\]/g, '\\$&');
+        const anio = Number(p.get('anio')) || 0;
+        const pagina = Math.max(1, Number(p.get('pagina')) || 1);
+        const total = Number((await client.query(`SELECT COUNT(*)::int AS n FROM archivo_reservas WHERE ($1 = '' OR buscable LIKE '%' || $1 || '%') AND ($2 = 0 OR anio = $2)`, [busca, anio])).rows[0].n);
+        const filas = (await client.query(`SELECT reserva_id, anio, cliente, agencia, fecha_servicio, total, version, actualizado FROM archivo_reservas WHERE ($1 = '' OR buscable LIKE '%' || $1 || '%') AND ($2 = 0 OR anio = $2) ORDER BY reserva_id DESC LIMIT 50 OFFSET $3`, [busca, anio, (pagina - 1) * 50])).rows;
+        return json(res, 200, { total, pagina, reservas: filas.map(r => ({ ...r, total: Number(r.total) })) });
+      }
+      if (req.method === 'GET' && url === '/api/op/archivo/detalle') {
+        pide('ver_reservas_op', 'No tienes permiso para ver las reservas.');
+        const id = Number(new URL(req.url, 'http://localhost').searchParams.get('reserva')) || 0;
+        const r = (await client.query('SELECT reserva_id, anio, cliente, agencia, fecha_servicio, total, version, huella, snapshot, creado, actualizado FROM archivo_reservas WHERE reserva_id = $1', [id])).rows[0];
+        if (!r) return json(res, 404, { error: 'Esa reserva no está en el archivo.' });
+        const versiones = (await client.query('SELECT version, cambios, creado FROM archivo_reservas_versiones WHERE reserva_id = $1 ORDER BY version DESC', [id])).rows;
+        const pagos = prog || puede('ver_pagos') ? (await client.query(`SELECT id, monto, moneda, metodo, referencia, estado, voucher_nombre, to_char(fecha, 'YYYY-MM-DD') AS fecha FROM op_pagos WHERE reserva = $1 ORDER BY creado`, [String(id)])).rows : null;
+        return json(res, 200, { reserva: { ...r, total: Number(r.total) }, versiones, pagos });
+      }
+      if (req.method === 'POST' && url === '/api/op/archivo/reconstruir') {
+        pide('configurar_operaciones', 'Solo el Programador puede reconstruir el archivo.');
+        let guardadas = 0;
+        for (let i = 0; i < 100; i++) { const n = await archivarPendientes(); guardadas += n; if (!n) break; }
+        return json(res, 200, { ok: true, guardadas });
       }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }

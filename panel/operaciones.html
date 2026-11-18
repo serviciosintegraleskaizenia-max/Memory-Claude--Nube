@@ -358,6 +358,7 @@ function proximamente() {
 const VISTAS = [
   ['hoy', 'sun', 'Hoy', 'ver_operaciones', 'operaciones'],
   ['reservas', 'book-open', 'Reservas', 'ver_reservas_op', null],
+  ['archivo', 'search', 'Archivo de reservas', 'ver_reservas_op', null],
   ['operaciones', 'route', 'Asignar servicios', 'ver_operaciones', 'operaciones'],
   ['tablero', 'layout-dashboard', 'Tablero', 'ver_operaciones', 'operaciones'],
   ['vivo', 'navigation', 'Mapa de choferes', ['ver_choferes_vivo', 'ver_vuelos'], 'operaciones'],
@@ -397,7 +398,7 @@ async function ir(v) {
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
   const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
-    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias }[v];
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
@@ -1792,6 +1793,47 @@ document.addEventListener('click', async ev => {
   const r = await api('/api/op/pagos/verificar', { id, decision, nota });
   if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
   aviso(decision === 'verificado' ? 'Pago verificado.' : 'Pago rechazado.'); await vGanancias();
+});
+
+/* ---------- Archivo de reservas: búsqueda de cualquier reserva, de cualquier año ---------- */
+let ARCH = { q: '', anio: 0, pagina: 1, sel: 0 };
+async function vArchivo() {
+  const r = await api(`/api/op/archivo?q=${encodeURIComponent(ARCH.q)}&anio=${ARCH.anio}&pagina=${ARCH.pagina}`);
+  const d = r.ok ? r.data : { total: 0, reservas: [] };
+  const paginas = Math.max(1, Math.ceil(d.total / 50));
+  $('#vista').innerHTML = cabeceraDia('Archivo de reservas', 'Todas las reservas desde el primer día, de cualquier año. Cada cambio queda como versión nueva; nada se borra.') +
+    `<div class="caja"><div class="fila2" style="gap:8px"><input id="arQ" value="${esc(ARCH.q)}" placeholder="Nombre, número de reserva, agencia, hotel o vuelo" style="flex:1"><input id="arA" type="number" min="2000" max="2100" value="${ARCH.anio || ''}" placeholder="Año" style="max-width:120px"><button class="btn" id="arBuscar">Buscar</button></div>
+     <div class="ay" style="margin:8px 0">${d.total} reserva(s) encontradas</div>
+     <div style="overflow-x:auto"><table><thead><tr><th>Reserva</th><th>Cliente</th><th>Agencia</th><th>Servicio</th><th>Año</th><th>Versiones</th><th></th></tr></thead><tbody>${d.reservas.map(x => `<tr><td>#${x.reserva_id}</td><td>${esc(x.cliente || '—')}</td><td>${esc(x.agencia || '—')}</td><td>${esc(x.fecha_servicio || '—')}</td><td>${x.anio || '—'}</td><td>${x.version}</td><td><button class="btn-mini" data-arch-ver="${x.reserva_id}">Ver</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">No hay reservas con esa búsqueda.</td></tr>'}</tbody></table></div>
+     <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:10px"><button class="btn-mini" data-arch-pag="-1" ${ARCH.pagina <= 1 ? 'disabled' : ''}>← Anterior</button><span class="ay">Página ${ARCH.pagina} de ${paginas}</span><button class="btn-mini" data-arch-pag="1" ${ARCH.pagina >= paginas ? 'disabled' : ''}>Siguiente →</button></div></div>
+     <div id="arDetalle"></div>`;
+  if (ARCH.sel) await cargarArchivoDetalle(ARCH.sel);
+}
+async function cargarArchivoDetalle(id) {
+  ARCH.sel = id;
+  const r = await api('/api/op/archivo/detalle?reserva=' + id);
+  const el = document.getElementById('arDetalle');
+  if (!el) return;
+  if (!r.ok) { el.innerHTML = `<div class="caja" style="margin-top:14px"><div class="vacio">${esc(r.data.error || 'No se pudo abrir la reserva.')}</div></div>`; return; }
+  const x = r.data.reserva, s = x.snapshot;
+  el.innerHTML = `<div class="caja" style="margin-top:14px"><div class="cab"><h3>Reserva #${x.reserva_id} · versión ${x.version}</h3><button class="btn-mini" data-arch-cerrar="1">Cerrar</button></div>
+    <div class="fila2"><div><b>${esc(s.cliente || '—')}</b><div class="sub2">${esc(s.agencia || '—')} · ${esc(s.telefono || '')}</div></div><div><b>${esc(s.fecha_servicio || '—')} ${esc(s.hora || '')}</b><div class="sub2">${esc(s.hotel || '')}</div><div class="sub2">${esc(s.desde || '')} → ${esc(s.hasta || '')}</div></div></div>
+    <p class="sub" style="margin:8px 0">Pasajeros: ${s.adultos || 0} adultos · ${s.ninos || 0} niños · ${s.infantes || 0} infantes${s.vuelo ? ' · Vuelo ' + esc(s.vuelo) : ''}</p>
+    <h4>Servicios</h4>${(s.servicios || []).map(v => `<div class="sub2">${esc(v.fecha || '')} ${esc(v.hora || '')} · ${esc(v.estado || '')} · ${esc(v.chofer || v.proveedor || 'sin asignar')} · ${dinero(v.precio)}</div>`).join('') || '<div class="sub2">Sin servicios todavía.</div>'}
+    ${r.data.pagos ? `<h4 style="margin-top:10px">Pagos</h4>${r.data.pagos.map(p => `<div class="sub2">${esc(p.fecha || '')} · ${esc(p.moneda)} ${Number(p.monto).toFixed(2)} · ${esc(p.metodo)} · ${esc(p.estado)}</div>`).join('') || '<div class="sub2">Sin pagos.</div>'}` : ''}
+    <h4 style="margin-top:10px">Historial de versiones</h4>${r.data.versiones.map(v => `<div class="sub2"><b>Versión ${v.version}</b> · ${esc(new Date(v.creado).toLocaleString('es-DO'))} · ${esc(v.cambios)}</div>`).join('')}
+  </div>`;
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('#arBuscar,[data-arch-ver],[data-arch-pag],[data-arch-cerrar]');
+  if (!b) return;
+  if (b.id === 'arBuscar') { ARCH.q = val('arQ').trim(); ARCH.anio = Number(val('arA')) || 0; ARCH.pagina = 1; ARCH.sel = 0; return vArchivo(); }
+  if (b.dataset.archVer) return cargarArchivoDetalle(Number(b.dataset.archVer));
+  if (b.dataset.archPag) { ARCH.pagina = Math.max(1, ARCH.pagina + Number(b.dataset.archPag)); ARCH.sel = 0; return vArchivo(); }
+  if (b.dataset.archCerrar) { ARCH.sel = 0; const el = document.getElementById('arDetalle'); if (el) el.innerHTML = ''; }
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ev.target && ev.target.id === 'arQ') { ARCH.q = ev.target.value.trim(); ARCH.anio = Number(val('arA')) || 0; ARCH.pagina = 1; ARCH.sel = 0; vArchivo(); }
 });
 
 </script>
