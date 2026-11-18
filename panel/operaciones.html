@@ -588,7 +588,7 @@ async function abrirDetalle(id) {
     ${x.alerta ? `<div class="caja" style="border-color:rgba(217,45,75,.35);padding:10px 12px"><div class="alerta" style="margin:0">${ic('triangle-alert')}${esc(x.alerta)}</div>${I.permisos.asignar_servicios ? `<button class="btn mini s" style="margin-top:8px" data-quitar-alerta="${x.id}">Ya lo revisé</button>` : ''}</div>` : ''}
     <div class="dato"><span>Fecha</span><span>${S.filtro === 'sin_fecha' || !x.fecha ? `<span style="color:var(--rojo)">Sin fecha</span>` : fechaLarga(x.fecha)}</span></div>
     <div class="dato"><span>${x.tipo === 'OUT' ? 'Vuelo sale' : x.tipo === 'IN' ? 'Vuelo llega' : 'Hora'}</span><span>${esc(x.hora || '—')}${x.tipo === 'OUT' ? ` · <b>recoger ${esc(x.recogida)}</b>` : ''}</span></div>
-    ${x.vuelo ? `<div class="dato"><span>Vuelo</span><span>${esc(x.vuelo)} ${x.aeropuerto ? '· ' + esc(x.aeropuerto) : ''}${v && v.estado ? ` · <b>${esc(v.estado)}</b>${v.hora_estimada ? ' ' + esc(v.hora_estimada) : ''}${v.terminal ? ' · terminal ' + esc(v.terminal) : ''}${v.puerta ? ' · puerta ' + esc(v.puerta) : ''}` : ''}</span></div>` : ''}
+    ${x.vuelo ? `<div class="dato"><span>Vuelo</span><span>${esc(x.vuelo)} ${x.aeropuerto ? '· ' + esc(x.aeropuerto) : ''}<span class="vuelo-verif" data-numero="${esc(x.vuelo)}" data-fecha="${esc(x.fecha || '')}" data-aeropuerto="${esc(x.aeropuerto || '')}" data-tipo="${esc(x.tipo || '')}"></span>${v && v.estado ? ` · <b>${esc(v.estado)}</b>${v.hora_estimada ? ' ' + esc(v.hora_estimada) : ''}${v.terminal ? ' · terminal ' + esc(v.terminal) : ''}${v.puerta ? ' · puerta ' + esc(v.puerta) : ''}` : ''}</span></div>` : ''}
     <div class="dato"><span>Recorrido</span><span>${esc(x.desde || '—')} → ${esc(x.hasta || '—')}${x.zona ? ' · zona ' + esc(x.zona) : ''}</span></div>
     <div class="dato"><span>Pasajeros</span><span>${x.pax.adultos} adultos${x.pax.ninos ? ', ' + x.pax.ninos + ' niños' : ''}${x.pax.infantes ? ', ' + x.pax.infantes + ' infantes' : ''}</span></div>
     ${x.viator && x.viator.incluye.length ? `<div class="dato"><span>Incluye (Viator)</span><span>${x.viator.incluye.map(a => `<span class="tag" style="margin:0 4px 4px 0;background:rgba(109,75,216,.1);color:var(--violeta)">${esc(a)}</span>`).join('')}</span></div>` : ''}
@@ -696,6 +696,8 @@ function pintarMapa(vuelos = []) {
   const cargarLeaflet = () => new Promise(ok => { if (window.L) return ok(); const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = ok; document.head.appendChild(s); });
   cargarLeaflet().then(async () => {
     if (!$('#mapa')) return;
+    const vv = await api('/api/op/vuelos-verificados?fecha=' + S.fecha);
+    const verificadosHoy = new Set(vv.ok ? vv.data.numeros : []);
     mapa = L.map('mapa').setView(S.sede === 'Orlando' ? [28.42, -81.47] : [18.62, -68.42], 9);
     const cfgMapa = await api('/api/op/mapas-config');
     const tokMapa = cfgMapa.ok ? cfgMapa.data.mapbox : '';
@@ -708,7 +710,7 @@ function pintarMapa(vuelos = []) {
       L.marker(ll, { icon: L.divIcon({ className: '', html: `<div style="transform:translate(-50%,-50%);background:#0c1a2e;color:#e8c877;border-radius:8px;padding:3px 7px;font-weight:800;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,.3)">✈ ${cod}</div>` }) }).addTo(mapa);
     }
     // Aviones: el ícono gira hacia donde vuela
-    for (const a of vuelos.filter(x => x.en_mapa)) {
+    for (const a of vuelos.filter(x => x.en_mapa && verificadosHoy.has(String(x.vuelo || '').toUpperCase().replace(/[^A-Z0-9]/g, '')))) {
       const icono = L.divIcon({ className: '', html: `<div style="transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px"><div style="transform:rotate(${(a.rumbo || 0) - 45}deg);font-size:24px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">✈️</div><span style="background:#fff;color:#0f1b2d;border-radius:7px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2)">${esc(a.vuelo)} · ${a.pax} pax</span></div>` });
       L.marker([a.lat, a.lng], { icon: icono }).addTo(mapa).bindPopup(`<b>${esc(a.vuelo)}</b> (${esc(a.callsign)})<br>${a.tipo === 'IN' ? 'Llega' : 'Sale'} ${esc(a.hora || '')} · ${esc(a.aeropuerto || '')}<br>${esc(estadoAvion(a)[0])}<br>${esc(a.cliente || '')}`);
       pts.push([a.lat, a.lng]);
@@ -1862,6 +1864,20 @@ async function mostrarRutaChofer(id) {
     <div class="sub2" style="margin-top:8px">${d.tramos.map(t => `${esc(t.desde)} → ${esc(t.hasta)}: ${t.km ?? '—'} km · ${t.minutos ?? '—'} min`).join('<br>')}</div>
     ${d.avisos.length ? `<div class="ay" style="margin-top:6px">⚠ ${d.avisos.map(a => esc(a)).join(' · ')}</div>` : ''}</div>`;
 }
+
+/* ---------- Verificación del vuelo de cada reserva (si el vuelo existe y coincide con la reserva) ---------- */
+const ETIQUETA_VUELO = { verificado: '<b style="color:var(--verde)">✔ Vuelo verificado</b>', advertencia: '<b style="color:var(--ambar)">⚠ Revisa el vuelo</b>', no_encontrado: '<b style="color:var(--rojo)">✖ Vuelo no encontrado</b>', sin_llave: '<span class="sub2">Sin verificar: falta la llave de vuelos</span>', error: '<span class="sub2">No se pudo verificar ahora</span>', sin_datos: '<span class="sub2">Sin número de vuelo</span>' };
+async function verificarVuelosEnPantalla() {
+  for (const el of [...document.querySelectorAll('.vuelo-verif:not([data-hecho])')]) {
+    el.dataset.hecho = '1';
+    const q = new URLSearchParams({ numero: el.dataset.numero || '', fecha: el.dataset.fecha || '', aeropuerto: el.dataset.aeropuerto || '', tipo: el.dataset.tipo || '' });
+    const r = await api('/api/op/vuelo-verificar?' + q);
+    if (!r.ok) { el.innerHTML = ' · <span class="sub2">No se pudo verificar</span>'; continue; }
+    const d = r.data;
+    el.innerHTML = ' · ' + (ETIQUETA_VUELO[d.estado] || '') + (d.avisos && d.avisos.length ? `<div class="ay" style="margin-top:4px">${d.avisos.map(a => esc(a)).join('<br>')}</div>` : '');
+  }
+}
+new MutationObserver(() => verificarVuelosEnPantalla()).observe(document.body, { childList: true, subtree: true });
 
 </script>
 </body>

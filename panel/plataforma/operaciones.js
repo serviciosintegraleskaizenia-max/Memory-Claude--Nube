@@ -150,6 +150,57 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     const sumar = k => Math.round(tramos.reduce((s, t) => s + (Number(t[k]) || 0), 0) * 10) / 10;
     return { paradas, tramos, totalKm: sumar('km'), totalMinutos: Math.round(sumar('minutos')), avisos };
   }
+  // ---------- Verificación de vuelos de las reservas: ¿el vuelo existe y sale o llega donde dice la reserva? ----------
+  // Se guarda 24 horas: un mismo vuelo no se consulta más de una vez al día. Los errores no se guardan (se vuelve a intentar).
+  // Compara los datos del vuelo con la reserva (cada vez que se pide, también si viene de la caché).
+  function evaluarVuelo(d, aeropuerto, tipo) {
+    const avisos = [];
+    let estado = 'verificado';
+    if (/cancel/i.test(d.estado_vuelo || '')) { estado = 'advertencia'; avisos.push('El vuelo aparece como cancelado.'); }
+    const ap = String(aeropuerto || '').toUpperCase().slice(0, 3);
+    if (tipo === 'IN') {
+      if (!d.destino) { estado = 'advertencia'; avisos.push('El proveedor no trae el aeropuerto de llegada: no pude confirmar ' + (ap || 'el destino') + '.'); }
+      else if (ap && d.destino !== ap) { estado = 'advertencia'; avisos.push(`Llega a ${d.destino}, la reserva dice ${ap}.`); }
+    } else if (tipo === 'OUT') {
+      if (!d.origen) { estado = 'advertencia'; avisos.push('El proveedor no trae el aeropuerto de salida: no pude confirmar ' + (ap || 'el origen') + '.'); }
+      else if (ap && d.origen !== ap) { estado = 'advertencia'; avisos.push(`Sale de ${d.origen}, la reserva dice ${ap}.`); }
+    }
+    return { estado, avisos };
+  }
+  // ¿El vuelo existe y coincide con la reserva? La caché guarda solo los datos del vuelo; la comparación se hace siempre.
+  async function verificarVuelo(numero, fecha, aeropuerto, tipo) {
+    const ident = String(numero || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!ident || !/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return { estado: 'sin_datos', avisos: ['La reserva no trae número de vuelo o fecha.'] };
+    const clave = ident + '|' + fecha;
+    const previa = (await client.query("SELECT estado, datos FROM op_vuelos_verif WHERE clave = $1 AND creado > NOW() - INTERVAL '24 hours'", [clave])).rows[0];
+    if (previa && previa.estado === 'no_encontrado') return { estado: 'no_encontrado', avisos: [`El vuelo ${ident} no aparece para el ${fecha}. Confírmalo con la agencia antes de confirmar la reserva.`], desdeCache: true };
+    if (previa) { const ev = evaluarVuelo(previa.datos, aeropuerto, tipo); return { ...previa.datos, ...ev, desdeCache: true }; }
+    const llave = await llaveDeOficina('api_vuelos');
+    if (!llave) return { estado: 'sin_llave', avisos: ['Falta la llave de AeroDataBox: se pone en Oficina → APIs y suscripciones.'] };
+    let v = null;
+    try { v = await consultarVuelo(null, ident, fecha); } catch (e) { return { estado: 'error', avisos: ['No pude consultar el vuelo: ' + e.message] }; }
+    if (!v) {
+      await client.query('INSERT INTO op_vuelos_verif (clave, estado, datos, avisos) VALUES ($1, $2, $3, $4) ON CONFLICT (clave) DO UPDATE SET estado = EXCLUDED.estado, datos = EXCLUDED.datos, avisos = EXCLUDED.avisos, creado = NOW()', [clave, 'no_encontrado', '{}', '']);
+      return { estado: 'no_encontrado', avisos: [`El vuelo ${ident} no aparece para el ${fecha}. Confírmalo con la agencia antes de confirmar la reserva.`] };
+    }
+    const datos = { aerolinea: v.aerolinea || '', modelo: v.modelo || '', origen: v.origen || '', destino: v.destino || '', llegada_programada: v.llegada_programada || '', salida_programada: v.salida_programada || '', estado_vuelo: v.estado || '' };
+    await client.query('INSERT INTO op_vuelos_verif (clave, estado, datos, avisos) VALUES ($1, $2, $3, $4) ON CONFLICT (clave) DO UPDATE SET estado = EXCLUDED.estado, datos = EXCLUDED.datos, avisos = EXCLUDED.avisos, creado = NOW()', [clave, 'verificado', JSON.stringify(datos), '']);
+    return { ...datos, ...evaluarVuelo(datos, aeropuerto, tipo) };
+  }
+  // Revisa los vuelos de las reservas de los próximos 3 días. Como máximo `maximo` consultas nuevas por pasada.
+  async function verificarVuelosProximos(maximo) {
+    const hoy = hoyLocal(), hasta = new Date(Date.parse(hoy) + 3 * 86400000).toISOString().slice(0, 10);
+    const lista = (await client.query(`SELECT DISTINCT vuelo, fecha_servicio, aeropuerto, tipo_servicio FROM clasificacion
+      WHERE vuelo IS NOT NULL AND vuelo <> '' AND fecha_servicio ~ '^\\d{4}-\\d{2}-\\d{2}$' AND fecha_servicio BETWEEN $1 AND $2
+        AND categoria IN ('RESERVA', 'MODIFICACION') AND NOT COALESCE(error_ia, FALSE)`, [hoy, hasta])).rows;
+    let nuevas = 0;
+    for (const x of lista) {
+      if (nuevas >= maximo) break;
+      const r = await verificarVuelo(x.vuelo, x.fecha_servicio, x.aeropuerto, String(x.tipo_servicio || '').toUpperCase());
+      if (!r.desdeCache) nuevas++;
+    }
+    return nuevas;
+  }
   // Llaves de Oficina (APIs y suscripciones): llegan a esta empresa en zentralia_ajustes. Sin llave de Oficina: ''.
   async function llaveDeOficina(clave) {
     try { const r = await client.query('SELECT valor FROM zentralia_ajustes WHERE clave = $1', [clave]); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
@@ -229,6 +280,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     await q(`CREATE INDEX IF NOT EXISTS archivo_reservas_anio ON archivo_reservas (anio)`);
     await q(`CREATE TABLE IF NOT EXISTS op_lugares (texto TEXT PRIMARY KEY, lat DOUBLE PRECISION, lng DOUBLE PRECISION, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_rutas (clave TEXT PRIMARY KEY, km NUMERIC NOT NULL, minutos NUMERIC NOT NULL, geometria JSONB NOT NULL, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS op_vuelos_verif (clave TEXT PRIMARY KEY, estado TEXT NOT NULL, datos JSONB NOT NULL DEFAULT '{}', avisos TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
     await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
@@ -678,6 +730,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         await evento(s.op_id, 'cambio', texto, 'sistema');
       }
       await archivarPendientes().catch(e => console.log('Archivo de reservas:', e.message));
+      await verificarVuelosProximos(5).catch(e => console.log('Vuelos:', e.message));
       ultimaSync = Date.now();
     })().finally(() => { sincronizando = null; });
     return sincronizando;
@@ -975,7 +1028,8 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       const ret = prog && est ? Math.round((Date.parse(String(est).replace(' ', 'T')) - Date.parse(String(prog).replace(' ', 'T'))) / 60000) : 0;
       return { fuente: 'AeroDataBox', estado: /cancel/i.test(f.status) ? 'cancelado' : /divert/i.test(f.status) ? 'desviado' : /arriv|landed/i.test(f.status) ? 'aterrizó' : /enroute|departed|airborne/i.test(f.status) ? 'en vuelo' : 'programado', texto: f.status || '',
         llegada_programada: prog, llegada_estimada: est, llegada_real: real, salida_programada: t(s.scheduledTime) || '', salida_estimada: t(s.revisedTime) || '', salida_real: t(s.runwayTime) || '',
-        retraso_min: Number.isFinite(ret) ? ret : 0, terminal: a.terminal || '', puerta: a.gate || '' };
+        retraso_min: Number.isFinite(ret) ? ret : 0, terminal: a.terminal || '', puerta: a.gate || '',
+        origen: (s.airport || {}).iata || '', destino: (a.airport || {}).iata || '', aerolinea: (f.airline || {}).name || '', modelo: (f.aircraft || {}).model || '' };
     } finally { clearTimeout(reloj); }
   }
   const horaLocal = iso => { const m = String(iso || '').match(/(\d{2}):(\d{2})/); return m ? m[1] + ':' + m[2] : ''; };
@@ -1638,6 +1692,17 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         if (!chofer) return json(res, 400, { error: 'Elige un chofer.' });
         const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(p.get('fecha') || '')) ? String(p.get('fecha')) : hoyLocal();
         return json(res, 200, await rutaDelChofer(chofer, fecha));
+      }
+      if (req.method === 'GET' && url === '/api/op/vuelo-verificar') {
+        pide('ver_reservas_op', 'No tienes permiso para ver las reservas.');
+        const p = new URL(req.url, 'http://localhost').searchParams;
+        return json(res, 200, await verificarVuelo(p.get('numero'), p.get('fecha'), p.get('aeropuerto'), String(p.get('tipo') || '').toUpperCase()));
+      }
+      if (req.method === 'GET' && url === '/api/op/vuelos-verificados') {
+        pide('ver_vuelos', 'No tienes permiso para ver los vuelos.');
+        const fecha = String(new URL(req.url, 'http://localhost').searchParams.get('fecha') || hoyLocal());
+        const filas = (await client.query("SELECT clave FROM op_vuelos_verif WHERE estado = 'verificado' AND clave LIKE '%|' || $1", [fecha])).rows;
+        return json(res, 200, { numeros: filas.map(r => r.clave.split('|')[0]) });
       }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }
