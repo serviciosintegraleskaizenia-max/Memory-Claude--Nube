@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const crearConocimiento = require('./conocimiento');
 const crearRedes = require('./redes');
 const crearProyectos = require('./proyectos');
+const crearApps = require('./apps');
 const fsR = require('fs');
 const pathR = require('path');
 const { spawn: spawnR } = require('child_process');
@@ -90,12 +91,15 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const redes = crearRedes({ client, registrar, central, conocimiento });
   // Gastos de creación de cada sistema y reparto entre socios (aparte de los gastos del negocio).
   const proyectos = crearProyectos({ client });
+  // Apps instalables (PWA) para probar y publicar desde la Oficina.
+  const apps = crearApps({ client, registrar });
 
   async function preparar() {
     if (!activo) return;
     await conocimiento.preparar();
     await redes.preparar();
     await proyectos.preparar();
+    await apps.preparar();
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_apis (
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL DEFAULT 0, nombre TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'Otro',
       proveedor TEXT NOT NULL DEFAULT '', plan TEXT NOT NULL DEFAULT 'Gratis', costo_mensual NUMERIC NOT NULL DEFAULT 0,
@@ -503,6 +507,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url === '/api/oficina/negocios') return ['negocios', 'inicio'];
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
     if (url.startsWith('/api/oficina/apis')) return ['apis_programador'];
+    if (url.startsWith('/api/oficina/apps')) return ['apps_programador'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
@@ -535,6 +540,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
 
       if (url === '/api/oficina/redes' || url.startsWith('/api/oficina/redes/')) {
         return await redes.manejarOficina(req, res, url, u, { json, leerCuerpo });
+      }
+      if (url === '/api/oficina/apps' || url.startsWith('/api/oficina/apps/')) {
+        return await apps.manejarOficina(req, res, url, u, { json, leerCuerpo });
       }
       if (url === '/api/oficina/proyectos' || url.startsWith('/api/oficina/proyectos/')) {
         return await proyectos.manejar(req, res, url, u, { json, leerCuerpo, registrar });
@@ -804,5 +812,5 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
   }
 
-  return { activo, preparar, manejar, conocimiento, redes };
+  return { activo, preparar, manejar, conocimiento, redes, apps };
 };

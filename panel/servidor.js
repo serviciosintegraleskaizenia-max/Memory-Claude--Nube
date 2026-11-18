@@ -1887,6 +1887,10 @@ http.createServer(async (req, res) => {
     if (url.startsWith('/api/chatwoot/')) {
       return oficina.redes.manejarPublico(req, res, url, { json, leerCuerpo });
     }
+    // Apps de Oficina (instalables): página de instalación, manifiesto e icono; las apps en prueba piden código.
+    if (oficina.activo && (url === '/app' || url.startsWith('/app/'))) {
+      return oficina.apps.manejarPublico(req, res, url, { json, leerCuerpo });
+    }
     if (url.startsWith('/api/conocimiento/')) {
       return oficina.conocimiento.manejarPublico(req, res, url, { json, leerCuerpo });
     }

@@ -266,6 +266,7 @@
   <button class="nav" data-ir="chat">💬 Chat con los negocios <span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces">🔗 Enlaces</button>
   <button class="nav" data-ir="apis">🧩 APIs y suscripciones</button>
+  <button class="nav" data-ir="apps">📱 Apps</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
   <button class="nav" data-ir="redes">📲 Redes sociales</button>
   <button class="nav" data-ir="respaldos">💾 Respaldos <span class="num" id="numRespaldo" style="display:none"></span></button>
@@ -475,6 +476,7 @@ async function ir(v, recargar = true) {
     if (v === 'gastos') await cargarProyectos();
     if (v === 'inicio' || v === 'enlaces') await cargarServicios();
     if (v === 'apis') await cargarApis();
+    if (v === 'apps') await cargarApps();
     if (v === 'chat') await cargarChatContactos();
     if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
     if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
@@ -484,7 +486,7 @@ async function ir(v, recargar = true) {
   pintar();
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
   if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
@@ -2251,6 +2253,89 @@ function formApi(a = {}) {
   document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/apis/guardar', { id: a.id, nombre: v('aNom'), tipo: v('aTip'), proveedor: v('aPro'), plan: v('aPla'), costo_mensual: v('aCos'), limite_mes: v('aLim'), renovacion: v('aRen'), empresa_id: v('aEmp'), llave: v('aLla') }, 'Guardado.');
   if (a.id) document.getElementById('fBorrar').onclick = async () => { if (!confirm('¿Borrar este servicio?')) return; await enviarForm('/api/oficina/apis/borrar', { id: a.id }, 'Borrado.'); };
 }
+
+// ---------- Apps (solo Programador): PWA instalables, pruebas con código y publicación ----------
+let APPS = [], INICIOS_APP = {};
+async function cargarApps() { const r = await api('/api/oficina/apps'); if (r.ok) { APPS = r.data.apps; INICIOS_APP = r.data.inicios || {}; } }
+function vApps() {
+  const publicadas = APPS.filter(a => a.estado === 'publicada').length;
+  const probadores = APPS.reduce((s, a) => s + a.probadores.filter(p => p.vigente).length, 0);
+  return cabecera('📱 Apps', 'Crea, prueba con un código y publica las apps que se instalan en el celular', '<button class="btn" data-nueva-app>+ App</button>') +
+    `<div class="caja"><div class="fila2"><div><b>${APPS.length}</b> app(s) · <b>${publicadas}</b> publicada(s)</div><div style="text-align:right"><b>${probadores}</b><div class="ay">probadores con acceso vigente</div></div></div></div>` +
+    (APPS.length ? APPS.map(tarjetaApp).join('') : '<div class="caja ay">Todavía no hay apps. Crea una con «+ App».</div>');
+}
+function tarjetaApp(a) {
+  const url = `${location.origin}/app/${a.slug}/`;
+  const pub = a.estado === 'publicada';
+  const probs = a.probadores.length
+    ? `<table><thead><tr><th>Probador</th><th>Código</th><th>Vence</th><th>Último uso</th><th>Estado</th><th></th></tr></thead><tbody>${a.probadores.map(p => `<tr><td>${esc(p.nombre)}</td><td>••••${esc(p.codigo_fin)}</td><td>${esc(p.vence)}</td><td>${esc(p.ultimo_uso || '—')}</td><td>${p.vigente ? '<b>Activo</b>' : 'Vencido o quitado'}</td><td>${p.activo ? `<button class="btn-sec" data-revocar-probador="${p.id}">Quitar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="ay">Nadie tiene acceso de prueba todavía.</div>';
+  return `<div class="caja">
+    <div class="fila2"><div style="display:flex;gap:12px;align-items:center"><span style="display:inline-grid;place-items:center;width:44px;height:44px;border-radius:10px;background:${esc(a.color)};color:#fff;font-weight:700">${esc(a.letra)}</span><div><b>${esc(a.nombre)}</b><div class="ay">${esc(INICIOS_APP[a.inicio] || a.inicio)} · v${esc(a.version)}</div></div></div>
+    <div style="text-align:right"><b>${pub ? 'Publicada' : 'En prueba'}</b>${pub && a.publicada_en ? `<div class="ay">desde ${esc(a.publicada_en)}</div>` : ''}</div></div>
+    <div class="ay" style="margin:8px 0">Enlace: <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></div>
+    ${a.accesos.length ? `<div class="ay">Accesos directos: ${a.accesos.map(x => esc(x.nombre)).join(' · ')}</div>` : ''}
+    ${probs}
+    <div class="pie" style="margin-top:10px">
+      <button class="btn-sec" data-editar-app="${a.id}">Editar</button>
+      <button class="btn-sec" data-nuevo-probador="${a.id}">+ Probador</button>
+      <button class="btn" data-publicar-app="${a.id}" data-publicar="${pub ? '0' : '1'}">${pub ? 'Volver a prueba' : 'Publicar'}</button>
+    </div></div>`;
+}
+function formApp(a = {}) {
+  abrirModal(`<h2>${a.id ? 'Editar app' : 'Nueva app'}</h2>
+    ${campo('apNom', 'Nombre', `<input id="apNom" value="${esc(a.nombre || '')}" placeholder="Ej.: Choferes Somos Viajes">`)}
+    ${campo('apDes', 'Descripción', `<input id="apDes" value="${esc(a.descripcion || '')}" placeholder="Qué hace y para quién">`)}
+    <div class="fila2">${campo('apIni', 'Pantalla que abre', `<select id="apIni">${Object.entries(INICIOS_APP).map(([k, n]) => `<option value="${k}" ${k === (a.inicio || '/chofer') ? 'selected' : ''}>${esc(n)} (${k})</option>`).join('')}</select>`)}${campo('apEmp', 'Empresa', `<select id="apEmp">${opcionesEmpresa(a.empresa_id ?? 0, 'General (Kaizen)')}</select>`)}</div>
+    <div class="fila2">${campo('apCol', 'Color', `<input id="apCol" type="color" value="${esc(a.color || '#0c1a2e')}">`)}${campo('apLet', 'Letra del icono', `<input id="apLet" maxlength="2" value="${esc(a.letra || '')}" placeholder="Automática">`)}</div>
+    ${campo('apAcc', 'Accesos directos', `<textarea id="apAcc" rows="3" placeholder="Nombre | ruta, una por línea. Ej.: Mis servicios | /chofer">${esc((a.accesos || []).map(x => `${x.nombre} | ${x.ruta}`).join('\n'))}</textarea>`, 'Máximo 6. La ruta debe empezar igual que la pantalla que abre.')}
+    ${campo('apVer', 'Versión', `<input id="apVer" value="${esc(a.version || '1.0.0')}">`)}
+    ${pieModal(Boolean(a.id))}`);
+  document.getElementById('fGuardar').onclick = () => {
+    const accesos = document.getElementById('apAcc').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [nombre, ...r] = l.split('|'); return { nombre: nombre.trim(), ruta: r.join('|').trim() }; });
+    enviarForm('/api/oficina/apps/guardar', { id: a.id, nombre: v('apNom'), descripcion: v('apDes'), inicio: v('apIni'), empresa_id: v('apEmp'), color: v('apCol'), letra: v('apLet'), version: v('apVer'), accesos }, 'Guardado.');
+  };
+  if (a.id) document.getElementById('fBorrar').onclick = async () => { if (!confirm('¿Borrar esta app y sus códigos de prueba?')) return; await enviarForm('/api/oficina/apps/borrar', { id: a.id }, 'Borrado.'); };
+}
+function formProbador(app) {
+  abrirModal(`<h2>Probador de «${esc(app.nombre)}»</h2>
+    ${campo('prNom', 'Nombre de la persona', '<input id="prNom" placeholder="Ej.: Juan, chofer Punta Cana">')}
+    ${campo('prDia', 'Días de acceso', '<input id="prDia" type="number" min="1" max="365" value="30">', 'Pasado este tiempo el acceso deja de funcionar solo.')}
+    <div class="error-form" id="errForm"></div>
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Crear código</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/apps/probador', { app_id: app.id, nombre: v('prNom'), dias: v('prDia') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo crear.'; return; }
+    abrirModal(`<h2>Código creado</h2><p>Mándale este enlace a la persona. El código solo se muestra ahora.</p>
+      <div class="campo"><label>Enlace</label><input readonly value="${esc(location.origin + r.data.enlace)}" onclick="this.select()"></div>
+      <div class="campo"><label>Código</label><input readonly value="${esc(r.data.codigo)}" onclick="this.select()"></div>
+      <div class="ay">Vence el ${esc(r.data.vence)}.</div>
+      <div class="pie"><button class="btn" data-cerrar-modal>Listo</button></div>`);
+    await cargarApps(); ir('apps', false);
+  };
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-nueva-app],[data-editar-app],[data-nuevo-probador],[data-publicar-app],[data-revocar-probador]');
+  if (!b) return;
+  ev.preventDefault();
+  const d = b.dataset;
+  if ('nuevaApp' in d) return formApp();
+  if (d.editarApp) return formApp(APPS.find(x => String(x.id) === d.editarApp) || {});
+  if (d.nuevoProbador) return formProbador(APPS.find(x => String(x.id) === d.nuevoProbador));
+  if (d.publicarApp) {
+    const pub = d.publicar === '1';
+    if (pub && !confirm('¿Publicar esta app? Cualquiera con el enlace podrá instalarla.')) return;
+    const r = await api('/api/oficina/apps/publicar', { id: Number(d.publicarApp), publicar: pub });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar.');
+    await cargarApps(); return ir('apps', false);
+  }
+  if (d.revocarProbador) {
+    if (!confirm('¿Quitar el acceso de esta persona?')) return;
+    const r = await api('/api/oficina/apps/probador/revocar', { id: Number(d.revocarProbador) });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo quitar.');
+    await cargarApps(); return ir('apps', false);
+  }
+});
 
 function formPago(p = {}) {
   abrirModal(`<h2>${p.id ? 'Editar cobro' : 'Nuevo cobro'}</h2>
