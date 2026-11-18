@@ -684,7 +684,9 @@ function pintarVivo() {
         : `<div class="vacio" style="padding:60px 20px">${ic('map')}<br><b>Enciende el mapa</b><br>Configuración → Módulos → "App del chofer y mapa" y "Aviones en el mapa".</div>`}</div>
       <div>${conAviones ? `<div class="caja"><h3>${ic('plane')}Vuelos de hoy (${vuelos.length})</h3>${vuelos.map(a => { const [t, cls] = estadoAvion(a);
           return `<div class="comp" ${a.en_mapa ? `data-volar="${a.lat},${a.lng}" style="cursor:pointer"` : ''}><div class="tile ${a.tipo === 'IN' ? 't-ve' : 't-az'}">${ic(a.tipo === 'IN' ? 'plane-landing' : 'plane-takeoff')}</div><div class="d"><b>${esc(a.vuelo)} · ${esc(a.hora || '')}</b><br><small class="sub2">${a.tipo === 'IN' ? 'Llega a' : 'Sale de'} ${esc(a.aeropuerto || '')} · ${a.pax} pax · ${esc(a.cliente || '')}${a.servicios.length > 1 ? ' y ' + (a.servicios.length - 1) + ' más' : ''}</small></div><span class="tag ${cls}" style="max-width:150px;text-align:right">${esc(t)}</span></div>`; }).join('') || '<div class="vacio">No hay llegadas ni salidas con vuelo hoy.</div>'}</div>` : ''}
-        <div class="caja"><h3>${ic('car')}Carros y choferes</h3>${I.choferes.filter(c => c.activo).map(c => { const [t, cls] = estadoChofer(c); const u = S.ubicaciones.find(x => x.chofer_id === c.id);
+        <div class="caja"><h3>${ic('car')}Carros y choferes</h3>
+      <select id="rutaSel" style="width:100%;margin:6px 0 10px"><option value="">Ver la ruta de hoy de un chofer…</option>${I.choferes.filter(c => c.activo).map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</select>
+      <div id="rutaChofer"></div>${I.choferes.filter(c => c.activo).map(c => { const [t, cls] = estadoChofer(c); const u = S.ubicaciones.find(x => x.chofer_id === c.id);
           return `<div class="comp" ${u ? `data-volar="${u.lat},${u.lng}" style="cursor:pointer"` : ''}><span class="mini-av" style="width:36px;height:36px;font-size:12px;background:${colorDe(c.id)}">${esc(iniciales(c.nombre))}</span><div class="d"><b>${esc(c.nombre)}</b><br><small class="sub2">${esc((vehDe(c) || {}).nombre || 'sin vehículo')}${(vehDe(c) || {}).placa ? ' · ' + esc(vehDe(c).placa) : ''}${u ? ' · 📍 ' + esc(new Date(u.fecha).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })) : ' · sin ubicación'}</small></div><span class="tag ${cls}">${esc(t)}</span></div>`; }).join('') || '<div class="vacio">No hay choferes todavía.</div>'}</div></div></div>
     <div class="caja gantt">${'<h3>' + ic('timer') + 'El día de cada chofer</h3>'}${htmlGantt()}</div>`;
   if (conCarros || conAviones) pintarMapa(vuelos);
@@ -692,10 +694,13 @@ function pintarVivo() {
 const AEROPUERTOS_MAPA = { PUJ: [18.5674, -68.3634], SDQ: [18.4297, -69.6689], LRM: [18.4507, -68.9118], POP: [19.7579, -70.5700], STI: [19.4061, -70.6047], AZS: [19.2670, -69.7420], MCO: [28.4312, -81.3081], SFB: [28.7776, -81.2375] };
 function pintarMapa(vuelos = []) {
   const cargarLeaflet = () => new Promise(ok => { if (window.L) return ok(); const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = ok; document.head.appendChild(s); });
-  cargarLeaflet().then(() => {
+  cargarLeaflet().then(async () => {
     if (!$('#mapa')) return;
     mapa = L.map('mapa').setView(S.sede === 'Orlando' ? [28.42, -81.47] : [18.62, -68.42], 9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapa);
+    const cfgMapa = await api('/api/op/mapas-config');
+    const tokMapa = cfgMapa.ok ? cfgMapa.data.mapbox : '';
+    if (tokMapa) L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/512/{z}/{x}/{y}?access_token=${encodeURIComponent(tokMapa)}`, { tileSize: 512, zoomOffset: -1, maxZoom: 18, attribution: '© Mapbox © OpenStreetMap' }).addTo(mapa);
+    else L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapa);
     const pts = [];
     // Aeropuertos de hoy
     const usados = new Set(vuelos.map(a => a.aeropuerto).filter(Boolean));
@@ -1834,6 +1839,29 @@ document.addEventListener('click', async ev => {
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Enter' && ev.target && ev.target.id === 'arQ') { ARCH.q = ev.target.value.trim(); ARCH.anio = Number(val('arA')) || 0; ARCH.pagina = 1; ARCH.sel = 0; vArchivo(); }
 });
+
+/* ---------- Mapa de choferes: ruta de hoy de cada chofer (km y minutos por tramo) ---------- */
+let rutaLinea = null;
+document.addEventListener('change', ev => { if (ev.target && ev.target.id === 'rutaSel') mostrarRutaChofer(ev.target.value); });
+async function mostrarRutaChofer(id) {
+  if (rutaLinea && typeof mapa !== 'undefined' && mapa) { mapa.removeLayer(rutaLinea); rutaLinea = null; }
+  const box = document.getElementById('rutaChofer');
+  if (!box) return;
+  if (!id) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="sub2">Calculando la ruta de hoy…</div>';
+  const r = await api(`/api/op/ruta-chofer?chofer=${id}&fecha=${S.fecha}`);
+  if (!r.ok) { box.innerHTML = `<div class="sub2">${esc(r.data.error || 'No se pudo calcular la ruta.')}</div>`; return; }
+  const d = r.data;
+  const coords = d.tramos.flatMap(t => t.geometria || []).map(([lng, lat]) => [lat, lng]);
+  if (typeof mapa !== 'undefined' && mapa && coords.length && window.L) {
+    rutaLinea = L.polyline(coords, { color: '#0b4f8a', weight: 5, opacity: 0.85 }).addTo(mapa);
+    mapa.fitBounds(rutaLinea.getBounds(), { padding: [40, 40] });
+  }
+  box.innerHTML = `<div class="caja" style="margin:0 0 12px;padding:12px"><b>Ruta de hoy</b> · ${d.totalKm} km · ${d.totalMinutos} min estimados
+    <ol style="margin:8px 0 0;padding-left:18px">${d.paradas.map(p => `<li>${esc(p.hora || '')} ${esc(p.nombre)}${p.cliente ? ' · ' + esc(p.cliente) : ''}</li>`).join('') || '<li>Sin servicios para hoy</li>'}</ol>
+    <div class="sub2" style="margin-top:8px">${d.tramos.map(t => `${esc(t.desde)} → ${esc(t.hasta)}: ${t.km ?? '—'} km · ${t.minutos ?? '—'} min`).join('<br>')}</div>
+    ${d.avisos.length ? `<div class="ay" style="margin-top:6px">⚠ ${d.avisos.map(a => esc(a)).join(' · ')}</div>` : ''}</div>`;
+}
 
 </script>
 </body>

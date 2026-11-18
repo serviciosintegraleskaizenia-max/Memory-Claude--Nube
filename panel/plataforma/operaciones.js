@@ -83,6 +83,73 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
   const aeropuertoDe = s => (String(s || '').toUpperCase().match(/\b[A-Z]{3}\b/) || [''])[0];
 
   // Llaves (vuelos, Chatwoot): cifradas con el secreto de sesión del panel; nunca vuelven al navegador.
+  // ---------- Mapa de choferes: ubicar lugares (Mapbox) y calcular rutas con km y minutos. Todo se guarda en caché para gastar lo menos posible. ----------
+  const AEROPUERTOS_COORD = { PUJ: [18.5674, -68.3634], SDQ: [18.4297, -69.6689], POP: [19.7579, -70.5700], LRM: [18.4507, -68.9118], STI: [19.4061, -70.6047], AZS: [19.2670, -69.7420], MCO: [28.4312, -81.3081], SFB: [28.7776, -81.2375] };
+  const mapboxBase = () => String(config.mapbox_base || 'https://api.mapbox.com');
+  // Lugar (hotel, actividad) → coordenadas. Si Mapbox responde "no existe", se guarda vacío para no volver a preguntar.
+  async function geocodificar(texto) {
+    const t = String(texto || '').trim();
+    if (!t) return null;
+    const previa = (await client.query('SELECT lat, lng FROM op_lugares WHERE texto = $1', [t])).rows[0];
+    if (previa) return previa.lat === null ? null : { lat: previa.lat, lng: previa.lng };
+    const tok = await llaveDeOficina('api_mapas');
+    if (!tok) return null;
+    let lugar = null, definitivo = false;
+    try {
+      const r = await fetch(`${mapboxBase()}/geocoding/v5/mapbox.places/${encodeURIComponent(t + ', República Dominicana')}.json?access_token=${encodeURIComponent(tok)}&limit=1&proximity=-68.3634,18.5674`);
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) { definitivo = true; const f = d.features && d.features[0]; if (f) lugar = { lat: f.center[1], lng: f.center[0] }; }
+    } catch (e) { lugar = null; }
+    if (definitivo) await client.query('INSERT INTO op_lugares (texto, lat, lng) VALUES ($1, $2, $3) ON CONFLICT (texto) DO NOTHING', [t, lugar ? lugar.lat : null, lugar ? lugar.lng : null]);
+    return lugar;
+  }
+  // Ruta de conducción entre dos puntos: km, minutos y el trazo para dibujarlo.
+  async function rutaEntre(a, b) {
+    const clave = `${a.lat.toFixed(4)},${a.lng.toFixed(4)}>${b.lat.toFixed(4)},${b.lng.toFixed(4)}`;
+    const previa = (await client.query('SELECT km, minutos, geometria FROM op_rutas WHERE clave = $1', [clave])).rows[0];
+    if (previa) return { km: Number(previa.km), minutos: Number(previa.minutos), geometria: previa.geometria };
+    const tok = await llaveDeOficina('api_mapas');
+    if (!tok) return null;
+    const r = await fetch(`${mapboxBase()}/directions/v5/mapbox/driving/${a.lng},${a.lat};${b.lng},${b.lat}?geometries=geojson&overview=full&access_token=${encodeURIComponent(tok)}`);
+    const d = await r.json().catch(() => ({}));
+    const ruta = d.routes && d.routes[0];
+    if (!r.ok || !ruta) return null;
+    const out = { km: Math.round(ruta.distance / 100) / 10, minutos: Math.round(ruta.duration / 60), geometria: ruta.geometry.coordinates };
+    await client.query('INSERT INTO op_rutas (clave, km, minutos, geometria) VALUES ($1, $2, $3, $4) ON CONFLICT (clave) DO NOTHING', [clave, out.km, out.minutos, JSON.stringify(out.geometria)]);
+    return out;
+  }
+  // Ruta de un chofer en un día: aeropuerto e hoteles en orden de hora, con el tramo entre cada parada.
+  async function rutaDelChofer(choferId, fecha) {
+    const filas = (await client.query(`SELECT o.id, o.hora, c.tipo_servicio, c.aeropuerto, c.hotel, c.punto_partida, c.punto_llegada, c.actividad, c.nombre_cliente
+      FROM op_servicios o LEFT JOIN clasificacion c ON c.id = o.servicio_id
+      WHERE o.chofer_id = $1 AND o.fecha = $2 AND o.estado <> 'cancelado' ORDER BY o.hora, o.id`, [choferId, fecha])).rows;
+    const avisos = [], paradas = [];
+    const codigo = t => { const m = String(t || '').match(/\(([A-Z]{3})\)/); return m ? m[1] : ''; };
+    for (const f of filas) {
+      const tipo = String(f.tipo_servicio || '').toUpperCase();
+      const aero = (f.aeropuerto ? String(f.aeropuerto).toUpperCase().slice(0, 3) : '') || codigo(f.punto_partida) || codigo(f.punto_llegada) || 'PUJ';
+      const hotel = f.hotel || (tipo === 'IN' ? f.punto_llegada : f.punto_partida) || '';
+      const lista = tipo === 'IN' ? [{ nombre: 'Aeropuerto ' + aero, aero }, { nombre: hotel }]
+        : tipo === 'OUT' ? [{ nombre: hotel }, { nombre: 'Aeropuerto ' + aero, aero }]
+        : [{ nombre: hotel || f.actividad || '' }];
+      for (const p of lista) {
+        if (!p.nombre) continue;
+        const coord = p.aero && AEROPUERTOS_COORD[p.aero] ? { lat: AEROPUERTOS_COORD[p.aero][0], lng: AEROPUERTOS_COORD[p.aero][1] } : await geocodificar(p.nombre);
+        if (!coord) { avisos.push(`No encontré la ubicación de "${p.nombre}".`); continue; }
+        const ultima = paradas[paradas.length - 1];
+        if (ultima && Math.abs(ultima.lat - coord.lat) < 1e-5 && Math.abs(ultima.lng - coord.lng) < 1e-5) continue;
+        paradas.push({ nombre: p.nombre, lat: coord.lat, lng: coord.lng, hora: f.hora || '', cliente: f.nombre_cliente || '' });
+      }
+    }
+    const tramos = [];
+    for (let i = 0; i < paradas.length - 1; i++) {
+      const t = await rutaEntre(paradas[i], paradas[i + 1]);
+      tramos.push({ desde: paradas[i].nombre, hasta: paradas[i + 1].nombre, km: t ? t.km : null, minutos: t ? t.minutos : null, geometria: t ? t.geometria : [] });
+      if (!t) avisos.push(`No pude calcular la ruta de ${paradas[i].nombre} a ${paradas[i + 1].nombre}. Revisa la llave de mapas en Oficina.`);
+    }
+    const sumar = k => Math.round(tramos.reduce((s, t) => s + (Number(t[k]) || 0), 0) * 10) / 10;
+    return { paradas, tramos, totalKm: sumar('km'), totalMinutos: Math.round(sumar('minutos')), avisos };
+  }
   // Llaves de Oficina (APIs y suscripciones): llegan a esta empresa en zentralia_ajustes. Sin llave de Oficina: ''.
   async function llaveDeOficina(clave) {
     try { const r = await client.query('SELECT valor FROM zentralia_ajustes WHERE clave = $1', [clave]); return r.rows[0] ? r.rows[0].valor : ''; } catch (e) { return ''; }
@@ -160,6 +227,8 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     await q(`CREATE TABLE IF NOT EXISTS archivo_reservas (reserva_id INTEGER PRIMARY KEY, anio INTEGER NOT NULL DEFAULT 0, cliente TEXT NOT NULL DEFAULT '', agencia TEXT NOT NULL DEFAULT '', buscable TEXT NOT NULL DEFAULT '', fecha_servicio TEXT NOT NULL DEFAULT '', total NUMERIC NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, huella TEXT NOT NULL, snapshot JSONB NOT NULL, creado TIMESTAMP NOT NULL DEFAULT NOW(), actualizado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS archivo_reservas_versiones (id SERIAL PRIMARY KEY, reserva_id INTEGER NOT NULL, version INTEGER NOT NULL, huella TEXT NOT NULL, snapshot JSONB NOT NULL, cambios TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE (reserva_id, version))`);
     await q(`CREATE INDEX IF NOT EXISTS archivo_reservas_anio ON archivo_reservas (anio)`);
+    await q(`CREATE TABLE IF NOT EXISTS op_lugares (texto TEXT PRIMARY KEY, lat DOUBLE PRECISION, lng DOUBLE PRECISION, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q(`CREATE TABLE IF NOT EXISTS op_rutas (clave TEXT PRIMARY KEY, km NUMERIC NOT NULL, minutos NUMERIC NOT NULL, geometria JSONB NOT NULL, creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     await q(`CREATE TABLE IF NOT EXISTS op_cola_tarifarios (id SERIAL PRIMARY KEY, origen_id INTEGER, archivo TEXT NOT NULL, datos BYTEA,
       estado VARCHAR(12) NOT NULL DEFAULT 'pendiente', resultado JSONB, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado TIMESTAMPTZ)`);
     await q(`CREATE TABLE IF NOT EXISTS op_servicio_cortesias (id SERIAL PRIMARY KEY, op_id INTEGER NOT NULL, cortesia_id INTEGER, nombre TEXT NOT NULL,
@@ -1562,6 +1631,14 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
         return json(res, 200, { ok: true, guardadas });
       }
       if (req.method === 'GET' && url === '/api/op/mapas-config') { pide('ver_choferes_vivo', 'No tienes permiso para el mapa.'); return json(res, 200, { mapbox: await llaveDeOficina('api_mapas') }); }
+      if (req.method === 'GET' && url === '/api/op/ruta-chofer') {
+        pide('ver_choferes_vivo', 'No tienes permiso para ver el mapa de choferes.');
+        const p = new URL(req.url, 'http://localhost').searchParams;
+        const chofer = Number(p.get('chofer')) || 0;
+        if (!chofer) return json(res, 400, { error: 'Elige un chofer.' });
+        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(p.get('fecha') || '')) ? String(p.get('fecha')) : hoyLocal();
+        return json(res, 200, await rutaDelChofer(chofer, fecha));
+      }
       if (req.method === 'GET' && url === '/api/op/admin/ganancias') { pide('ver_administracion', 'Solo gerencia puede ver la administración.'); return json(res, 200, await ganancias(p)); }
       if (req.method === 'GET' && url === '/api/op/admin/boletas') { pide('ver_boletas', 'No tienes permiso para las boletas.'); return json(res, 200, await listaReservas(p, true, true)); }
       if (req.method === 'POST' && url === '/api/op/admin/costo') {
