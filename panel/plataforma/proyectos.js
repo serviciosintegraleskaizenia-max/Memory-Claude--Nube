@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CATEGORIAS = { ia: 'IA y tokens', programacion: 'Programación', automatizacion: 'Automatización', chat: 'Chat y redes', servidor: 'Servidor', dominio: 'Dominio', otro: 'Otro' };
+const CATEGORIAS = { ia: 'IA y tokens', programacion: 'Programación', automatizacion: 'Automatización', chat: 'Chat y redes', servidor: 'Servidor', dominio: 'Dominio', adelanto: 'Adelanto de ganancia', otro: 'Otro' };
 const FRECUENCIAS = { mensual: 'Cada mes', anual: 'Cada año', variable: 'Variable (estimado al mes)' };
 // Datos iniciales opcionales (los del cuaderno). Viven solo en el servidor, nunca en el repositorio.
 const SEMILLA = path.join(__dirname, '..', 'datos-iniciales', 'creacion-sistema.json');
@@ -33,6 +33,8 @@ module.exports = function crearProyectos({ client }) {
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_recargas_ia (
       id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, fecha DATE NOT NULL, monto NUMERIC(12,2) NOT NULL DEFAULT 0,
       nota TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Para quién es cada gasto: null = todos los socios; número = índice del socio en la lista de socios.
+    await client.query('ALTER TABLE oficina_proyecto_gastos ADD COLUMN IF NOT EXISTS para_socio INTEGER');
     // Notas viejas de n8n y Chatwoot: quedan como gasto que se paga cada mes.
     await client.query("UPDATE oficina_proyecto_mensuales SET nota = 'Se paga cada mes.' WHERE nota LIKE 'Ya no hace falta:%'");
     await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'n8n Pro' WHERE concepto = 'n8n Pro (en la nube)'");
@@ -72,11 +74,18 @@ module.exports = function crearProyectos({ client }) {
     return (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, cobrado, fecha_cobro, comision_pct, comision_nota, socios, nota) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', v)).rows[0].id;
   }
   async function guardarGasto(f) {
-    const v = [Number(f.proyecto_id), fecha(f.fecha), texto(f.concepto, 160), CATEGORIAS[f.categoria] ? f.categoria : 'otro', monto(f.monto), texto(f.pagado_por, 60), texto(f.nota, 300)];
+    const proy = (await client.query('SELECT socios FROM oficina_proyectos WHERE id = $1', [Number(f.proyecto_id) || 0])).rows[0];
+    const socios = proy && Array.isArray(proy.socios) ? proy.socios : [];
+    const cat = CATEGORIAS[f.categoria] ? f.categoria : 'otro';
+    // Para quién: null = todos (se reparte entre los socios); número = índice del socio (solo se descuenta de su parte).
+    const para = f.para_socio === '' || f.para_socio === null || f.para_socio === undefined ? null : Number(f.para_socio);
+    if (para !== null && (!Number.isInteger(para) || para < 0 || para >= socios.length)) throw error('Esa persona no está en el reparto de este sistema.');
+    if (cat === 'adelanto' && para === null) throw error('Un adelanto de ganancia es de una persona: elige para quién es.');
+    const v = [Number(f.proyecto_id), fecha(f.fecha), texto(f.concepto, 160), cat, monto(f.monto), texto(f.pagado_por, 60), texto(f.nota, 300), para];
     if (!v[0]) throw error('Falta el sistema.');
     if (!v[2]) throw error('Escribe qué se pagó (ej.: Claude Pro).');
-    if (Number(f.id)) await client.query('UPDATE oficina_proyecto_gastos SET proyecto_id=$1, fecha=$2, concepto=$3, categoria=$4, monto=$5, pagado_por=$6, nota=$7 WHERE id=$8', [...v, Number(f.id)]);
-    else await client.query('INSERT INTO oficina_proyecto_gastos (proyecto_id, fecha, concepto, categoria, monto, pagado_por, nota) VALUES ($1,$2,$3,$4,$5,$6,$7)', v);
+    if (Number(f.id)) await client.query('UPDATE oficina_proyecto_gastos SET proyecto_id=$1, fecha=$2, concepto=$3, categoria=$4, monto=$5, pagado_por=$6, nota=$7, para_socio=$8 WHERE id=$9', [...v, Number(f.id)]);
+    else await client.query('INSERT INTO oficina_proyecto_gastos (proyecto_id, fecha, concepto, categoria, monto, pagado_por, nota, para_socio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', v);
   }
   async function guardarMensual(f) {
     const v = [Number(f.proyecto_id), texto(f.concepto, 160), CATEGORIAS[f.categoria] ? f.categoria : 'otro', monto(f.monto), FRECUENCIAS[f.frecuencia] ? f.frecuencia : 'mensual', fecha(f.desde), texto(f.nota, 300), f.activo !== false, Number(f.orden) || 0];

@@ -879,9 +879,20 @@ function celdasRecarga(e) {
 function cuentasCreacion(p) {
   const comision = redondo(p.cobrado * p.comision_pct / 100);
   const neto = redondo(p.cobrado - comision);
-  const gastos = redondo(p.gastos.reduce((a, g) => a + g.monto, 0));
-  const queda = redondo(neto - gastos);
-  const socios = (p.socios || []).map(s => ({ ...s, monto: redondo(queda * s.pct / 100) }));
+  const esAdelanto = g => g.categoria === 'adelanto';
+  // Gastos de creación (los adelantos de ganancia no son costo del sistema).
+  const costos = p.gastos.filter(g => !esAdelanto(g));
+  const gastos = redondo(costos.reduce((a, g) => a + g.monto, 0));
+  // Gastos para todos: se descuentan antes de repartir.
+  const compartidos = redondo(costos.filter(g => g.para_socio == null).reduce((a, g) => a + g.monto, 0));
+  const queda = redondo(neto - compartidos);
+  // Gastos y adelantos para una persona: solo se descuentan de su parte.
+  const socios = (p.socios || []).map((s, i) => {
+    const parte = redondo(queda * s.pct / 100);
+    const gastosA = redondo(costos.filter(g => g.para_socio === i).reduce((a, g) => a + g.monto, 0));
+    const adelantos = redondo(p.gastos.filter(g => esAdelanto(g) && g.para_socio === i).reduce((a, g) => a + g.monto, 0));
+    return { ...s, parte, gastosA, adelantos, monto: redondo(parte - gastosA - adelantos) };
+  });
   const activos = p.mensuales.filter(m => m.activo);
   const alMes = m => m.frecuencia === 'anual' ? redondo(m.monto / 12) : m.monto;
   const fijo = redondo(activos.filter(m => m.frecuencia !== 'variable').reduce((a, m) => a + alMes(m), 0));
@@ -890,7 +901,7 @@ function cuentasCreacion(p) {
   const emp = D && p.cliente ? D.empresas.find(e => e.nombre.toLowerCase().includes(p.cliente.toLowerCase()) || p.cliente.toLowerCase().includes(e.nombre.toLowerCase())) : null;
   const iaMes = emp && emp.ia && emp.ia.delMes ? redondo(emp.ia.delMes) : 0;
   const variable = redondo(variables.reduce((a, m) => a + (m.categoria === 'ia' && iaMes ? iaMes : m.monto), 0));
-  return { comision, neto, gastos, queda, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
+  return { comision, neto, gastos, compartidos, queda, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
 }
 function vCreacion() {
   const lista = P ? P.proyectos : [];
@@ -907,11 +918,11 @@ function vCreacion() {
     <div class="kpi"><div class="e">Cobrado al cliente</div><div class="n">${dinero(p.cobrado)}</div><div class="d">${esc(p.cliente || '')}${p.fecha_cobro ? ' · ' + fechaCorta(p.fecha_cobro) : ''} · <a href="#" data-editar-proyecto="${p.id}">editar</a></div></div>
     <div class="kpi" style="border-color:var(--ambar)"><div class="e">Banco −${p.comision_pct} %</div><div class="n">−${dinero(c.comision)}</div><div class="d">llegaron <b>${dinero(c.neto)}</b>${p.comision_nota ? ' · ' + esc(p.comision_nota) : ''}</div></div>
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Lo que costó crearlo</div><div class="n">${dinero(c.gastos)}</div><div class="d">${p.gastos.length} gastos</div></div>
-    <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.queda)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.gastos)}</div></div>
+    <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.queda)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.compartidos)} gastos para todos</div></div>
   </div>
   <div class="rej r2">
-    <div class="caja"><h2>🤝 Reparto entre socios</h2><p class="sub">De los ${dinero(c.queda)} que quedan</p>
-      ${c.socios.length ? c.socios.map(s => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--borde)"><div><b style="font-size:15px">${esc(s.nombre)}</b><br><small style="color:var(--suave)">${s.pct} %</small></div><div style="font-size:22px;font-weight:700">${dinero(s.monto)}</div></div>`).join('')
+    <div class="caja"><h2>🤝 Reparto entre socios</h2><p class="sub">De los ${dinero(c.queda)} que quedan (después de los gastos para todos)</p>
+      ${c.socios.length ? c.socios.map(s => `<div style="padding:10px 0;border-bottom:1px solid var(--borde)"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:15px">${esc(s.nombre)}</b> <small style="color:var(--suave)">${s.pct} %</small></div><div style="font-size:22px;font-weight:700">${dinero(s.monto)}</div></div><div style="font-size:12.5px;color:var(--suave);margin-top:4px">Su parte ${dinero(s.parte)}${s.gastosA ? ' · − gastos a su nombre ' + dinero(s.gastosA) : ''}${s.adelantos ? ' · − adelantos ' + dinero(s.adelantos) : ''}</div></div>`).join('')
         : `<div class="vacio">Pon los socios y su porcentaje en <a href="#" data-editar-proyecto="${p.id}">Editar</a>.</div>`}
       ${p.nota ? `<p class="sub" style="margin-top:10px">${esc(p.nota)}</p>` : ''}</div>
     <div class="caja"><h2>📅 Gastos de cada mes</h2><p class="sub">Lo que va a costar mantener el sistema desde ahora</p>
@@ -921,9 +932,9 @@ function vCreacion() {
       ${c.socios.length ? `<div style="font-size:13px;color:var(--suave)">Si lo pagan entre los dos: ${c.socios.map(s => `${esc(s.nombre)} ${dinero(redondo(c.total * s.pct / 100))}`).join(' · ')}</div>` : ''}</div>
   </div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🏗️ Lo que costó crear el sistema<button class="btn-mini" data-nuevo-cgasto>+ Gasto</button></h2>
-    <table><thead><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Pagó</th><th>Nota</th><th></th></tr></thead><tbody>
-    ${p.gastos.map(g => `<tr class="${g.monto ? '' : 'apagado'}"><td>${fechaCorta(g.fecha)}</td><td class="envolver"><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td>${esc(g.pagado_por)}</td><td class="envolver" style="color:var(--suave);font-size:12.5px">${esc(g.nota)}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Sin gastos todavía.</td></tr>'}
-    <tr><td colspan="3"><b>Total</b></td><td class="n"><b>${dinero(c.gastos)}</b></td><td colspan="3"></td></tr></tbody></table></div>
+    <table><thead><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Pagó</th><th>Para</th><th>Nota</th><th></th></tr></thead><tbody>
+    ${p.gastos.map(g => `<tr class="${g.monto ? '' : 'apagado'}"><td>${fechaCorta(g.fecha)}</td><td class="envolver"><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td>${esc(g.pagado_por)}</td><td>${g.para_socio == null ? 'Todos' : esc((p.socios[g.para_socio] || {}).nombre || '—')}</td><td class="envolver" style="color:var(--suave);font-size:12.5px">${esc(g.nota)}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Sin gastos todavía.</td></tr>'}
+    <tr><td colspan="3"><b>Total</b></td><td class="n"><b>${dinero(c.gastos)}</b></td><td colspan="4"></td></tr></tbody></table></div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🔁 Gastos mensuales desde hoy<button class="btn-mini" data-nuevo-mensual>+ Gasto mensual</button></h2>
     <table><thead><tr><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Cada</th><th class="n">Al mes</th><th>Desde</th><th>Nota</th><th></th></tr></thead><tbody>
     ${p.mensuales.map(m => `<tr class="${m.activo ? '' : 'apagado'}"><td class="envolver"><b>${esc(m.concepto)}</b></td><td><span class="chip az">${esc(CAT[m.categoria] || m.categoria)}</span></td>
@@ -943,7 +954,7 @@ function borrarCreacion(tipo, id, texto) {
   if (b) b.onclick = async () => { if (!confirm(texto)) return; const r = await api('/api/oficina/proyectos/borrar', { tipo, id }); if (!r.ok) return alert(r.data.error || 'No se pudo borrar.'); cerrarModal(); aviso('Borrado.'); await cargarProyectos(); pintar(); };
 }
 function formProyecto(p = {}) {
-  const socios = (p.socios && p.socios.length ? p.socios : [{ nombre: 'Christian', pct: 60 }, { nombre: 'Socio', pct: 40 }]).concat([{ nombre: '', pct: '' }]);
+  const socios = (p.socios && p.socios.length ? p.socios : [{ nombre: 'Cristian Mundaray', pct: 60 }, { nombre: 'José Betancourt', pct: 40 }]).concat([{ nombre: '', pct: '' }]);
   abrirModal(`<h2>${p.id ? 'Editar sistema' : 'Nuevo sistema'}</h2>
     ${campo('fNom', 'Nombre del sistema', `<input id="fNom" value="${esc(p.nombre || '')}" placeholder="Ej.: Panel de correos · Somos Viajes">`)}
     <div class="fila2">${campo('fCli', 'Cliente', `<input id="fCli" value="${esc(p.cliente || '')}" placeholder="Somos Viajes">`, 'Para leer su gasto de IA del mes.')}${campo('fFec', 'Fecha del cobro', `<input id="fFec" type="date" value="${esc(p.fecha_cobro || hoy())}">`)}</div>
@@ -958,14 +969,31 @@ function formProyecto(p = {}) {
   };
   borrarCreacion('proyecto', p.id, '¿Borrar este sistema con todos sus gastos? No se puede deshacer.');
 }
+function sociosDeSel() { const p = P && P.proyectos ? P.proyectos.find(x => x.id === pSel) : null; return p ? p.socios || [] : []; }
+function selectSocios(id, valor, vacio) {
+  const lista = sociosDeSel().map(s => s.nombre);
+  if (valor && !lista.includes(valor)) lista.unshift(valor);
+  return `<select id="${id}"><option value="">${esc(vacio)}</option>${lista.map(n => `<option ${n === valor ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+}
+function opcionesPara(elegido, obligatorio) {
+  const tiene = elegido !== null && elegido !== undefined && elegido !== '';
+  const base = obligatorio ? '' : `<option value="" ${tiene ? '' : 'selected'}>Todos (se reparte entre los socios)</option>`;
+  return base + sociosDeSel().map((s, i) => `<option value="${i}" ${tiene && String(elegido) === String(i) ? 'selected' : ''}>${esc(s.nombre)}</option>`).join('');
+}
+function ajustarParaCGasto() {
+  const adelanto = document.getElementById('fCat').value === 'adelanto';
+  const sel = document.getElementById('fPara'); if (!sel) return;
+  sel.innerHTML = opcionesPara(sel.value === '' ? null : sel.value, adelanto);
+}
 function formCGasto(g = {}) {
   abrirModal(`<h2>${g.id ? 'Editar gasto de creación' : 'Nuevo gasto de creación'}</h2>
     ${campo('fCon', '¿Qué se pagó?', `<input id="fCon" value="${esc(g.concepto || '')}" placeholder="Ej.: Claude Pro">`)}
     <div class="fila2">${campo('fFec', 'Fecha', `<input id="fFec" type="date" value="${esc(g.fecha || hoy())}">`)}${campo('fMon', 'Monto (US$)', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}">`, '0 si fue gratis (demo).')}</div>
-    <div class="fila2">${campo('fCat', 'Tipo', `<select id="fCat">${opciones(P.categorias, g.categoria || 'ia')}</select>`)}${campo('fPor', '¿Quién lo pagó? (opcional)', `<input id="fPor" value="${esc(g.pagado_por || '')}" placeholder="Christian / Socio">`)}</div>
+    <div class="fila2">${campo('fCat', 'Tipo', `<select id="fCat" onchange="ajustarParaCGasto()">${opciones(P.categorias, g.categoria || 'ia')}</select>`)}${campo('fPor', '¿Quién lo pagó? (opcional)', selectSocios('fPor', g.pagado_por || '', 'Sin indicar'))}</div>
+    ${campo('fPara', '¿Para quién es?', `<select id="fPara">${opcionesPara(g.para_socio, (g.categoria || '') === 'adelanto')}</select>`, 'Todos: se reparte entre los socios. Una persona: solo se descuenta de su parte. Un adelanto de ganancia siempre es de una persona.')}
     ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(g.nota || '')}">`)}
     ${pieModal(g.id)}`);
-  document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'gasto', id: g.id, proyecto_id: pSel, concepto: v('fCon'), fecha: v('fFec'), monto: v('fMon'), categoria: v('fCat'), pagado_por: v('fPor'), nota: v('fNota') }, 'Gasto guardado.');
+  document.getElementById('fGuardar').onclick = () => guardarCreacion({ tipo: 'gasto', id: g.id, proyecto_id: pSel, concepto: v('fCon'), fecha: v('fFec'), monto: v('fMon'), categoria: v('fCat'), pagado_por: v('fPor'), para_socio: v('fPara'), nota: v('fNota') }, 'Gasto guardado.');
   borrarCreacion('gasto', g.id, '¿Borrar este gasto?');
 }
 function formMensual(m = {}) {
@@ -1002,9 +1030,9 @@ function imprimirCreacion() {
       ${fila(`Cobrado a ${esc(p.cliente || 'el cliente')}${p.fecha_cobro ? ' (' + esc(fechaCorta(p.fecha_cobro)) + ')' : ''}`, dinero(p.cobrado))}
       ${fila(`Banco${p.comision_nota ? ' ' + esc(p.comision_nota) : ''} −${p.comision_pct} %`, '−' + dinero(c.comision))}
       ${fila('Llegó a la cuenta', dinero(c.neto), true)}
-      ${fila('Gastos de creación del sistema (detalle abajo)', '−' + dinero(c.gastos))}
+      ${fila('Gastos para todos (se reparten entre los socios)', '−' + dinero(c.compartidos))}
       ${fila('Quedan para repartir', dinero(c.queda), true)}
-      ${c.socios.map(s => fila(`${esc(s.nombre)} · ${s.pct} %`, dinero(s.monto))).join('')}</table>
+      ${c.socios.map(s => fila(`${esc(s.nombre)} · ${s.pct} %`, dinero(s.parte)) + (s.gastosA ? fila('   − gastos a su nombre', '−' + dinero(s.gastosA)) : '') + (s.adelantos ? fila('   − adelantos', '−' + dinero(s.adelantos)) : '') + fila('   Le queda', dinero(s.monto), true)).join('')}</table>
     <h2>2. Lo que costó crear el sistema</h2><table><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th></tr>
       ${p.gastos.map(g => `<tr><td>${esc(fechaCorta(g.fecha))}</td><td>${esc(g.concepto)}${g.nota ? ` <span class="sub">· ${esc(g.nota)}</span>` : ''}</td><td>${esc(CAT[g.categoria] || '')}</td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td></tr>`).join('')}
       <tr class="tot"><td colspan="3">Total</td><td class="n">${dinero(c.gastos)}</td></tr></table>
