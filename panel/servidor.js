@@ -163,6 +163,9 @@ async function inicializarTablas() {
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(200) NOT NULL DEFAULT ''");
   await client.query(`CREATE TABLE IF NOT EXISTS equipos_confianza (
     token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL, detalle TEXT NOT NULL DEFAULT '')`);
+  // Sesiones del Programador recordadas en este equipo (30 días): sobreviven a los reinicios del servidor.
+  await client.query(`CREATE TABLE IF NOT EXISTS sesiones_recordadas (
+    token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL)`);
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
@@ -1596,10 +1599,18 @@ async function equipoDeConfianza(req, usuario) {
   const r = await client.query('SELECT 1 FROM equipos_confianza WHERE token_hash = $1 AND usuario = $2 AND vence > NOW()', [hashCorto(t), usuario]);
   return r.rowCount > 0;
 }
+const DIAS_RECORDADA = 30;
 function abrirSesion(res, req, u, extraCookies = []) {
   const token = crypto.randomBytes(32).toString('hex');
-  sesiones.set(token, { usuario: u.usuario, ultima: Date.now() });
-  return [`${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict${cookieSegura(req)}`, ...extraCookies];
+  // El Programador queda recordado 30 días en este equipo (no vuelve a pedir contraseña ni código); los demás, por inactividad.
+  const recordada = u.grupo === 'Programador';
+  sesiones.set(token, { usuario: u.usuario, ultima: Date.now(), recordada });
+  let cookie = `${COOKIE}=${token}; HttpOnly; Path=/; SameSite=Strict${cookieSegura(req)}`;
+  if (recordada) {
+    cookie += `; Max-Age=${DIAS_RECORDADA * 86400}`;
+    client.query("INSERT INTO sesiones_recordadas (token_hash, usuario, vence) VALUES ($1, $2, NOW() + INTERVAL '30 days') ON CONFLICT (token_hash) DO NOTHING", [hashCorto(token), u.usuario]).catch(() => {});
+  }
+  return [cookie, ...extraCookies];
 }
 
 async function correoDeAlerta(asunto, texto) {
@@ -1689,9 +1700,15 @@ async function limpiarRevisiones() {
 
 async function usuarioDeSesion(req) {
   const token = leerCookie(req, COOKIE);
-  if (!token || !sesiones.has(token)) return null;
+  if (!token) return null;
+  if (!sesiones.has(token)) {
+    // Después de un reinicio del servidor: si es una sesión recordada del Programador, se vuelve a abrir.
+    const r = await client.query("SELECT usuario FROM sesiones_recordadas WHERE token_hash = $1 AND vence > NOW()", [hashCorto(token)]).catch(() => ({ rows: [] }));
+    if (!r.rows[0]) return null;
+    sesiones.set(token, { usuario: r.rows[0].usuario, ultima: Date.now(), recordada: true });
+  }
   const s = sesiones.get(token);
-  const limite = config.sesion.minutosInactividad * 60 * 1000;
+  const limite = s.recordada ? DIAS_RECORDADA * 86400 * 1000 : config.sesion.minutosInactividad * 60 * 1000;
   if (Date.now() - s.ultima > limite) {
     sesiones.delete(token);
     return null;
@@ -1702,7 +1719,7 @@ async function usuarioDeSesion(req) {
     [s.usuario]
   );
   const u = r.rows[0];
-  if (!u || !u.activo || await cuenta.motivoBloqueo(u)) {
+  if (!u || !u.activo || await cuenta.motivoBloqueo(u) || (s.recordada && u.grupo !== 'Programador')) {
     sesiones.delete(token);
     return null;
   }
@@ -1860,7 +1877,8 @@ http.createServer(async (req, res) => {
       const u = (await client.query('SELECT * FROM usuarios WHERE usuario = $1 AND activo = TRUE', [nombreIntento])).rows[0];
       if (!u) return json(res, 401, { error: 'Usuario no encontrado' });
       const extra = [];
-      if (recordar) {
+      // El Programador siempre deja su equipo recordado: no vuelve a recibir código en este equipo.
+      if (recordar || u.grupo === 'Programador') {
         const t = crypto.randomBytes(32).toString('hex');
         await client.query("INSERT INTO equipos_confianza (token_hash, usuario, vence, detalle) VALUES ($1, $2, NOW() + INTERVAL '30 days', $3)",
           [hashCorto(t), u.usuario, String(req.headers['user-agent'] || '').slice(0, 200)]);
@@ -1873,7 +1891,10 @@ http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/api/logout') {
       const token = leerCookie(req, COOKIE);
       const actual = await usuarioDeSesion(req);
-      if (token) sesiones.delete(token);
+      if (token) {
+        sesiones.delete(token);
+        await client.query('DELETE FROM sesiones_recordadas WHERE token_hash = $1', [hashCorto(token)]).catch(() => {});
+      }
       if (actual) {
         presencia.delete(actual.usuario);
         await client.query('DELETE FROM conectados_ahora WHERE usuario = $1', [actual.usuario]).catch(() => {});
