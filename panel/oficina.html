@@ -886,6 +886,9 @@ function cuentasCreacion(p) {
   // Gastos para todos: se descuentan antes de repartir.
   const compartidos = redondo(costos.filter(g => g.para_socio == null).reduce((a, g) => a + g.monto, 0));
   const queda = redondo(neto - compartidos);
+  // Lo que realmente queda para los socios: cobro neto, menos todos los gastos y todos los adelantos.
+  const adelantosTotal = redondo(p.gastos.filter(esAdelanto).reduce((a, g) => a + g.monto, 0));
+  const quedaTotal = redondo(neto - gastos - adelantosTotal);
   // Gastos y adelantos para una persona: solo se descuentan de su parte.
   const socios = (p.socios || []).map((s, i) => {
     const parte = redondo(queda * s.pct / 100);
@@ -901,7 +904,7 @@ function cuentasCreacion(p) {
   const emp = D && p.cliente ? D.empresas.find(e => e.nombre.toLowerCase().includes(p.cliente.toLowerCase()) || p.cliente.toLowerCase().includes(e.nombre.toLowerCase())) : null;
   const iaMes = emp && emp.ia && emp.ia.delMes ? redondo(emp.ia.delMes) : 0;
   const variable = redondo(variables.reduce((a, m) => a + (m.categoria === 'ia' && iaMes ? iaMes : m.monto), 0));
-  return { comision, neto, gastos, compartidos, queda, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
+  return { comision, neto, gastos, compartidos, queda, quedaTotal, adelantos: adelantosTotal, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
 }
 function vCreacion() {
   const lista = P ? P.proyectos : [];
@@ -918,12 +921,13 @@ function vCreacion() {
     <div class="kpi"><div class="e">Cobrado al cliente</div><div class="n">${dinero(p.cobrado)}</div><div class="d">${esc(p.cliente || '')}${p.fecha_cobro ? ' · ' + fechaCorta(p.fecha_cobro) : ''} · <a href="#" data-editar-proyecto="${p.id}">editar</a></div></div>
     <div class="kpi" style="border-color:var(--ambar)"><div class="e">Banco −${p.comision_pct} %</div><div class="n">−${dinero(c.comision)}</div><div class="d">llegaron <b>${dinero(c.neto)}</b>${p.comision_nota ? ' · ' + esc(p.comision_nota) : ''}</div></div>
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Lo que costó crearlo</div><div class="n">${dinero(c.gastos)}</div><div class="d">${p.gastos.length} gastos</div></div>
-    <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.queda)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.compartidos)} gastos para todos</div></div>
+    <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.quedaTotal)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.gastos)} gastos − ${dinero(c.adelantos)} adelantos</div></div>
   </div>
   <div class="rej r2">
-    <div class="caja"><h2>🤝 Reparto entre socios</h2><p class="sub">De los ${dinero(c.queda)} que quedan (después de los gastos para todos)</p>
+    <div class="caja"><h2>🤝 Reparto entre socios</h2><p class="sub">Cada parte se calcula sobre ${dinero(c.queda)} (después de los gastos para todos). Luego se descuenta lo de cada uno.</p>
       ${c.socios.length ? c.socios.map(s => `<div style="padding:10px 0;border-bottom:1px solid var(--borde)"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:15px">${esc(s.nombre)}</b> <small style="color:var(--suave)">${s.pct} %</small></div><div style="font-size:22px;font-weight:700">${dinero(s.monto)}</div></div><div style="font-size:12.5px;color:var(--suave);margin-top:4px">Su parte ${dinero(s.parte)}${s.gastosA ? ' · − gastos a su nombre ' + dinero(s.gastosA) : ''}${s.adelantos ? ' · − adelantos ' + dinero(s.adelantos) : ''}</div></div>`).join('')
         : `<div class="vacio">Pon los socios y su porcentaje en <a href="#" data-editar-proyecto="${p.id}">Editar</a>.</div>`}
+      ${c.socios.length ? `<div style="display:flex;justify-content:space-between;padding-top:10px;margin-top:6px;border-top:1px solid var(--borde);font-weight:700"><span>Total que queda</span><span>${dinero(c.quedaTotal)}</span></div>` : ''}
       ${p.nota ? `<p class="sub" style="margin-top:10px">${esc(p.nota)}</p>` : ''}</div>
     <div class="caja"><h2>📅 Gastos de cada mes</h2><p class="sub">Lo que va a costar mantener el sistema desde ahora</p>
       <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Fijos (mensuales + anuales ÷ 12)</span><b>${dinero(c.fijo)}</b></div>
@@ -1031,8 +1035,8 @@ function imprimirCreacion() {
       ${fila(`Banco${p.comision_nota ? ' ' + esc(p.comision_nota) : ''} −${p.comision_pct} %`, '−' + dinero(c.comision))}
       ${fila('Llegó a la cuenta', dinero(c.neto), true)}
       ${fila('Gastos para todos (se reparten entre los socios)', '−' + dinero(c.compartidos))}
-      ${fila('Quedan para repartir', dinero(c.queda), true)}
-      ${c.socios.map(s => fila(`${esc(s.nombre)} · ${s.pct} %`, dinero(s.parte)) + (s.gastosA ? fila('   − gastos a su nombre', '−' + dinero(s.gastosA)) : '') + (s.adelantos ? fila('   − adelantos', '−' + dinero(s.adelantos)) : '') + fila('   Le queda', dinero(s.monto), true)).join('')}</table>
+      ${fila('Base para repartir (después de los gastos para todos)', dinero(c.queda), true)}
+      ${c.socios.map(s => fila(`${esc(s.nombre)} · ${s.pct} %`, dinero(s.parte)) + (s.gastosA ? fila('   − gastos a su nombre', '−' + dinero(s.gastosA)) : '') + (s.adelantos ? fila('   − adelantos', '−' + dinero(s.adelantos)) : '') + fila('   Le queda', dinero(s.monto), true)).join('')}${fila('Total que queda para repartir', dinero(c.quedaTotal), true)}</table>
     <h2>2. Lo que costó crear el sistema</h2><table><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th></tr>
       ${p.gastos.map(g => `<tr><td>${esc(fechaCorta(g.fecha))}</td><td>${esc(g.concepto)}${g.nota ? ` <span class="sub">· ${esc(g.nota)}</span>` : ''}</td><td>${esc(CAT[g.categoria] || '')}</td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td></tr>`).join('')}
       <tr class="tot"><td colspan="3">Total</td><td class="n">${dinero(c.gastos)}</td></tr></table>
