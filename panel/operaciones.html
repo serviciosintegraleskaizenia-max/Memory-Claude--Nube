@@ -1835,7 +1835,13 @@ document.addEventListener('click', async ev => {
   const b = ev.target.closest('#arBuscar,[data-arch-ver],[data-arch-pag],[data-arch-cerrar]');
   if (!b) return;
   if (b.id === 'arBuscar') { ARCH.q = val('arQ').trim(); ARCH.anio = Number(val('arA')) || 0; ARCH.pagina = 1; ARCH.sel = 0; return vArchivo(); }
-  if (b.dataset.archVer) return cargarArchivoDetalle(Number(b.dataset.archVer));
+  if (b.dataset.archVer) {
+    // El detalle aparece debajo de la tabla: la pantalla baja hasta él para que se vea.
+    await cargarArchivoDetalle(Number(b.dataset.archVer));
+    const det = document.getElementById('arDetalle');
+    if (det) det.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   if (b.dataset.archPag) { ARCH.pagina = Math.max(1, ARCH.pagina + Number(b.dataset.archPag)); ARCH.sel = 0; return vArchivo(); }
   if (b.dataset.archCerrar) { ARCH.sel = 0; const el = document.getElementById('arDetalle'); if (el) el.innerHTML = ''; }
 });
