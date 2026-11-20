@@ -3990,21 +3990,41 @@ async function cargarAutomatizacion() {
 }
 function bloquePrompts() {
   if (!AUTO_PROMPTS.length) return '';
-  return `<div class="titulo-seccion">Prompts maestro (solo tú los ves y los cambias)</div>
-    <p class="etiqueta-sec">Las reglas generales se aplican a todos los clientes. {negocio} y {tono} se cambian solos por los datos de cada cliente.</p>
-    ${AUTO_PROMPTS.map(p => `
+  const maestro = AUTO_PROMPTS.find(t => t.clave === 'maestro');
+  const tipos = AUTO_PROMPTS.filter(t => t.clave !== 'maestro');
+  const caja = (t) => `
       <div style="margin:10px 0">
-        <label><b>${esc(p.nombre)}</b>
-          <textarea id="pr-${esc(p.clave)}" rows="5" style="width:100%;margin-top:4px">${esc(p.texto)}</textarea></label>
-        <div style="margin-top:6px"><button class="btn-sec" data-accion="emp-auto-prompt" data-clave="${esc(p.clave)}">Guardar este prompt</button></div>
-      </div>`).join('')}`;
+        <label><b>${esc(t.nombre)}</b>
+          <textarea id="pr-${esc(t.clave)}" rows="5" style="width:100%;margin-top:4px">${esc(t.texto)}</textarea></label>
+        <div style="margin-top:6px"><button class="btn-sec" data-accion="emp-auto-prompt" data-clave="${esc(t.clave)}">Guardar</button></div>
+      </div>`;
+  return `<div class="titulo-seccion">Prompts (solo tú los ves y los cambias)</div>
+    <p class="etiqueta-sec">{negocio} y {tono} se cambian solos por los datos de cada cliente.</p>
+    <div class="titulo-seccion">Reglas generales (todos los clientes)</div>
+    ${maestro ? caja(maestro) : ''}
+    <div class="titulo-seccion">Plantillas por tipo de negocio</div>
+    ${tipos.map(caja).join('')}
+    <div class="titulo-seccion">Nueva plantilla</div>
+    <p class="etiqueta-sec">Crea un tipo de negocio nuevo con su texto. También se crea sola al escribir un tipo nuevo en un cliente.</p>
+    <div style="margin:10px 0">
+      <label>Nombre del tipo de negocio<input id="npNombre" maxlength="80" placeholder="Agencia de viajes"></label>
+      <label>Texto de la plantilla<textarea id="npTexto" rows="5" style="width:100%;margin-top:4px"></textarea></label>
+      <div style="margin-top:6px"><button class="btn" data-accion="emp-auto-prompt-nueva">Crear plantilla</button></div>
+    </div>`;
 }
+
 async function verPromptUI() {
   const datos = leerAutomatizacion();
   const r = await api('/api/central/automatizacion/prompt-vista', { nombre: datos.nombre, perfil: datos.perfil });
   const caja = document.getElementById('autoVista');
   caja.textContent = r.ok ? r.data.texto : (r.data.error || 'No se pudo armar el prompt.');
   caja.style.display = 'block';
+}
+async function crearPromptUI() {
+  const r = await api('/api/central/automatizacion/prompts/crear', { nombre: document.getElementById('npNombre').value.trim(), texto: document.getElementById('npTexto').value });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo crear la plantilla.', false);
+  await cargarAutomatizacion();
+  mostrarAviso('Plantilla creada. Ya aparece en la lista de tipos de negocio.', true);
 }
 async function guardarPromptUI(clave) {
   const r = await api('/api/central/automatizacion/prompts/guardar', { clave, texto: document.getElementById('pr-' + clave).value });
@@ -4017,6 +4037,7 @@ function formAutomatizacion() {
   const p = e.perfil || {};
   const r = p.redes || {}, m = p.meta || {}, g = p.gerente || {}, ia = p.ia || {}, crm = p.crm || {};
   const wa = r.whatsapp || {}, ig = r.instagram || {}, fb = r.facebook || {}, tk = r.tiktok || {};
+  const nombreTipo = (AUTO_PROMPTS.find(t => t.clave === ia.tipo) || {}).nombre || ia.tipo_nombre || '';
   const campo = (id, etiqueta, valor = '', ayuda = '', extra = '') =>
     `<label>${etiqueta}<input id="${id}" value="${esc(valor)}" ${extra}>${ayuda ? `<small class="etiqueta-sec">${ayuda}</small>` : ''}</label>`;
   const marca = (id, texto, marcado, ayuda = '') =>
@@ -4085,8 +4106,7 @@ function formAutomatizacion() {
 
     <div class="titulo-seccion">5 · Inteligencia artificial</div>
     <div class="form-fila">
-      <label>Tipo de negocio<select id="aIaTipo"><option value="" ${ia.tipo ? '' : 'selected'}>— Elegir —</option>${(AUTO_PROMPTS.filter(p => p.clave !== 'maestro').length ? AUTO_PROMPTS.filter(p => p.clave !== 'maestro') : [{ clave: 'otro', nombre: 'Otro negocio' }])
-        .map(t => `<option value="${esc(t.clave)}" ${t.clave === ia.tipo ? 'selected' : ''}>${esc(t.nombre)}</option>`).join('')}</select></label>
+      <label>Tipo de negocio<input id="aIaTipo" list="aTiposLista" maxlength="80" value="${esc(nombreTipo)}" placeholder="Escribe el tipo o elige de la lista"><small class="etiqueta-sec">Si el tipo no existe, se crea con una plantilla base que puedes editar abajo.</small></label><datalist id="aTiposLista">${AUTO_PROMPTS.filter(t => t.clave !== 'maestro').map(t => `<option value="${esc(t.nombre)}">`).join('')}</datalist>
       <label>Modelo<select id="aIaModelo">${modelos.map(x => `<option ${x === ia.modelo ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
     </div>
     <div class="form-fila">
@@ -4137,7 +4157,7 @@ function leerAutomatizacion() {
       },
       ia: {
         modelo: document.getElementById('aIaModelo').value, tono: document.getElementById('aIaTono').value,
-        tipo: document.getElementById('aIaTipo').value, que_ofrece: v('aIaQue'), zona_horario: v('aIaZona'),
+        tipo_nombre: v('aIaTipo'), que_ofrece: v('aIaQue'), zona_horario: v('aIaZona'),
         pagos: v('aIaPagos'), no_prometer: v('aIaNo'), pasar_persona: v('aIaPersona')
       },
       crm: { activo: ck('aCrm') }
@@ -4292,6 +4312,7 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-auto-guardar') return guardarAutomatizacionUI(b);
   if (a === 'emp-auto-vista') return verPromptUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
+  if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 
   if (a === 'emp-crear') {
     // Revisión antes de enviar: se marca el campo con problema y se lleva la vista a él.

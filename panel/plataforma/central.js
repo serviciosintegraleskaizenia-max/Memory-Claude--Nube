@@ -355,6 +355,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       },
       ia: {
         modelo: t((p.ia || {}).modelo, 80), tono: t((p.ia || {}).tono, 40), tipo: t((p.ia || {}).tipo, 40),
+        tipo_nombre: t((p.ia || {}).tipo_nombre, 80),
         que_ofrece: t((p.ia || {}).que_ofrece, 600), zona_horario: t((p.ia || {}).zona_horario, 300),
         pagos: t((p.ia || {}).pagos, 300), no_prometer: t((p.ia || {}).no_prometer, 600),
         pasar_persona: t((p.ia || {}).pasar_persona, 600)
@@ -381,6 +382,46 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     return [base, tipo && 'Tipo de negocio: ' + tipo, datos && 'Datos del cliente:\n' + datos].filter(Boolean).join('\n\n');
   }
 
+  function claveDe(t) {
+    return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '').slice(0, 36) || 'tipo';
+  }
+  // Busca una plantilla por nombre (sin distinguir mayúsculas) o por clave. Devuelve la clave o null.
+  function tipoExistente(nombre, prompts) {
+    const n = String(nombre || '').trim().toLowerCase();
+    if (!n || n === 'maestro') return null;
+    const p = prompts.find(x => x.clave !== 'maestro' && (x.nombre.toLowerCase() === n || x.clave === n));
+    return p ? p.clave : null;
+  }
+  // Crea una plantilla nueva. Si no se escribe texto, empieza con el de "otro negocio" para que la edites después.
+  async function insertarPlantilla(u, nombre, textoPlantilla) {
+    const prompts = await promptsList();
+    const base = claveDe(nombre);
+    let clave = base, n = 2;
+    while (prompts.some(p => p.clave === clave)) clave = base + '_' + (n++);
+    const orden = Math.max(0, ...prompts.map(p => Number(p.orden) || 0)) + 1;
+    await client.query('INSERT INTO automatizacion_prompts (clave, nombre, texto, orden) VALUES ($1, $2, $3, $4)', [clave, nombre, textoPlantilla, orden]);
+    await registrar(u, 'crear_plantilla_ia', 'prompt', clave, '', '', nombre);
+    return clave;
+  }
+  // Al guardar un cliente: si el tipo escrito no existe, se crea su plantilla.
+  async function resolverTipo(u, nombre) {
+    const n = texto(nombre, 80);
+    if (!n) return 'otro';
+    const existente = tipoExistente(n, await promptsList());
+    if (existente) return existente;
+    const otro = (await promptsList()).find(p => p.clave === 'otro');
+    return insertarPlantilla(u, n, otro ? otro.texto : '');
+  }
+  async function crearPrompt(u, f) {
+    const nombre = texto(f.nombre, 80);
+    const nuevo = String(f.texto ?? '').trim().slice(0, 4000);
+    if (!nombre) throw Object.assign(new Error('Escribe el nombre del tipo de negocio.'), { codigo: 400 });
+    if (!nuevo) throw Object.assign(new Error('Escribe el texto de la plantilla.'), { codigo: 400 });
+    if (tipoExistente(nombre, await promptsList())) throw Object.assign(new Error('Ya existe una plantilla con ese nombre. Edítala abajo.'), { codigo: 400 });
+    return { clave: await insertarPlantilla(u, nombre, nuevo) };
+  }
+
   // Solo el Programador edita los prompts (la ruta ya lo exige: Empresas es solo Programador).
   async function guardarPrompt(u, f) {
     const clave = texto(f.clave, 40);
@@ -405,7 +446,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
       throw Object.assign(new Error('Ese subdominio ya lo usa una empresa del panel de correo.'), { codigo: 400, campo: 'slug' });
     }
-    const perfil = JSON.stringify(limpiarPerfil(f.perfil || {}));
+    const entrada = f.perfil || {};
+    const claveTipo = await resolverTipo(u, (entrada.ia || {}).tipo_nombre);
+    const perfil = JSON.stringify(limpiarPerfil({ ...entrada, ia: { ...(entrada.ia || {}), tipo: claveTipo } }));
     if (id) {
       const r = await client.query('UPDATE automatizacion_clientes SET slug = $1, nombre = $2, perfil = $3::jsonb, actualizado = NOW() WHERE id = $4 RETURNING id',
         [slug, nombre, perfil, id]);
@@ -644,13 +687,19 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'GET' && url === '/api/central/automatizacion/prompts') {
         return json(res, 200, { prompts: await promptsList() });
       }
+      if (req.method === 'POST' && url === '/api/central/automatizacion/prompts/crear') {
+        return json(res, 200, await crearPrompt(u, await leerCuerpo(req)));
+      }
       if (req.method === 'POST' && url === '/api/central/automatizacion/prompts/guardar') {
         return json(res, 200, await guardarPrompt(u, await leerCuerpo(req)));
       }
       // Muestra el prompt final que recibirá la IA de un cliente (sin guardar nada).
       if (req.method === 'POST' && url === '/api/central/automatizacion/prompt-vista') {
         const f = await leerCuerpo(req);
-        return json(res, 200, { texto: armarPrompt(limpiarPerfil(f.perfil || {}), texto(f.nombre, 120), await promptsList()) });
+        const prompts = await promptsList();
+        const perfil = limpiarPerfil(f.perfil || {});
+        perfil.ia.tipo = tipoExistente(perfil.ia.tipo_nombre, prompts) || 'otro';
+        return json(res, 200, { texto: armarPrompt(perfil, texto(f.nombre, 120), prompts) });
       }
       if (req.method === 'POST' && url === '/api/central/automatizacion/guardar') {
         return json(res, 200, await guardarAutomatizacion(u, await leerCuerpo(req)));
