@@ -11,149 +11,158 @@
 [hidden]{display:none !important}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Plus Jakarta Sans',Inter,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-.top{background:var(--nav);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+button,input,select,textarea{font:inherit}
+.top{background:var(--nav);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .top .marca{font-weight:800;font-size:16px}
 .top .marca span{color:var(--oro)}
 .top a{color:#fff;text-decoration:none;font-size:13px;opacity:.9}
-main{max-width:1280px;margin:0 auto;padding:0 16px 40px}
-.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
-#buscar{flex:1;min-width:200px;padding:9px 12px;border-radius:10px;border:1px solid var(--borde);font:inherit;background:#fff}
-.btn{border:1px solid var(--borde);background:#fff;border-radius:10px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer;color:var(--txt);white-space:nowrap}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px}
+.tab.on{background:#fff;color:var(--nav);border-color:#fff;font-weight:700}
+main{padding:12px 14px 40px}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.barra input[type=search]{flex:1;min-width:180px;padding:9px 12px;border-radius:10px;border:1px solid var(--borde);background:#fff}
+.barra select{padding:9px 10px;border-radius:10px;border:1px solid var(--borde);background:#fff}
+.btn{border:1px solid var(--borde);background:#fff;border-radius:10px;padding:8px 13px;font-weight:700;cursor:pointer;color:var(--txt);white-space:nowrap}
 .btn.principal{background:var(--nav);color:#fff;border-color:var(--nav)}
+.btn.chico{padding:4px 9px;font-size:12.5px}
 .btn:disabled{opacity:.5;cursor:default}
-.btn.chico{padding:4px 10px}
-.sub{font-size:12.5px;color:var(--suave);margin:8px 2px 0}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
-.chip{border:1px solid var(--borde);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--txt)}
-.chip b{margin-left:4px}
-.chip.on{background:var(--nav);color:#fff;border-color:var(--nav)}
-.banner{background:#fff7e6;border:1px solid #f5d28a;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:13.5px}
+.sub{font-size:12.5px;color:var(--suave);margin:8px 2px}
+.banner{background:#fff7e6;border:1px solid #f5d28a;border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13.5px}
 .banner.suave{background:#eef4fd;border-color:#c7dbf5}
-.cuerpo{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
-.lista-wrap{background:var(--card);border-radius:14px;box-shadow:var(--sombra);overflow:hidden}
-.cabecera-lista,.fila{display:grid;grid-template-columns:minmax(0,2fr) 110px 120px 130px;gap:10px;align-items:center}
-.cabecera-lista{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--suave);padding:9px 14px;border-bottom:1px solid var(--borde);font-weight:700}
-.fila{width:100%;text-align:left;background:var(--card);border:0;border-bottom:1px solid var(--borde);padding:12px 14px;cursor:pointer;font:inherit;color:inherit}
-.fila:hover{background:#f8fafd}
-.fila.sel{background:#eef4fd}
-.fila .nom{display:flex;flex-direction:column;min-width:0}
-.fila .nom b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fila .nom small{color:var(--suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.etiquetas-fila{display:contents}
-.canal,.etapa{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;justify-self:start}
-.canal{background:#eef2f8;color:#34445c}
-.c-whatsapp{background:#dff6ec;color:#0a7a52}
-.c-instagram{background:#fde7f1;color:#a3165b}
-.c-messenger{background:#e3eefc;color:#1c5fb8}
-.c-tiktok{background:#e9e9ee;color:#111}
-.etapa{background:#f1ecdc;color:#7a5a12}
-.fecha{font-size:12.5px;color:var(--suave)}
-.vacio{padding:30px;text-align:center;color:var(--suave)}
-.ficha{background:var(--card);border-radius:14px;box-shadow:var(--sombra);padding:18px;overflow-wrap:anywhere}
-.ficha-cab{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px}
+.resumen{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.pill{background:#fff;border:1px solid var(--borde);border-radius:999px;padding:5px 11px;font-size:12.5px}
+.pill b{margin-left:4px}
+/* Tablero */
+.tablero{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start;scroll-snap-type:x proximity}
+.col{flex:0 0 260px;background:#e9eef6;border-radius:14px;padding:10px;min-height:200px;scroll-snap-align:start}
+.col.sobre{outline:2px dashed var(--azul);outline-offset:-4px}
+.col-cab{display:flex;justify-content:space-between;align-items:center;margin:2px 4px 8px;font-weight:800}
+.col-cab small{color:var(--suave);font-weight:700}
+.tarjeta{background:#fff;border-radius:11px;padding:10px 11px;margin-bottom:8px;box-shadow:var(--sombra);cursor:grab;border-left:4px solid #cbd5e1}
+.tarjeta:active{cursor:grabbing}
+.tarjeta.arrastrando{opacity:.5}
+.tarjeta .nom{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tarjeta .meta{font-size:12px;color:var(--suave);margin-top:3px;display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.chip{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11.5px;font-weight:700;background:#eef2f8;color:#34445c}
+.chip.ia{background:#efe9ff;color:#5b3fb8}
+.chip.canal-whatsapp{background:#dff6ec;color:#0a7a52}
+.chip.canal-instagram{background:#fde7f1;color:#a3165b}
+.chip.canal-messenger{background:#e3eefc;color:#1c5fb8}
+.chip.canal-tiktok{background:#e9e9ee;color:#111}
+.chip.seg{background:#fff1d6;color:#8a5a00}
+.chip.alerta{background:#fde6ea;color:#a3142e}
+.mover{margin-top:6px;width:100%;font-size:12.5px;padding:4px;border-radius:7px;border:1px solid var(--borde)}
+.vacio{padding:24px;text-align:center;color:var(--suave);background:#fff;border-radius:12px}
+/* Lista */
+.tabla-wrap{background:#fff;border-radius:14px;box-shadow:var(--sombra);overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--borde);text-align:left;vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--suave)}
+tr.fila{cursor:pointer}
+tr.fila:hover{background:#f8fafd}
+/* Ficha */
+.velo{position:fixed;inset:0;background:rgba(10,20,35,.35);z-index:40}
+.ficha{position:fixed;top:0;right:0;bottom:0;width:min(520px,100%);background:var(--card);z-index:50;box-shadow:-10px 0 30px rgba(0,0,0,.15);display:flex;flex-direction:column}
+.ficha-cab{padding:14px 16px;border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .ficha-cab h2{margin:0 0 6px;font-size:18px}
-.cerrar{display:none;border:0;background:none;font:inherit;font-size:20px;cursor:pointer;padding:0 6px 0 0;color:var(--txt)}
-.form label{display:block;font-size:12px;color:var(--suave);font-weight:600;margin:10px 0}
-.form input,.form select,.form textarea,.nota select,.nota textarea,#formNueva input,#formNueva select,.etapa-fila input[type=text],.etapa-fila .e-nombre{display:block;width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--borde);border-radius:8px;font:inherit;font-size:14px;color:var(--txt);background:#fff}
-.nota{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;margin-top:8px}
-.nota select{grid-column:1 / -1}
-.nota textarea{grid-column:1}
-.nota .btn{grid-column:2}
-h3{font-size:14px;margin:18px 0 4px}
-.hilo{max-height:420px;overflow:auto;margin-top:6px}
+.ficha-tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--borde);overflow-x:auto}
+.ficha-tabs button{border:0;background:transparent;padding:7px 10px;border-radius:8px;cursor:pointer;font-weight:700;color:var(--suave);white-space:nowrap}
+.ficha-tabs button.on{background:#eef4fd;color:var(--azul)}
+.ficha-cuerpo{padding:14px 16px;overflow:auto;flex:1}
 .msg{border-left:3px solid #cbd5e1;padding:6px 10px;margin:8px 0;background:#f8fafc;border-radius:6px}
 .m-entrante{border-color:var(--verde)}
 .m-saliente{border-color:var(--azul)}
 .m-nota{border-color:var(--ambar)}
 .msg p{margin:4px 0 0;white-space:pre-wrap}
-.meta{color:var(--suave);font-size:12.5px;margin:6px 0}
+.msg small,.evento small{color:var(--suave)}
+.evento{padding:8px 0;border-bottom:1px solid var(--borde)}
+.evento b{display:block}
+label.campo{display:block;font-size:12px;color:var(--suave);font-weight:600;margin:10px 0}
+label.campo input,label.campo select,label.campo textarea{display:block;width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--borde);border-radius:8px;color:var(--txt);background:#fff}
+.fila-btn{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .modal{position:fixed;inset:0;background:rgba(10,20,35,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60}
 .modal .caja{background:var(--card);border-radius:14px;padding:20px;width:min(520px,100%);max-height:90vh;overflow:auto;box-shadow:var(--sombra)}
 .modal h2{margin:0 0 6px;font-size:18px}
-.modal label{display:block;font-size:12px;color:var(--suave);font-weight:600;margin:10px 0}
 .acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
 .etapa-fila{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px;align-items:center;margin:8px 0}
-.etapa-fila .e-nombre{margin:0}
-.chk{font-size:13px;color:var(--txt);display:flex;gap:4px;align-items:center;white-space:nowrap}
+.etapa-fila input[type=text],.etapa-fila .e-nombre{width:100%;padding:8px;border:1px solid var(--borde);border-radius:8px}
+.chk{font-size:13px;display:flex;gap:4px;align-items:center;white-space:nowrap}
 .aviso{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(90px);background:var(--nav);color:#fff;padding:10px 16px;border-radius:10px;transition:transform .25s,opacity .25s;opacity:0;pointer-events:none;z-index:70;max-width:calc(100% - 32px)}
 .aviso.v{transform:translateX(-50%);opacity:1}
-@media (min-width:960px){
-  .cuerpo{grid-template-columns:minmax(0,1fr) 420px}
-  .ficha{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
-}
-@media (max-width:959px){
-  .ficha.abierta{display:block;position:fixed;inset:0;z-index:50;border-radius:0;overflow:auto;padding:16px}
-  .ficha:not(.abierta){display:none}
-  .cerrar{display:inline-block}
-  .ficha-cab .cerrar{flex:0 0 auto}
-}
 @media (max-width:700px){
-  .cabecera-lista{display:none}
-  .fila{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
-  .etiquetas-fila{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-  .fila .fecha{display:none}
-  .btn{padding:8px 12px}
-  .etapa-fila{grid-template-columns:minmax(0,1fr) auto}
-  .etapa-fila .chk{grid-column:1}
-  .etapa-fila .btn{grid-row:2}
+  .col{flex-basis:84vw}
+  .ficha{width:100%}
+  .barra select{flex:1}
 }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="marca">Zentralia <span>· CRM</span></div>
+  <nav class="tabs" aria-label="Vistas">
+    <button class="tab on" data-vista="tablero">Tablero</button>
+    <button class="tab" data-vista="lista">Lista</button>
+    <button class="tab" data-vista="seguimientos">Seguimientos <span id="nSeg"></span></button>
+  </nav>
   <a href="/">← Volver al panel</a>
 </header>
 <main>
   <div id="bannerServicio" class="banner" hidden></div>
-  <div id="bannerChatwoot" class="banner suave" hidden>Chatwoot no está conectado. Puedes cargar personas a mano. Para traer conversaciones, el Programador conecta Chatwoot en Operaciones (WhatsApp).</div>
-  <div id="contenido">
-    <div class="barra">
-      <input id="buscar" type="search" placeholder="Buscar por nombre, teléfono o correo" aria-label="Buscar personas">
-      <button id="btnNueva" class="btn principal" type="button">+ Nueva persona</button>
-      <button id="btnSync" class="btn" type="button" disabled>Sincronizar con Chatwoot</button>
-      <button id="btnEtapas" class="btn" type="button" hidden>Etapas de venta</button>
-    </div>
-    <div class="sub" id="sincTxt"></div>
-    <div id="chips" class="chips"></div>
-    <div class="cuerpo">
-      <section class="lista-wrap">
-        <div class="cabecera-lista"><span>Persona</span><span>Canal</span><span>Etapa</span><span>Último cambio</span></div>
-        <div id="lista"></div>
-      </section>
-      <aside id="ficha" class="ficha"><p class="meta">Elige una persona de la lista para ver sus datos y su conversación.</p></aside>
-    </div>
+  <div id="bannerChatwoot" class="banner suave" hidden>Chatwoot no está conectado. Puedes cargar personas a mano. Para traer conversaciones, el Programador lo conecta en Operaciones (WhatsApp).</div>
+
+  <div class="barra">
+    <input id="buscar" type="search" placeholder="Buscar por nombre, teléfono o correo" aria-label="Buscar personas">
+    <select id="fCanal" aria-label="Canal"><option value="">Todos los canales</option></select>
+    <select id="fSin" aria-label="Sin respuesta">
+      <option value="">Cualquier último mensaje</option>
+      <option value="24">Sin respuesta hace 24 h o más</option>
+      <option value="48">Sin respuesta hace 48 h o más</option>
+      <option value="336">Sin respuesta hace 2 semanas o más</option>
+      <option value="720">Sin respuesta hace 1 mes o más</option>
+    </select>
+    <select id="fEtiqueta" aria-label="Etiqueta"><option value="">Cualquier etiqueta</option></select>
+    <label class="chk"><input type="checkbox" id="fSeg"> Con seguimiento pendiente</label>
   </div>
+  <div class="barra" style="margin-top:8px">
+    <button id="btnNueva" class="btn principal" type="button">+ Nueva persona</button>
+    <button id="btnSync" class="btn" type="button" disabled>Sincronizar con Chatwoot</button>
+    <button id="btnEtapas" class="btn" type="button" hidden>Etapas de venta</button>
+  </div>
+  <div class="sub" id="sincTxt"></div>
+  <div class="resumen" id="resumen"></div>
+
+  <section id="vTablero"><div class="tablero" id="tablero"></div></section>
+  <section id="vLista" hidden><div class="tabla-wrap"><table><thead><tr><th>Persona</th><th>Canal</th><th>Etapa</th><th>Etiquetas</th><th>Último mensaje</th></tr></thead><tbody id="filas"></tbody></table></div></section>
+  <section id="vSeguimientos" hidden><div id="listaSeg"></div></section>
 </main>
+
+<div id="velo" class="velo" hidden></div>
+<aside id="ficha" class="ficha" hidden></aside>
 
 <div id="modalNueva" class="modal" hidden>
   <form id="formNueva" class="caja">
     <h2>Nueva persona</h2>
-    <p class="meta">Escribe al menos el nombre, el teléfono o el correo.</p>
-    <label>Canal<select name="canal" id="nCanal"></select></label>
-    <label>Nombre<input name="nombre" maxlength="120"></label>
-    <label>Teléfono<input name="telefono" maxlength="40" placeholder="Con código de país, por ejemplo 51977000000"></label>
-    <label>Correo<input name="correo" maxlength="120" type="email"></label>
-    <label>Etapa<select name="etapa" id="nEtapa"></select></label>
-    <p class="meta" id="nError" style="color:var(--rojo)"></p>
-    <div class="acciones">
-      <button type="button" class="btn" data-cerrar="modalNueva">Cancelar</button>
-      <button type="submit" class="btn principal">Guardar</button>
-    </div>
+    <p class="sub">Escribe al menos el nombre, el teléfono o el correo.</p>
+    <label class="campo">Canal<select name="canal" id="nCanal"></select></label>
+    <label class="campo">Nombre<input name="nombre" maxlength="120"></label>
+    <label class="campo">Teléfono<input name="telefono" maxlength="40" placeholder="Con código de país, por ejemplo 51977000000"></label>
+    <label class="campo">Correo<input name="correo" maxlength="120" type="email"></label>
+    <label class="campo">Etapa<select name="etapa" id="nEtapa"></select></label>
+    <p class="sub" id="nError" style="color:var(--rojo)"></p>
+    <div class="acciones"><button type="button" class="btn" data-cerrar="modalNueva">Cancelar</button><button type="submit" class="btn principal">Guardar</button></div>
   </form>
 </div>
 
 <div id="modalEtapas" class="modal" hidden>
   <div class="caja">
     <h2>Etapas de venta</h2>
-    <p class="meta">Cambia el nombre, agrega etapas o apaga las que no uses. Las personas que ya están en una etapa apagada la conservan.</p>
+    <p class="sub">Cambia el nombre, agrega etapas o apaga las que no uses. Las personas que ya están en una etapa apagada la conservan.</p>
     <div id="etapasLista"></div>
     <button type="button" class="btn" id="btnAgregarEtapa">+ Agregar etapa</button>
-    <p class="meta" id="etapasError" style="color:var(--rojo)"></p>
-    <div class="acciones">
-      <button type="button" class="btn" data-cerrar="modalEtapas">Cancelar</button>
-      <button type="button" class="btn principal" id="btnGuardarEtapas">Guardar etapas</button>
-    </div>
+    <p class="sub" id="etapasError" style="color:var(--rojo)"></p>
+    <div class="acciones"><button type="button" class="btn" data-cerrar="modalEtapas">Cancelar</button><button type="button" class="btn principal" id="btnGuardarEtapas">Guardar etapas</button></div>
   </div>
 </div>
 
@@ -163,9 +172,17 @@ h3{font-size:14px;margin:18px 0 4px}
 const $ = s => document.querySelector(s);
 const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const DIRECCION = { entrante: 'Cliente escribió', saliente: 'Respondimos', nota: 'Nota interna' };
-const PLACEHOLDER = '<p class="meta">Elige una persona de la lista para ver sus datos y su conversación.</p>';
+const PLAZOS = [['24h', '24 horas'], ['48h', '48 horas'], ['2s', '2 semanas'], ['1m', '1 mes']];
+const hace = iso => {
+  if (!iso) return 'sin mensajes';
+  const h = (Date.now() - new Date(iso).getTime()) / 3600e3;
+  if (h < 1) return 'hace menos de 1 h';
+  if (h < 48) return 'hace ' + Math.floor(h) + ' h';
+  return 'hace ' + Math.floor(h / 24) + ' días';
+};
 
-let ESTADO = null, LISTA = [], CONTEOS = {}, FILTRO = { q: '', etapa: '' }, FICHA = null, ETAPAS_EDIT = [];
+let ESTADO = null, TABLERO = null, VISTA = 'tablero', FICHA = null, FICHA_TAB = 'conv', ETAPAS_EDIT = [];
+let FILTRO = { q: '', canal: '', sinRespuesta: '', etiqueta: '', seguimiento: false };
 let temporizadorBuscar = null, temporizadorAviso = null;
 
 async function api(url, cuerpo) {
@@ -178,103 +195,184 @@ function aviso(t, ms = 3800) {
   const el = $('#aviso'); el.textContent = t; el.classList.add('v');
   clearTimeout(temporizadorAviso); temporizadorAviso = setTimeout(() => el.classList.remove('v'), ms);
 }
-const etapaNombre = clave => { const e = ESTADO.etapas.find(x => x.clave === clave); return e ? e.nombre : clave; };
+const etapaNombre = clave => { const e = (ESTADO.etapas || []).find(x => x.clave === clave); return e ? e.nombre : clave; };
 const etapasActivas = () => ESTADO.etapas.filter(e => e.activa);
 const nombreDe = c => c.nombre || c.telefono || c.correo || c.identificador;
 const canalNombre = c => (ESTADO.canales[c] || c);
+const chipCanal = c => `<span class="chip canal-${esc(c.canal)}">${esc(canalNombre(c.canal))}</span>`;
+const chipsEtiquetas = (c, max = 3) => (c.etiquetas || []).slice(0, max).map(e => `<span class="chip">${esc(e)}</span>`).join('') + ((c.etiquetas || []).length > max ? `<span class="chip">+${c.etiquetas.length - max}</span>` : '');
 
-function opcionesEtapa(actual) {
-  return ESTADO.etapas.filter(e => e.activa || e.clave === actual)
-    .map(e => `<option value="${esc(e.clave)}" ${e.clave === actual ? 'selected' : ''}>${esc(e.nombre)}${e.activa ? '' : ' (apagada)'}</option>`).join('');
-}
-function opcionesCanal(actual) {
-  return Object.entries(ESTADO.canales).map(([k, n]) => `<option value="${esc(k)}" ${k === actual ? 'selected' : ''}>${esc(n)}</option>`).join('');
+function queryFiltros() {
+  const p = new URLSearchParams();
+  if (FILTRO.q) p.set('q', FILTRO.q);
+  if (FILTRO.canal) p.set('canal', FILTRO.canal);
+  if (FILTRO.sinRespuesta) p.set('sin_respuesta_horas', FILTRO.sinRespuesta);
+  if (FILTRO.etiqueta) p.set('etiqueta', FILTRO.etiqueta);
+  if (FILTRO.seguimiento) p.set('seguimiento', 'pendiente');
+  return p.toString();
 }
 
 async function iniciar() {
   const r = await api('/api/crm/estado');
-  if (!r.ok) { $('#contenido').innerHTML = `<div class="banner">${esc(r.data.error || 'No se pudo abrir el CRM.')}</div>`; return; }
+  if (!r.ok) { document.querySelector('main').innerHTML = `<div class="banner">${esc(r.data.error || 'No se pudo abrir el CRM.')}</div>`; return; }
   ESTADO = r.data;
   $('#bannerServicio').hidden = ESTADO.servicio;
-  $('#bannerServicio').textContent = 'El servicio CRM no está contratado para esta empresa. Tú lo ves para revisarlo; los demás usuarios no entran hasta que Kaizen IA lo active desde la pestaña Empresas de Oficina.';
+  $('#bannerServicio').textContent = 'El servicio CRM no está contratado para esta empresa. Tú lo ves para revisarlo; los demás usuarios no entran hasta que Kaizen IA lo active desde Empresas en Oficina.';
   $('#bannerChatwoot').hidden = ESTADO.chatwoot;
   $('#btnSync').disabled = !ESTADO.chatwoot;
   $('#btnEtapas').hidden = !ESTADO.editarEtapas;
   const s = ESTADO.sincronizado;
-  $('#sincTxt').textContent = s ? 'Última sincronización con Chatwoot: ' + new Date(s.en).toLocaleString('es') + ' (' + s.contactos_nuevos + ' personas nuevas, ' + s.mensajes_nuevos + ' mensajes nuevos)'
-    : (ESTADO.chatwoot ? 'Todavía no se ha sincronizado con Chatwoot.' : '');
-  await cargarLista();
+  $('#sincTxt').textContent = (s ? `Última sincronización: ${new Date(s.en).toLocaleString('es')} · ${s.contactos_nuevos} personas nuevas · ${s.mensajes_nuevos} mensajes nuevos · ${s.etiquetas_ia || 0} etiquetas de la IA` : (ESTADO.chatwoot ? 'Todavía no se ha sincronizado con Chatwoot.' : ''))
+    + (ESTADO.ia ? '' : ' · Sin clave de IA: las etiquetas se ponen por palabras clave.');
+  $('#nCanal').innerHTML = Object.entries(ESTADO.canales).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+  $('#fCanal').innerHTML = '<option value="">Todos los canales</option>' + Object.entries(ESTADO.canales).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+  $('#fEtiqueta').innerHTML = '<option value="">Cualquier etiqueta</option>' + ESTADO.etiquetas_ia.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  await pintarVista();
+}
+
+async function pintarVista() {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.vista === VISTA));
+  $('#vTablero').hidden = VISTA !== 'tablero';
+  $('#vLista').hidden = VISTA !== 'lista';
+  $('#vSeguimientos').hidden = VISTA !== 'seguimientos';
+  if (VISTA === 'tablero') return cargarTablero();
+  if (VISTA === 'lista') return cargarLista();
+  return cargarSeguimientos();
+}
+
+async function cargarTablero() {
+  const r = await api('/api/crm/tablero?' + queryFiltros());
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cargar el tablero.', 6000);
+  TABLERO = r.data;
+  const total = TABLERO.total;
+  $('#resumen').innerHTML = `<span class="pill">Personas<b>${total}</b></span>` + TABLERO.columnas.filter(c => c.activa).map(c => `<span class="pill">${esc(c.nombre)}<b>${c.total}</b></span>`).join('');
+  $('#tablero').innerHTML = TABLERO.columnas.filter(c => c.activa || c.total).map(c => `
+    <div class="col" data-etapa="${esc(c.clave)}">
+      <div class="col-cab"><span>${esc(c.nombre)}</span><small>${c.total}</small></div>
+      ${c.contactos.length ? c.contactos.map(tarjeta).join('') : '<div class="vacio" style="padding:14px">Arrastra aquí</div>'}
+    </div>`).join('') || '<div class="vacio">No hay personas con ese filtro.</div>';
+  $('#nSeg').textContent = '';
+}
+function tarjeta(c) {
+  const alerta = c.ultimo_entrante && (Date.now() - new Date(c.ultimo_entrante).getTime()) > 24 * 3600e3 && c.ultimo_saliente && new Date(c.ultimo_saliente) > new Date(c.ultimo_entrante);
+  return `
+  <div class="tarjeta" draggable="true" data-id="${c.id}" style="border-left-color:${c.seguimientos ? '#c98a12' : '#cbd5e1'}">
+    <div class="nom">${esc(nombreDe(c))}</div>
+    <div class="meta"><span>${esc(hace(c.ultimo_entrante))}</span>${c.seguimientos ? `<span class="chip seg">${c.seguimientos} seguimiento(s)</span>` : ''}</div>
+    <div class="chips">${chipCanal(c)}${alerta ? '<span class="chip alerta">Sin respuesta nuestra</span>' : ''}${chipsEtiquetas(c)}</div>
+    <select class="mover" data-mover="${c.id}" aria-label="Mover a otra etapa">${etapasActivas().map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
+  </div>`;
 }
 
 async function cargarLista() {
-  const r = await api('/api/crm/contactos?' + new URLSearchParams(FILTRO));
+  const r = await api('/api/crm/contactos?' + queryFiltros());
   if (!r.ok) return aviso(r.data.error || 'No se pudo cargar la lista.', 6000);
-  LISTA = r.data.contactos; CONTEOS = r.data.conteos;
-  pintarChips(); pintarLista();
+  $('#filas').innerHTML = r.data.contactos.length ? r.data.contactos.map(c => `
+    <tr class="fila" data-id="${c.id}">
+      <td><b>${esc(nombreDe(c))}</b><div class="sub">${esc(c.telefono || c.correo || c.identificador)}</div></td>
+      <td>${chipCanal(c)}</td>
+      <td>${esc(etapaNombre(c.etapa))}</td>
+      <td><div class="chips">${chipsEtiquetas(c, 5)}</div></td>
+      <td>${esc(hace(c.ultimo_entrante))}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="vacio">No hay personas con ese filtro.</td></tr>';
 }
 
-function pintarChips() {
-  const total = Object.values(CONTEOS).reduce((s, n) => s + n, 0);
-  $('#chips').innerHTML = `<button class="chip ${FILTRO.etapa ? '' : 'on'}" data-etapa="">Todas<b>${total}</b></button>` +
-    etapasActivas().map(e => `<button class="chip ${FILTRO.etapa === e.clave ? 'on' : ''}" data-etapa="${esc(e.clave)}">${esc(e.nombre)}<b>${CONTEOS[e.clave] || 0}</b></button>`).join('');
+async function cargarSeguimientos() {
+  const r = await api('/api/crm/seguimientos');
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cargar.', 6000);
+  $('#nSeg').textContent = r.data.seguimientos.length ? `(${r.data.seguimientos.length})` : '';
+  $('#listaSeg').innerHTML = r.data.seguimientos.length ? r.data.seguimientos.map(s => `
+    <div class="tabla-wrap" style="padding:12px;margin-bottom:8px">
+      <div><b>${esc(s.nombre || s.telefono || 'Sin nombre')}</b> · ${chipCanal({ canal: s.canal })} · ${esc(PLAZOS.find(p => p[0] === s.plazo)?.[1] || s.plazo)}</div>
+      <div class="sub">Para el ${new Date(s.cuando).toLocaleString('es')} · ${s.estado === 'requiere_plantilla' ? '<b style="color:var(--rojo)">Requiere plantilla aprobada de Meta (pasó la ventana de 24 h)</b>' : 'Pendiente: la IA lo envía a su hora'}</div>
+      <div class="fila-btn"><button class="btn chico" data-abrir="${s.contacto_id}">Abrir persona</button><button class="btn chico" data-cancelar-seg="${s.id}">Cancelar seguimiento</button></div>
+    </div>`).join('') : '<div class="vacio">No hay seguimientos pendientes.</div>';
 }
 
-function pintarLista() {
-  if (!LISTA.length) {
-    $('#lista').innerHTML = `<div class="vacio">${FILTRO.q || FILTRO.etapa ? 'Nadie coincide con ese filtro.' : 'Todavía no hay personas. Pulsa «Sincronizar con Chatwoot» o «+ Nueva persona».'}</div>`;
-    return;
-  }
-  $('#lista').innerHTML = LISTA.map(c => `
-    <button class="fila ${FICHA && FICHA.contacto.id === c.id ? 'sel' : ''}" data-id="${c.id}" type="button">
-      <span class="nom"><b>${esc(nombreDe(c))}</b><small>${esc(c.telefono || c.correo || c.identificador)}</small></span>
-      <span class="etiquetas-fila"><span class="canal c-${esc(c.canal)}">${esc(canalNombre(c.canal))}</span><span class="etapa">${esc(etapaNombre(c.etapa))}</span></span>
-      <span class="fecha">${esc(c.actualizado)}</span>
-    </button>`).join('');
-}
-
-async function abrirFicha(id) {
+// ---------- Ficha ----------
+async function abrirFicha(id, tab) {
+  if (tab) FICHA_TAB = tab;
   const r = await api('/api/crm/contactos/' + id);
   if (!r.ok) return aviso(r.data.error || 'No se pudo abrir la ficha.', 5000);
   FICHA = r.data;
-  pintarFicha(); pintarLista();
-  $('#ficha').classList.add('abierta');
+  $('#velo').hidden = false;
+  $('#ficha').hidden = false;
+  pintarFicha();
 }
+function cerrarFicha() { FICHA = null; $('#ficha').hidden = true; $('#velo').hidden = true; }
 
 function pintarFicha() {
   const c = FICHA.contacto;
+  const pendientes = FICHA.seguimientos.filter(s => ['pendiente', 'requiere_plantilla'].includes(s.estado));
+  const tabs = [['conv', 'Conversación'], ['hist', 'Historial'], ['seg', 'Seguimientos' + (pendientes.length ? ` (${pendientes.length})` : '')], ['datos', 'Datos']];
+  let cuerpo = '';
+  if (FICHA_TAB === 'conv') {
+    cuerpo = `
+      <p class="sub">${FICHA.ventana_abierta ? '<b style="color:var(--verde)">Ventana de 24 h abierta: se puede escribir libremente.</b>' : '<b style="color:var(--ambar)">Fuera de la ventana de 24 h: solo plantillas aprobadas por Meta.</b>'}</p>
+      <form id="fNota" class="fila-btn" style="align-items:flex-start">
+        <select name="direccion" aria-label="Tipo"><option value="nota">Nota interna</option><option value="entrante">Cliente escribió</option><option value="saliente">Respondimos</option></select>
+        <textarea name="texto" rows="2" maxlength="2000" placeholder="Escribe la nota o el mensaje" style="flex:1;min-width:180px;padding:8px;border:1px solid var(--borde);border-radius:8px"></textarea>
+        <button class="btn" type="submit">Agregar</button>
+      </form>
+      ${FICHA.mensajes.length ? FICHA.mensajes.map(m => `<div class="msg m-${esc(m.direccion)}"><small>${esc(DIRECCION[m.direccion] || m.direccion)} · ${new Date(m.creado).toLocaleString('es')}</small><p>${esc(m.texto)}</p></div>`).join('') : '<p class="sub">Sin mensajes todavía.</p>'}`;
+  } else if (FICHA_TAB === 'hist') {
+    cuerpo = FICHA.historial.length ? FICHA.historial.map(h => `<div class="evento"><small>${new Date(h.creado).toLocaleString('es')} · ${esc(h.quien)}</small><b>${esc(h.detalle)}</b></div>`).join('') : '<p class="sub">Sin historial todavía.</p>';
+  } else if (FICHA_TAB === 'seg') {
+    cuerpo = `
+      <p class="sub">Programa un seguimiento. La IA redacta el mensaje con la conversación y lo envía a la hora indicada.</p>
+      <div class="fila-btn">${PLAZOS.map(([k, n]) => `<button class="btn" data-programar="${k}">${n}</button>`).join('')}</div>
+      <label class="campo">Mensaje (opcional, si lo escribes tú, la IA no lo cambia)<textarea id="segMensaje" rows="2" maxlength="1000" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--borde);border-radius:8px"></textarea></label>
+      <h3 style="margin-top:14px">Seguimientos</h3>
+      ${FICHA.seguimientos.length ? FICHA.seguimientos.map(s => `
+        <div class="evento">
+          <small>Para el ${new Date(s.cuando).toLocaleString('es')} · ${esc(PLAZOS.find(p => p[0] === s.plazo)?.[1] || s.plazo)}</small>
+          <b>${esc({ pendiente: 'Pendiente', enviado: 'Enviado', requiere_plantilla: 'Requiere plantilla de Meta', cancelado: 'Cancelado', omitido: 'Omitido', error: 'Error' }[s.estado] || s.estado)}${s.resultado ? ' · ' + esc(s.resultado) : ''}</b>
+          ${['pendiente', 'requiere_plantilla'].includes(s.estado) ? `<button class="btn chico" data-cancelar-seg="${s.id}">Cancelar</button>` : ''}
+        </div>`).join('') : '<p class="sub">No hay seguimientos.</p>'}`;
+  } else {
+    cuerpo = `
+      <form id="fDatos">
+        <label class="campo">Nombre<input name="nombre" value="${esc(c.nombre)}" maxlength="120"></label>
+        <label class="campo">Teléfono<input name="telefono" value="${esc(c.telefono)}" maxlength="40"></label>
+        <label class="campo">Correo<input name="correo" value="${esc(c.correo)}" maxlength="120"></label>
+        <label class="campo">Etapa<select name="etapa">${ESTADO.etapas.filter(e => e.activa || e.clave === c.etapa).map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></label>
+        <label class="campo">Etiquetas (separadas por coma). Las de la IA también aparecen aquí.<input name="etiquetas" value="${esc((c.etiquetas || []).join(', '))}" maxlength="300"></label>
+        <label class="campo">Notas<textarea name="notas" rows="3" maxlength="2000">${esc(c.notas)}</textarea></label>
+        <p class="sub">Canal: ${esc(canalNombre(c.canal))} · Origen: ${esc(c.origen || 'carga manual')} · Último mensaje del cliente: ${esc(hace(c.ultimo_entrante))}</p>
+        <div class="fila-btn"><button type="submit" class="btn principal">Guardar datos</button><button type="button" class="btn" data-etiquetar="${c.id}">Volver a etiquetar con IA</button></div>
+      </form>`;
+  }
   $('#ficha').innerHTML = `
     <div class="ficha-cab">
-      <div style="flex:1;min-width:0">
-        <h2>${esc(nombreDe(c))}</h2>
-        <span class="canal c-${esc(c.canal)}">${esc(canalNombre(c.canal))}</span>
-        <span class="etapa">${esc(etapaNombre(c.etapa))}</span>
-      </div>
-      <button class="cerrar" id="fCerrar" type="button" aria-label="Cerrar ficha">✕</button>
+      <div style="min-width:0"><h2>${esc(nombreDe(c))}</h2>${chipCanal(c)} <span class="chip">${esc(etapaNombre(c.etapa))}</span></div>
+      <button class="btn chico" id="fCerrar" type="button" aria-label="Cerrar">✕</button>
     </div>
-    <form id="fDatos" class="form">
-      <label>Nombre<input name="nombre" value="${esc(c.nombre)}" maxlength="120"></label>
-      <label>Teléfono<input name="telefono" value="${esc(c.telefono)}" maxlength="40"></label>
-      <label>Correo<input name="correo" value="${esc(c.correo)}" maxlength="120"></label>
-      <label>Etapa<select name="etapa">${opcionesEtapa(c.etapa)}</select></label>
-      <label>Etiquetas (separadas por coma)<input name="etiquetas" value="${esc((c.etiquetas || []).join(', '))}" maxlength="300"></label>
-      <label>Notas<textarea name="notas" rows="3" maxlength="2000">${esc(c.notas)}</textarea></label>
-      <p class="meta">Canal: ${esc(canalNombre(c.canal))} · Origen: ${esc(c.origen || 'carga manual')} · Identificador: ${esc(c.identificador)}</p>
-      <div class="acciones"><button type="submit" class="btn principal">Guardar datos</button></div>
-    </form>
-    <h3>Conversación</h3>
-    <form id="fNota" class="nota">
-      <select name="direccion" aria-label="Tipo de mensaje">
-        <option value="nota">Nota interna</option>
-        <option value="entrante">Cliente escribió</option>
-        <option value="saliente">Respondimos</option>
-      </select>
-      <textarea name="texto" rows="2" maxlength="2000" placeholder="Escribe la nota o el mensaje" aria-label="Texto"></textarea>
-      <button type="submit" class="btn">Agregar</button>
-    </form>
-    <div class="hilo">${FICHA.mensajes.length
-      ? FICHA.mensajes.map(m => `<div class="msg m-${esc(m.direccion)}"><small>${esc(DIRECCION[m.direccion] || m.direccion)} · ${esc(m.creado)}</small><p>${esc(m.texto)}</p></div>`).join('')
-      : '<p class="meta">Sin mensajes todavía.</p>'}
-    </div>`;
+    <div class="ficha-tabs">${tabs.map(([k, n]) => `<button data-tab="${k}" class="${FICHA_TAB === k ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <div class="ficha-cuerpo">${cuerpo}</div>`;
+}
+
+async function programar(plazo) {
+  const r = await api('/api/crm/seguimientos/programar', { contacto_id: FICHA.contacto.id, plazo, mensaje: $('#segMensaje').value });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo programar.', 5000);
+  aviso('Seguimiento programado. La IA lo envía a su hora.');
+  await abrirFicha(FICHA.contacto.id);
+  await cargarTablero();
+}
+async function cancelarSeg(id) {
+  if (!confirm('¿Cancelar este seguimiento?')) return;
+  const r = await api('/api/crm/seguimientos/cancelar', { id: Number(id) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cancelar.', 5000);
+  aviso('Seguimiento cancelado.');
+  if (FICHA) await abrirFicha(FICHA.contacto.id);
+  await pintarVista();
+}
+
+async function moverEtapa(id, etapa) {
+  const r = await api('/api/crm/contactos/etapa', { id: Number(id), etapa });
+  if (!r.ok) { aviso(r.data.error || 'No se pudo mover.', 5000); return pintarVista(); }
+  aviso('Persona movida de etapa.');
+  await pintarVista();
+  if (FICHA && FICHA.contacto.id === Number(id)) await abrirFicha(id);
 }
 
 async function guardarDatos(form) {
@@ -286,44 +384,48 @@ async function guardarDatos(form) {
   });
   if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.', 5000);
   aviso('Datos guardados.');
-  await cargarLista(); await abrirFicha(c.id);
+  await abrirFicha(c.id);
+  await pintarVista();
 }
-
 async function agregarNota(form) {
   const f = Object.fromEntries(new FormData(form));
   if (!f.texto.trim()) return aviso('Escribe el mensaje o la nota.');
   const r = await api('/api/crm/mensajes', { contacto_id: FICHA.contacto.id, direccion: f.direccion, texto: f.texto });
   if (!r.ok) return aviso(r.data.error || 'No se pudo agregar.', 5000);
-  await abrirFicha(FICHA.contacto.id); await cargarLista();
+  await abrirFicha(FICHA.contacto.id);
+}
+async function etiquetarIA(id) {
+  const r = await api('/api/crm/etiquetar', { id: Number(id) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo etiquetar.', 5000);
+  aviso(r.data.nuevas && r.data.nuevas.length ? 'La IA agregó: ' + r.data.nuevas.join(', ') : 'La IA no encontró etiquetas nuevas.', 5000);
+  await abrirFicha(id);
+  await pintarVista();
 }
 
+// ---------- Nueva persona, sincronizar, etapas ----------
 function abrirNueva() {
-  $('#nCanal').innerHTML = opcionesCanal('manual');
-  $('#nEtapa').innerHTML = opcionesEtapa('nuevo');
-  $('#formNueva').reset();
-  $('#nError').textContent = '';
+  $('#formNueva').reset(); $('#nError').textContent = '';
+  $('#nEtapa').innerHTML = etapasActivas().map(e => `<option value="${esc(e.clave)}" ${e.clave === 'nuevo' ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('');
   $('#modalNueva').hidden = false;
 }
-
 async function guardarNueva(form) {
   const f = Object.fromEntries(new FormData(form));
   const r = await api('/api/crm/contactos/guardar', { canal: f.canal, nombre: f.nombre, telefono: f.telefono, correo: f.correo, etapa: f.etapa });
   if (!r.ok) { $('#nError').textContent = r.data.error || 'No se pudo guardar.'; return; }
   $('#modalNueva').hidden = true;
   aviso('Persona guardada.');
-  await cargarLista(); await abrirFicha(r.data.id);
+  await pintarVista();
+  await abrirFicha(r.data.id, 'datos');
 }
-
 async function sincronizar() {
-  const b = $('#btnSync'), texto = b.textContent;
+  const b = $('#btnSync'), t = b.textContent;
   b.disabled = true; b.textContent = 'Sincronizando…';
   const r = await api('/api/crm/sincronizar', {});
-  b.textContent = texto; b.disabled = !ESTADO.chatwoot;
+  b.textContent = t; b.disabled = !ESTADO.chatwoot;
   if (!r.ok) return aviso(r.data.error || 'No se pudo sincronizar.', 7000);
-  aviso(`Listo: ${r.data.contactos_nuevos} personas nuevas y ${r.data.mensajes_nuevos} mensajes nuevos (de ${r.data.conversaciones} conversaciones).`, 7000);
+  aviso(`Listo: ${r.data.contactos_nuevos} personas nuevas, ${r.data.mensajes_nuevos} mensajes nuevos, ${r.data.etiquetas_ia} etiquetas de la IA.`, 7000);
   await iniciar();
 }
-
 function leerEtapas() {
   return [...document.querySelectorAll('.etapa-fila')].map(fila => {
     const i = Number(fila.dataset.i);
@@ -335,16 +437,11 @@ function pintarEtapas() {
     <div class="etapa-fila" data-i="${i}">
       <input class="e-nombre" value="${esc(e.nombre)}" maxlength="40" aria-label="Nombre de la etapa">
       <label class="chk"><input type="checkbox" class="e-activa" ${e.activa ? 'checked' : ''}> Activa</label>
-      <button class="btn chico" type="button" data-subir="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
-      <button class="btn chico" type="button" data-bajar="${i}" ${i === ETAPAS_EDIT.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
+      <button class="btn chico" type="button" data-subir="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+      <button class="btn chico" type="button" data-bajar="${i}" ${i === ETAPAS_EDIT.length - 1 ? 'disabled' : ''}>↓</button>
     </div>`).join('');
 }
-function abrirEtapas() {
-  ETAPAS_EDIT = ESTADO.etapas.map(e => ({ ...e }));
-  $('#etapasError').textContent = '';
-  pintarEtapas();
-  $('#modalEtapas').hidden = false;
-}
+function abrirEtapas() { ETAPAS_EDIT = ESTADO.etapas.map(e => ({ ...e })); $('#etapasError').textContent = ''; pintarEtapas(); $('#modalEtapas').hidden = false; }
 async function guardarEtapas() {
   const r = await api('/api/crm/etapas/guardar', { etapas: leerEtapas() });
   if (!r.ok) { $('#etapasError').textContent = r.data.error || 'No se pudo guardar.'; return; }
@@ -352,33 +449,36 @@ async function guardarEtapas() {
   aviso('Etapas guardadas.');
   await iniciar();
 }
-function moverEtapa(i, d) {
-  const cur = leerEtapas();
-  [cur[i], cur[i + d]] = [cur[i + d], cur[i]];
-  ETAPAS_EDIT = cur; pintarEtapas();
-}
+function moverEtapaLocal(i, d) { const cur = leerEtapas(); [cur[i], cur[i + d]] = [cur[i + d], cur[i]]; ETAPAS_EDIT = cur; pintarEtapas(); }
 
+// ---------- Eventos ----------
 document.addEventListener('click', ev => {
   const t = ev.target;
-  const chip = t.closest('.chip');
-  if (chip) { FILTRO.etapa = chip.dataset.etapa; return cargarLista(); }
-  const fila = t.closest('.fila');
-  if (fila) return abrirFicha(Number(fila.dataset.id));
-  if (t.closest('#fCerrar')) {
-    FICHA = null;
-    $('#ficha').classList.remove('abierta');
-    $('#ficha').innerHTML = PLACEHOLDER;
-    return pintarLista();
-  }
-  const cerrar = t.closest('[data-cerrar]');
-  if (cerrar) return ($('#' + cerrar.dataset.cerrar).hidden = true);
+  const vista = t.closest('.tab');
+  if (vista) { VISTA = vista.dataset.vista; return pintarVista(); }
+  const fila = t.closest('tr.fila');
+  if (fila) return abrirFicha(Number(fila.dataset.id), 'conv');
+  const tarjetaEl = t.closest('.tarjeta');
+  if (tarjetaEl && !t.closest('select')) return abrirFicha(Number(tarjetaEl.dataset.id), 'conv');
+  const abrir = t.closest('[data-abrir]'); if (abrir) return abrirFicha(Number(abrir.dataset.abrir), 'conv');
+  const tabBtn = t.closest('[data-tab]'); if (tabBtn) { FICHA_TAB = tabBtn.dataset.tab; return pintarFicha(); }
+  const prog = t.closest('[data-programar]'); if (prog) return programar(prog.dataset.programar);
+  const canc = t.closest('[data-cancelar-seg]'); if (canc) return cancelarSeg(canc.dataset.cancelarSeg);
+  const et = t.closest('[data-etiquetar]'); if (et) return etiquetarIA(et.dataset.etiquetar);
+  if (t.closest('#fCerrar') || t.id === 'velo') return cerrarFicha();
+  const cerrar = t.closest('[data-cerrar]'); if (cerrar) return ($('#' + cerrar.dataset.cerrar).hidden = true);
   if (t.id === 'btnNueva') return abrirNueva();
   if (t.id === 'btnSync') return sincronizar();
   if (t.id === 'btnEtapas') return abrirEtapas();
   if (t.id === 'btnAgregarEtapa') { const cur = leerEtapas(); cur.push({ clave: '', nombre: '', activa: true }); ETAPAS_EDIT = cur; return pintarEtapas(); }
   if (t.id === 'btnGuardarEtapas') return guardarEtapas();
-  const subir = t.closest('[data-subir]'); if (subir) return moverEtapa(Number(subir.dataset.subir), -1);
-  const bajar = t.closest('[data-bajar]'); if (bajar) return moverEtapa(Number(bajar.dataset.bajar), 1);
+  const subir = t.closest('[data-subir]'); if (subir) return moverEtapaLocal(Number(subir.dataset.subir), -1);
+  const bajar = t.closest('[data-bajar]'); if (bajar) return moverEtapaLocal(Number(bajar.dataset.bajar), 1);
+});
+
+document.addEventListener('change', ev => {
+  const m = ev.target.closest('[data-mover]');
+  if (m) moverEtapa(m.dataset.mover, m.value);
 });
 
 document.addEventListener('submit', ev => {
@@ -389,10 +489,41 @@ document.addEventListener('submit', ev => {
   if (f.id === 'formNueva') guardarNueva(f);
 });
 
+// Arrastrar y soltar en el tablero.
+let arrastrado = null;
+document.addEventListener('dragstart', ev => {
+  const t = ev.target.closest && ev.target.closest('.tarjeta');
+  if (!t) return;
+  arrastrado = t.dataset.id; t.classList.add('arrastrando');
+  ev.dataTransfer.setData('text/plain', arrastrado);
+});
+document.addEventListener('dragend', ev => { const t = ev.target.closest && ev.target.closest('.tarjeta'); if (t) t.classList.remove('arrastrando'); });
+document.addEventListener('dragover', ev => {
+  const c = ev.target.closest && ev.target.closest('.col');
+  if (!c) return;
+  ev.preventDefault();
+  document.querySelectorAll('.col.sobre').forEach(x => x.classList.remove('sobre'));
+  c.classList.add('sobre');
+});
+document.addEventListener('dragleave', ev => { const c = ev.target.closest && ev.target.closest('.col'); if (c && !c.contains(ev.relatedTarget)) c.classList.remove('sobre'); });
+document.addEventListener('drop', ev => {
+  const c = ev.target.closest && ev.target.closest('.col');
+  document.querySelectorAll('.col.sobre').forEach(x => x.classList.remove('sobre'));
+  if (!c) return;
+  ev.preventDefault();
+  const id = ev.dataTransfer.getData('text/plain') || arrastrado;
+  if (id) moverEtapa(id, c.dataset.etapa);
+  arrastrado = null;
+});
+
 $('#buscar').addEventListener('input', e => {
   clearTimeout(temporizadorBuscar);
-  temporizadorBuscar = setTimeout(() => { FILTRO.q = e.target.value.trim(); cargarLista(); }, 250);
+  temporizadorBuscar = setTimeout(() => { FILTRO.q = e.target.value.trim(); pintarVista(); }, 250);
 });
+$('#fCanal').addEventListener('change', e => { FILTRO.canal = e.target.value; pintarVista(); });
+$('#fSin').addEventListener('change', e => { FILTRO.sinRespuesta = e.target.value; pintarVista(); });
+$('#fEtiqueta').addEventListener('change', e => { FILTRO.etiqueta = e.target.value; pintarVista(); });
+$('#fSeg').addEventListener('change', e => { FILTRO.seguimiento = e.target.checked; pintarVista(); });
 
 iniciar();
 </script>
