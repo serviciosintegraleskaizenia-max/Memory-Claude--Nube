@@ -11,7 +11,8 @@ const MODULOS = {
   control: { nombre: 'Pantalla de Control', porDefecto: true },
   historial: { nombre: 'Historial de correos', porDefecto: true },
   chat: { nombre: 'Chat interno', porDefecto: true },
-  redes: { nombre: 'Redes sociales (WhatsApp e Instagram)', porDefecto: false }
+  redes: { nombre: 'Redes sociales (WhatsApp e Instagram)', porDefecto: false },
+  crm: { nombre: 'CRM de redes y campañas (servicio aparte)', porDefecto: false }
 };
 
 const TEXTOS_PAGO = {

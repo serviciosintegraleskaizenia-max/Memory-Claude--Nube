@@ -32,6 +32,7 @@ const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisa
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), registrar: (...a) => registrar(...a), SISTEMA });
+const crm = require('./plataforma/crm')({ client, cuenta, registrar: (...a) => registrar(...a) });
 // Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
@@ -40,7 +41,7 @@ const operaciones = require('./plataforma/operaciones')({ client, config, regist
   fechaServicioISO: (...a) => fechaServicioISO(...a), hoyLocal: () => require('./plataforma/cuenta').hoyLocal(),
   esCancelacion: (...a) => esCancelacion(...a), indiceReservas: (...a) => indiceReservas(...a), originalDe: (...a) => originalDe(...a) });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia',
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia', 'ver_crm',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
   'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
   'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos',
@@ -366,6 +367,7 @@ client.connect()
   .then(() => central.preparar().catch(e => console.log('Panel central:', e.message)))
   .then(() => oficina.preparar().catch(e => console.log('Oficina:', e.message)))
   .then(() => operaciones.preparar().catch(e => console.log('Operaciones:', e.message)))
+  .then(() => crm.preparar().catch(e => console.log('CRM:', e.message)))
   .then(() => apiExterna.preparar(client).catch(e => console.log('API externa:', e.message)))
   .then(() => {
     motorCorreo.iniciar();
@@ -2006,6 +2008,7 @@ http.createServer(async (req, res) => {
     const permisos = permisosDe(u, await mapaGrupos());
     const puede = p => Boolean(permisos[p]);
 
+    if (url.startsWith('/api/crm/')) return crm.manejar(req, res, url, u, { json, leerCuerpo });
     if (url.startsWith('/api/op/')) return operaciones.manejar(req, res, url, u, { json, leerCuerpo, puede });
 
     // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
