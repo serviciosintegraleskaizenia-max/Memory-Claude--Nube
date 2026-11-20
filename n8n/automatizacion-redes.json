@@ -1,0 +1,173 @@
+{
+  "name": "PLANTILLA · Automatización de redes (copiar por cliente)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Plantilla por cliente\n1. En n8n: copiar este flujo y ponerle el nombre del cliente.\n2. En el nodo **Datos del cliente** cambiar los textos que dicen CAMBIAR.\n3. En el nodo **Recibir de Chatwoot** cambiar la ruta por el subdominio del cliente.\n4. En Chatwoot del cliente: Configuración → Integraciones → Webhooks → agregar la dirección del nodo.\n5. Activar el flujo (Publish).\n\nEste flujo no tiene claves. La respuesta automática todavía no está conectada: el último nodo es un marcador.",
+        "height": 340,
+        "width": 420
+      },
+      "id": "nota-instrucciones",
+      "name": "Nota: cómo usar esta plantilla",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-100, -180]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "automatizacion/CAMBIAR-subdominio/chatwoot",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "recibir-chatwoot",
+      "name": "Recibir de Chatwoot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 200],
+      "webhookId": "CAMBIAR-subdominio-chatwoot"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "solo-entrantes",
+              "leftValue": "={{ $json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "no-privados",
+              "leftValue": "={{ $json.body.private }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "solo-del-cliente",
+      "name": "Solo mensajes del cliente",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "nombre-cliente",
+              "name": "cliente",
+              "value": "CAMBIAR: nombre del cliente",
+              "type": "string"
+            },
+            {
+              "id": "subdominio",
+              "name": "subdominio",
+              "value": "CAMBIAR-subdominio",
+              "type": "string"
+            },
+            {
+              "id": "cuenta-chatwoot",
+              "name": "cuenta_chatwoot",
+              "value": "CAMBIAR: número de cuenta de Chatwoot",
+              "type": "string"
+            },
+            {
+              "id": "conversacion",
+              "name": "conversacion",
+              "value": "={{ $json.body.conversation.id }}",
+              "type": "number"
+            },
+            {
+              "id": "canal",
+              "name": "canal",
+              "value": "={{ $json.body.inbox.channel_type }}",
+              "type": "string"
+            },
+            {
+              "id": "mensaje",
+              "name": "mensaje",
+              "value": "={{ $json.body.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "datos-cliente",
+      "name": "Datos del cliente",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 120]
+    },
+    {
+      "parameters": {},
+      "id": "respuesta-pendiente",
+      "name": "Respuesta automática (pendiente)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [960, 120]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Recibir de Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Solo mensajes del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solo mensajes del cliente": {
+      "main": [
+        [
+          {
+            "node": "Datos del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Datos del cliente": {
+      "main": [
+        [
+          {
+            "node": "Respuesta automática (pendiente)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

@@ -69,6 +69,11 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   async function preparar() {
     if (!activo) return;
+    // Clientes de automatización (redes y CRM): perfil guardado desde Oficina. No guarda claves ni contraseñas.
+    await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_clientes (
+      id SERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL,
+      perfil JSONB NOT NULL DEFAULT '{}'::jsonb, estado TEXT NOT NULL DEFAULT 'borrador',
+      creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await client.query(`CREATE TABLE IF NOT EXISTS empresas (
       id SERIAL PRIMARY KEY,
       slug VARCHAR(30) UNIQUE NOT NULL,
@@ -302,6 +307,63 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     throw new Error('No hay puertos libres.');
   }
 
+  // Perfil de un cliente de automatización. Solo datos que no son secretos: IDs, nombres de cuenta, casillas de Meta y preferencias.
+  // Las claves (OpenRouter, tokens de Meta) no entran aquí; se cargan después, cifradas, en el panel del cliente.
+  function limpiarPerfil(p) {
+    const t = (v, max = 120) => texto(v, max);
+    const b = v => v === true;
+    const red = (r, campos) => Object.fromEntries(campos.map(c => [c, t(r && r[c], c.includes('notas') ? 300 : 120)]));
+    const redes = p.redes || {};
+    return {
+      sedes: t(p.sedes, 300),
+      gerente: { nombre: t(p.gerente && p.gerente.nombre, 100), usuario: t(p.gerente && p.gerente.usuario, 50).toLowerCase() },
+      redes: {
+        whatsapp: red(redes.whatsapp, ['cuenta_id', 'numero_id', 'numero_visible']),
+        instagram: red(redes.instagram, ['cuenta_id', 'usuario']),
+        facebook: red(redes.facebook, ['pagina_id', 'nombre']),
+        tiktok: red(redes.tiktok, ['cuenta'])
+      },
+      meta: {
+        business_id: t((p.meta || {}).business_id, 60),
+        cuenta_publicitaria: t((p.meta || {}).cuenta_publicitaria, 60),
+        socio_agregado: b((p.meta || {}).socio_agregado),
+        pagina_asignada: b((p.meta || {}).pagina_asignada),
+        instagram_asignado: b((p.meta || {}).instagram_asignado),
+        whatsapp_verificado: b((p.meta || {}).whatsapp_verificado),
+        permisos_aprobados: b((p.meta || {}).permisos_aprobados)
+      },
+      ia: { modelo: t((p.ia || {}).modelo, 80), tono: t((p.ia || {}).tono, 40) },
+      crm: { activo: b((p.crm || {}).activo) }
+    };
+  }
+
+  async function guardarAutomatizacion(u, f) {
+    const nombre = texto(f.nombre, 120);
+    const slug = texto(f.slug, 30).toLowerCase();
+    if (!nombre) throw Object.assign(new Error('Falta el nombre del cliente.'), { codigo: 400 });
+    if (!SLUG.test(slug) || RESERVADOS.has(slug) || slug === 'demo') {
+      throw Object.assign(new Error(`Subdominio: "${slug}" no sirve o está reservado. Usa de 3 a 30 letras minúsculas, números o guiones (ej.: premios-carrasco).`), { codigo: 400, campo: 'slug' });
+    }
+    const id = Number(f.id) || 0;
+    const ocupado = (await client.query('SELECT id FROM automatizacion_clientes WHERE slug = $1', [slug])).rows[0];
+    if (ocupado && ocupado.id !== id) throw Object.assign(new Error('Ya hay un cliente de automatización con ese subdominio.'), { codigo: 400, campo: 'slug' });
+    if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
+      throw Object.assign(new Error('Ese subdominio ya lo usa una empresa del panel de correo.'), { codigo: 400, campo: 'slug' });
+    }
+    const perfil = JSON.stringify(limpiarPerfil(f.perfil || {}));
+    if (id) {
+      const r = await client.query('UPDATE automatizacion_clientes SET slug = $1, nombre = $2, perfil = $3::jsonb, actualizado = NOW() WHERE id = $4 RETURNING id',
+        [slug, nombre, perfil, id]);
+      if (!r.rows[0]) throw Object.assign(new Error('Ese cliente ya no existe.'), { codigo: 404 });
+    } else {
+      const r = await client.query('INSERT INTO automatizacion_clientes (slug, nombre, perfil) VALUES ($1, $2, $3::jsonb) RETURNING id', [slug, nombre, perfil]);
+      await registrar(u, 'crear_automatizacion', 'cliente', slug, '', '', nombre);
+      return { id: r.rows[0].id };
+    }
+    await registrar(u, 'editar_automatizacion', 'cliente', slug, '', '', nombre);
+    return { id };
+  }
+
   async function crearEmpresa(u, f, esDemo) {
     const slug = esDemo ? 'demo' : texto(f.slug, 30).toLowerCase();
     const nombre = esDemo ? 'Demo de ventas' : texto(f.nombre, 120);
@@ -517,6 +579,15 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         const f = await leerCuerpo(req);
         await confirmar(f.confirmar);
         return json(res, 200, await crearEmpresa(u, f, false));
+      }
+
+      // Clientes de automatización (redes y CRM), separados del motor de correo.
+      if (req.method === 'GET' && url === '/api/central/automatizacion') {
+        const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
+        return json(res, 200, { clientes });
+      }
+      if (req.method === 'POST' && url === '/api/central/automatizacion/guardar') {
+        return json(res, 200, await guardarAutomatizacion(u, await leerCuerpo(req)));
       }
 
       // Agregar una empresa que ya funciona (ej. Somos Viajes) para administrarla desde aquí.

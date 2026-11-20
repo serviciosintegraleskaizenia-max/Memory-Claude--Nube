@@ -3733,10 +3733,11 @@ function pintarEmpresas() {
   if (vistaEmpresas === 'nueva') cuerpo = formNuevaEmpresa();
   else if (vistaEmpresas === 'mensajes') cuerpo = vistaMensajes();
   else if (vistaEmpresas === 'existente') cuerpo = formExistente();
+  else if (vistaEmpresas === 'auto') cuerpo = formAutomatizacion();
   else if (vistaEmpresas === 'demo') cuerpo = '<div id="panelDemo">Cargando…</div>';
   else cuerpo = (resultadoEmpresas || '') + listaEmpresas();
   box.innerHTML = `
-    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('existente', '+ Agregar existente')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
+    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('auto', '+ Automatización')}${sub('existente', '+ Agregar existente')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
     ${cuerpo}`;
   if (vistaEmpresas === 'demo') cargarDemo();
   actualizarCamposCorreo(box);
@@ -3958,6 +3959,161 @@ function leerCorreo(p) {
   };
 }
 
+/* ---------- Clientes de automatización (redes y CRM, sin motor de correo) ---------- */
+let AUTO_CLIENTES = [];
+let AUTO_EDIT = null;
+
+function slugDe(t) {
+  return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+}
+function autoSlugA(nombre) {
+  const s = document.getElementById('aSlug');
+  if (s && !s.dataset.manual) s.value = slugDe(nombre);
+}
+function resumenRedes(c) {
+  const p = c.perfil || {};
+  const r = p.redes || {}, m = p.meta || {};
+  const chip = (nombre, ok) => `<span class="chip ${ok ? 'chip-verde' : 'chip-amarillo'}">${nombre}: ${ok ? 'listo' : 'pendiente'}</span>`;
+  const metaOk = ['socio_agregado', 'pagina_asignada', 'instagram_asignado', 'whatsapp_verificado', 'permisos_aprobados'].filter(k => m[k]).length;
+  const crmOn = Boolean(p.crm && p.crm.activo);
+  return chip('WhatsApp', !!(r.whatsapp && r.whatsapp.cuenta_id)) + chip('Instagram', !!(r.instagram && r.instagram.cuenta_id)) +
+    chip('Facebook', !!(r.facebook && r.facebook.pagina_id)) + chip('TikTok', !!(r.tiktok && r.tiktok.cuenta)) +
+    `<span class="chip ${metaOk === 5 ? 'chip-verde' : 'chip-amarillo'}">Meta: ${metaOk} de 5</span>` +
+    `<span class="chip ${crmOn ? 'chip-verde' : 'chip-gris'}">CRM ${crmOn ? 'activo' : 'apagado'}</span>`;
+}
+async function cargarAutomatizacion() {
+  const r = await api('/api/central/automatizacion');
+  AUTO_CLIENTES = r.ok ? r.data.clientes : [];
+  pintarEmpresas();
+}
+function formAutomatizacion() {
+  const e = AUTO_EDIT || {};
+  const p = e.perfil || {};
+  const r = p.redes || {}, m = p.meta || {}, g = p.gerente || {}, ia = p.ia || {}, crm = p.crm || {};
+  const wa = r.whatsapp || {}, ig = r.instagram || {}, fb = r.facebook || {}, tk = r.tiktok || {};
+  const campo = (id, etiqueta, valor = '', ayuda = '', extra = '') =>
+    `<label>${etiqueta}<input id="${id}" value="${esc(valor)}" ${extra}>${ayuda ? `<small class="etiqueta-sec">${ayuda}</small>` : ''}</label>`;
+  const marca = (id, texto, marcado, ayuda = '') =>
+    `<label class="chk"><input type="checkbox" id="${id}" ${marcado ? 'checked' : ''}> ${texto}${ayuda ? `<br><small class="etiqueta-sec">${ayuda}</small>` : ''}</label>`;
+  const modelos = ['Anthropic: Claude Haiku 5.5 (recomendado)', 'Anthropic: Claude Sonnet 5.5 (más preciso, más caro)'];
+  const tonos = ['Amable y directo', 'Formal', 'Cercano'];
+  const lista = AUTO_CLIENTES.length ? AUTO_CLIENTES.map(c => `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px;border:1px solid #2a3b57;border-radius:10px;margin:6px 0">
+      <div><strong>${esc(c.nombre)}</strong> <small class="etiqueta-sec">${esc(c.slug)}.kaizenia.app</small></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${resumenRedes(c)}</div>
+      <button class="btn-sec" data-accion="emp-auto-editar" data-id="${c.id}">Editar</button>
+    </div>`).join('') : '<p class="etiqueta-sec">Todavía no hay clientes de automatización. Crea el primero abajo.</p>';
+  return `
+  <div class="emp-form">
+    <div class="titulo-seccion">Clientes de automatización</div>
+    ${lista}
+    <div class="titulo-seccion">${e.id ? 'Editar: ' + esc(e.nombre) : 'Nuevo cliente de automatización'}</div>
+    <p class="etiqueta-sec">Este perfil no crea correos ni reservas: sirve para automatizar redes y el CRM. Aquí no se piden claves ni contraseñas.</p>
+    <input type="hidden" id="aId" value="${e.id || ''}">
+
+    <div class="titulo-seccion">1 · Datos del cliente</div>
+    <div class="form-fila">
+      ${campo('aNombre', 'Nombre del cliente', e.nombre || '', '', 'maxlength="120" placeholder="Premios Carrasco" oninput="autoSlugA(this.value)"')}
+      ${campo('aSlug', 'Subdominio', e.slug || '', 'Así entrará el cliente más adelante: subdominio.kaizenia.app', 'maxlength="30" placeholder="premios-carrasco" oninput="this.dataset.manual=1"')}
+      ${campo('aSedes', 'Sedes u oficinas (opcional)', p.sedes || '', '', 'maxlength="300" placeholder="Chiclayo - Perú"')}
+    </div>
+
+    <div class="titulo-seccion">2 · Gerente (usuario principal)</div>
+    <div class="form-fila">
+      ${campo('aGerNombre', 'Nombre del gerente', g.nombre || '', '', 'maxlength="100"')}
+      ${campo('aGerUsuario', 'Usuario para entrar', g.usuario || '', 'Recibirá una contraseña temporal al entrar.', 'maxlength="50"')}
+    </div>
+
+    <div class="titulo-seccion">3 · Redes sociales</div>
+    <p class="etiqueta-sec"><b>WhatsApp</b></p>
+    <div class="form-fila">
+      ${campo('aWaCuenta', 'ID de la cuenta de WhatsApp Business', wa.cuenta_id || '', 'Meta Business Manager → WhatsApp → Configuración.')}
+      ${campo('aWaNumero', 'ID del número de teléfono', wa.numero_id || '', 'El número debe estar dado de alta en WhatsApp Business Platform.')}
+      ${campo('aWaVisible', 'Número que verá el cliente', wa.numero_visible || '', 'Con código de país, por ejemplo +51 979 000 000')}
+    </div>
+    <p class="etiqueta-sec"><b>Instagram</b></p>
+    <div class="form-fila">
+      ${campo('aIgCuenta', 'ID de la cuenta de Instagram', ig.cuenta_id || '', 'La cuenta debe estar vinculada a una página de Facebook.')}
+      ${campo('aIgUsuario', 'Usuario de Instagram', ig.usuario || '', 'Sin @', 'maxlength="60"')}
+    </div>
+    <p class="etiqueta-sec"><b>Facebook (Messenger)</b></p>
+    <div class="form-fila">
+      ${campo('aFbPagina', 'ID de la página de Facebook', fb.pagina_id || '')}
+      ${campo('aFbNombre', 'Nombre de la página', fb.nombre || '', '', 'maxlength="120"')}
+    </div>
+    <p class="etiqueta-sec"><b>TikTok</b></p>
+    <div class="form-fila">
+      ${campo('aTkCuenta', 'Cuenta de TikTok for Business', tk.cuenta || '', 'Se conecta cuando TikTok apruebe la app del desarrollador.')}
+    </div>
+
+    <div class="titulo-seccion">4 · Acceso de Meta (lo da el cliente, no pedimos su contraseña)</div>
+    <div class="form-fila">
+      ${campo('aMetaBiz', 'ID del Business Manager del cliente', m.business_id || '', 'El cliente te agrega como socio desde su Business Manager.')}
+      ${campo('aMetaAds', 'ID de la cuenta publicitaria (opcional)', m.cuenta_publicitaria || '')}
+    </div>
+    ${marca('aMetaSocio', 'Me agregaron como socio en su Business Manager', m.socio_agregado)}
+    ${marca('aMetaPagina', 'La página de Facebook está asignada', m.pagina_asignada)}
+    ${marca('aMetaIg', 'La cuenta de Instagram está asignada', m.instagram_asignado)}
+    ${marca('aMetaWa', 'El número de WhatsApp está verificado', m.whatsapp_verificado)}
+    ${marca('aMetaPermisos', 'Los permisos de la app de Meta están aprobados', m.permisos_aprobados)}
+
+    <div class="titulo-seccion">5 · Inteligencia artificial</div>
+    <div class="form-fila">
+      <label>Modelo<select id="aIaModelo">${modelos.map(x => `<option ${x === ia.modelo ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+      <label>Tono de respuesta<select id="aIaTono">${tonos.map(x => `<option ${x === ia.tono ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+    </div>
+    <p class="etiqueta-sec">La clave de OpenRouter de este cliente se carga después, cifrada, en su panel.</p>
+
+    <div class="titulo-seccion">6 · CRM y flujo de automatización</div>
+    ${marca('aCrm', 'Activar el CRM para este cliente (servicio aparte)', crm.activo, 'Solo tú lo ves y lo activas. Después le das permiso al cliente desde su panel.')}
+    <p class="etiqueta-sec">Flujo de n8n: copia la plantilla <b>n8n/automatizacion-redes.json</b>, ponle el nombre del cliente y vincula sus cuentas.</p>
+
+    <div class="pie-acciones">
+      <button class="btn" data-accion="emp-auto-guardar">Guardar cliente</button>
+      ${e.id ? '<button class="btn-sec" data-accion="emp-auto-nuevo">Nuevo cliente</button>' : ''}
+    </div>
+  </div>`;
+}
+function leerAutomatizacion() {
+  const v = id => document.getElementById(id).value.trim();
+  const ck = id => document.getElementById(id).checked;
+  return {
+    id: Number(v('aId')) || 0, nombre: v('aNombre'), slug: v('aSlug').toLowerCase(),
+    perfil: {
+      sedes: v('aSedes'),
+      gerente: { nombre: v('aGerNombre'), usuario: v('aGerUsuario') },
+      redes: {
+        whatsapp: { cuenta_id: v('aWaCuenta'), numero_id: v('aWaNumero'), numero_visible: v('aWaVisible') },
+        instagram: { cuenta_id: v('aIgCuenta'), usuario: v('aIgUsuario') },
+        facebook: { pagina_id: v('aFbPagina'), nombre: v('aFbNombre') },
+        tiktok: { cuenta: v('aTkCuenta') }
+      },
+      meta: {
+        business_id: v('aMetaBiz'), cuenta_publicitaria: v('aMetaAds'),
+        socio_agregado: ck('aMetaSocio'), pagina_asignada: ck('aMetaPagina'), instagram_asignado: ck('aMetaIg'),
+        whatsapp_verificado: ck('aMetaWa'), permisos_aprobados: ck('aMetaPermisos')
+      },
+      ia: { modelo: document.getElementById('aIaModelo').value, tono: document.getElementById('aIaTono').value },
+      crm: { activo: ck('aCrm') }
+    }
+  };
+}
+async function guardarAutomatizacionUI(b) {
+  const datos = leerAutomatizacion();
+  if (!datos.nombre) return avisoEmpresas('Falta el nombre del cliente.', false);
+  b.disabled = true;
+  const r = await api('/api/central/automatizacion/guardar', datos);
+  b.disabled = false;
+  if (!r.ok) {
+    if (r.data.campo === 'slug') document.getElementById('aSlug').focus();
+    return avisoEmpresas(r.data.error || 'No se pudo guardar el cliente.', false);
+  }
+  await cargarAutomatizacion();
+  AUTO_EDIT = AUTO_CLIENTES.find(c => c.id === r.data.id) || null;
+  pintarEmpresas();
+  mostrarAviso('Cliente guardado. Las redes y el CRM se conectan en el siguiente paso.', true);
+}
+
 function formNuevaEmpresa() {
   const modulos = Object.entries(datosEmpresas.modulos).map(([k, m]) =>
     `<label class="chk"><input type="checkbox" data-modulo="${k}" ${m.porDefecto ? 'checked' : ''}> ${esc(m.nombre)}</label>`).join('');
@@ -4084,7 +4240,10 @@ async function accionEmpresas(a, b) {
     salida.style.color = ok ? '#16a34a' : '#dc2626';
     return;
   }
-  if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; return pintarEmpresas(); }
+  if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; if (vistaEmpresas === 'auto') return cargarAutomatizacion(); return pintarEmpresas(); }
+  if (a === 'emp-auto-nuevo') { AUTO_EDIT = null; return pintarEmpresas(); }
+  if (a === 'emp-auto-editar') { AUTO_EDIT = AUTO_CLIENTES.find(c => String(c.id) === b.dataset.id) || null; return pintarEmpresas(); }
+  if (a === 'emp-auto-guardar') return guardarAutomatizacionUI(b);
 
   if (a === 'emp-crear') {
     // Revisión antes de enviar: se marca el campo con problema y se lleva la vista a él.

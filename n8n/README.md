@@ -46,3 +46,12 @@ El flujo debe estar **activo** (Publish) para que la URL `/webhook/` responda.
 
 Contraseñas, secretos de Azure / Microsoft 365, contraseñas de aplicación de Gmail
 ni el archivo `config.js` del panel con claves.
+
+## Plantilla de automatización por cliente (`automatizacion-redes.json`)
+
+Para los clientes de automatización (Premios Carrasco, PEX Solution, etc.). Se copia el flujo
+en n8n, se le pone el nombre del cliente y se cambian los textos que dicen **CAMBIAR**.
+
+- Recibe los mensajes de Chatwoot (webhook), deja pasar solo los mensajes entrantes del cliente
+  y los prepara. El último nodo es un marcador: la respuesta automática todavía no está conectada.
+- No tiene claves. Las credenciales se asignan en n8n, nunca en el archivo.
