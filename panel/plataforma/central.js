@@ -67,8 +67,29 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   const CARPETA_EMPRESAS = path.resolve(aj.carpeta);
   const fallos = new Map();
 
+  // Prompts maestro de la IA de automatización. {negocio} y {tono} se cambian por los datos de cada cliente.
+  const PROMPTS_INICIALES = [
+    { clave: 'maestro', orden: 0, nombre: 'Reglas generales (se aplican a todos los clientes)',
+      texto: 'Eres el asistente de atención por redes sociales de {negocio}. Respondes en el idioma de la persona, con tono {tono}. Respuestas cortas, claras y sin tecnicismos. Nunca inventes precios, disponibilidad, descuentos ni promociones: si no está en tu información, dilo y ofrece pasar a una persona. Nunca pidas contraseñas ni claves. Si la persona pide hablar con alguien, hay una queja o un pago no se puede validar, pasa la conversación al equipo.' },
+    { clave: 'inmobiliaria', orden: 1, nombre: 'Asesor inmobiliario',
+      texto: 'Asesoras a personas que quieren comprar, alquilar o vender una propiedad. Antes de recomendar, pregunta: zona, tipo de propiedad, presupuesto y plazo. Ofrece agendar una visita. No confirmes disponibilidad ni precios que no estén en tu información.' },
+    { clave: 'ferreteria', orden: 2, nombre: 'Ferretería y materiales (tuberías PEX, accesorios, herramientas)',
+      texto: 'Ayudas a elegir materiales y accesorios para un trabajo. Antes de cotizar, pregunta: medida o diámetro, uso y cantidad. Da precios solo si están en la lista de precios. Sugiere el producto correcto para el trabajo y avisa cuando falta un dato técnico para decidir.' },
+    { clave: 'sorteo', orden: 3, nombre: 'Guía de sorteo (cómo participar)',
+      texto: 'Guías a la persona para participar en el sorteo: qué debe comprar, cómo enviar el comprobante de pago y cuándo se anuncia el resultado. Explica las reglas con claridad. No prometas premios distintos a los oficiales ni garantices que la persona gane. Si el pago no se puede validar, pide una foto más clara y pasa la conversación a una persona.' },
+    { clave: 'otro', orden: 4, nombre: 'Otro negocio (consultas generales)',
+      texto: 'Atiendes consultas generales del negocio con la información disponible. Si no sabes algo, dilo y pasa la conversación a una persona.' }
+  ];
+
   async function preparar() {
     if (!activo) return;
+    await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_prompts (
+      clave TEXT PRIMARY KEY, nombre TEXT NOT NULL, texto TEXT NOT NULL, orden INTEGER NOT NULL DEFAULT 0,
+      actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    for (const p of PROMPTS_INICIALES) {
+      await client.query('INSERT INTO automatizacion_prompts (clave, nombre, texto, orden) VALUES ($1, $2, $3, $4) ON CONFLICT (clave) DO NOTHING',
+        [p.clave, p.nombre, p.texto, p.orden]);
+    }
     // Clientes de automatización (redes y CRM): perfil guardado desde Oficina. No guarda claves ni contraseñas.
     await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_clientes (
       id SERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL, nombre TEXT NOT NULL,
@@ -332,9 +353,43 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         whatsapp_verificado: b((p.meta || {}).whatsapp_verificado),
         permisos_aprobados: b((p.meta || {}).permisos_aprobados)
       },
-      ia: { modelo: t((p.ia || {}).modelo, 80), tono: t((p.ia || {}).tono, 40) },
+      ia: {
+        modelo: t((p.ia || {}).modelo, 80), tono: t((p.ia || {}).tono, 40), tipo: t((p.ia || {}).tipo, 40),
+        que_ofrece: t((p.ia || {}).que_ofrece, 600), zona_horario: t((p.ia || {}).zona_horario, 300),
+        pagos: t((p.ia || {}).pagos, 300), no_prometer: t((p.ia || {}).no_prometer, 600),
+        pasar_persona: t((p.ia || {}).pasar_persona, 600)
+      },
       crm: { activo: b((p.crm || {}).activo) }
     };
+  }
+
+  async function promptsList() {
+    return (await client.query('SELECT clave, nombre, texto, orden FROM automatizacion_prompts ORDER BY orden, clave')).rows;
+  }
+
+  // Arma el prompt final de un cliente: reglas generales + tipo de negocio + datos del cliente.
+  function armarPrompt(perfil, nombreCliente, prompts) {
+    const ia = perfil.ia || {};
+    const mapa = Object.fromEntries(prompts.map(p => [p.clave, p.texto]));
+    const cambios = { negocio: nombreCliente || 'el negocio', tono: ia.tono || 'amable y directo' };
+    const base = (mapa.maestro || '').replace(/\{(\w+)\}/g, (_, k) => (cambios[k] !== undefined ? cambios[k] : ''));
+    const tipo = mapa[ia.tipo] || mapa.otro || '';
+    const datos = [
+      ['Qué vende o qué ofrece', ia.que_ofrece], ['Zona y horario', ia.zona_horario], ['Formas de pago', ia.pagos],
+      ['La IA NO puede prometer', ia.no_prometer], ['Cuándo pasar a una persona', ia.pasar_persona]
+    ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n');
+    return [base, tipo && 'Tipo de negocio: ' + tipo, datos && 'Datos del cliente:\n' + datos].filter(Boolean).join('\n\n');
+  }
+
+  // Solo el Programador edita los prompts (la ruta ya lo exige: Empresas es solo Programador).
+  async function guardarPrompt(u, f) {
+    const clave = texto(f.clave, 40);
+    const nuevo = String(f.texto ?? '').trim().slice(0, 4000);
+    if (!nuevo) throw Object.assign(new Error('El texto del prompt no puede quedar vacío.'), { codigo: 400 });
+    const r = await client.query('UPDATE automatizacion_prompts SET texto = $2, actualizado = NOW() WHERE clave = $1 RETURNING clave', [clave, nuevo]);
+    if (!r.rowCount) throw Object.assign(new Error('Ese prompt no existe.'), { codigo: 404 });
+    await registrar(u, 'editar_prompt_ia', 'prompt', clave, '', '', '');
+    return { ok: true };
   }
 
   async function guardarAutomatizacion(u, f) {
@@ -585,6 +640,17 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'GET' && url === '/api/central/automatizacion') {
         const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
         return json(res, 200, { clientes });
+      }
+      if (req.method === 'GET' && url === '/api/central/automatizacion/prompts') {
+        return json(res, 200, { prompts: await promptsList() });
+      }
+      if (req.method === 'POST' && url === '/api/central/automatizacion/prompts/guardar') {
+        return json(res, 200, await guardarPrompt(u, await leerCuerpo(req)));
+      }
+      // Muestra el prompt final que recibirá la IA de un cliente (sin guardar nada).
+      if (req.method === 'POST' && url === '/api/central/automatizacion/prompt-vista') {
+        const f = await leerCuerpo(req);
+        return json(res, 200, { texto: armarPrompt(limpiarPerfil(f.perfil || {}), texto(f.nombre, 120), await promptsList()) });
       }
       if (req.method === 'POST' && url === '/api/central/automatizacion/guardar') {
         return json(res, 200, await guardarAutomatizacion(u, await leerCuerpo(req)));
