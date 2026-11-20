@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM · Zentralia</title>
+<link rel="icon" href="/favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--txt:#0f1b2d;--suave:#6b7a90;--borde:#e6ebf2;--nav:#0c1a2e;--oro:#c9a24a;--azul:#1f5fae;--verde:#0f9d6b;--ambar:#c98a12;--rojo:#d92d4b;--sombra:0 1px 2px rgba(15,27,45,.04),0 8px 24px rgba(15,27,45,.06)}
+[hidden]{display:none !important}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Plus Jakarta Sans',Inter,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+.top{background:var(--nav);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.top .marca{font-weight:800;font-size:16px}
+.top .marca span{color:var(--oro)}
+.top a{color:#fff;text-decoration:none;font-size:13px;opacity:.9}
+main{max-width:1280px;margin:0 auto;padding:0 16px 40px}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+#buscar{flex:1;min-width:200px;padding:9px 12px;border-radius:10px;border:1px solid var(--borde);font:inherit;background:#fff}
+.btn{border:1px solid var(--borde);background:#fff;border-radius:10px;padding:9px 14px;font:inherit;font-weight:700;cursor:pointer;color:var(--txt);white-space:nowrap}
+.btn.principal{background:var(--nav);color:#fff;border-color:var(--nav)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.chico{padding:4px 10px}
+.sub{font-size:12.5px;color:var(--suave);margin:8px 2px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.chip{border:1px solid var(--borde);background:#fff;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--txt)}
+.chip b{margin-left:4px}
+.chip.on{background:var(--nav);color:#fff;border-color:var(--nav)}
+.banner{background:#fff7e6;border:1px solid #f5d28a;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:13.5px}
+.banner.suave{background:#eef4fd;border-color:#c7dbf5}
+.cuerpo{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.lista-wrap{background:var(--card);border-radius:14px;box-shadow:var(--sombra);overflow:hidden}
+.cabecera-lista,.fila{display:grid;grid-template-columns:minmax(0,2fr) 110px 120px 130px;gap:10px;align-items:center}
+.cabecera-lista{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--suave);padding:9px 14px;border-bottom:1px solid var(--borde);font-weight:700}
+.fila{width:100%;text-align:left;background:var(--card);border:0;border-bottom:1px solid var(--borde);padding:12px 14px;cursor:pointer;font:inherit;color:inherit}
+.fila:hover{background:#f8fafd}
+.fila.sel{background:#eef4fd}
+.fila .nom{display:flex;flex-direction:column;min-width:0}
+.fila .nom b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fila .nom small{color:var(--suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.etiquetas-fila{display:contents}
+.canal,.etapa{display:inline-block;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;justify-self:start}
+.canal{background:#eef2f8;color:#34445c}
+.c-whatsapp{background:#dff6ec;color:#0a7a52}
+.c-instagram{background:#fde7f1;color:#a3165b}
+.c-messenger{background:#e3eefc;color:#1c5fb8}
+.c-tiktok{background:#e9e9ee;color:#111}
+.etapa{background:#f1ecdc;color:#7a5a12}
+.fecha{font-size:12.5px;color:var(--suave)}
+.vacio{padding:30px;text-align:center;color:var(--suave)}
+.ficha{background:var(--card);border-radius:14px;box-shadow:var(--sombra);padding:18px;overflow-wrap:anywhere}
+.ficha-cab{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px}
+.ficha-cab h2{margin:0 0 6px;font-size:18px}
+.cerrar{display:none;border:0;background:none;font:inherit;font-size:20px;cursor:pointer;padding:0 6px 0 0;color:var(--txt)}
+.form label{display:block;font-size:12px;color:var(--suave);font-weight:600;margin:10px 0}
+.form input,.form select,.form textarea,.nota select,.nota textarea,#formNueva input,#formNueva select,.etapa-fila input[type=text],.etapa-fila .e-nombre{display:block;width:100%;margin-top:4px;padding:9px 10px;border:1px solid var(--borde);border-radius:8px;font:inherit;font-size:14px;color:var(--txt);background:#fff}
+.nota{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:start;margin-top:8px}
+.nota select{grid-column:1 / -1}
+.nota textarea{grid-column:1}
+.nota .btn{grid-column:2}
+h3{font-size:14px;margin:18px 0 4px}
+.hilo{max-height:420px;overflow:auto;margin-top:6px}
+.msg{border-left:3px solid #cbd5e1;padding:6px 10px;margin:8px 0;background:#f8fafc;border-radius:6px}
+.m-entrante{border-color:var(--verde)}
+.m-saliente{border-color:var(--azul)}
+.m-nota{border-color:var(--ambar)}
+.msg p{margin:4px 0 0;white-space:pre-wrap}
+.meta{color:var(--suave);font-size:12.5px;margin:6px 0}
+.modal{position:fixed;inset:0;background:rgba(10,20,35,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60}
+.modal .caja{background:var(--card);border-radius:14px;padding:20px;width:min(520px,100%);max-height:90vh;overflow:auto;box-shadow:var(--sombra)}
+.modal h2{margin:0 0 6px;font-size:18px}
+.modal label{display:block;font-size:12px;color:var(--suave);font-weight:600;margin:10px 0}
+.acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.etapa-fila{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px;align-items:center;margin:8px 0}
+.etapa-fila .e-nombre{margin:0}
+.chk{font-size:13px;color:var(--txt);display:flex;gap:4px;align-items:center;white-space:nowrap}
+.aviso{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(90px);background:var(--nav);color:#fff;padding:10px 16px;border-radius:10px;transition:transform .25s,opacity .25s;opacity:0;pointer-events:none;z-index:70;max-width:calc(100% - 32px)}
+.aviso.v{transform:translateX(-50%);opacity:1}
+@media (min-width:960px){
+  .cuerpo{grid-template-columns:minmax(0,1fr) 420px}
+  .ficha{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+}
+@media (max-width:959px){
+  .ficha.abierta{display:block;position:fixed;inset:0;z-index:50;border-radius:0;overflow:auto;padding:16px}
+  .ficha:not(.abierta){display:none}
+  .cerrar{display:inline-block}
+  .ficha-cab .cerrar{flex:0 0 auto}
+}
+@media (max-width:700px){
+  .cabecera-lista{display:none}
+  .fila{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
+  .etiquetas-fila{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .fila .fecha{display:none}
+  .btn{padding:8px 12px}
+  .etapa-fila{grid-template-columns:minmax(0,1fr) auto}
+  .etapa-fila .chk{grid-column:1}
+  .etapa-fila .btn{grid-row:2}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="marca">Zentralia <span>· CRM</span></div>
+  <a href="/">← Volver al panel</a>
+</header>
+<main>
+  <div id="bannerServicio" class="banner" hidden></div>
+  <div id="bannerChatwoot" class="banner suave" hidden>Chatwoot no está conectado. Puedes cargar personas a mano. Para traer conversaciones, el Programador conecta Chatwoot en Operaciones (WhatsApp).</div>
+  <div id="contenido">
+    <div class="barra">
+      <input id="buscar" type="search" placeholder="Buscar por nombre, teléfono o correo" aria-label="Buscar personas">
+      <button id="btnNueva" class="btn principal" type="button">+ Nueva persona</button>
+      <button id="btnSync" class="btn" type="button" disabled>Sincronizar con Chatwoot</button>
+      <button id="btnEtapas" class="btn" type="button" hidden>Etapas de venta</button>
+    </div>
+    <div class="sub" id="sincTxt"></div>
+    <div id="chips" class="chips"></div>
+    <div class="cuerpo">
+      <section class="lista-wrap">
+        <div class="cabecera-lista"><span>Persona</span><span>Canal</span><span>Etapa</span><span>Último cambio</span></div>
+        <div id="lista"></div>
+      </section>
+      <aside id="ficha" class="ficha"><p class="meta">Elige una persona de la lista para ver sus datos y su conversación.</p></aside>
+    </div>
+  </div>
+</main>
+
+<div id="modalNueva" class="modal" hidden>
+  <form id="formNueva" class="caja">
+    <h2>Nueva persona</h2>
+    <p class="meta">Escribe al menos el nombre, el teléfono o el correo.</p>
+    <label>Canal<select name="canal" id="nCanal"></select></label>
+    <label>Nombre<input name="nombre" maxlength="120"></label>
+    <label>Teléfono<input name="telefono" maxlength="40" placeholder="Con código de país, por ejemplo 51977000000"></label>
+    <label>Correo<input name="correo" maxlength="120" type="email"></label>
+    <label>Etapa<select name="etapa" id="nEtapa"></select></label>
+    <p class="meta" id="nError" style="color:var(--rojo)"></p>
+    <div class="acciones">
+      <button type="button" class="btn" data-cerrar="modalNueva">Cancelar</button>
+      <button type="submit" class="btn principal">Guardar</button>
+    </div>
+  </form>
+</div>
+
+<div id="modalEtapas" class="modal" hidden>
+  <div class="caja">
+    <h2>Etapas de venta</h2>
+    <p class="meta">Cambia el nombre, agrega etapas o apaga las que no uses. Las personas que ya están en una etapa apagada la conservan.</p>
+    <div id="etapasLista"></div>
+    <button type="button" class="btn" id="btnAgregarEtapa">+ Agregar etapa</button>
+    <p class="meta" id="etapasError" style="color:var(--rojo)"></p>
+    <div class="acciones">
+      <button type="button" class="btn" data-cerrar="modalEtapas">Cancelar</button>
+      <button type="button" class="btn principal" id="btnGuardarEtapas">Guardar etapas</button>
+    </div>
+  </div>
+</div>
+
+<div id="aviso" class="aviso" role="status"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const DIRECCION = { entrante: 'Cliente escribió', saliente: 'Respondimos', nota: 'Nota interna' };
+const PLACEHOLDER = '<p class="meta">Elige una persona de la lista para ver sus datos y su conversación.</p>';
+
+let ESTADO = null, LISTA = [], CONTEOS = {}, FILTRO = { q: '', etapa: '' }, FICHA = null, ETAPAS_EDIT = [];
+let temporizadorBuscar = null, temporizadorAviso = null;
+
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  if (r.status === 401) location.href = '/';
+  return { ok: r.ok, status: r.status, data: d };
+}
+function aviso(t, ms = 3800) {
+  const el = $('#aviso'); el.textContent = t; el.classList.add('v');
+  clearTimeout(temporizadorAviso); temporizadorAviso = setTimeout(() => el.classList.remove('v'), ms);
+}
+const etapaNombre = clave => { const e = ESTADO.etapas.find(x => x.clave === clave); return e ? e.nombre : clave; };
+const etapasActivas = () => ESTADO.etapas.filter(e => e.activa);
+const nombreDe = c => c.nombre || c.telefono || c.correo || c.identificador;
+const canalNombre = c => (ESTADO.canales[c] || c);
+
+function opcionesEtapa(actual) {
+  return ESTADO.etapas.filter(e => e.activa || e.clave === actual)
+    .map(e => `<option value="${esc(e.clave)}" ${e.clave === actual ? 'selected' : ''}>${esc(e.nombre)}${e.activa ? '' : ' (apagada)'}</option>`).join('');
+}
+function opcionesCanal(actual) {
+  return Object.entries(ESTADO.canales).map(([k, n]) => `<option value="${esc(k)}" ${k === actual ? 'selected' : ''}>${esc(n)}</option>`).join('');
+}
+
+async function iniciar() {
+  const r = await api('/api/crm/estado');
+  if (!r.ok) { $('#contenido').innerHTML = `<div class="banner">${esc(r.data.error || 'No se pudo abrir el CRM.')}</div>`; return; }
+  ESTADO = r.data;
+  $('#bannerServicio').hidden = ESTADO.servicio;
+  $('#bannerServicio').textContent = 'El servicio CRM no está contratado para esta empresa. Tú lo ves para revisarlo; los demás usuarios no entran hasta que Kaizen IA lo active desde la pestaña Empresas de Oficina.';
+  $('#bannerChatwoot').hidden = ESTADO.chatwoot;
+  $('#btnSync').disabled = !ESTADO.chatwoot;
+  $('#btnEtapas').hidden = !ESTADO.editarEtapas;
+  const s = ESTADO.sincronizado;
+  $('#sincTxt').textContent = s ? 'Última sincronización con Chatwoot: ' + new Date(s.en).toLocaleString('es') + ' (' + s.contactos_nuevos + ' personas nuevas, ' + s.mensajes_nuevos + ' mensajes nuevos)'
+    : (ESTADO.chatwoot ? 'Todavía no se ha sincronizado con Chatwoot.' : '');
+  await cargarLista();
+}
+
+async function cargarLista() {
+  const r = await api('/api/crm/contactos?' + new URLSearchParams(FILTRO));
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cargar la lista.', 6000);
+  LISTA = r.data.contactos; CONTEOS = r.data.conteos;
+  pintarChips(); pintarLista();
+}
+
+function pintarChips() {
+  const total = Object.values(CONTEOS).reduce((s, n) => s + n, 0);
+  $('#chips').innerHTML = `<button class="chip ${FILTRO.etapa ? '' : 'on'}" data-etapa="">Todas<b>${total}</b></button>` +
+    etapasActivas().map(e => `<button class="chip ${FILTRO.etapa === e.clave ? 'on' : ''}" data-etapa="${esc(e.clave)}">${esc(e.nombre)}<b>${CONTEOS[e.clave] || 0}</b></button>`).join('');
+}
+
+function pintarLista() {
+  if (!LISTA.length) {
+    $('#lista').innerHTML = `<div class="vacio">${FILTRO.q || FILTRO.etapa ? 'Nadie coincide con ese filtro.' : 'Todavía no hay personas. Pulsa «Sincronizar con Chatwoot» o «+ Nueva persona».'}</div>`;
+    return;
+  }
+  $('#lista').innerHTML = LISTA.map(c => `
+    <button class="fila ${FICHA && FICHA.contacto.id === c.id ? 'sel' : ''}" data-id="${c.id}" type="button">
+      <span class="nom"><b>${esc(nombreDe(c))}</b><small>${esc(c.telefono || c.correo || c.identificador)}</small></span>
+      <span class="etiquetas-fila"><span class="canal c-${esc(c.canal)}">${esc(canalNombre(c.canal))}</span><span class="etapa">${esc(etapaNombre(c.etapa))}</span></span>
+      <span class="fecha">${esc(c.actualizado)}</span>
+    </button>`).join('');
+}
+
+async function abrirFicha(id) {
+  const r = await api('/api/crm/contactos/' + id);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo abrir la ficha.', 5000);
+  FICHA = r.data;
+  pintarFicha(); pintarLista();
+  $('#ficha').classList.add('abierta');
+}
+
+function pintarFicha() {
+  const c = FICHA.contacto;
+  $('#ficha').innerHTML = `
+    <div class="ficha-cab">
+      <div style="flex:1;min-width:0">
+        <h2>${esc(nombreDe(c))}</h2>
+        <span class="canal c-${esc(c.canal)}">${esc(canalNombre(c.canal))}</span>
+        <span class="etapa">${esc(etapaNombre(c.etapa))}</span>
+      </div>
+      <button class="cerrar" id="fCerrar" type="button" aria-label="Cerrar ficha">✕</button>
+    </div>
+    <form id="fDatos" class="form">
+      <label>Nombre<input name="nombre" value="${esc(c.nombre)}" maxlength="120"></label>
+      <label>Teléfono<input name="telefono" value="${esc(c.telefono)}" maxlength="40"></label>
+      <label>Correo<input name="correo" value="${esc(c.correo)}" maxlength="120"></label>
+      <label>Etapa<select name="etapa">${opcionesEtapa(c.etapa)}</select></label>
+      <label>Etiquetas (separadas por coma)<input name="etiquetas" value="${esc((c.etiquetas || []).join(', '))}" maxlength="300"></label>
+      <label>Notas<textarea name="notas" rows="3" maxlength="2000">${esc(c.notas)}</textarea></label>
+      <p class="meta">Canal: ${esc(canalNombre(c.canal))} · Origen: ${esc(c.origen || 'carga manual')} · Identificador: ${esc(c.identificador)}</p>
+      <div class="acciones"><button type="submit" class="btn principal">Guardar datos</button></div>
+    </form>
+    <h3>Conversación</h3>
+    <form id="fNota" class="nota">
+      <select name="direccion" aria-label="Tipo de mensaje">
+        <option value="nota">Nota interna</option>
+        <option value="entrante">Cliente escribió</option>
+        <option value="saliente">Respondimos</option>
+      </select>
+      <textarea name="texto" rows="2" maxlength="2000" placeholder="Escribe la nota o el mensaje" aria-label="Texto"></textarea>
+      <button type="submit" class="btn">Agregar</button>
+    </form>
+    <div class="hilo">${FICHA.mensajes.length
+      ? FICHA.mensajes.map(m => `<div class="msg m-${esc(m.direccion)}"><small>${esc(DIRECCION[m.direccion] || m.direccion)} · ${esc(m.creado)}</small><p>${esc(m.texto)}</p></div>`).join('')
+      : '<p class="meta">Sin mensajes todavía.</p>'}
+    </div>`;
+}
+
+async function guardarDatos(form) {
+  const c = FICHA.contacto;
+  const f = Object.fromEntries(new FormData(form));
+  const r = await api('/api/crm/contactos/guardar', {
+    id: c.id, canal: c.canal, identificador: c.identificador, origen: c.origen,
+    nombre: f.nombre, telefono: f.telefono, correo: f.correo, etapa: f.etapa, etiquetas: f.etiquetas, notas: f.notas
+  });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.', 5000);
+  aviso('Datos guardados.');
+  await cargarLista(); await abrirFicha(c.id);
+}
+
+async function agregarNota(form) {
+  const f = Object.fromEntries(new FormData(form));
+  if (!f.texto.trim()) return aviso('Escribe el mensaje o la nota.');
+  const r = await api('/api/crm/mensajes', { contacto_id: FICHA.contacto.id, direccion: f.direccion, texto: f.texto });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo agregar.', 5000);
+  await abrirFicha(FICHA.contacto.id); await cargarLista();
+}
+
+function abrirNueva() {
+  $('#nCanal').innerHTML = opcionesCanal('manual');
+  $('#nEtapa').innerHTML = opcionesEtapa('nuevo');
+  $('#formNueva').reset();
+  $('#nError').textContent = '';
+  $('#modalNueva').hidden = false;
+}
+
+async function guardarNueva(form) {
+  const f = Object.fromEntries(new FormData(form));
+  const r = await api('/api/crm/contactos/guardar', { canal: f.canal, nombre: f.nombre, telefono: f.telefono, correo: f.correo, etapa: f.etapa });
+  if (!r.ok) { $('#nError').textContent = r.data.error || 'No se pudo guardar.'; return; }
+  $('#modalNueva').hidden = true;
+  aviso('Persona guardada.');
+  await cargarLista(); await abrirFicha(r.data.id);
+}
+
+async function sincronizar() {
+  const b = $('#btnSync'), texto = b.textContent;
+  b.disabled = true; b.textContent = 'Sincronizando…';
+  const r = await api('/api/crm/sincronizar', {});
+  b.textContent = texto; b.disabled = !ESTADO.chatwoot;
+  if (!r.ok) return aviso(r.data.error || 'No se pudo sincronizar.', 7000);
+  aviso(`Listo: ${r.data.contactos_nuevos} personas nuevas y ${r.data.mensajes_nuevos} mensajes nuevos (de ${r.data.conversaciones} conversaciones).`, 7000);
+  await iniciar();
+}
+
+function leerEtapas() {
+  return [...document.querySelectorAll('.etapa-fila')].map(fila => {
+    const i = Number(fila.dataset.i);
+    return { clave: ETAPAS_EDIT[i].clave, nombre: fila.querySelector('.e-nombre').value.trim(), activa: fila.querySelector('.e-activa').checked };
+  });
+}
+function pintarEtapas() {
+  $('#etapasLista').innerHTML = ETAPAS_EDIT.map((e, i) => `
+    <div class="etapa-fila" data-i="${i}">
+      <input class="e-nombre" value="${esc(e.nombre)}" maxlength="40" aria-label="Nombre de la etapa">
+      <label class="chk"><input type="checkbox" class="e-activa" ${e.activa ? 'checked' : ''}> Activa</label>
+      <button class="btn chico" type="button" data-subir="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
+      <button class="btn chico" type="button" data-bajar="${i}" ${i === ETAPAS_EDIT.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
+    </div>`).join('');
+}
+function abrirEtapas() {
+  ETAPAS_EDIT = ESTADO.etapas.map(e => ({ ...e }));
+  $('#etapasError').textContent = '';
+  pintarEtapas();
+  $('#modalEtapas').hidden = false;
+}
+async function guardarEtapas() {
+  const r = await api('/api/crm/etapas/guardar', { etapas: leerEtapas() });
+  if (!r.ok) { $('#etapasError').textContent = r.data.error || 'No se pudo guardar.'; return; }
+  $('#modalEtapas').hidden = true;
+  aviso('Etapas guardadas.');
+  await iniciar();
+}
+function moverEtapa(i, d) {
+  const cur = leerEtapas();
+  [cur[i], cur[i + d]] = [cur[i + d], cur[i]];
+  ETAPAS_EDIT = cur; pintarEtapas();
+}
+
+document.addEventListener('click', ev => {
+  const t = ev.target;
+  const chip = t.closest('.chip');
+  if (chip) { FILTRO.etapa = chip.dataset.etapa; return cargarLista(); }
+  const fila = t.closest('.fila');
+  if (fila) return abrirFicha(Number(fila.dataset.id));
+  if (t.closest('#fCerrar')) {
+    FICHA = null;
+    $('#ficha').classList.remove('abierta');
+    $('#ficha').innerHTML = PLACEHOLDER;
+    return pintarLista();
+  }
+  const cerrar = t.closest('[data-cerrar]');
+  if (cerrar) return ($('#' + cerrar.dataset.cerrar).hidden = true);
+  if (t.id === 'btnNueva') return abrirNueva();
+  if (t.id === 'btnSync') return sincronizar();
+  if (t.id === 'btnEtapas') return abrirEtapas();
+  if (t.id === 'btnAgregarEtapa') { const cur = leerEtapas(); cur.push({ clave: '', nombre: '', activa: true }); ETAPAS_EDIT = cur; return pintarEtapas(); }
+  if (t.id === 'btnGuardarEtapas') return guardarEtapas();
+  const subir = t.closest('[data-subir]'); if (subir) return moverEtapa(Number(subir.dataset.subir), -1);
+  const bajar = t.closest('[data-bajar]'); if (bajar) return moverEtapa(Number(bajar.dataset.bajar), 1);
+});
+
+document.addEventListener('submit', ev => {
+  ev.preventDefault();
+  const f = ev.target;
+  if (f.id === 'fDatos') guardarDatos(f);
+  if (f.id === 'fNota') agregarNota(f);
+  if (f.id === 'formNueva') guardarNueva(f);
+});
+
+$('#buscar').addEventListener('input', e => {
+  clearTimeout(temporizadorBuscar);
+  temporizadorBuscar = setTimeout(() => { FILTRO.q = e.target.value.trim(); cargarLista(); }, 250);
+});
+
+iniciar();
+</script>
+</body>
+</html>

@@ -1112,6 +1112,12 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     } finally { vuelosCorriendo = false; }
   }
 
+  // Conexión con Chatwoot que comparten Operaciones y el CRM: dirección, cuenta y token (token sin cifrar, solo para el servidor).
+  async function chatwootConfig() {
+    const wa = await cfg('whatsapp', WHATSAPP_INICIAL);
+    return { url: wa.chatwoot_url || '', cuenta: wa.cuenta || '', token: descifrar((await cfg('llaves', {})).chatwoot || '') };
+  }
+
   // ---------- WhatsApp por Chatwoot ----------
   async function enviarWhatsApp(u, id) {
     const mods = await modulos();
@@ -1952,5 +1958,5 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     setInterval(() => buscarAviones().catch(e => console.log('Aviones:', e.message)), 60 * 1000);
   }
 
-  return { preparar, iniciar, manejar, manejarChofer, estadoPublico, sincronizar, _probar: { mejorTarifa, importe, tiempos, marcarChoques, identVuelo, cifrar, descifrar, agenciaDe, zonaDe } };
+  return { preparar, iniciar, manejar, manejarChofer, estadoPublico, sincronizar, chatwootConfig, _probar: { mejorTarifa, importe, tiempos, marcarChoques, identVuelo, cifrar, descifrar, agenciaDe, zonaDe } };
 };

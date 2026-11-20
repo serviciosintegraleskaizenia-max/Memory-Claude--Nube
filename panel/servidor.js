@@ -32,7 +32,7 @@ const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisa
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), registrar: (...a) => registrar(...a), SISTEMA });
-const crm = require('./plataforma/crm')({ client, cuenta, registrar: (...a) => registrar(...a) });
+const crm = require('./plataforma/crm')({ client, cuenta, registrar: (...a) => registrar(...a), chatwoot: () => operaciones.chatwootConfig() });
 // Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
@@ -1786,6 +1786,7 @@ http.createServer(async (req, res) => {
     }
     // Operaciones (pantalla de la oficina) y la app web del chofer.
     if (req.method === 'GET' && url === '/operaciones') return archivo(res, path.join(CARPETA, 'operaciones.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/crm') return archivo(res, path.join(CARPETA, 'crm.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/asesor') return archivo(res, path.join(CARPETA, 'asesor.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer') return archivo(res, path.join(CARPETA, 'chofer.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer.webmanifest') return archivo(res, path.join(CARPETA, 'chofer.webmanifest'), 'application/manifest+json');
@@ -1936,6 +1937,7 @@ http.createServer(async (req, res) => {
         vence: u.vence || null, asistente: Boolean(await conexionAsistente()),
         preferencias: u.preferencias || {},
         operaciones: await operaciones.estadoPublico(u).catch(() => null),
+        crm: await crm.estadoPublico(u).catch(() => null),
         dos_pasos: necesitaDosPasos(u) ? (u.email ? 'activa' : 'sin_correo') : 'no'
       });
     }

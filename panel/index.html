@@ -567,6 +567,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
     <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
     <button class="btn-tema" id="btnControl" style="display:none;" title="Tiempos y gráficas de los asesores">Control</button>
     <button class="btn-tema" id="btnOperaciones" style="display:none;" title="Asignar choferes, operativo del día, precios, paquetes y reportes">🚐 Operaciones</button>
+    <button class="btn-tema" id="btnCrm" style="display:none;" title="Personas, conversaciones y etapas de venta (servicio CRM)">👥 CRM</button>
     <button class="btn-tema" id="btnAsistente" style="display:none;" title="Probar el asistente de redes sociales">🤖 Asistente</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
     <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
@@ -1102,6 +1103,7 @@ function mostrarApp(s) {
   btnOp.style.display = op.puedeVer && (s.grupo === 'Programador' || puede('ver_operaciones')) ? 'inline-block' : !op.publico ? 'inline-block' : 'none';
   btnOp.textContent = op.puedeVer ? '🚐 Operaciones' : '🚧 Operaciones';
   btnOp.dataset.abierto = op.puedeVer ? '1' : '';
+  document.getElementById('btnCrm').style.display = (s.crm || {}).puedeVer ? 'inline-block' : 'none';
   document.getElementById('btnAsistente').style.display = puede('probar_asistente') && s.asistente ? 'inline-block' : 'none';
   document.getElementById('filtroAsesor').style.display = puede('supervisar') ? 'inline-block' : 'none';
   document.getElementById('btnHerramientas').style.display =
@@ -5133,6 +5135,7 @@ document.getElementById('btnOperaciones').addEventListener('click', ev => {
   if (ev.currentTarget.dataset.abierto) return window.open('/operaciones', '_blank');
   alert('🚧 Operaciones · Próximamente\n\nEstamos construyendo la parte de Operaciones: asignar choferes, operativo del día, precios, paquetes de Orlando y reportes.\nCuando esté lista se abrirá desde este botón con tu mismo usuario.');
 });
+document.getElementById('btnCrm').addEventListener('click', () => window.open('/crm', '_blank'));
 /* ---------- Ventana flotante del asistente ---------- */
 (function () {
   const v = document.getElementById('ventanaAsistente'), barra = document.getElementById('vfBarra'), marco = document.getElementById('vfMarco');
