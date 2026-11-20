@@ -4013,6 +4013,12 @@ function bloquePrompts() {
     </div>`;
 }
 
+async function verClaveN8nUI() {
+  const r = await api('/api/central/automatizacion/clave-n8n');
+  const caja = document.getElementById('autoClaveN8n');
+  caja.textContent = r.ok ? 'Clave para pegar en el flujo de n8n (credencial "Zentralia - clave n8n"):\n' + r.data.clave : (r.data.error || 'No se pudo leer la clave.');
+  caja.style.display = 'block';
+}
 async function verPromptUI() {
   const datos = leerAutomatizacion();
   const r = await api('/api/central/automatizacion/prompt-vista', { nombre: datos.nombre, perfil: datos.perfil });
@@ -4121,13 +4127,19 @@ function formAutomatizacion() {
       <label>Lo que la IA NO puede prometer<textarea id="aIaNo" rows="3" maxlength="600">${esc(ia.no_prometer || '')}</textarea></label>
       <label>Cuándo pasar a una persona<textarea id="aIaPersona" rows="3" maxlength="600">${esc(ia.pasar_persona || '')}</textarea></label>
     </div>
-    <p class="etiqueta-sec">Los precios y las políticas largas se suben como Excel o PDF en Oficina (base de conocimiento). La clave de OpenRouter se carga después, cifrada, en su panel.</p>
+    <div class="form-fila">
+      <label>Clave de OpenRouter de este cliente<input id="aIaClave" type="password" autocomplete="new-password" placeholder="${ia.clave_configurada ? 'Ya está guardada. Escribe una nueva solo si la quieres cambiar' : 'sk-or-...'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
+    </div>
+    <p class="etiqueta-sec">Los precios y las políticas largas se suben como Excel o PDF en Oficina (base de conocimiento).</p>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-auto-vista">Ver cómo quedará la IA</button></div>
     <pre id="autoVista" style="display:none;white-space:pre-wrap;background:#0b1424;color:#e7edf6;padding:10px;border-radius:8px"></pre>
 
     <div class="titulo-seccion">6 · CRM y flujo de automatización</div>
     ${marca('aCrm', 'Activar el CRM para este cliente (servicio aparte)', crm.activo, 'Solo tú lo ves y lo activas. Después le das permiso al cliente desde su panel.')}
+    ${marca('aActiva', 'Activar respuestas automáticas en Chatwoot', ia.activa, 'La IA responde sola al cliente. Déjalo apagado hasta probar el flujo.')}
     <p class="etiqueta-sec">Flujo de n8n: copia la plantilla <b>n8n/automatizacion-redes.json</b>, ponle el nombre del cliente y vincula sus cuentas.</p>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-auto-clave-n8n">Ver clave para n8n</button></div>
+    <pre id="autoClaveN8n" style="display:none;white-space:pre-wrap;background:#0b1424;color:#e7edf6;padding:10px;border-radius:8px"></pre>
 
     <div class="pie-acciones">
       <button class="btn" data-accion="emp-auto-guardar">Guardar cliente</button>
@@ -4158,7 +4170,8 @@ function leerAutomatizacion() {
       ia: {
         modelo: document.getElementById('aIaModelo').value, tono: document.getElementById('aIaTono').value,
         tipo_nombre: v('aIaTipo'), que_ofrece: v('aIaQue'), zona_horario: v('aIaZona'),
-        pagos: v('aIaPagos'), no_prometer: v('aIaNo'), pasar_persona: v('aIaPersona')
+        pagos: v('aIaPagos'), no_prometer: v('aIaNo'), pasar_persona: v('aIaPersona'),
+        activa: ck('aActiva'), clave_openrouter: v('aIaClave')
       },
       crm: { activo: ck('aCrm') }
     }
@@ -4311,6 +4324,7 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-auto-editar') { AUTO_EDIT = AUTO_CLIENTES.find(c => String(c.id) === b.dataset.id) || null; return pintarEmpresas(); }
   if (a === 'emp-auto-guardar') return guardarAutomatizacionUI(b);
   if (a === 'emp-auto-vista') return verPromptUI();
+  if (a === 'emp-auto-clave-n8n') return verClaveN8nUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 

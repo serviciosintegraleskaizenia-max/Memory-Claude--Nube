@@ -1910,6 +1910,7 @@ http.createServer(async (req, res) => {
 
     // Base de conocimiento para el chatbot (n8n): sin sesión, con la clave del asistente de cada empresa.
     // Avisos de Chatwoot (mensajes nuevos de las redes): con la clave del conector en la URL.
+    if (url.startsWith('/api/n8n/')) return central.manejarN8n(req, res, url, { json });
     if (url.startsWith('/api/chatwoot/')) {
       return oficina.redes.manejarPublico(req, res, url, { json, leerCuerpo });
     }

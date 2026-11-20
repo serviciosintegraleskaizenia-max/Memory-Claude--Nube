@@ -83,6 +83,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   async function preparar() {
     if (!activo) return;
+    await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_config (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)`);
+    await client.query("INSERT INTO automatizacion_config (clave, valor) VALUES ('clave_n8n', $1) ON CONFLICT (clave) DO NOTHING",
+      [crypto.randomBytes(24).toString('hex')]);
     await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_prompts (
       clave TEXT PRIMARY KEY, nombre TEXT NOT NULL, texto TEXT NOT NULL, orden INTEGER NOT NULL DEFAULT 0,
       actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -358,10 +361,32 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         tipo_nombre: t((p.ia || {}).tipo_nombre, 80),
         que_ofrece: t((p.ia || {}).que_ofrece, 600), zona_horario: t((p.ia || {}).zona_horario, 300),
         pagos: t((p.ia || {}).pagos, 300), no_prometer: t((p.ia || {}).no_prometer, 600),
-        pasar_persona: t((p.ia || {}).pasar_persona, 600)
+        pasar_persona: t((p.ia || {}).pasar_persona, 600), activa: b((p.ia || {}).activa)
       },
       crm: { activo: b((p.crm || {}).activo) }
     };
+  }
+
+  // Lo usa el flujo de n8n de cada cliente: entrega el prompt armado y la clave de OpenRouter del cliente.
+  // No tiene sesión: se protege con la clave de n8n (cabecera x-clave-n8n).
+  async function manejarN8n(req, res, url, { json }) {
+    const esperada = await claveN8n();
+    const dada = String(req.headers['x-clave-n8n'] || '');
+    const ok = Boolean(esperada) && dada.length === esperada.length && crypto.timingSafeEqual(Buffer.from(dada), Buffer.from(esperada));
+    if (!ok) return json(res, 401, { error: 'Clave de n8n no válida.' });
+    if (req.method !== 'GET' || url !== '/api/n8n/automatizacion') return json(res, 404, { error: 'No existe esa ruta.' });
+    const slug = texto(new URL(req.url, 'http://x').searchParams.get('slug'), 30).toLowerCase();
+    const fila = (await client.query('SELECT nombre, slug, perfil FROM automatizacion_clientes WHERE slug = $1', [slug])).rows[0];
+    if (!fila) return json(res, 404, { error: 'No hay cliente de automatización con ese subdominio.' });
+    const perfil = fila.perfil || {};
+    const ia = perfil.ia || {};
+    const modelo = /sonnet/i.test(ia.modelo || '') ? 'anthropic/claude-sonnet-5.5' : 'anthropic/claude-haiku-5.5';
+    return json(res, 200, {
+      activo: ia.activa === true,
+      nombre: fila.nombre, slug: fila.slug, modelo,
+      prompt: armarPrompt(perfil, fila.nombre, await promptsList()),
+      openrouter_key: descifrarAuto(ia.clave_openrouter_enc)
+    });
   }
 
   async function promptsList() {
@@ -380,6 +405,27 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       ['La IA NO puede prometer', ia.no_prometer], ['Cuándo pasar a una persona', ia.pasar_persona]
     ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('\n');
     return [base, tipo && 'Tipo de negocio: ' + tipo, datos && 'Datos del cliente:\n' + datos].filter(Boolean).join('\n\n');
+  }
+
+  // Cifrado de la clave de OpenRouter de cada cliente (misma técnica que Operaciones; la clave nunca vuelve al navegador).
+  const llaveAuto = () => crypto.createHash('sha256').update('automatizacion|' + String((config.sesion && config.sesion.secreto) || '')).digest();
+  function cifrarAuto(t) {
+    if (!t) return '';
+    const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', llaveAuto(), iv);
+    const d = Buffer.concat([c.update(String(t), 'utf8'), c.final()]);
+    return Buffer.concat([iv, c.getAuthTag(), d]).toString('base64');
+  }
+  function descifrarAuto(b) {
+    if (!b) return '';
+    try {
+      const x = Buffer.from(b, 'base64');
+      const d = crypto.createDecipheriv('aes-256-gcm', llaveAuto(), x.subarray(0, 12));
+      d.setAuthTag(x.subarray(12, 28));
+      return Buffer.concat([d.update(x.subarray(28)), d.final()]).toString('utf8');
+    } catch (e) { return ''; }
+  }
+  async function claveN8n() {
+    return (await client.query("SELECT valor FROM automatizacion_config WHERE clave = 'clave_n8n'")).rows[0]?.valor || '';
   }
 
   function claveDe(t) {
@@ -448,7 +494,12 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     }
     const entrada = f.perfil || {};
     const claveTipo = await resolverTipo(u, (entrada.ia || {}).tipo_nombre);
-    const perfil = JSON.stringify(limpiarPerfil({ ...entrada, ia: { ...(entrada.ia || {}), tipo: claveTipo } }));
+    const previo = id ? (await client.query('SELECT perfil FROM automatizacion_clientes WHERE id = $1', [id])).rows[0] : null;
+    const claveNueva = String((entrada.ia || {}).clave_openrouter || '').trim();
+    const encPrevio = previo && previo.perfil && previo.perfil.ia ? previo.perfil.ia.clave_openrouter_enc : '';
+    const perfilLimpio = limpiarPerfil({ ...entrada, ia: { ...(entrada.ia || {}), tipo: claveTipo } });
+    perfilLimpio.ia.clave_openrouter_enc = claveNueva ? cifrarAuto(claveNueva) : (encPrevio || '');
+    const perfil = JSON.stringify(perfilLimpio);
     if (id) {
       const r = await client.query('UPDATE automatizacion_clientes SET slug = $1, nombre = $2, perfil = $3::jsonb, actualizado = NOW() WHERE id = $4 RETURNING id',
         [slug, nombre, perfil, id]);
@@ -682,7 +733,16 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       // Clientes de automatización (redes y CRM), separados del motor de correo.
       if (req.method === 'GET' && url === '/api/central/automatizacion') {
         const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
-        return json(res, 200, { clientes });
+        const sinClave = clientes.map(c => {
+          const p = { ...(c.perfil || {}), ia: { ...((c.perfil || {}).ia || {}) } };
+          p.ia.clave_configurada = Boolean(p.ia.clave_openrouter_enc);
+          delete p.ia.clave_openrouter_enc;
+          return { ...c, perfil: p };
+        });
+        return json(res, 200, { clientes: sinClave });
+      }
+      if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
+        return json(res, 200, { clave: await claveN8n() });
       }
       if (req.method === 'GET' && url === '/api/central/automatizacion/prompts') {
         return json(res, 200, { prompts: await promptsList() });
@@ -935,5 +995,5 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, ayudantes };
+  return { activo, preparar, iniciar, manejar, manejarN8n, ayudantes };
 };
