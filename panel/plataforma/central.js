@@ -89,6 +89,16 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     // Token que Meta usa para verificar el receptor de WhatsApp (se muestra en Oficina).
     await client.query("INSERT INTO automatizacion_config (clave, valor) VALUES ('verify_token_whatsapp', $1) ON CONFLICT (clave) DO NOTHING",
       [crypto.randomBytes(18).toString('hex')]);
+    // Estado de cada número de la API y alertas (revisión programada).
+    await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_estado (
+      numero_id TEXT PRIMARY KEY, slug TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT '',
+      verificado TEXT NOT NULL DEFAULT '', calidad TEXT NOT NULL DEFAULT '', detalle TEXT NOT NULL DEFAULT '',
+      revisado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_alertas (
+      id SERIAL PRIMARY KEY, numero_id TEXT NOT NULL, slug TEXT NOT NULL DEFAULT '', nivel TEXT NOT NULL,
+      texto TEXT NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    setTimeout(() => revisarWhatsapp().catch(e => console.log('WhatsApp revisión:', e.message)), 5 * 60e3).unref();
+    setInterval(() => revisarWhatsapp().catch(e => console.log('WhatsApp revisión:', e.message)), 60 * 60e3).unref();
     // Mensajes de WhatsApp que llegan desde Meta, esperando que el CRM del cliente los tome.
     await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_entrantes (
       id SERIAL PRIMARY KEY, meta_id TEXT UNIQUE NOT NULL, slug TEXT NOT NULL DEFAULT '', numero_id TEXT NOT NULL DEFAULT '',
@@ -435,6 +445,65 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       }
     }
     return json(res, 200, { ok: true, guardados });
+  }
+
+  // ---------- Revisión programada de los números de la API ----------
+  // Versión de la API de Meta que usamos. Confirmar en la documentación vigente antes de activar.
+  const VERSION_META = 'v21.0';
+  async function tokenNumero(numeroId) {
+    return descifrarAuto(await leerConfigAuto('token_wa_' + numeroId));
+  }
+  async function consultarNumeroMeta(numeroId, token) {
+    const r = await fetch(`https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(numeroId)}?fields=verified_name,code_verification_status,quality_rating`,
+      { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((d.error && d.error.message) || ('Meta respondió ' + r.status));
+    return { verificado: String(d.code_verification_status || ''), calidad: String(d.quality_rating || ''), nombre: String(d.verified_name || '') };
+  }
+  // Solo genera alerta cuando algo cambia (o es la primera revisión), para no repetirlas cada hora.
+  function alertasDe(previo, nuevo) {
+    const cambio = !previo || previo.estado !== nuevo.estado || previo.calidad !== nuevo.calidad || previo.verificado !== nuevo.verificado;
+    if (!cambio) return [];
+    const out = [];
+    if (nuevo.estado === 'sin_conectar') out.push({ nivel: 'info', texto: 'Número sin conectar a la API de Meta.' });
+    if (nuevo.estado === 'error') out.push({ nivel: 'alto', texto: 'No se pudo revisar el número: ' + nuevo.detalle });
+    if (nuevo.verificado && nuevo.verificado !== 'VERIFIED') out.push({ nivel: 'alto', texto: 'El número no está verificado (' + nuevo.verificado + ').' });
+    if (nuevo.calidad === 'RED') out.push({ nivel: 'alto', texto: 'Calidad en rojo: Meta puede limitar los envíos. Revisa qué mensajes se están enviando.' });
+    else if (nuevo.calidad === 'YELLOW') out.push({ nivel: 'medio', texto: 'Calidad en amarillo: vigila los mensajes que salen.' });
+    if (previo && previo.calidad && nuevo.calidad && previo.calidad !== nuevo.calidad) out.push({ nivel: 'info', texto: `La calidad cambió de ${previo.calidad} a ${nuevo.calidad}.` });
+    return out;
+  }
+  async function revisarWhatsapp() {
+    const numeros = (await client.query(`SELECT slug, perfil->'redes'->'whatsapp'->>'numero_id' AS numero FROM automatizacion_clientes
+      WHERE COALESCE(perfil->'redes'->'whatsapp'->>'numero_id', '') <> ''`)).rows;
+    let revisados = 0;
+    for (const n of numeros) {
+      const previo = (await client.query('SELECT estado, verificado, calidad FROM whatsapp_estado WHERE numero_id = $1', [n.numero])).rows[0];
+      const token = await tokenNumero(n.numero);
+      let nuevo;
+      if (!token) nuevo = { estado: 'sin_conectar', verificado: '', calidad: '', detalle: 'Falta conectar este número con Meta.' };
+      else {
+        try { nuevo = { estado: 'conectado', ...(await consultarNumeroMeta(n.numero, token)), detalle: '' }; }
+        catch (e) { nuevo = { estado: 'error', verificado: '', calidad: '', detalle: texto(e.message, 200) }; }
+      }
+      await client.query(`INSERT INTO whatsapp_estado (numero_id, slug, estado, verificado, calidad, detalle, revisado)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        ON CONFLICT (numero_id) DO UPDATE SET slug = EXCLUDED.slug, estado = EXCLUDED.estado, verificado = EXCLUDED.verificado,
+          calidad = EXCLUDED.calidad, detalle = EXCLUDED.detalle, revisado = NOW()`,
+        [n.numero, n.slug, nuevo.estado, nuevo.verificado, nuevo.calidad, nuevo.detalle]);
+      for (const a of alertasDe(previo, nuevo)) {
+        await client.query('INSERT INTO whatsapp_alertas (numero_id, slug, nivel, texto) VALUES ($1, $2, $3, $4)', [n.numero, n.slug, a.nivel, a.texto]);
+      }
+      revisados++;
+    }
+    return { revisados };
+  }
+  async function estadoWhatsapp() {
+    const numeros = (await client.query(`SELECT e.numero_id, e.slug, e.estado, e.verificado, e.calidad, e.detalle,
+        TO_CHAR(e.revisado, 'YYYY-MM-DD HH24:MI') AS revisado FROM whatsapp_estado e ORDER BY e.slug`)).rows;
+    const alertas = (await client.query(`SELECT numero_id, slug, nivel, texto, TO_CHAR(creado, 'YYYY-MM-DD HH24:MI') AS creado
+      FROM whatsapp_alertas ORDER BY creado DESC LIMIT 30`)).rows;
+    return { numeros, alertas };
   }
 
   // Configuración de la conexión con Meta (solo Programador, desde Oficina).
@@ -825,6 +894,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         return json(res, 200, { clientes: sinClave });
       }
       if (req.method === 'GET' && url === '/api/central/whatsapp/config') return json(res, 200, await configWhatsapp());
+      if (req.method === 'GET' && url === '/api/central/whatsapp/estado') return json(res, 200, await estadoWhatsapp());
+      if (req.method === 'POST' && url === '/api/central/whatsapp/revisar') return json(res, 200, await revisarWhatsapp());
       if (req.method === 'POST' && url === '/api/central/whatsapp/config/guardar') return json(res, 200, await guardarSecretoWhatsapp(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
         return json(res, 200, { clave: await claveN8n() });
@@ -1080,5 +1151,5 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes };
+  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe } };
 };

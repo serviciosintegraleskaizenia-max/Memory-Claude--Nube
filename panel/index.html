@@ -3983,12 +3983,35 @@ function resumenRedes(c) {
 }
 let AUTO_PROMPTS = [];
 let AUTO_WA = {};
+let AUTO_WA_ESTADO = { numeros: [], alertas: [] };
 async function cargarAutomatizacion() {
-  const [r, p, w] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config')]);
+  const [r, p, w, e] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config'), api('/api/central/whatsapp/estado')]);
   AUTO_CLIENTES = r.ok ? r.data.clientes : [];
   AUTO_PROMPTS = p.ok ? p.data.prompts : [];
   AUTO_WA = w.ok ? w.data : {};
+  AUTO_WA_ESTADO = e.ok ? e.data : { numeros: [], alertas: [] };
   pintarEmpresas();
+}
+async function revisarWaUI() {
+  const r = await api('/api/central/whatsapp/revisar', {});
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo revisar.', false);
+  await cargarAutomatizacion();
+  mostrarAviso('Revisión lista: ' + r.data.revisados + ' número(s) revisados.', true);
+}
+const ETIQUETA_ESTADO = { conectado: 'Conectado', sin_conectar: 'Sin conectar', error: 'Error al revisar' };
+function bloqueEstadoWa() {
+  const nums = AUTO_WA_ESTADO.numeros || [];
+  const alertas = AUTO_WA_ESTADO.alertas || [];
+  const filas = nums.length ? nums.map(n => `<tr><td>${esc(n.slug)}</td><td>${esc(n.numero_id)}</td>
+      <td>${esc(ETIQUETA_ESTADO[n.estado] || n.estado)}</td><td>${esc(n.verificado || '—')}</td><td>${esc(n.calidad || '—')}</td><td>${esc(n.revisado || '—')}</td></tr>`).join('')
+    : '<tr><td colspan="6" class="etiqueta-sec">Ningún cliente tiene número de API todavía.</td></tr>';
+  const lista = alertas.length ? alertas.map(a => `<li><b>${esc(a.creado)}</b> · ${esc(a.slug)} · ${esc(a.texto)}</li>`).join('')
+    : '<li class="etiqueta-sec">Sin alertas.</li>';
+  return `<div class="titulo-seccion">Números de la API: estado y alertas</div>
+    <p class="etiqueta-sec">Oficina revisa cada hora el estado de cada número con Meta y avisa cuando algo cambia.</p>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-revisar">Revisar ahora</button></div>
+    <table style="width:100%;font-size:13px"><tr><th align="left">Cliente</th><th align="left">Número</th><th align="left">Estado</th><th align="left">Verificación</th><th align="left">Calidad</th><th align="left">Última revisión</th></tr>${filas}</table>
+    <ul style="font-size:13px;margin-top:10px">${lista}</ul>`;
 }
 // Conexión con Meta: el receptor de WhatsApp necesita el token de verificación y la clave secreta de la app.
 function bloqueMeta() {
@@ -3999,7 +4022,8 @@ function bloqueMeta() {
     <div class="form-fila">
       <label>Clave secreta de la app de Meta<input id="waSecreto" type="password" autocomplete="new-password" placeholder="${AUTO_WA.app_secret_configurada ? 'Ya está guardada. Escribe una nueva solo si la cambias' : '32 caracteres de Meta'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
     </div>
-    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>`;
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>
+    ${bloqueEstadoWa()}`;
 }
 async function verTokenWaUI() {
   const r = await api('/api/central/whatsapp/config');
@@ -4354,6 +4378,7 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-auto-clave-n8n') return verClaveN8nUI();
   if (a === 'emp-wa-token') return verTokenWaUI();
   if (a === 'emp-wa-guardar') return guardarSecretoWaUI();
+  if (a === 'emp-wa-revisar') return revisarWaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 
