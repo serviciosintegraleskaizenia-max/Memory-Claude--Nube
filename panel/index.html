@@ -3982,11 +3982,37 @@ function resumenRedes(c) {
     `<span class="chip ${crmOn ? 'chip-verde' : 'chip-gris'}">CRM ${crmOn ? 'activo' : 'apagado'}</span>`;
 }
 let AUTO_PROMPTS = [];
+let AUTO_WA = {};
 async function cargarAutomatizacion() {
-  const [r, p] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts')]);
+  const [r, p, w] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config')]);
   AUTO_CLIENTES = r.ok ? r.data.clientes : [];
   AUTO_PROMPTS = p.ok ? p.data.prompts : [];
+  AUTO_WA = w.ok ? w.data : {};
   pintarEmpresas();
+}
+// Conexión con Meta: el receptor de WhatsApp necesita el token de verificación y la clave secreta de la app.
+function bloqueMeta() {
+  return `<div class="titulo-seccion">Conexión con WhatsApp (Meta)</div>
+    <p class="etiqueta-sec">Meta envía los mensajes a la ruta <b>/api/whatsapp/webhook</b> de Oficina. Meta exige una dirección pública con https.</p>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-token">Ver token de verificación</button></div>
+    <pre id="waToken" style="display:none;white-space:pre-wrap;background:#0b1424;color:#e7edf6;padding:10px;border-radius:8px"></pre>
+    <div class="form-fila">
+      <label>Clave secreta de la app de Meta<input id="waSecreto" type="password" autocomplete="new-password" placeholder="${AUTO_WA.app_secret_configurada ? 'Ya está guardada. Escribe una nueva solo si la cambias' : '32 caracteres de Meta'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
+    </div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>`;
+}
+async function verTokenWaUI() {
+  const r = await api('/api/central/whatsapp/config');
+  const caja = document.getElementById('waToken');
+  caja.textContent = r.ok ? 'Token de verificación (pégalo en Meta junto con la ruta):\n' + r.data.verify_token : (r.data.error || 'No se pudo leer el token.');
+  caja.style.display = 'block';
+}
+async function guardarSecretoWaUI() {
+  const r = await api('/api/central/whatsapp/config/guardar', { app_secret: document.getElementById('waSecreto').value.trim() });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar la clave.', false);
+  document.getElementById('waSecreto').value = '';
+  await cargarAutomatizacion();
+  mostrarAviso('Clave de la app guardada (cifrada).', true);
 }
 function bloquePrompts() {
   if (!AUTO_PROMPTS.length) return '';
@@ -4060,6 +4086,7 @@ function formAutomatizacion() {
   <div class="emp-form">
     <div class="titulo-seccion">Clientes de automatización</div>
     ${lista}
+    ${bloqueMeta()}
     <div class="titulo-seccion">${e.id ? 'Editar: ' + esc(e.nombre) : 'Nuevo cliente de automatización'}</div>
     <p class="etiqueta-sec">Este perfil no crea correos ni reservas: sirve para automatizar redes y el CRM. Aquí no se piden claves ni contraseñas.</p>
     <input type="hidden" id="aId" value="${e.id || ''}">
@@ -4325,6 +4352,8 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-auto-guardar') return guardarAutomatizacionUI(b);
   if (a === 'emp-auto-vista') return verPromptUI();
   if (a === 'emp-auto-clave-n8n') return verClaveN8nUI();
+  if (a === 'emp-wa-token') return verTokenWaUI();
+  if (a === 'emp-wa-guardar') return guardarSecretoWaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 

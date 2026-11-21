@@ -86,6 +86,14 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_config (clave TEXT PRIMARY KEY, valor TEXT NOT NULL)`);
     await client.query("INSERT INTO automatizacion_config (clave, valor) VALUES ('clave_n8n', $1) ON CONFLICT (clave) DO NOTHING",
       [crypto.randomBytes(24).toString('hex')]);
+    // Token que Meta usa para verificar el receptor de WhatsApp (se muestra en Oficina).
+    await client.query("INSERT INTO automatizacion_config (clave, valor) VALUES ('verify_token_whatsapp', $1) ON CONFLICT (clave) DO NOTHING",
+      [crypto.randomBytes(18).toString('hex')]);
+    // Mensajes de WhatsApp que llegan desde Meta, esperando que el CRM del cliente los tome.
+    await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_entrantes (
+      id SERIAL PRIMARY KEY, meta_id TEXT UNIQUE NOT NULL, slug TEXT NOT NULL DEFAULT '', numero_id TEXT NOT NULL DEFAULT '',
+      de TEXT NOT NULL DEFAULT '', nombre TEXT NOT NULL DEFAULT '', tipo TEXT NOT NULL DEFAULT '', texto TEXT NOT NULL DEFAULT '',
+      recibido TIMESTAMPTZ NOT NULL DEFAULT NOW(), procesado BOOLEAN NOT NULL DEFAULT FALSE)`);
     await client.query(`CREATE TABLE IF NOT EXISTS automatizacion_prompts (
       clave TEXT PRIMARY KEY, nombre TEXT NOT NULL, texto TEXT NOT NULL, orden INTEGER NOT NULL DEFAULT 0,
       actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -365,6 +373,81 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       },
       crm: { activo: b((p.crm || {}).activo) }
     };
+  }
+
+  // ---------- WhatsApp (Meta): receptor de mensajes entrantes ----------
+  async function leerConfigAuto(clave) {
+    return (await client.query('SELECT valor FROM automatizacion_config WHERE clave = $1', [clave])).rows[0]?.valor || '';
+  }
+  function leerCrudo(req) {
+    return new Promise((resolve, reject) => {
+      const partes = []; let total = 0;
+      req.on('data', d => {
+        total += d.length;
+        if (total > 1024 * 1024) { reject(Object.assign(new Error('Cuerpo demasiado grande'), { codigo: 413 })); req.destroy(); return; }
+        partes.push(d);
+      });
+      req.on('end', () => resolve(Buffer.concat(partes)));
+      req.on('error', reject);
+    });
+  }
+  async function clientePorNumero(numeroId) {
+    if (!numeroId) return '';
+    const r = await client.query(`SELECT slug FROM automatizacion_clientes WHERE perfil->'redes'->'whatsapp'->>'numero_id' = $1 LIMIT 1`, [numeroId]);
+    return r.rows[0] ? r.rows[0].slug : '';
+  }
+  // Meta llama a esta ruta: primero verifica el token, luego envía cada mensaje firmado con la clave de la app.
+  async function manejarWhatsapp(req, res, url, { json }) {
+    if (url !== '/api/whatsapp/webhook') return json(res, 404, { error: 'No existe esa ruta.' });
+    const pregunta = new URL(req.url, 'http://x').searchParams;
+    if (req.method === 'GET') {
+      const token = await leerConfigAuto('verify_token_whatsapp');
+      const ok = pregunta.get('hub.mode') === 'subscribe' && Boolean(token) && pregunta.get('hub.verify_token') === token;
+      if (!ok) return json(res, 403, { error: 'Verificación no válida.' });
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      return res.end(pregunta.get('hub.challenge') || '');
+    }
+    if (req.method !== 'POST') return json(res, 405, { error: 'Método no permitido.' });
+    let crudo;
+    try { crudo = await leerCrudo(req); } catch (e) { return json(res, e.codigo || 400, { error: e.message }); }
+    const cifrada = await leerConfigAuto('app_secret_whatsapp_enc');
+    const secreto = descifrarAuto(cifrada);
+    if (!secreto) return json(res, 503, { error: 'Falta la clave de la app de Meta en Oficina.' });
+    const firma = String(req.headers['x-hub-signature-256'] || '');
+    const esperada = 'sha256=' + crypto.createHmac('sha256', secreto).update(crudo).digest('hex');
+    const firmaOk = firma.length === esperada.length && crypto.timingSafeEqual(Buffer.from(firma), Buffer.from(esperada));
+    if (!firmaOk) return json(res, 401, { error: 'Firma no válida.' });
+    let cuerpo;
+    try { cuerpo = JSON.parse(crudo.toString('utf8')); } catch (e) { return json(res, 400, { error: 'Cuerpo no válido.' }); }
+    let guardados = 0;
+    for (const entrada of cuerpo.entry || []) {
+      for (const cambio of entrada.changes || []) {
+        const v = cambio.value || {};
+        const numero = String((v.metadata || {}).phone_number_id || '');
+        const nombres = Object.fromEntries((v.contacts || []).map(c => [c.wa_id, ((c.profile || {}).name) || '']));
+        const slug = await clientePorNumero(numero);
+        for (const m of v.messages || []) {
+          const r = await client.query(`INSERT INTO whatsapp_entrantes (meta_id, slug, numero_id, de, nombre, tipo, texto)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (meta_id) DO NOTHING`,
+            [texto(m.id, 120), slug, numero, texto(m.from, 40), texto(nombres[m.from], 120), texto(m.type, 20), texto((m.text || {}).body, 2000)]);
+          guardados += r.rowCount;
+        }
+      }
+    }
+    return json(res, 200, { ok: true, guardados });
+  }
+
+  // Configuración de la conexión con Meta (solo Programador, desde Oficina).
+  async function configWhatsapp() {
+    return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))) };
+  }
+  async function guardarSecretoWhatsapp(u, f) {
+    const secreto = String(f.app_secret || '').trim();
+    if (!/^[a-f0-9]{16,64}$/i.test(secreto)) throw Object.assign(new Error('La clave de la app debe ser el código de 32 caracteres de Meta.'), { codigo: 400 });
+    await client.query(`INSERT INTO automatizacion_config (clave, valor) VALUES ('app_secret_whatsapp_enc', $1)
+      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [cifrarAuto(secreto)]);
+    await registrar(u, 'configurar_whatsapp_meta', 'whatsapp', 'app', '', '', 'clave de la app guardada (cifrada)');
+    return { ok: true };
   }
 
   // Lo usa el flujo de n8n de cada cliente: entrega el prompt armado y la clave de OpenRouter del cliente.
@@ -741,6 +824,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         });
         return json(res, 200, { clientes: sinClave });
       }
+      if (req.method === 'GET' && url === '/api/central/whatsapp/config') return json(res, 200, await configWhatsapp());
+      if (req.method === 'POST' && url === '/api/central/whatsapp/config/guardar') return json(res, 200, await guardarSecretoWhatsapp(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
         return json(res, 200, { clave: await claveN8n() });
       }
@@ -995,5 +1080,5 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, manejarN8n, ayudantes };
+  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes };
 };
