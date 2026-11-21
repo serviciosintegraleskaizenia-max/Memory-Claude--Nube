@@ -3984,8 +3984,10 @@ function resumenRedes(c) {
 let AUTO_PROMPTS = [];
 let AUTO_WA = {};
 let AUTO_WA_ESTADO = { numeros: [], alertas: [] };
+let AUTO_PLANTILLAS = [];
 async function cargarAutomatizacion() {
-  const [r, p, w, e] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config'), api('/api/central/whatsapp/estado')]);
+  const [r, p, w, e, pl] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config'), api('/api/central/whatsapp/estado'), api('/api/central/whatsapp/plantillas')]);
+  AUTO_PLANTILLAS = pl.ok ? pl.data.plantillas : [];
   AUTO_CLIENTES = r.ok ? r.data.clientes : [];
   AUTO_PROMPTS = p.ok ? p.data.prompts : [];
   AUTO_WA = w.ok ? w.data : {};
@@ -3999,6 +4001,50 @@ async function revisarWaUI() {
   mostrarAviso('Revisión lista: ' + r.data.revisados + ' número(s) revisados.', true);
 }
 const ETIQUETA_ESTADO = { conectado: 'Conectado', sin_conectar: 'Sin conectar', error: 'Error al revisar' };
+const ETIQUETA_PLANTILLA = { borrador: 'Borrador', aprobada_por_ti: 'Buena (tú)', rechazada_por_ti: 'Mala (tú)' };
+function bloquePlantillasWa() {
+  const filas = AUTO_PLANTILLAS.map(pl => `
+    <div style="border:1px solid #2a3b57;border-radius:10px;padding:10px;margin:8px 0">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <b>${esc(pl.nombre)}</b><span class="etiqueta-sec">${esc(pl.categoria)} · ${esc(ETIQUETA_PLANTILLA[pl.estado] || pl.estado)}</span>
+      </div>
+      <textarea id="pl-c-${pl.id}" rows="3" style="width:100%;margin-top:6px">${esc(pl.cuerpo)}</textarea>
+      <ul style="font-size:12.5px;margin:6px 0">${pl.checks.map(c => `<li style="color:${c.ok ? '#7ef0bf' : '#ffb4b4'}">${c.ok ? '✔' : '✖'} ${esc(c.texto)}</li>`).join('')}</ul>
+      ${pl.motivo ? `<p class="etiqueta-sec">Motivo: ${esc(pl.motivo)}</p>` : ''}
+      <div class="pie-acciones" style="margin-top:4px">
+        <button class="btn-sec" data-accion="emp-wa-pl-guardar" data-id="${pl.id}">Guardar texto</button>
+        <button class="btn" data-accion="emp-wa-pl-buena" data-id="${pl.id}">Marcar buena</button>
+        <button class="btn-sec" data-accion="emp-wa-pl-mala" data-id="${pl.id}">Marcar mala</button>
+      </div>
+    </div>`).join('');
+  return `<div class="titulo-seccion">Plantillas de WhatsApp</div>
+    <p class="etiqueta-sec">Las reglas de la lista las escribimos nosotros. Una plantilla solo se marca buena si pasa todas. La decisión final es tuya; el sistema no decide por sí solo.</p>
+    ${filas || '<p class="etiqueta-sec">No hay plantillas.</p>'}
+    <div class="titulo-seccion" style="margin-top:12px">Nueva plantilla</div>
+    <div class="form-fila">
+      <label>Nombre (minúsculas y guion bajo)<input id="plNuevaNombre" maxlength="60" placeholder="seguimiento_1_mes"></label>
+      <label>Categoría<select id="plNuevaCat"><option value="utilidad">Utilidad</option><option value="marketing">Marketing</option></select></label>
+    </div>
+    <label>Texto (usa {{1}}, {{2}}… para las variables)<textarea id="plNuevaCuerpo" rows="3" style="width:100%"></textarea></label>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-pl-nueva">Crear plantilla</button></div>`;
+}
+async function guardarPlantillaWaUI(id) {
+  const r = await api('/api/central/whatsapp/plantillas/guardar', { id: Number(id), nombre: AUTO_PLANTILLAS.find(x => String(x.id) === String(id)).nombre, categoria: AUTO_PLANTILLAS.find(x => String(x.id) === String(id)).categoria, cuerpo: document.getElementById('pl-c-' + id).value });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar.', false);
+  await cargarAutomatizacion(); mostrarAviso('Texto guardado. Si cambió, vuelve a borrador y hay que volver a decidir.', true);
+}
+async function decidirPlantillaWaUI(id, decision) {
+  let motivo = '';
+  if (decision === 'mala') { motivo = prompt('¿Por qué no sirve esta plantilla? (queda guardado para no repetir el error)') || ''; if (!motivo.trim()) return; }
+  const r = await api('/api/central/whatsapp/plantillas/marcar', { id: Number(id), decision, motivo });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo marcar.', false);
+  await cargarAutomatizacion(); mostrarAviso(decision === 'buena' ? 'Plantilla marcada como buena.' : 'Plantilla marcada como mala.', true);
+}
+async function crearPlantillaWaUI() {
+  const r = await api('/api/central/whatsapp/plantillas/guardar', { nombre: document.getElementById('plNuevaNombre').value, categoria: document.getElementById('plNuevaCat').value, cuerpo: document.getElementById('plNuevaCuerpo').value });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo crear.', false);
+  await cargarAutomatizacion(); mostrarAviso('Plantilla creada como borrador.', true);
+}
 function bloqueEstadoWa() {
   const nums = AUTO_WA_ESTADO.numeros || [];
   const alertas = AUTO_WA_ESTADO.alertas || [];
@@ -4023,7 +4069,8 @@ function bloqueMeta() {
       <label>Clave secreta de la app de Meta<input id="waSecreto" type="password" autocomplete="new-password" placeholder="${AUTO_WA.app_secret_configurada ? 'Ya está guardada. Escribe una nueva solo si la cambias' : '32 caracteres de Meta'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
     </div>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>
-    ${bloqueEstadoWa()}`;
+    ${bloqueEstadoWa()}
+    ${bloquePlantillasWa()}`;
 }
 async function verTokenWaUI() {
   const r = await api('/api/central/whatsapp/config');
@@ -4379,6 +4426,10 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-wa-token') return verTokenWaUI();
   if (a === 'emp-wa-guardar') return guardarSecretoWaUI();
   if (a === 'emp-wa-revisar') return revisarWaUI();
+  if (a === 'emp-wa-pl-guardar') return guardarPlantillaWaUI(b.dataset.id);
+  if (a === 'emp-wa-pl-buena') return decidirPlantillaWaUI(b.dataset.id, 'buena');
+  if (a === 'emp-wa-pl-mala') return decidirPlantillaWaUI(b.dataset.id, 'mala');
+  if (a === 'emp-wa-pl-nueva') return crearPlantillaWaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 

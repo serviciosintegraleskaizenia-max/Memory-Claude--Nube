@@ -67,6 +67,78 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   const CARPETA_EMPRESAS = path.resolve(aj.carpeta);
   const fallos = new Map();
 
+  // Plantillas base para empezar. Son borradores: nadie las usa hasta que una persona las marque como buenas.
+  const PLANTILLAS_BASE = [
+    { nombre: 'seguimiento_48h', categoria: 'marketing', cuerpo: 'Hola {{1}}, ¿pudiste revisar la información que te enviamos? Si tienes alguna duda, con gusto te ayudamos.' },
+    { nombre: 'seguimiento_2_semanas', categoria: 'marketing', cuerpo: 'Hola {{1}}, hace unas semanas conversamos sobre {{2}}. ¿Sigues interesado? Respóndenos y te damos los detalles.' },
+    { nombre: 'recordatorio_pago', categoria: 'utilidad', cuerpo: 'Hola {{1}}, te recordamos que tu pago de {{2}} vence el {{3}}. Si ya lo hiciste, ignora este mensaje.' },
+    { nombre: 'confirmacion_reserva', categoria: 'utilidad', cuerpo: 'Hola {{1}}, tu reserva para {{2}} el {{3}} está confirmada. Te escribiremos si hay algún cambio.' }
+  ];
+  // Reglas fijas de revisión. Las escribimos nosotros, a partir de las políticas de Meta; hay que actualizarlas cuando Meta cambie.
+  const PALABRAS_RIESGO = ['gratis', 'urgente', 'última oportunidad', 'ganador', 'garantizado', 'haz clic', 'click aquí'];
+  function revisarPlantilla(p) {
+    const cuerpo = String(p.cuerpo || '');
+    const variables = [...cuerpo.matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
+    const consecutivas = variables.every((v, i) => v === i + 1);
+    const bajo = cuerpo.toLowerCase();
+    const riesgos = PALABRAS_RIESGO.filter(w => bajo.includes(w));
+    const cadena = (cuerpo.match(/https?:\/\/\S+/g) || []).some(u => /bit\.ly|tinyurl|goo\.gl/.test(u));
+    const empiezaOTermina = /^\s*\{\{\d+\}\}/.test(cuerpo) || /\{\{\d+\}\}\s*$/.test(cuerpo);
+    return [
+      { ok: /^[a-z0-9_]{3,512}$/.test(p.nombre || ''), texto: 'Nombre en minúsculas, números y guion bajo' },
+      { ok: cuerpo.length > 0 && cuerpo.length <= 1024, texto: 'Texto de 1 a 1024 caracteres' },
+      { ok: consecutivas, texto: 'Variables numeradas en orden ({{1}}, {{2}}…)' },
+      { ok: !empiezaOTermina, texto: 'No empieza ni termina con una variable' },
+      { ok: riesgos.length === 0, texto: riesgos.length ? 'Tiene palabras de riesgo: ' + riesgos.join(', ') : 'Sin palabras de riesgo' },
+      { ok: !cadena, texto: 'Sin enlaces acortados' },
+      { ok: ['utilidad', 'marketing'].includes(p.categoria), texto: 'Categoría utilidad o marketing (confirmar con Meta)' }
+    ];
+  }
+  async function plantillasWa() {
+    const filas = (await client.query('SELECT id, nombre, categoria, cuerpo, estado, motivo FROM plantillas_wa ORDER BY id')).rows;
+    return filas.map(p => ({ ...p, checks: revisarPlantilla(p) }));
+  }
+  async function guardarPlantillaWa(u, f) {
+    const id = Number(f.id) || 0;
+    const nombre = texto(f.nombre, 512).toLowerCase();
+    const categoria = texto(f.categoria, 20) || 'utilidad';
+    const cuerpo = String(f.cuerpo ?? '').trim().slice(0, 1200);
+    if (id) {
+      const previo = (await client.query('SELECT nombre, categoria, cuerpo FROM plantillas_wa WHERE id = $1', [id])).rows[0];
+      if (!previo) throw Object.assign(new Error('Esa plantilla ya no existe.'), { codigo: 404 });
+      const cambio = previo.nombre !== nombre || previo.categoria !== categoria || previo.cuerpo !== cuerpo;
+      await client.query(`UPDATE plantillas_wa SET nombre = $2, categoria = $3, cuerpo = $4,
+        estado = CASE WHEN $5 THEN 'borrador' ELSE estado END, motivo = CASE WHEN $5 THEN '' ELSE motivo END, actualizada = NOW() WHERE id = $1`,
+        [id, nombre, categoria, cuerpo, cambio]);
+      await registrar(u, 'editar_plantilla_wa', 'plantilla', nombre, '', '', cambio ? 'cambió: vuelve a borrador' : 'sin cambios');
+      return { id };
+    }
+    const r = await client.query(`INSERT INTO plantillas_wa (nombre, categoria, cuerpo) VALUES ($1, $2, $3) RETURNING id`, [nombre, categoria, cuerpo]).catch(e => {
+      if (e.code === '23505') throw Object.assign(new Error('Ya existe una plantilla con ese nombre.'), { codigo: 400 });
+      throw e;
+    });
+    await registrar(u, 'crear_plantilla_wa', 'plantilla', nombre, '', '', '');
+    return { id: r.rows[0].id };
+  }
+  // Una persona decide: "buena" solo si pasa todas las reglas; "mala" pide el motivo.
+  async function marcarPlantillaWa(u, f) {
+    const id = Number(f.id) || 0;
+    const decision = String(f.decision || '');
+    const p = (await client.query('SELECT id, nombre, categoria, cuerpo FROM plantillas_wa WHERE id = $1', [id])).rows[0];
+    if (!p) throw Object.assign(new Error('Esa plantilla ya no existe.'), { codigo: 404 });
+    if (decision === 'buena') {
+      const fallos = revisarPlantilla(p).filter(c => !c.ok);
+      if (fallos.length) throw Object.assign(new Error('No se puede marcar como buena: ' + fallos.map(c => c.texto).join('; ') + '.'), { codigo: 400 });
+      await client.query(`UPDATE plantillas_wa SET estado = 'aprobada_por_ti', motivo = '', actualizada = NOW() WHERE id = $1`, [id]);
+    } else if (decision === 'mala') {
+      const motivo = texto(f.motivo, 300);
+      if (!motivo) throw Object.assign(new Error('Escribe por qué no sirve, para no repetir el error.'), { codigo: 400 });
+      await client.query(`UPDATE plantillas_wa SET estado = 'rechazada_por_ti', motivo = $2, actualizada = NOW() WHERE id = $1`, [id, motivo]);
+    } else throw Object.assign(new Error('Decisión no válida.'), { codigo: 400 });
+    await registrar(u, 'decidir_plantilla_wa', 'plantilla', p.nombre, '', '', decision);
+    return { ok: true };
+  }
+
   // Prompts maestro de la IA de automatización. {negocio} y {tono} se cambian por los datos de cada cliente.
   const PROMPTS_INICIALES = [
     { clave: 'maestro', orden: 0, nombre: 'Reglas generales (se aplican a todos los clientes)',
@@ -89,6 +161,16 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     // Token que Meta usa para verificar el receptor de WhatsApp (se muestra en Oficina).
     await client.query("INSERT INTO automatizacion_config (clave, valor) VALUES ('verify_token_whatsapp', $1) ON CONFLICT (clave) DO NOTHING",
       [crypto.randomBytes(18).toString('hex')]);
+    // Biblioteca de plantillas de WhatsApp. Las decide una persona; las reglas de revisión son fijas y las escribimos nosotros.
+    await client.query(`CREATE TABLE IF NOT EXISTS plantillas_wa (
+      id SERIAL PRIMARY KEY, nombre TEXT UNIQUE NOT NULL, categoria TEXT NOT NULL DEFAULT 'utilidad',
+      cuerpo TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'borrador', motivo TEXT NOT NULL DEFAULT '',
+      actualizada TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    if (!(await client.query('SELECT 1 FROM plantillas_wa LIMIT 1')).rowCount) {
+      for (const pl of PLANTILLAS_BASE) {
+        await client.query('INSERT INTO plantillas_wa (nombre, categoria, cuerpo) VALUES ($1, $2, $3) ON CONFLICT (nombre) DO NOTHING', [pl.nombre, pl.categoria, pl.cuerpo]);
+      }
+    }
     // Estado de cada número de la API y alertas (revisión programada).
     await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_estado (
       numero_id TEXT PRIMARY KEY, slug TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT '',
@@ -895,6 +977,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       }
       if (req.method === 'GET' && url === '/api/central/whatsapp/config') return json(res, 200, await configWhatsapp());
       if (req.method === 'GET' && url === '/api/central/whatsapp/estado') return json(res, 200, await estadoWhatsapp());
+      if (req.method === 'GET' && url === '/api/central/whatsapp/plantillas') return json(res, 200, { plantillas: await plantillasWa() });
+      if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/guardar') return json(res, 200, await guardarPlantillaWa(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/marcar') return json(res, 200, await marcarPlantillaWa(u, await leerCuerpo(req)));
       if (req.method === 'POST' && url === '/api/central/whatsapp/revisar') return json(res, 200, await revisarWhatsapp());
       if (req.method === 'POST' && url === '/api/central/whatsapp/config/guardar') return json(res, 200, await guardarSecretoWhatsapp(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
@@ -1151,5 +1236,5 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe } };
+  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe, revisarPlantilla } };
 };
