@@ -68,6 +68,9 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     }
     await client.query(`CREATE TABLE IF NOT EXISTS crm_config (clave TEXT PRIMARY KEY, valor JSONB NOT NULL DEFAULT '{}'::jsonb)`);
     setInterval(() => procesarSeguimientos().catch(e => console.log('CRM seguimientos:', e.message)), 60e3).unref();
+    // Sincronización automática con Chatwoot cada 2 minutos (solo las 25 conversaciones más recientes).
+    // Así el CRM se mantiene al día sin depender de n8n. Si Chatwoot no está configurado, no hace nada.
+    setInterval(() => sincronizarAutomatica().catch(e => console.log('CRM sincronía:', e.message)), 120e3).unref();
   }
 
   // Quién puede entrar: el Programador siempre; los demás, con el servicio contratado y el permiso.
@@ -346,7 +349,17 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
 
   // ---------- Chatwoot ----------
   const CANAL_CHATWOOT = { 'Channel::Whatsapp': 'whatsapp', 'Channel::FacebookPage': 'messenger', 'Channel::Instagram': 'instagram', 'Channel::Tiktok': 'tiktok', 'Channel::WebWidget': 'web' };
-  async function sincronizar(u) {
+  let sincronizando = false;
+  async function sincronizarAutomatica() {
+    if (sincronizando || !chatwoot) return;
+    const cw = await chatwoot().catch(() => null);
+    if (!cw || !cw.url || !cw.cuenta || !cw.token) return;
+    sincronizando = true;
+    try { await sincronizar({ usuario: 'sistema', nombre: 'Sistema' }, { automatica: true }); }
+    finally { sincronizando = false; }
+  }
+
+  async function sincronizar(u, { automatica = false } = {}) {
     const cw = chatwoot ? await chatwoot() : null;
     if (!cw || !cw.url || !cw.cuenta || !cw.token) throw error('Chatwoot no está configurado en esta empresa. El Programador lo configura en Operaciones (WhatsApp).');
     const base = String(cw.url).replace(/\/$/, '') + '/api/v1/accounts/' + encodeURIComponent(cw.cuenta);
@@ -361,7 +374,7 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
       return r.json();
     };
     let contactosNuevos = 0, mensajesNuevos = 0, conversaciones = 0, etiquetas = 0;
-    for (let pagina = 1; pagina <= PAGINAS_MAX; pagina++) {
+    for (let pagina = 1; pagina <= (automatica ? 1 : PAGINAS_MAX); pagina++) {
       const lista = (await pedir(`/conversations?status=all&page=${pagina}`))?.data?.payload || [];
       for (const conv of lista) {
         const sender = conv.meta && conv.meta.sender;
@@ -407,7 +420,7 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const resumen = { contactos_nuevos: contactosNuevos, mensajes_nuevos: mensajesNuevos, conversaciones, etiquetas_ia: etiquetas, en: new Date().toISOString() };
     await client.query(`INSERT INTO crm_config (clave, valor) VALUES ('sincronizacion', $1)
       ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [JSON.stringify(resumen)]);
-    await registrar(u, 'crm_contactos', 'crm', 'Chatwoot', '', '', 'sincronizado');
+    if (!automatica) await registrar(u, 'crm_contactos', 'crm', 'Chatwoot', '', '', 'sincronizado');
     return resumen;
   }
 
