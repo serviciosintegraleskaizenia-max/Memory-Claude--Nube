@@ -4045,6 +4045,38 @@ async function crearPlantillaWaUI() {
   if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo crear.', false);
   await cargarAutomatizacion(); mostrarAviso('Plantilla creada como borrador.', true);
 }
+function bloqueEnvioWa() {
+  return `<div class="titulo-seccion">Enviar una plantilla (prueba)</div>
+    <p class="etiqueta-sec">Primero guarda el token de acceso del número. Después puedes enviar una plantilla que Meta ya haya aprobado.</p>
+    <div class="form-fila">
+      <label>ID del número de teléfono<input id="enNumero" maxlength="25" placeholder="1376670675538773"></label>
+      <label>Token de acceso del número<input id="enToken" type="password" autocomplete="new-password" placeholder="Pégalo aquí. No se vuelve a mostrar"></label>
+    </div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-token-guardar">Guardar token</button></div>
+    <div class="form-fila">
+      <label>Destinatario (con código de país)<input id="enDestino" maxlength="20" placeholder="51979000000"></label>
+      <label>Nombre de la plantilla<input id="enPlantilla" maxlength="60" value="confirmacion_pedido"></label>
+    </div>
+    <div class="pie-acciones"><button class="btn" data-accion="emp-wa-enviar">Enviar plantilla</button></div>`;
+}
+async function guardarTokenWaUI() {
+  const numero = document.getElementById('enNumero').value.trim();
+  const token = document.getElementById('enToken').value.trim();
+  const r = await api('/api/central/whatsapp/token/guardar', { numero_id: numero, token: token });
+  document.getElementById('enToken').value = '';
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar el token.', false);
+  mostrarAviso('Token guardado (cifrado).', true);
+}
+async function enviarPlantillaWaUI() {
+  const r = await api('/api/central/whatsapp/enviar', {
+    numero_id: document.getElementById('enNumero').value.trim(),
+    destino: document.getElementById('enDestino').value.trim(),
+    plantilla: document.getElementById('enPlantilla').value.trim(),
+    idioma: 'es_PE'
+  });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo enviar la plantilla.', false);
+  mostrarAviso('Plantilla enviada. Meta respondió: ' + (r.data.respuesta || 'ok'), true);
+}
 function bloqueEstadoWa() {
   const nums = AUTO_WA_ESTADO.numeros || [];
   const alertas = AUTO_WA_ESTADO.alertas || [];
@@ -4070,6 +4102,7 @@ function bloqueMeta() {
     </div>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>
     ${bloqueEstadoWa()}
+    ${bloqueEnvioWa()}
     ${bloquePlantillasWa()}`;
 }
 async function verTokenWaUI() {
@@ -4430,6 +4463,8 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-wa-pl-buena') return decidirPlantillaWaUI(b.dataset.id, 'buena');
   if (a === 'emp-wa-pl-mala') return decidirPlantillaWaUI(b.dataset.id, 'mala');
   if (a === 'emp-wa-pl-nueva') return crearPlantillaWaUI();
+  if (a === 'emp-wa-token-guardar') return guardarTokenWaUI();
+  if (a === 'emp-wa-enviar') return enviarPlantillaWaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
 

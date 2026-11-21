@@ -171,6 +171,11 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         await client.query('INSERT INTO plantillas_wa (nombre, categoria, cuerpo) VALUES ($1, $2, $3) ON CONFLICT (nombre) DO NOTHING', [pl.nombre, pl.categoria, pl.cuerpo]);
       }
     }
+    // Registro de cada envío de plantilla que sale desde Oficina.
+    await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_envios (
+      id SERIAL PRIMARY KEY, numero_id TEXT NOT NULL, destino TEXT NOT NULL, plantilla TEXT NOT NULL,
+      idioma TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL, respuesta TEXT NOT NULL DEFAULT '',
+      creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     // Estado de cada número de la API y alertas (revisión programada).
     await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_estado (
       numero_id TEXT PRIMARY KEY, slug TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT '',
@@ -588,6 +593,50 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     return { numeros, alertas };
   }
 
+  // ---------- Envío de plantillas desde Oficina ----------
+  // Guarda el token de acceso de un número (cifrado). Nunca vuelve a mostrarse.
+  async function guardarTokenNumero(u, f) {
+    const numero = String(f.numero_id || '').trim();
+    const token = String(f.token || '').trim();
+    if (!/^\d{6,25}$/.test(numero)) throw Object.assign(new Error('El ID del número debe ser solo números.'), { codigo: 400 });
+    if (token.length < 20 || /\s/.test(token)) throw Object.assign(new Error('El token de acceso no parece válido.'), { codigo: 400 });
+    await client.query(`INSERT INTO automatizacion_config (clave, valor) VALUES ($1, $2)
+      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, ['token_wa_' + numero, cifrarAuto(token)]);
+    await registrar(u, 'guardar_token_wa', 'whatsapp', numero, '', '', 'token guardado (cifrado)');
+    return { ok: true };
+  }
+  // Envía una plantilla aprobada a un número de WhatsApp, usando la API de Meta.
+  async function enviarPlantillaWa(u, f) {
+    const numero = String(f.numero_id || '').trim();
+    const destino = String(f.destino || '').replace(/\D/g, '');
+    const plantilla = String(f.plantilla || '').trim();
+    const idioma = String(f.idioma || 'es_PE').trim();
+    if (!/^\d{6,25}$/.test(numero)) throw Object.assign(new Error('Escribe el ID del número de teléfono.'), { codigo: 400 });
+    if (!/^\d{8,15}$/.test(destino)) throw Object.assign(new Error('El destinatario debe llevar código de país, solo números (ej.: 51979000000).'), { codigo: 400 });
+    if (!/^[a-z0-9_]{3,512}$/.test(plantilla)) throw Object.assign(new Error('Nombre de plantilla no válido.'), { codigo: 400 });
+    const token = await tokenNumero(numero);
+    if (!token) throw Object.assign(new Error('Ese número todavía no tiene token de acceso. Guárdalo primero.'), { codigo: 400 });
+    let respuesta, ok = false, texto_r = '';
+    try {
+      const r = await fetch(`https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(numero)}/messages`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: destino, type: 'template', template: { name: plantilla, language: { code: idioma } } }),
+        signal: AbortSignal.timeout(20000)
+      });
+      respuesta = await r.json().catch(() => ({}));
+      ok = r.ok;
+      texto_r = ok ? ('id: ' + ((respuesta.messages || [])[0] || {}).id) : ((respuesta.error && respuesta.error.message) || ('Meta respondió ' + r.status));
+    } catch (e) {
+      texto_r = 'No hay conexión con Meta: ' + texto(e.message, 150);
+    }
+    await client.query('INSERT INTO whatsapp_envios (numero_id, destino, plantilla, idioma, estado, respuesta) VALUES ($1, $2, $3, $4, $5, $6)',
+      [numero, destino, plantilla, idioma, ok ? 'enviado' : 'error', texto(texto_r, 400)]);
+    await registrar(u, 'enviar_plantilla_wa', 'whatsapp', plantilla, '', '', ok ? 'enviada' : 'error');
+    if (!ok) throw Object.assign(new Error('Meta no envió el mensaje: ' + texto_r), { codigo: 502 });
+    return { ok: true, respuesta: texto_r };
+  }
+
   // Configuración de la conexión con Meta (solo Programador, desde Oficina).
   async function configWhatsapp() {
     return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))) };
@@ -977,6 +1026,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       }
       if (req.method === 'GET' && url === '/api/central/whatsapp/config') return json(res, 200, await configWhatsapp());
       if (req.method === 'GET' && url === '/api/central/whatsapp/estado') return json(res, 200, await estadoWhatsapp());
+      if (req.method === 'POST' && url === '/api/central/whatsapp/token/guardar') return json(res, 200, await guardarTokenNumero(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/enviar') return json(res, 200, await enviarPlantillaWa(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/whatsapp/plantillas') return json(res, 200, { plantillas: await plantillasWa() });
       if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/guardar') return json(res, 200, await guardarPlantillaWa(u, await leerCuerpo(req)));
       if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/marcar') return json(res, 200, await marcarPlantillaWa(u, await leerCuerpo(req)));
