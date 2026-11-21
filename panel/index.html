@@ -4056,6 +4056,7 @@ function bloqueEnvioWa() {
     <div class="form-fila">
       <label>Destinatario (con código de país)<input id="enDestino" maxlength="20" placeholder="51979000000"></label>
       <label>Nombre de la plantilla<input id="enPlantilla" maxlength="60" value="confirmacion_pedido"></label>
+      <label>Idioma de la plantilla<input id="enIdioma" maxlength="10" value="es_PE" placeholder="es_PE o en_US"></label>
     </div>
     <div class="pie-acciones"><button class="btn" data-accion="emp-wa-enviar">Enviar plantilla</button></div>`;
 }
@@ -4072,7 +4073,7 @@ async function enviarPlantillaWaUI() {
     numero_id: document.getElementById('enNumero').value.trim(),
     destino: document.getElementById('enDestino').value.trim(),
     plantilla: document.getElementById('enPlantilla').value.trim(),
-    idioma: 'es_PE'
+    idioma: document.getElementById('enIdioma').value.trim() || 'es_PE'
   });
   if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo enviar la plantilla.', false);
   mostrarAviso('Plantilla enviada. Meta respondió: ' + (r.data.respuesta || 'ok'), true);
