@@ -274,6 +274,52 @@
   .tema-switch.on .ico-luna { display: block; }
   aside .pie button.tema-switch { all:unset; position:relative; display:block; flex:none; width:58px; height:28px; border-radius:999px; background:rgba(15,23,42,.55); border:1px solid rgba(255,255,255,.3); cursor:pointer; }
   aside .pie button.tema-switch:hover { background:rgba(15,23,42,.55); box-shadow:0 0 0 3px rgba(255,255,255,.18); }
+  #barraCarga { position:fixed; top:0; left:0; right:0; height:3px; z-index:999; overflow:hidden; display:none; }
+  #barraCarga.activa { display:block; }
+  #barraCarga::after { content:''; position:absolute; top:0; bottom:0; width:40%; background:#008069; animation:barraCarga 1s linear infinite; }
+  @keyframes barraCarga { from { left:-40%; } to { left:100%; } }
+  .wa-chat { display:grid; grid-template-columns:330px minmax(0,1fr); height:calc(100vh - 170px); min-height:460px; border-radius:14px; overflow:hidden; background:#f0f2f5; color:#111b21; box-shadow:0 1px 3px #0f172a22; }
+  .wa-lista { background:#fff; border-right:1px solid #e9edef; overflow-y:auto; }
+  .wa-negocio-cab { all:unset; box-sizing:border-box; width:100%; display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; border-bottom:1px solid #f0f2f5; color:#111b21; }
+  .wa-negocio-cab:hover, .wa-negocio.abierto > .wa-negocio-cab { background:#f5f6f6; }
+  .wa-av { width:46px; height:46px; border-radius:50%; color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; font-size:17px; }
+  .wa-quien { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .wa-quien b { font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .wa-quien small { font-size:13px; color:#667781; display:flex; align-items:center; gap:5px; }
+  .wa-badge { background:#25d366; color:#fff; border-radius:999px; font-size:12px; font-weight:700; padding:2px 8px; }
+  .wa-flecha { color:#667781; font-size:14px; }
+  .wa-gente { background:#fff; border-bottom:1px solid #e9edef; }
+  .wa-persona { display:flex; gap:12px; align-items:center; padding:10px 14px 10px 26px; cursor:pointer; border-bottom:1px solid #f5f6f6; }
+  .wa-persona:hover, .wa-persona.activo { background:#f5f6f6; }
+  .wa-persona .wa-av { width:40px; height:40px; font-size:15px; }
+  .wa-vacio { padding:12px 26px; color:#667781; font-size:13.5px; }
+  .wa-conv { display:flex; flex-direction:column; min-height:0; }
+  .wa-cab { background:#008069; color:#fff; padding:12px 16px; font-size:16px; font-weight:600; display:flex; align-items:center; gap:10px; min-height:60px; }
+  .wa-cab small { font-weight:400; font-size:13px; opacity:.9; display:block; }
+  .wa-cab .tema-switch { margin-left:auto; flex:none; }
+  .wa-msgs { flex:1; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:6px; background:#efeae2; }
+  .wa-msgs .burbuja { max-width:72%; border-radius:8px; padding:7px 10px 5px; font-size:15px; line-height:1.4; box-shadow:0 1px 0.5px rgba(11,20,26,.13); background:#fff; color:#111b21; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .wa-msgs .burbuja.mia { align-self:flex-end; background:#d9fdd3; }
+  .wa-msgs .burbuja.otra { align-self:flex-start; }
+  .wa-msgs .burbuja small { display:block; text-align:right; font-size:11px; color:#667781; margin-top:3px; }
+  .wa-pie2 { display:flex; gap:10px; align-items:flex-end; padding:10px 14px; background:#f0f2f5; }
+  .wa-pie2 textarea { flex:1; resize:none; height:46px; border:0; border-radius:22px; padding:12px 16px; font-family:inherit; font-size:15px; background:#fff; color:#111b21; }
+  .wa-pie2 .btn { border-radius:999px; padding:12px 22px; background:#008069; }
+  .wa-chat.oscuro-chat { background:#111b21; color:#e9edef; }
+  .wa-chat.oscuro-chat .wa-lista, .wa-chat.oscuro-chat .wa-gente { background:#111b21; border-color:#2a3942; }
+  .wa-chat.oscuro-chat .wa-negocio-cab { color:#e9edef; border-bottom-color:#222d34; }
+  .wa-chat.oscuro-chat .wa-negocio-cab:hover, .wa-chat.oscuro-chat .wa-negocio.abierto > .wa-negocio-cab, .wa-chat.oscuro-chat .wa-persona:hover, .wa-chat.oscuro-chat .wa-persona.activo { background:#2a3942; }
+  .wa-chat.oscuro-chat .wa-quien small, .wa-chat.oscuro-chat .wa-vacio, .wa-chat.oscuro-chat .wa-flecha { color:#8696a0; }
+  .wa-chat.oscuro-chat .wa-persona { color:#e9edef; border-bottom-color:#222d34; }
+  .wa-chat.oscuro-chat .wa-cab { background:#202c33; }
+  .wa-chat.oscuro-chat .wa-msgs { background:#0b141a; }
+  .wa-chat.oscuro-chat .wa-msgs .burbuja { background:#202c33; color:#e9edef; }
+  .wa-chat.oscuro-chat .wa-msgs .burbuja.mia { background:#005c4b; }
+  .wa-chat.oscuro-chat .wa-pie2 { background:#202c33; }
+  .wa-chat.oscuro-chat .wa-pie2 textarea { background:#2a3942; color:#e9edef; }
+  .wa-chat.oscuro-chat .wa-pie2 .btn { background:#00a884; }
+  @media (max-width:800px) { .wa-chat { grid-template-columns:1fr; height:auto; } .wa-lista { max-height:300px; } }
+  aside .pie button.tema-switch { all:unset; position:relative; display:block; flex:none; width:58px; height:28px; border-radius:999px; background:rgba(15,23,42,.55); border:1px solid rgba(255,255,255,.3); cursor:pointer; }
 </style>
 </head>
 <body>
@@ -471,7 +517,7 @@ async function cargarChatContactos() {
   const r = await api('/api/oficina/chat/contactos');
   if (!r.ok) return;
   chatEmpresas = r.data.empresas;
-  const total = chatEmpresas.reduce((a, e) => a + e.gente.reduce((b, p) => b + p.noLeidos, 0), 0);
+  const total = chatEmpresas.filter(e => !e.es_demo).reduce((a, e) => a + e.gente.reduce((b, p) => b + p.noLeidos, 0), 0);
   const n = document.getElementById('numChat'); n.textContent = total; n.style.display = total ? '' : 'none';
   if (vista === 'chat') pintarListaChat();
 }
@@ -494,26 +540,37 @@ async function ir(v, recargar = true) {
   document.querySelectorAll('aside .nav').forEach(b => b.classList.toggle('activo', b.dataset.ir === v));
   document.getElementById('lateral').classList.remove('abierto');
   try { localStorage.setItem('oficinaVista', v); } catch (e) {}
-  if (recargar) {
-    if (['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(v)) await cargarDatos();
-    if (v === 'inicio' || v === 'negocios') await cargarNegocios();
-    if (v === 'gastos') await cargarProyectos();
-    if (v === 'inicio' || v === 'enlaces') await cargarServicios();
-    if (v === 'apis') await cargarApis();
-    if (v === 'apps') await cargarApps();
-    if (v === 'integraciones') await cargarIntegraciones();
-    if (v === 'chat') await cargarChatContactos();
-    if (v === 'respaldos' || v === 'inicio') await cargarRespaldo();
-    if (v === 'conocimiento' || v === 'redes') await cargarConocimiento();
-    if (v === 'redes' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
-    if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
-  }
   pintar();
+  if (!recargar) return;
+  barraCarga(true);
+  try { await cargarSeccion(v); } finally { barraCarga(false); }
+  pintar();
+}
+function barraCarga(on) {
+  let b = document.getElementById('barraCarga');
+  if (!b) { b = document.createElement('div'); b.id = 'barraCarga'; document.body.appendChild(b); }
+  b.classList.toggle('activa', on);
+}
+async function cargarSeccion(v) {
+  const tareas = [];
+  if (['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(v)) tareas.push(cargarDatos());
+  if (v === 'inicio' || v === 'negocios') tareas.push(cargarNegocios());
+  if (v === 'gastos') tareas.push(cargarProyectos());
+  if (v === 'inicio' || v === 'enlaces') tareas.push(cargarServicios());
+  if (v === 'apis') tareas.push(cargarApis());
+  if (v === 'apps') tareas.push(cargarApps());
+  if (v === 'integraciones') tareas.push(cargarIntegraciones());
+  if (v === 'chat') tareas.push(cargarChatContactos());
+  if (v === 'respaldos' || v === 'inicio') tareas.push(cargarRespaldo());
+  if (v === 'conocimiento' || v === 'redes') tareas.push(cargarConocimiento());
+  await Promise.all(tareas);
+  if (v === 'redes' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
+  if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
 }
 function pintar() {
   const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
-  if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) return;
-  if ((vista === 'conocimiento' || vista === 'redes') && !K) return;
+  if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
@@ -1134,23 +1191,41 @@ async function pintarCalendario() {
 }
 
 /* ---------- Chat ---------- */
+const chatAbiertos = new Set();
 function vChat() {
-  return cabecera('💬 Chat con los negocios', 'Escríbele a la gente de cada negocio · les llega en el chat de su panel') +
-    `<div class="chat"><div class="chat-lista" id="chatLista"><div class="vacio">Cargando…</div></div>
-     <div class="chat-conv"><div class="chat-cab" id="chatCab">Elige a alguien de la lista</div><div class="chat-mensajes" id="chatMensajes"></div>
-     <div class="chat-escribir"><textarea id="chatTexto" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter otra línea)" maxlength="1000" ${chatSel ? '' : 'disabled'}></textarea><button class="btn" id="chatEnviar" ${chatSel ? '' : 'disabled'}>Enviar</button></div></div></div>`;
+  let oscuroChat = false;
+  try { oscuroChat = localStorage.getItem('temaChatOf') === 'oscuro'; } catch (e) {}
+  return cabecera('💬 Chat con los negocios', 'Toca un negocio para ver a su gente · les llega en el chat de su panel') +
+    `<div class="wa-chat ${oscuroChat ? 'oscuro-chat' : ''}" id="waChat">
+       <div class="wa-lista" id="chatLista"><div class="wa-vacio">Cargando…</div></div>
+       <div class="wa-conv">
+         <div class="wa-cab"><span id="chatCab" style="flex:1">Elige a alguien de la lista</span>
+           <button type="button" class="tema-switch ${oscuroChat ? 'on' : ''}" id="btnTemaChatOf" title="Chat: cambiar a oscuro"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
+         </div>
+         <div class="wa-msgs" id="chatMensajes"></div>
+         <div class="wa-pie2"><textarea id="chatTexto" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter otra línea)" maxlength="1000" ${chatSel ? '' : 'disabled'}></textarea><button class="btn" id="chatEnviar" ${chatSel ? '' : 'disabled'}>Enviar</button></div>
+       </div>
+     </div>`;
 }
 function pintarListaChat() {
   const caja = document.getElementById('chatLista');
   if (!caja || !chatEmpresas) return;
   const orden = { 'en linea': 0, ausente: 1, desconectado: 2 };
-  caja.innerHTML = chatEmpresas.map(e => `<div class="chat-grupo">${esc(e.nombre)}${e.es_demo ? ' · demo' : ''}</div>` +
-    (e.error ? `<div class="vacio">${esc(e.error)}</div>` : !e.yo ? '<div class="vacio">Sin usuario Programador en ese negocio.</div>' : e.gente.length ? e.gente.slice()
+  const negocios = chatEmpresas.filter(e => !e.es_demo);
+  caja.innerHTML = negocios.map(e => {
+    const abierto = chatAbiertos.has(e.id);
+    const noLeidos = (e.gente || []).reduce((a, p) => a + p.noLeidos, 0);
+    const gente = e.error ? `<div class="wa-vacio">${esc(e.error)}</div>` : !e.yo ? '<div class="wa-vacio">Sin usuario Programador en ese negocio.</div>' : e.gente.length ? e.gente.slice()
       .sort((a, b) => b.noLeidos - a.noLeidos || orden[a.estado] - orden[b.estado] || b.principal - a.principal || a.nombre.localeCompare(b.nombre))
-      .map(p => `<div class="chat-persona ${chatSel && chatSel.empresa === e.id && chatSel.usuario === p.usuario ? 'activo' : ''}" data-chat-empresa="${e.id}" data-chat-usuario="${esc(p.usuario)}" data-chat-nombre="${esc(p.nombre)}">
-        <span class="avatar" style="background:${colorDe(p.usuario)}">${esc(iniciales(p.nombre))}</span>
-        <span class="quien"><b>${p.principal ? '⭐ ' : ''}${esc(p.nombre)}</b><small><span class="punto p-${p.estado === 'en linea' ? 'bien' : p.estado === 'ausente' ? 'aviso' : 'gris'}"></span>${p.estado === 'en linea' ? 'En línea' : p.estado === 'ausente' ? 'Ausente' : 'Desconectado'} · ${esc(p.grupo)}</small></span>
-        ${p.noLeidos ? `<span class="chip mal">${p.noLeidos}</span>` : ''}</div>`).join('') : '<div class="vacio">Sin usuarios.</div>')).join('');
+      .map(p => `<div class="wa-persona ${chatSel && chatSel.empresa === e.id && chatSel.usuario === p.usuario ? 'activo' : ''}" data-chat-empresa="${e.id}" data-chat-usuario="${esc(p.usuario)}" data-chat-nombre="${esc(p.nombre)}">
+        <span class="wa-av" style="background:${colorDe(p.usuario)}">${esc(iniciales(p.nombre))}</span>
+        <span class="wa-quien"><b>${p.principal ? '⭐ ' : ''}${esc(p.nombre)}</b><small><span class="punto p-${p.estado === 'en linea' ? 'bien' : p.estado === 'ausente' ? 'aviso' : 'gris'}"></span>${p.estado === 'en linea' ? 'En línea' : p.estado === 'ausente' ? 'Ausente' : 'Desconectado'}</small></span>
+        ${p.noLeidos ? `<span class="wa-badge">${p.noLeidos}</span>` : ''}</div>`).join('') : '<div class="wa-vacio">Sin usuarios.</div>';
+    return `<div class="wa-negocio ${abierto ? 'abierto' : ''}" data-negocio="${e.id}">
+      <button type="button" class="wa-negocio-cab" data-negocio-btn="${e.id}"><span class="wa-av" style="background:${colorDe(String(e.id))}">${esc(iniciales(e.nombre))}</span><span class="wa-quien"><b>${esc(e.nombre)}</b><small>${(e.gente || []).length} personas</small></span>${noLeidos ? `<span class="wa-badge">${noLeidos}</span>` : ''}<span class="wa-flecha">${abierto ? '▾' : '▸'}</span></button>
+      ${abierto ? `<div class="wa-gente">${gente}</div>` : ''}
+    </div>`;
+  }).join('') || '<div class="wa-vacio">Todavía no hay negocios con chat.</div>';
 }
 async function cargarConversacion(alFinal) {
   if (!chatSel) return;
@@ -2689,8 +2764,26 @@ document.addEventListener('click', async e => {
 });
 document.getElementById('btnMenu').onclick = () => document.getElementById('lateral').classList.toggle('abierto');
 document.getElementById('btnSalir').onclick = async () => { await api('/api/logout', {}); location.href = '/'; };
-document.getElementById('btnTema').onclick = () => { const o = document.body.classList.toggle('oscuro'); document.querySelectorAll('.tema-switch').forEach(b => { b.classList.toggle('on', o); b.title = o ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'; }); try { localStorage.setItem('tema', o ? 'oscuro' : 'claro'); } catch (e) {} };
+document.getElementById('btnTema').onclick = () => { const o = document.body.classList.toggle('oscuro'); document.querySelectorAll('.tema-switch:not(#btnTemaChatOf)').forEach(b => { b.classList.toggle('on', o); b.title = o ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'; }); try { localStorage.setItem('tema', o ? 'oscuro' : 'claro'); } catch (e) {} };
 document.getElementById('btnTema').classList.toggle('on', document.body.classList.contains('oscuro'));
+document.addEventListener('click', e => {
+  if (e.target.closest('#btnTemaChatOf')) {
+    const w = document.getElementById('waChat'); if (!w) return;
+    w.classList.toggle('oscuro-chat'); const oscuro = w.classList.contains('oscuro-chat');
+    document.getElementById('btnTemaChatOf').classList.toggle('on', oscuro);
+    try { localStorage.setItem('temaChatOf', oscuro ? 'oscuro' : 'claro'); } catch (er) {}
+    return;
+  }
+  const bn = e.target.closest('[data-negocio-btn]');
+  if (bn) {
+    const id = Number(bn.dataset.negocioBtn);
+    if (chatAbiertos.has(id)) chatAbiertos.delete(id); else chatAbiertos.add(id);
+    pintarListaChat();
+    const el = document.querySelector(`[data-negocio="${id}"]`);
+    if (el && chatAbiertos.has(id)) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+});
+
 
 /* ---------- Arranque ---------- */
 (async () => {
