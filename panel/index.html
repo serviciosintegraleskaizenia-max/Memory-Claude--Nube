@@ -610,32 +610,52 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #btnMiFoto { margin-left: auto; background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; color: var(--texto); font-family: inherit; }
   #btnQuitarFoto { background: none; border: 0; color: var(--suave); font-size: 12px; cursor: pointer; text-decoration: underline; font-family: inherit; }
   #btnQuitarFoto[hidden] { display: none; }
-  /* ---- Chat privado: colores de WhatsApp fijos (no cambian con el modo oscuro) ---- */
-  .chat-modal { background:#f0f2f5 !important; color:#111b21; }
+  /* ---- Chat privado: WhatsApp claro u oscuro, según el interruptor de tema ---- */
+  .chat-modal { background:#f0f2f5; color:#111b21; }
+  body.oscuro .chat-modal { background:#111b21; color:#e9edef; }
   .chat-modal .modal-cabecera { background:#008069; color:#fff; border-bottom:none; position:relative; }
+  body.oscuro .chat-modal .modal-cabecera { background:#202c33; }
   .chat-modal .modal-cabecera h2 { color:#fff; font-size:17px; font-weight:600; flex:1; }
   .chat-modal .modal-cabecera .cerrar { color:#fff; }
   .chat-modal .yo-av { cursor:pointer; display:inline-flex; border-radius:50%; flex:none; }
   .chat-modal .yo-av:focus { outline:2px solid #fff; }
   .chat-modal .chat-contactos { background:#fff; border-right:1px solid #e9edef; color:#111b21; }
+  body.oscuro .chat-modal .chat-contactos { background:#111b21; border-right:1px solid #2a3942; color:#e9edef; }
   .chat-modal .chat-contacto { background:#fff; color:#111b21; border-bottom:1px solid #f0f2f5; }
+  body.oscuro .chat-modal .chat-contacto { background:#111b21; color:#e9edef; border-bottom:1px solid #222d34; }
   .chat-modal .chat-contacto:hover, .chat-modal .chat-contacto.activo { background:#f5f6f6; }
+  body.oscuro .chat-modal .chat-contacto:hover, body.oscuro .chat-modal .chat-contacto.activo { background:#2a3942; }
   .chat-modal .cc-texto b { color:#111b21; }
+  body.oscuro .chat-modal .cc-texto b { color:#e9edef; }
   .chat-modal .cc-texto small { color:#667781; }
-  .chat-modal .chat-mensajes { background:#efeae2 !important; }
-  .chat-modal .burbuja.mia { background:#d9fdd3 !important; color:#111b21 !important; }
-  .chat-modal .burbuja.otra { background:#fff !important; color:#111b21 !important; }
-  .chat-modal .burbuja small { color:#667781 !important; }
-  .chat-modal .nv-tiempo { color:#667781 !important; }
-  .chat-modal .barra-voz { background:#fff !important; color:#111b21; }
-  .chat-modal .barra-voz .bv-tiempo { color:#3b4a54 !important; }
-  .chat-modal .barra-voz .bv-papelera { color:#54656f !important; }
+  .chat-modal .chat-mensajes { background:#efeae2; }
+  body.oscuro .chat-modal .chat-mensajes { background:#0b141a; }
+  .chat-modal .burbuja.mia { background:#d9fdd3; color:#111b21; }
+  body.oscuro .chat-modal .burbuja.mia { background:#005c4b; color:#e9edef; }
+  .chat-modal .burbuja.otra { background:#fff; color:#111b21; }
+  body.oscuro .chat-modal .burbuja.otra { background:#202c33; color:#e9edef; }
+  .chat-modal .burbuja small { color:#667781; }
+  body.oscuro .chat-modal .burbuja small { color:#8696a0; }
+  .chat-modal .nv-tiempo { color:#667781; }
+  body.oscuro .chat-modal .nv-tiempo { color:#8696a0; }
+  .chat-modal .barra-voz { background:#fff; color:#111b21; }
+  body.oscuro .chat-modal .barra-voz { background:#202c33; color:#e9edef; }
+  .chat-modal .barra-voz .bv-tiempo { color:#3b4a54; }
+  body.oscuro .chat-modal .barra-voz .bv-tiempo { color:#e9edef; }
+  .chat-modal .barra-voz .bv-papelera { color:#54656f; }
+  body.oscuro .chat-modal .barra-voz .bv-papelera { color:#aebac1; }
   .chat-modal .chat-barra-herr { background:#f0f2f5; border:0; }
-  .chat-modal .chat-barra-herr > button { background:transparent !important; border:0 !important; color:#54656f; }
+  body.oscuro .chat-modal .chat-barra-herr { background:#202c33; }
+  .chat-modal .chat-barra-herr > button { background:transparent; border:0; color:#54656f; }
+  body.oscuro .chat-modal .chat-barra-herr > button { color:#aebac1; }
   .chat-modal .chat-enviar { background:#f0f2f5; border-top:0; }
-  .chat-modal .chat-enviar input { background:#fff !important; color:#111b21 !important; border:0 !important; border-radius:22px; }
-  .chat-modal .chat-enviar button { background:#008069 !important; color:#fff !important; border:0; border-radius:50%; width:42px; height:42px; }
+  body.oscuro .chat-modal .chat-enviar { background:#202c33; }
+  .chat-modal .chat-enviar input { background:#fff; color:#111b21; border:0; border-radius:22px; }
+  body.oscuro .chat-modal .chat-enviar input { background:#2a3942; color:#e9edef; }
+  .chat-modal .chat-enviar button { background:#008069; color:#fff; border:0; border-radius:50%; width:42px; height:42px; }
+  body.oscuro .chat-modal .chat-enviar button { background:#00a884; }
   .chat-modal .vacio-total { color:#667781; }
+  body.oscuro .chat-modal .vacio-total { color:#8696a0; }
   .tarjeta-yo { position:absolute; top:calc(100% + 6px); right:12px; width:250px; background:#fff; color:#111b21; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.25); padding:16px; z-index:20; display:flex; flex-direction:column; gap:8px; }
   .tarjeta-yo[hidden] { display:none; }
   .ty-foto { align-self:center; }
@@ -874,7 +894,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
         <button type="button" class="ty-btn" id="tyFotoBtn">Cambiar foto</button>
         <button type="button" class="ty-btn ty-rojo" id="tyQuitarFoto" hidden>Quitar foto</button>
       </div>
-      <button class="tema-switch" style="margin-left:auto;margin-right:8px" id="btnTemaChat" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
+      <button class="tema-switch" style="margin-left:auto;margin-right:8px;flex:none" id="btnTemaChat" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
       <button class="cerrar" id="btnCerrarChat" title="Cerrar">&times;</button>
     </div>
     <div class="chat-cuerpo">
@@ -3037,11 +3057,12 @@ function descargarCsv(cabeceras, filas, nombre) {
 
 // El interruptor muestra el modo en que estás: la bola va al lado de la luna cuando es oscuro.
 function pintarBotonTema() {
-  const b = document.getElementById('btnTema');
   const oscuro = document.body.classList.contains('oscuro');
-  b.classList.toggle('on', oscuro);
-  b.title = oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
-  b.setAttribute('aria-pressed', String(oscuro));
+  document.querySelectorAll('.tema-switch').forEach(b => {
+    b.classList.toggle('on', oscuro);
+    b.title = oscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+    b.setAttribute('aria-pressed', String(oscuro));
+  });
 }
 function alternarTema() {
   document.body.classList.toggle('oscuro');
