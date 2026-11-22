@@ -805,7 +805,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
       bienvenidas: a.bienvenidas || {}, web: { sedes: (a.web && a.web.sedes) || [], palabras: (a.web && a.web.palabras) || '', sitios: (a.web && a.web.sitios) || '' } };
   }
   // modelo / instrucciones: solo para la Simulación de ventas (prueba otro modelo u otro prompt sin cambiar los ajustes guardados).
-  async function responder(empresaId, { sede = '', mensajes = [], borradores = false, modelo = '', instrucciones = null }) {
+  async function responder(empresaId, { sede = '', mensajes = [], borradores = false, modelo = '', instrucciones = null, reglas = null }) {
     const e = await empresa(empresaId);
     const aj = ajustesDe(e);
     if (modelo) aj.modelo = modelo;
@@ -849,7 +849,9 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     const otras = sedes.filter(s => !mismaSede(s, sedeOk)).join(' o ');
     // Lo que no sirve en el prompt: el marcador "[AQUÍ PEGA TUS TARIFAS…]" y su título (la INFORMACIÓN se agrega sola desde 🤖 Chatbot).
     const limpiarPrompt = t => String(t || '').replace(/\[\s*AQU[IÍ][^\]]*PEGA[^\]]*\]/gi, '').replace(/^\s*#*\s*INFORMACI[ÓO]N\s*\(BASE DE CONOCIMIENTO[^)]*\)\s*$/gim, '').trim();
-    const extra = [limpiarPrompt(aj.instrucciones), sedeOk && aj.sedes[sedeOk]].filter(Boolean).join('\n');
+    // Modo venta (🛒 del asistente de prueba): solo las reglas que el dueño aprobó.
+    const modoVenta = Array.isArray(reglas) ? 'Modo venta: responde como vendedor y usa SOLO estas reglas aprobadas por el dueño para decidir precios, condiciones y qué ofrecer. Si la pregunta no está cubierta por ellas, dilo con honestidad y ofrece pasar a un asesor, sin inventar.\nReglas aprobadas:\n' + (reglas.length ? reglas.map(x => '- ' + x).join('\n') : '(todavía no hay reglas aprobadas)') : '';
+    const extra = [limpiarPrompt(aj.instrucciones), sedeOk && aj.sedes[sedeOk], modoVenta].filter(Boolean).join('\n');
     // Búsqueda en internet: solo en las sedes elegidas, y solo si la pregunta es de los temas elegidos o la base no tiene la respuesta.
     const webSede = aj.web.sedes.some(x => mismaSede(x, sedeOk || ''));
     const temas = aj.web.palabras.split(',').map(x => palabras(x).join(' ')).filter(Boolean);
@@ -1228,7 +1230,7 @@ module.exports = function crearConocimiento({ client, config = {}, registrar, ce
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/chat') {
       const f = await leerCuerpo(req);
-      return json(res, 200, await responder(f.empresa_id, { sede: texto(f.sede, 60), mensajes: f.mensajes, borradores: Boolean(f.borradores) }));
+      return json(res, 200, await responder(f.empresa_id, { sede: texto(f.sede, 60), mensajes: f.mensajes, borradores: Boolean(f.borradores), reglas: Array.isArray(f.reglas) ? f.reglas.slice(0, 200).map(x => String(x).slice(0, 500)) : null }));
     }
     if (req.method === 'POST' && url === '/api/oficina/conocimiento/ejemplo') {
       const f = await leerCuerpo(req);

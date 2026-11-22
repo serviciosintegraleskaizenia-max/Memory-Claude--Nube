@@ -11,8 +11,7 @@
   * { box-sizing:border-box; }
   body { font-family:'Segoe UI',Arial,sans-serif; background:var(--fondo); color:var(--texto); margin:0; }
   header { background:linear-gradient(135deg,var(--enc),var(--enc2)); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
-  header h1 { margin:0; font-size:19px; } header p { margin:3px 0 0; font-size:13px; opacity:.85; }
-  .btn-tema { background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.35); padding:7px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
+  header h1 { margin:0; font-size:19px; }
   main { max-width:860px; margin:0 auto; padding:16px 16px 30px; }
   .caja { background:var(--tarjeta); border-radius:14px; padding:14px 16px; box-shadow:0 1px 3px #0f172a14; margin-bottom:14px; }
   .ayuda { font-size:13.5px; line-height:1.5; color:var(--suave); margin:0; }
@@ -23,7 +22,6 @@
   .btn { background:var(--azul); color:#fff; border-color:var(--azul); padding:9px 16px; font-weight:600; }
   .btn-sec { background:var(--tarjeta); color:var(--texto); padding:8px 12px; }
   .mini { background:var(--tarjeta); color:var(--texto); padding:3px 9px; font-size:12.5px; }
-  .mini.elegido { background:var(--azul); color:#fff; border-color:var(--azul); }
   .chat { display:flex; flex-direction:column; gap:8px; background:var(--fondo); border-radius:12px; padding:12px; min-height:300px; max-height:calc(100vh - 330px); overflow-y:auto; }
   .burbuja { max-width:80%; padding:9px 12px; border-radius:12px; font-size:14.5px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
   .cliente { align-self:flex-end; background:#dcf8c6; color:#0f172a; border-bottom-right-radius:4px; }
@@ -37,12 +35,20 @@
   .error { align-self:flex-start; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:10px; padding:7px 10px; font-size:13px; }
   .sugerir { align-self:flex-start; width:min(560px,90%); background:var(--tarjeta); border:1px solid var(--borde); border-radius:10px; padding:10px; }
   .sugerir textarea { width:100%; resize:vertical; }
+  .regla-ok { font-size:12px; color:#15803d; }
   .escribir { display:flex; gap:8px; margin-top:10px; }
   .escribir textarea { flex:1; resize:none; height:62px; }
+  .dictado { display:flex; align-items:center; gap:10px; margin-top:10px; padding:8px 12px; border-radius:10px; background:#fee2e2; color:#991b1b; font-size:13.5px; }
+  .dictado[hidden] { display:none; }
+  .dictado .punto { width:10px; height:10px; border-radius:50%; background:#ef4444; animation:parpadeo 1s infinite; }
+  @keyframes parpadeo { 50% { opacity:.2; } }
+  .dictado b { font-variant-numeric:tabular-nums; }
+  .dictado .btn-sec { margin-left:auto; }
   .vacio { text-align:center; color:var(--suave); padding:40px 10px; font-size:14px; }
   .toast { position:fixed; right:16px; bottom:16px; background:#0f172a; color:#fff; padding:10px 15px; border-radius:10px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; }
   .toast.visible { opacity:1; }
   @media (max-width:600px) { .burbuja, .asesor { max-width:92%; } .chat { max-height:none; } }
+  /* Interruptor claro/oscuro */
   .tema-switch { position: relative; width: 58px; height: 28px; border-radius: 999px; background: rgba(15,23,42,.55); border: 1px solid rgba(255,255,255,.3); cursor: pointer; padding: 0; flex: none; transition: background .25s, box-shadow .2s; }
   .tema-switch:hover { box-shadow: 0 0 0 3px rgba(255,255,255,.18); }
   .tema-switch svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -58,19 +64,30 @@
   .tema-switch.on .ts-bola { left: 35px; }
   .tema-switch.on .ico-sol { display: none; }
   .tema-switch.on .ico-luna { display: block; }
+  /* Selector de modo: solo iconos, grandes */
+  .modo { display:flex; gap:6px; }
+  .modo button { font-size:24px; width:50px; height:42px; border-radius:12px; border:2px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); cursor:pointer; line-height:1; padding:0; opacity:.7; }
+  .modo button.on { opacity:1; border-color:#fff; }
+  .modo button[data-modo="entrenamiento"].on { background:#1679c2; }
+  .modo button[data-modo="venta"].on { background:#f97316; }
   .grabando { background: #ef4444 !important; color: #fff !important; }
 </style>
 </head>
 <body>
 <header>
   <div><h1>🤖 Probar el asistente</h1></div>
-  <div><button class="tema-switch" id="btnTema" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button></div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div class="modo" id="modo" role="group" aria-label="Modo del asistente">
+      <button type="button" data-modo="entrenamiento" title="Entrenamiento: enseñar reglas al asistente">🎓</button>
+      <button type="button" data-modo="venta" title="Venta: responde como vendedor, solo con reglas aprobadas">🛒</button>
+    </div>
+    <button class="tema-switch" id="btnTema" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
+  </div>
 </header>
 <main>
   <div class="caja">
-    <p class="ayuda"><b>Escribe como si fueras un cliente</b> de Facebook, Instagram o WhatsApp, en el idioma que quieras (español, portugués, inglés…). El asistente contesta igual que lo hará con los clientes reales.
-      Debajo de cada respuesta: <b>👍</b> si estuvo bien, o <b>👎</b> y escribe cómo debió responder. Kaizen IA revisa tus sugerencias y entrena al asistente con ellas.
-      <br>Esto es solo una prueba: no le llega a ningún cliente.</p>
+    <p class="ayuda"><b>Escribe como si fueras un cliente</b> de Facebook, Instagram o WhatsApp, en el idioma que quieras. Esto es solo una prueba: no le llega a ningún cliente.</p>
+    <p class="ayuda" id="ayudaModo" style="margin-top:8px"></p>
   </div>
   <div class="caja">
     <div class="barra">
@@ -78,6 +95,11 @@
       <button class="btn-sec" id="nueva">↺ Nueva conversación</button>
     </div>
     <div class="chat" id="chat"><div class="vacio">Cargando…</div></div>
+    <div class="dictado" id="dictadoBarra" hidden>
+      <span class="punto"></span>
+      <span>Escuchando <b id="dictadoTiempo">0:00</b> · el texto queda en el cuadro para que lo revises; no se envía solo.</span>
+      <button class="btn-sec" id="dictadoParar" type="button">⏹ Parar</button>
+    </div>
     <div class="escribir">
       <textarea id="texto" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea>
       <button class="btn-sec" id="dictarTexto" title="Dictar por voz">🎤</button>
@@ -88,8 +110,11 @@
 <div class="toast" id="toast"></div>
 <script>
 const IDIOMAS = { es: 'Español', pt: 'Portugués', en: 'Inglés', fr: 'Francés', it: 'Italiano', de: 'Alemán' };
-let mensajes = [];   // { rol: 'cliente'|'asistente', texto, info, voto, abierto }
+let mensajes = [];          // { rol: 'cliente'|'asistente', texto, info, error, abierto, borrador, ensenada }
 let pensando = false;
+let modo = 'entrenamiento'; // 'entrenamiento' (🎓) o 'venta' (🛒)
+let puedeEnsenar = false;   // permiso entrenar_ia
+let dictando = null;        // { r, destino, boton } mientras se dicta
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 // Las direcciones que manda el asistente se pueden tocar: un clic abre el archivo (Drive) o la página.
 function conEnlaces(t) {
@@ -100,7 +125,7 @@ function conEnlaces(t) {
     return `<a href="${limpia}" target="_blank" rel="noopener noreferrer">${etiqueta}</a>${cola}`;
   });
 }
-function aviso(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('visible'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('visible'), 3000); }
+function aviso(t) { const el = document.getElementById('toast'); el.textContent = t; el.classList.add('visible'); clearTimeout(aviso.t); aviso.t = setTimeout(() => el.classList.remove('visible'), 3500); }
 async function api(url, cuerpo) {
   try {
     const r = await fetch(url, cuerpo === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
@@ -109,6 +134,15 @@ async function api(url, cuerpo) {
     return { ok: r.ok, data: d };
   } catch (e) { return { ok: false, data: { error: 'No hay conexión con el panel.' } }; }
 }
+// Textos de la ayuda según el modo.
+function pintarModo() {
+  document.querySelectorAll('#modo [data-modo]').forEach(b => b.classList.toggle('on', b.dataset.modo === modo));
+  const ayuda = document.getElementById('ayudaModo');
+  ayuda.innerHTML = modo === 'venta'
+    ? '<b>🛒 Venta:</b> el asistente responde como vendedor, pero <b>solo con las reglas que el dueño ya aprobó</b>. Si la pregunta no está cubierta, lo dice y no inventa.'
+    : '<b>🎓 Entrenamiento:</b> si una respuesta no está bien, toca <b>💡 Enseñar</b>, escribe o dicta cómo debió responder y envíalo. La regla queda para confirmar en Base del asistente → Entrenamiento; no se guarda hasta que la confirmen.';
+  document.getElementById('texto').placeholder = modo === 'venta' ? 'Escribe como cliente para probar la venta…' : 'Escribe como cliente y, si algo sale mal, enséñale…';
+}
 function pintar() {
   const c = document.getElementById('chat');
   if (!mensajes.length) { c.innerHTML = '<div class="vacio">Empieza la conversación como si fueras un cliente.</div>'; return; }
@@ -116,15 +150,15 @@ function pintar() {
     if (m.rol === 'cliente') return `<div class="burbuja cliente">${esc(m.texto)}</div>`;
     if (m.error) return `<div class="error">⛔ ${esc(m.error)}</div>`;
     const x = m.info || {};
+    const ensenar = modo === 'entrenamiento' && puedeEnsenar && !m.abierto;
     return `<div class="burbuja bot">${conEnlaces(m.texto)}</div>` +
       (x.pasar_a_asesor ? `<div class="asesor">👤 <b>Aquí pasaría a un asesor de ${esc(x.sede)}</b> <small>(este recuadro es solo para la prueba: el cliente no lo ve; en Messenger o Instagram le llega al asesor como nota privada)</small>${x.motivo_texto ? ' · ' + esc(x.motivo_texto) : ''}${x.resumen_para_asesor ? `<br>${esc(x.resumen_para_asesor)}` : ''}</div>` : '') +
-      `<div class="meta">${x.idioma ? `<span class="chip">${esc(IDIOMAS[x.idioma] || x.idioma)}</span>` : ''}${x.web && x.web.usada ? '<span class="chip">🌐 buscó en internet</span>' : ''}
-        <button class="mini ${m.voto === 'bien' ? 'elegido' : ''}" data-bien="${i}" title="Estuvo bien">👍</button>
-        <button class="mini ${m.voto === 'mal' ? 'elegido' : ''}" data-mal="${i}" title="Estuvo mal: sugerir cómo debió responder">👎</button>
-        ${m.voto ? '<span>¡Gracias! Enviado a Kaizen IA.</span>' : ''}</div>` +
+      `<div class="meta">${x.idioma ? `<span class="chip">${esc(IDIOMAS[x.idioma] || x.idioma)}</span>` : ''}${x.web && x.web.usada ? '<span class="chip">🌐 buscó en internet</span>' : ''}` +
+      `${ensenar ? `<button class="mini" data-ensenar="${i}" title="Enseñar: cómo debió responder">💡 Enseñar</button>` : ''}` +
+      `${m.ensenada ? '<span class="regla-ok">✔ Regla enviada para confirmar</span>' : ''}</div>` +
       (m.abierto ? `<div class="sugerir"><b style="font-size:13px">¿Cómo debió responder?</b>
-        <textarea id="sug${i}" rows="4" placeholder="Escribe la respuesta ideal, o qué estuvo mal (ej. el precio del niño es otro, faltó ofrecer el traslado…)">${esc(m.borrador || '')}</textarea>
-        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn-sec" data-dictar="sug${i}" title="Dictar por voz">🎤</button><button class="btn-sec" data-cancelar="${i}">Cancelar</button><button class="btn" data-mandar="${i}">Enviar sugerencia</button></div></div>` : '');
+        <textarea id="sug${i}" rows="4" placeholder="Escribe la regla o dicta (ej. el precio del niño es otro, ofrecer el traslado siempre…)">${esc(m.borrador || '')}</textarea>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn-sec" data-dictar="sug${i}" title="Dictar por voz">🎤</button><button class="btn-sec" data-cancelar="${i}">Cancelar</button><button class="btn" data-proponer="${i}">Proponer regla</button></div></div>` : '');
   }).join('') + (pensando ? '<div class="burbuja bot" style="opacity:.6">escribiendo…</div>' : '');
   c.scrollTop = c.scrollHeight;
 }
@@ -133,57 +167,90 @@ async function enviar() {
   const caja = document.getElementById('texto');
   const t = caja.value.trim(); if (!t || pensando) return;
   mensajes.push({ rol: 'cliente', texto: t }); caja.value = ''; pensando = true; pintar();
-  const r = await api('/api/asistente/chat', { sede: document.getElementById('sede').value, mensajes: historial(mensajes.length) });
+  const r = await api('/api/asistente/chat', { sede: document.getElementById('sede').value, mensajes: historial(mensajes.length), modo });
   pensando = false;
   mensajes.push(r.ok ? { rol: 'asistente', texto: r.data.respuesta, info: r.data } : { rol: 'asistente', error: r.data.error || 'No respondió.' });
   pintar(); caja.focus();
 }
-async function calificar(i, voto, ideal) {
+// Enseñar: la persona escribe o dicta cómo debió responder; eso se propone como regla (no se guarda como aprobada).
+async function proponerRegla(i) {
   const m = mensajes[i];
-  const r = await api('/api/asistente/calificar', { sede: document.getElementById('sede').value, mensajes: historial(i), respuesta: m.texto, voto, ideal: ideal || '' });
-  if (!r.ok) return aviso(r.data.error || 'No se pudo enviar.');
-  m.voto = voto; m.abierto = false; pintar(); aviso(voto === 'bien' ? 'Gracias 👍' : 'Sugerencia enviada. Gracias.');
+  const ta = document.getElementById('sug' + i);
+  const v = (ta ? ta.value : (m.borrador || '')).trim();
+  if (!v) return aviso('Escribe o dicta la regla primero.');
+  const medio = ta && ta.dataset.medio === 'voz' ? 'voz' : 'texto';
+  const r = await api('/api/entrenamiento/proponer', { texto: v, medio, origen: 'prueba del asistente' });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo enviar la regla.');
+  m.ensenada = true; m.abierto = false; m.borrador = ''; pintar();
+  aviso('Regla enviada. Confírmala en Base del asistente → Entrenamiento.');
 }
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
   const d = t.dataset;
   if (t.id === 'enviar') return enviar();
   if (t.id === 'nueva') { mensajes = []; return pintar(); }
-  if (d.bien) { const m = mensajes[d.bien]; if (!m.voto) calificar(Number(d.bien), 'bien'); return; }
-  if (d.mal) { const m = mensajes[d.mal]; if (!m.voto) { m.abierto = true; pintar(); const ta = document.getElementById('sug' + d.mal); if (ta) ta.focus(); } return; }
-  if (d.cancelar) { mensajes[d.cancelar].abierto = false; return pintar(); }
-  if (d.mandar) { const ta = document.getElementById('sug' + d.mandar); const v = ta.value.trim(); if (!v) { aviso('Escribe cómo debió responder.'); return; } return calificar(Number(d.mandar), 'mal', v); }
+  if (t.id === 'dictadoParar') { if (dictando) dictando.r.stop(); return; }
+  if (t.closest && t.closest('#modo')) { modo = t.dataset.modo; try { localStorage.setItem('modoAsis', modo); } catch (er) {} pintarModo(); return pintar(); }
+  if (d.ensenar !== undefined) { const m = mensajes[d.ensenar]; m.abierto = true; pintar(); const ta = document.getElementById('sug' + d.ensenar); if (ta) ta.focus(); return; }
+  if (d.cancelar !== undefined) { mensajes[d.cancelar].abierto = false; return pintar(); }
+  if (d.proponer !== undefined) return proponerRegla(Number(d.proponer));
   if (t.closest && t.closest('#btnTema')) { document.body.classList.toggle('oscuro'); pintarTemaAsis(); try { localStorage.setItem('tema', document.body.classList.contains('oscuro') ? 'oscuro' : 'claro'); } catch (er) {} return; }
-  if (t.closest && t.closest('#dictarTexto')) return dictar(document.getElementById('texto'), t.closest('#dictarTexto'));
-  if (t.closest && t.closest('[data-dictar]')) { const b = t.closest('[data-dictar]'); return dictar(document.getElementById(b.dataset.dictar), b); }
+  if (t.id === 'dictarTexto') return dictar(document.getElementById('texto'), t);
+  if (d.dictar) return dictar(document.getElementById(d.dictar), t);
 });
-// Interruptor de modo: la bola va al lado de la luna cuando está en oscuro.
+// Interruptor claro/oscuro: la bola va al lado de la luna cuando está en oscuro.
 function pintarTemaAsis() {
   const b = document.getElementById('btnTema');
   const o = document.body.classList.contains('oscuro');
   b.classList.toggle('on', o);
   b.title = o ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
 }
-// Dictar por voz (navegador Chrome o Edge): lo que se dice queda escrito en el cuadro.
+// Dictar por voz (Chrome o Edge): el texto aparece mientras se habla, con contador y botón para parar.
+// No se envía solo: queda en el cuadro para revisarlo.
 function dictar(destino, boton) {
+  if (dictando) { dictando.r.stop(); return; }
   const R = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!R) { aviso('Este navegador no permite dictar. Usa Chrome o Edge.'); return; }
   const r = new R();
-  r.lang = 'es-PE'; r.interimResults = false; r.maxAlternatives = 1;
-  boton.classList.add('grabando');
-  r.onresult = e => { destino.value = (destino.value ? destino.value + ' ' : '') + e.results[0][0].transcript; destino.dispatchEvent(new Event('input', { bubbles: true })); };
-  r.onerror = () => aviso('No pude escuchar. Revisa el micrófono y el permiso del navegador.');
-  r.onend = () => boton.classList.remove('grabando');
+  r.lang = 'es-PE'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+  const base = destino.value ? destino.value + ' ' : '';
+  let fijo = '';
+  const barra = document.getElementById('dictadoBarra');
+  const tiempo = document.getElementById('dictadoTiempo');
+  const t0 = Date.now();
+  const reloj = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); tiempo.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }, 250);
+  tiempo.textContent = '0:00'; barra.hidden = false; boton.classList.add('grabando');
+  dictando = { r, destino, boton };
+  r.onresult = e => {
+    let interino = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const tx = e.results[i][0].transcript;
+      if (e.results[i].isFinal) fijo += tx; else interino += tx;
+    }
+    destino.value = base + fijo + interino;
+    destino.dataset.medio = 'voz';
+    destino.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  r.onerror = ev => { if (ev.error !== 'no-speech' && ev.error !== 'aborted') aviso('No pude escuchar. Revisa el micrófono y el permiso del navegador.'); };
+  r.onend = () => { clearInterval(reloj); barra.hidden = true; boton.classList.remove('grabando'); dictando = null; };
   r.start();
 }
-document.addEventListener('input', e => { if (e.target.id && e.target.id.startsWith('sug')) mensajes[e.target.id.slice(3)].borrador = e.target.value; });
+document.addEventListener('input', e => {
+  const id = e.target.id || '';
+  if (!id.startsWith('sug')) return;
+  const m = mensajes[id.slice(3)]; if (m) m.borrador = e.target.value;
+  if (e.isTrusted) e.target.dataset.medio = 'texto'; // escrito con el teclado; lo dictado llega como evento propio
+});
 document.getElementById('texto').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); } });
 document.getElementById('sede').addEventListener('change', () => { if (mensajes.length) { mensajes = []; pintar(); aviso('Nueva conversación en la otra oficina.'); } });
 (async () => {
   try { if (localStorage.getItem('tema') === 'oscuro') { document.body.classList.add('oscuro'); pintarTemaAsis(); } } catch (e) {}
+  try { const g = localStorage.getItem('modoAsis'); if (g === 'venta' || g === 'entrenamiento') modo = g; } catch (e) {}
+  pintarModo();
   const s = await api('/api/sesion');
   if (!s.ok) return;
   if (!s.data.permisos || !s.data.permisos.probar_asistente) { document.getElementById('chat').innerHTML = '<div class="vacio">No tienes permiso para probar el asistente. Pídeselo al gerente o a Kaizen IA.</div>'; return; }
+  puedeEnsenar = !!s.data.permisos.entrenar_ia;
   const i = await api('/api/asistente/info');
   if (!i.ok) { document.getElementById('chat').innerHTML = `<div class="vacio">${esc(i.data.error || 'El asistente no está disponible.')}</div>`; return; }
   const sel = document.getElementById('sede');

@@ -269,6 +269,7 @@
   <button class="nav" data-ir="apps">📱 Apps</button>
   <button class="nav" data-ir="integraciones">🔌 Integraciones</button>
   <button class="nav" data-ir="conocimiento">📚 Base del asistente <span class="num" id="numConocimiento" style="display:none;background:#d97706"></span></button>
+  <button class="nav" data-ir="aprobaciones">🎓 Aprobaciones del entrenamiento <span class="num" id="numAprobar" style="display:none"></span></button>
   <button class="nav" data-ir="redes">📲 Redes sociales</button>
   <button class="nav" data-ir="respaldos">💾 Respaldos <span class="num" id="numRespaldo" style="display:none"></span></button>
   <div class="sep">Administrar</div>
@@ -457,7 +458,7 @@ async function cargarChatContactos() {
 async function cargarProyectos() { const r = await api('/api/oficina/proyectos'); if (r.ok) P = r.data; }
 // Permisos de la Oficina para quien no es Programador (Herramientas → Grupos / Usuarios → "Oficina").
 let YO = null;
-const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', clientes: 'oficina_clientes', gastos: ['oficina_gastos', 'oficina_creacion'], calendario: 'oficina_calendario', chat: 'oficina_chat',
+const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
   enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos' };
 function puedeSec(v) {
   if (!YO || YO.grupo === 'Programador') return true;
@@ -466,6 +467,7 @@ function puedeSec(v) {
 }
 function primeraSec() { return ['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'respaldos'].find(puedeSec) || 'inicio'; }
 async function ir(v, recargar = true) {
+  if (v === 'aprobaciones') { kTab = 'entrenar'; v = 'conocimiento'; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} }
   if (!puedeSec(v)) v = primeraSec();
   vista = v;
   document.querySelectorAll('aside .nav').forEach(b => b.classList.toggle('activo', b.dataset.ir === v));
@@ -1296,7 +1298,7 @@ async function probarRedes() {
 }
 
 /* ---------- Base del asistente: 5 pestañas ---------- */
-const TABS_K = [['config', '⚙️ Configuración'], ['docs', '📚 Documentos'], ['revisar', '📝 Por revisar'], ['buscar', '🔎 Probar búsqueda'], ['chat', '💬 Chat de prueba'], ['simular', '🧪 Simulación de ventas']];
+const TABS_K = [['config', '⚙️ Configuración'], ['docs', '📚 Documentos'], ['entrenar', '🎓 Entrenamiento'], ['buscar', '🔎 Probar búsqueda'], ['chat', '💬 Chat de prueba'], ['simular', '🧪 Simulación de ventas']];
 let kTab = (() => { try { return localStorage.getItem('oficinaTabK') || 'docs'; } catch (e) { return 'docs'; } })();
 function selectorEmpresaK() {
   return `<select id="kEmpresa" title="Empresa">${K.empresas.map(x => `<option value="${x.id}" ${String(x.id) === kEmpresa ? 'selected' : ''}>${esc(x.nombre)}${x.es_demo ? ' (demo)' : ''}</option>`).join('')}</select>`;
@@ -1307,7 +1309,7 @@ function vConocimiento() {
   if (!TABS_K.some(t => t[0] === kTab)) kTab = 'docs';
   const pend = pendientesK();
   const barra = `<div class="pestanas">${TABS_K.map(([k, n]) => `<button class="pestana ${k === kTab ? 'activa' : ''}" data-k-tab="${k}">${n}${k === 'revisar' && pend ? ` <span class="num-p">${pend}</span>` : ''}</button>`).join('')}</div>`;
-  const cuerpo = { config: tabConfigK, docs: tabDocsK, revisar: tabRevisarK, buscar: tabBuscarK, chat: tabChatK, simular: tabSimularK }[kTab]();
+  const cuerpo = { config: tabConfigK, docs: tabDocsK, entrenar: tabEntrenarK, buscar: tabBuscarK, chat: tabChatK, simular: tabSimularK }[kTab]();
   return cabecera('📚 Base del asistente', 'Lo que sabe y cómo responde el asistente de redes · solo tú lo ves y lo cambias', selectorEmpresaK()) + barra + cuerpo;
 }
 /* ---------- 🧪 Simulación de ventas (vendedor IA contra 15 clientes simulados) ---------- */
@@ -1704,6 +1706,63 @@ function filaEjemplo(x) {
     <td>${x.voto === 'bien' ? '👍' : x.voto === 'mal' ? '👎' : '🎓'}</td><td>${esc(x.sede || 'Todas')}</td><td>${esc(x.autor || '')}<br><small style="color:var(--suave)">${x.origen === 'panel' ? 'desde su panel' : 'Oficina'} · ${fechaCorta(x.creado)}</small></td>
     <td><button class="btn-mini ${x.estado === 'nuevo' ? 'p' : ''}" data-k="ej-abrir" data-id="${x.id}">${x.estado === 'nuevo' ? 'Revisar' : '✏️'}</button></td></tr>`;
 }
+// ---------- 🎓 Entrenamiento del asistente: reglas que el equipo enseña y se aprueban ----------
+let ENT = null;
+async function cargarEntrenamiento() {
+  const r = await api('/api/entrenamiento');
+  ENT = r.ok ? r.data : { reglas: [], puedeEntrenar: false, puedeAprobar: false };
+  const pend = ENT.reglas.filter(x => x.estado === 'pendiente').length;
+  const badge = document.getElementById('numAprobar');
+  if (badge) { badge.textContent = pend; badge.style.display = pend && ENT.puedeAprobar ? '' : 'none'; }
+  return ENT;
+}
+function tabEntrenarK() {
+  if (!ENT) { cargarEntrenamiento().then(() => { if (vista === 'conocimiento' && kTab === 'entrenar') pintar(); }); return '<div class="caja"><div class="vacio">Cargando…</div></div>'; }
+  const porConfirmar = ENT.reglas.filter(x => x.estado === 'por_confirmar');
+  const pendientes = ENT.reglas.filter(x => x.estado === 'pendiente');
+  const aprobadas = ENT.reglas.filter(x => x.estado === 'aprobada');
+  const fila = (x) => {
+    const medio = x.medio === 'voz' ? '🎤 voz' : '⌨️ texto';
+    const acc = [];
+    if (x.estado === 'por_confirmar' && ENT.puedeEntrenar) acc.push(`<button class="bt-ent" data-ent="confirmar" data-id="${x.id}">✔ Confirmar</button>`);
+    if (x.estado !== 'aprobada' && x.estado !== 'rechazada' && ENT.puedeAprobar) acc.push(`<button class="bt-ent p" data-ent="aprobar" data-id="${x.id}">Aprobar</button>`);
+    if (ENT.puedeAprobar && x.estado !== 'rechazada') acc.push(`<button class="bt-ent" data-ent="editar" data-id="${x.id}">Editar</button>`);
+    if (ENT.puedeAprobar && x.estado !== 'rechazada') acc.push(`<button class="bt-ent" data-ent="rechazar" data-id="${x.id}">Rechazar</button>`);
+    return `<div class="fila-regla"><div style="flex:1"><div>${esc(x.texto)}</div><small>${esc(x.propuso || '')} · ${medio} · ${esc(x.creado)} · v${x.version}${x.aprobo ? ' · aprobó ' + esc(x.aprobo) : ''}</small></div><div class="acc-ent">${acc.join(' ')}</div></div>`;
+  };
+  const bloque = (titulo, sub, lista) => `<div class="caja"><h2>${titulo} (${lista.length})</h2><p class="sub">${sub}</p>${lista.length ? lista.map(fila).join('') : '<div class="vacio">Nada aquí.</div>'}</div>`;
+  const formulario = ENT.puedeEntrenar ? `<div class="caja"><h2>Enseñar una regla</h2><p class="sub">Escribe la regla, o dictala con el micrófono del asistente. Después se confirma aquí.</p><textarea id="entTexto" rows="3" style="width:100%" placeholder="Ej: no dar precio antes de tener edad de niños, lugar, aeropuerto y fecha"></textarea><div style="margin-top:6px"><button class="bt-ent p" data-ent="proponer">Guardar como regla por confirmar</button></div></div>` : '';
+  return `<style>.fila-regla{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #e2e8f0}.acc-ent{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.bt-ent{padding:5px 10px;border-radius:8px;background:#e2e8f0;font-size:12px;font-weight:700}.bt-ent.p{background:#2563eb;color:#fff}</style>`
+    + formulario
+    + bloque('Por confirmar', 'Reglas que alguien propuso. Confirma que la IA las entendió bien.', porConfirmar)
+    + bloque('Pendientes de aprobar', 'Ya confirmadas. Gerencia o el programador las aprueban antes de que la IA las use.', pendientes)
+    + bloque('Aprobadas', 'Lo que la IA usa. Si cambias una, vuelve a pendientes para aprobarla.', aprobadas);
+}
+async function accionEntrenamiento(accion, id) {
+  let cuerpo = { id: Number(id) };
+  if (accion === 'proponer') {
+    const t = document.getElementById('entTexto').value.trim();
+    if (!t) return aviso('Escribe la regla.');
+    cuerpo = { texto: t, medio: 'texto' };
+  }
+  if (accion === 'editar') {
+    const actual = ENT.reglas.find(x => x.id === Number(id));
+    const nuevo = prompt('Cambia la regla:', actual ? actual.texto : '');
+    if (!nuevo || !nuevo.trim()) return;
+    cuerpo.texto = nuevo.trim();
+  }
+  const url = accion === 'proponer' ? '/api/entrenamiento/proponer' : '/api/entrenamiento/' + accion;
+  const r = await api(url, cuerpo);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
+  ENT = null;
+  pintar();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-ent]');
+  if (!b || vista !== 'conocimiento') return;
+  e.preventDefault();
+  accionEntrenamiento(b.dataset.ent, b.dataset.id);
+});
 function tabRevisarK() {
   const borr = K.archivos.filter(a => a.estado === 'borrador');
   const nuevos = (K.ejemplos || []).filter(x => x.estado === 'nuevo');
@@ -2212,7 +2271,24 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- Empresas y Herramientas (las pantallas de siempre, dentro de la Oficina) ---------- */
-function vEmpresas() { return cabecera('🏗️ Empresas y demo', 'Crear empresas, módulos, cobro y recordatorio, anuncios, pausa y demo de ventas') + `<iframe class="marco" src="/?incrustado=empresas" title="Empresas"></iframe>`; }
+// Para el socio: la sección Empresas solo muestra crear y ver la empresa demo.
+let DEMO_S = null;
+async function cargarDemoSocio() { const r = await api('/api/central/demo'); DEMO_S = r.ok ? r.data : { existe: false }; }
+function vDemoSocio() {
+  if (!DEMO_S) { cargarDemoSocio().then(() => { if (vista === 'empresas') pintar(); }); return cabecera('🏗️ Empresas y demo', 'Solo la empresa demo') + '<div class="caja"><div class="vacio">Cargando…</div></div>'; }
+  const cuerpo = DEMO_S.existe
+    ? `<div class="caja"><h2>🧪 Tu demo</h2><p class="sub">Accesos de 48 horas. Puedes ver la demo y compartir su enlace.</p><p><a href="${esc(DEMO_S.url || '#')}" target="_blank">${esc(DEMO_S.url || '')}</a> ${DEMO_S.vivo ? '<span class="chip ok">● En línea</span>' : '<span class="chip">● Sin respuesta</span>'}</p></div>`
+    : '<div class="caja"><h2>🧪 Crear empresa demo</h2><p class="sub">Crea una demo de ventas con accesos de 48 horas. No puedes crear empresas nuevas.</p><button class="bt-ent p" id="btnCrearDemoS">Crear demo</button></div>';
+  return cabecera('🏗️ Empresas y demo', 'Solo la empresa demo') + cuerpo;
+}
+document.addEventListener('click', async e => {
+  if (!e.target || e.target.id !== 'btnCrearDemoS') return;
+  const r = await api('/api/central/demo/crear', {});
+  if (!r.ok) return aviso(r.data.error || 'No se pudo crear la demo.');
+  DEMO_S = null;
+  pintar();
+});
+function vEmpresas() { if (YO && YO.grupo !== 'Programador') return vDemoSocio(); return cabecera('🏗️ Empresas y demo', 'Crear empresas, módulos, cobro y recordatorio, anuncios, pausa y demo de ventas') + `<iframe class="marco" src="/?incrustado=empresas" title="Empresas"></iframe>`; }
 function vHerramientas() { return cabecera('🛠️ Herramientas', 'Usuarios, grupos, auditoría, bloqueos y estado del sistema del central') + `<iframe class="marco" src="/?incrustado=herramientas" title="Herramientas"></iframe>`; }
 
 /* ---------- Formularios ---------- */

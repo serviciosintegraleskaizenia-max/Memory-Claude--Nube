@@ -41,7 +41,7 @@ const operaciones = require('./plataforma/operaciones')({ client, config, regist
   fechaServicioISO: (...a) => fechaServicioISO(...a), hoyLocal: () => require('./plataforma/cuenta').hoyLocal(),
   esCancelacion: (...a) => esCancelacion(...a), indiceReservas: (...a) => indiceReservas(...a), originalDe: (...a) => originalDe(...a) });
 const ZONA_HORARIA = 'America/Santo_Domingo';
-const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia', 'ver_crm',
+const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia', 'ver_crm', 'entrenar_ia', 'aprobar_ia', 'ver_entrenamiento', 'oficina_demo', 'oficina_gastos_editar',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
   'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
   'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos',
@@ -170,6 +170,12 @@ async function inicializarTablas() {
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS audio TEXT');
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS audio_seg INTEGER');
+  // Reglas que enseña el equipo al asistente: se confirman y se aprueban antes de que la IA las use.
+  await client.query(`CREATE TABLE IF NOT EXISTS reglas_entrenamiento (
+    id SERIAL PRIMARY KEY, texto TEXT NOT NULL, medio TEXT NOT NULL DEFAULT 'texto', origen TEXT NOT NULL DEFAULT '',
+    estado TEXT NOT NULL DEFAULT 'por_confirmar', propuso VARCHAR(50) NOT NULL DEFAULT '', confirmo VARCHAR(50) NOT NULL DEFAULT '',
+    aprobo VARCHAR(50) NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1,
+    creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
     tipo VARCHAR(10) NOT NULL,
@@ -1977,7 +1983,7 @@ http.createServer(async (req, res) => {
       return oficina.manejar(req, res, url, u, { json, leerCuerpo, permisos: u ? permisosDe(u, await mapaGrupos()) : {} });
     }
     if (url.startsWith('/api/central/')) {
-      return central.manejar(req, res, url, u, { json, leerCuerpo });
+      return central.manejar(req, res, url, u, { json, leerCuerpo, permisos: u ? permisosDe(u, await mapaGrupos()) : {} });
     }
 
     if (req.method === 'POST' && url === '/api/latido') {
@@ -2027,7 +2033,9 @@ http.createServer(async (req, res) => {
       let cuerpo;
       if (ruta[0] === 'POST') {
         const f = await leerCuerpo(req);
-        cuerpo = JSON.stringify({ sede: f.sede, mensajes: f.mensajes, respuesta: f.respuesta, voto: f.voto, ideal: f.ideal, nota: f.nota, autor: `${u.nombre || u.usuario} (${u.grupo})` });
+        // Modo venta: se mandan solo las reglas aprobadas; en entrenamiento no se mandan.
+        const reglas = f.modo === 'venta' && url === '/api/asistente/chat' ? (await client.query("SELECT texto FROM reglas_entrenamiento WHERE estado = 'aprobada' ORDER BY id LIMIT 200")).rows.map(x => String(x.texto).slice(0, 500)) : null;
+        cuerpo = JSON.stringify({ sede: f.sede, mensajes: f.mensajes, respuesta: f.respuesta, voto: f.voto, ideal: f.ideal, nota: f.nota, reglas, autor: `${u.nombre || u.usuario} (${u.grupo})` });
       }
       try {
         const control = new AbortController();
@@ -2460,6 +2468,50 @@ http.createServer(async (req, res) => {
       if (!m) return json(res, 404, { error: 'Imagen no válida' });
       res.writeHead(200, { 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' });
       return res.end(Buffer.from(m[2], 'base64'));
+    }
+
+    // Entrenamiento del asistente: propuestas, confirmación, aprobación, edición y rechazo de reglas.
+    if (url.startsWith('/api/entrenamiento')) {
+      const quita = (p) => !puede(p);
+      if (req.method === 'GET' && url === '/api/entrenamiento') {
+        if (quita('ver_entrenamiento') && quita('entrenar_ia') && quita('aprobar_ia')) return json(res, 403, { error: 'No tienes permiso para ver el entrenamiento.' });
+        const reglas = (await client.query("SELECT id, texto, medio, origen, estado, propuso, confirmo, aprobo, version, TO_CHAR(creado, 'YYYY-MM-DD HH24:MI') AS creado FROM reglas_entrenamiento ORDER BY creado DESC LIMIT 300")).rows;
+        return json(res, 200, { reglas, puedeEntrenar: puede('entrenar_ia'), puedeAprobar: puede('aprobar_ia') });
+      }
+      if (req.method === 'POST' && url === '/api/entrenamiento/proponer') {
+        if (quita('entrenar_ia')) return json(res, 403, { error: 'No tienes permiso para enseñar al asistente.' });
+        const f = await leerCuerpo(req);
+        const texto = String(f.texto || '').trim().slice(0, 1000);
+        if (!texto) return json(res, 400, { error: 'Escribe o dicta la regla.' });
+        const medio = f.medio === 'voz' ? 'voz' : 'texto';
+        const r = await client.query("INSERT INTO reglas_entrenamiento (texto, medio, origen, propuso) VALUES ($1, $2, $3, $4) RETURNING id", [texto, medio, String(f.origen || '').slice(0, 120), u.usuario]);
+        await registrar(u, 'entrenar_ia', 'asistente', r.rows[0].id, '', '', texto.slice(0, 120));
+        return json(res, 200, { ok: true, id: r.rows[0].id });
+      }
+      const accion = url.replace('/api/entrenamiento/', '');
+      if (req.method === 'POST' && ['confirmar', 'aprobar', 'rechazar', 'editar', 'quitar'].includes(accion)) {
+        const f = await leerCuerpo(req);
+        const id = Number(f.id) || 0;
+        const fila = (await client.query('SELECT id, estado, texto FROM reglas_entrenamiento WHERE id = $1', [id])).rows[0];
+        if (!fila) return json(res, 404, { error: 'Esa regla ya no existe.' });
+        if (accion === 'confirmar') {
+          if (quita('entrenar_ia')) return json(res, 403, { error: 'No tienes permiso para confirmar reglas.' });
+          await client.query("UPDATE reglas_entrenamiento SET estado = 'pendiente', confirmo = $2, actualizado = NOW() WHERE id = $1", [id, u.usuario]);
+        } else {
+          if (quita('aprobar_ia')) return json(res, 403, { error: 'Solo gerencia o el programador aprueban reglas.' });
+          if (accion === 'aprobar') await client.query("UPDATE reglas_entrenamiento SET estado = 'aprobada', aprobo = $2, actualizado = NOW() WHERE id = $1", [id, u.usuario]);
+          if (accion === 'rechazar') await client.query("UPDATE reglas_entrenamiento SET estado = 'rechazada', aprobo = $2, actualizado = NOW() WHERE id = $1", [id, u.usuario]);
+          if (accion === 'editar') {
+            const nuevo = String(f.texto || '').trim().slice(0, 1000);
+            if (!nuevo) return json(res, 400, { error: 'La regla no puede quedar vacía.' });
+            await client.query("UPDATE reglas_entrenamiento SET texto = $2, version = version + 1, estado = 'pendiente', actualizado = NOW() WHERE id = $1", [id, nuevo]);
+          }
+          if (accion === 'quitar') await client.query("UPDATE reglas_entrenamiento SET estado = 'rechazada', aprobo = $2, actualizado = NOW() WHERE id = $1", [id, u.usuario]);
+        }
+        await registrar(u, 'entrenamiento_' + accion, 'asistente', id, fila.estado, '', fila.texto.slice(0, 120));
+        return json(res, 200, { ok: true });
+      }
+      return json(res, 404, { error: 'No existe esa ruta del entrenamiento.' });
     }
 
     // Notas de voz del chat: se guardan como audio y solo las ven quien las envía y quien las recibe.

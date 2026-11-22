@@ -709,6 +709,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
 
       const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
+      if (g && req.method === 'POST' && g[2] === 'gastos' && u.grupo !== 'Programador' && !(permisos || {}).oficina_gastos_editar) {
+        return json(res, 403, { error: 'Puedes ver los gastos, pero no cambiarlos.' });
+      }
       if (g && req.method === 'POST') {
         const f = await leerCuerpo(req);
         if (g[1] === 'guardar') {

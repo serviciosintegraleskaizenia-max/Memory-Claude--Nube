@@ -1000,9 +1000,11 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // ---------- Rutas ----------
 
-  async function manejar(req, res, url, u, { json, leerCuerpo }) {
+  async function manejar(req, res, url, u, { json, leerCuerpo, permisos = {} }) {
     if (!activo) return json(res, 404, { error: 'Este panel no es el central.' });
-    if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el programador puede usar Empresas.' });
+    // Solo la empresa demo: quien tenga el permiso "oficina_demo" puede crearla y verla. Lo demás es del programador.
+    const demoPermitida = Boolean(permisos.oficina_demo) && ((url === '/api/central/demo' && req.method === 'GET') || (url === '/api/central/demo/crear' && req.method === 'POST'));
+    if (u.grupo !== 'Programador' && !demoPermitida) return json(res, 403, { error: 'Solo el programador puede usar Empresas.' });
     // Acciones delicadas: se vuelve a pedir la contraseña del programador.
     const confirmar = async clave => {
       const r = (await client.query('SELECT password_hash FROM usuarios WHERE id = $1', [u.id])).rows[0];
