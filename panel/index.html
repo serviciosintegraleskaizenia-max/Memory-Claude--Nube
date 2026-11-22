@@ -3985,6 +3985,7 @@ let AUTO_PROMPTS = [];
 let AUTO_WA = {};
 let AUTO_WA_ESTADO = { numeros: [], alertas: [] };
 let AUTO_PLANTILLAS = [];
+let AUTO_CLAVE_GENERAL = false;
 // Pantalla de Automatización: dos áreas (Clientes / General de Oficina) y pestañas dentro de cada una.
 let AUTO_AREA = 'clientes';
 const AUTO_PESTANA = { clientes: 'datos', general: 'meta' };
@@ -4015,13 +4016,14 @@ function vistaGeneralAuto() {
     ${pestanasAuto('general')}
     ${seccionAuto('general', 'meta', bloqueMeta() + bloqueEstadoWa())}
     ${seccionAuto('general', 'plantillas', bloquePlantillasWa())}
-    ${seccionAuto('general', 'ia', bloquePrompts())}
+    ${seccionAuto('general', 'ia', bloqueClaveIA() + bloquePrompts())}
     ${seccionAuto('general', 'prueba', bloqueEnvioWa())}
   </div>`;
 }
 async function cargarAutomatizacion() {
   const [r, p, w, e, pl] = await Promise.all([api('/api/central/automatizacion'), api('/api/central/automatizacion/prompts'), api('/api/central/whatsapp/config'), api('/api/central/whatsapp/estado'), api('/api/central/whatsapp/plantillas')]);
   AUTO_PLANTILLAS = pl.ok ? pl.data.plantillas : [];
+  AUTO_CLAVE_GENERAL = r.ok ? Boolean(r.data.clave_general_configurada) : false;
   AUTO_CLIENTES = r.ok ? r.data.clientes : [];
   AUTO_PROMPTS = p.ok ? p.data.prompts : [];
   AUTO_WA = w.ok ? w.data : {};
@@ -4194,6 +4196,23 @@ async function crearPromptUI() {
   await cargarAutomatizacion();
   mostrarAviso('Plantilla creada. Ya aparece en la lista de tipos de negocio.', true);
 }
+// Clave de OpenRouter de Kaizen: los clientes sin clave propia la usan. Hoy es la misma para todos.
+function bloqueClaveIA() {
+  return `<div class="titulo-seccion">Clave de OpenRouter de Kaizen</div>
+    <p class="etiqueta-sec">Los clientes que no tengan clave propia usan esta. Por ahora es la misma para todos; más adelante cada cliente podrá tener la suya.</p>
+    <p class="etiqueta-sec">Estado: <b>${AUTO_CLAVE_GENERAL ? 'Guardada' : 'Todavía no hay'}</b></p>
+    <div class="form-fila">
+      <label>Clave de OpenRouter<input id="iaClaveGeneral" type="password" autocomplete="new-password" placeholder="${AUTO_CLAVE_GENERAL ? 'Ya está guardada. Escribe una nueva solo si la cambias' : 'sk-or-...'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
+    </div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-auto-clave-ia">Guardar clave general</button></div>`;
+}
+async function guardarClaveIAUI() {
+  const r = await api('/api/central/automatizacion/clave-ia/guardar', { clave: document.getElementById('iaClaveGeneral').value.trim() });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar la clave.', false);
+  document.getElementById('iaClaveGeneral').value = '';
+  await cargarAutomatizacion();
+  mostrarAviso('Clave general guardada (cifrada).', true);
+}
 async function guardarPromptUI(clave) {
   const r = await api('/api/central/automatizacion/prompts/guardar', { clave, texto: document.getElementById('pr-' + clave).value });
   if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar el prompt.', false);
@@ -4297,7 +4316,7 @@ function formAutomatizacion() {
       <label>Cuándo pasar a una persona<textarea id="aIaPersona" rows="3" maxlength="600">${esc(ia.pasar_persona || '')}</textarea></label>
     </div>
     <div class="form-fila">
-      <label>Clave de OpenRouter de este cliente<input id="aIaClave" type="password" autocomplete="new-password" placeholder="${ia.clave_configurada ? 'Ya está guardada. Escribe una nueva solo si la quieres cambiar' : 'sk-or-...'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
+      <label>Clave de OpenRouter de este cliente (opcional)<input id="aIaClave" type="password" autocomplete="new-password" placeholder="${ia.clave_configurada ? 'Ya está guardada. Escribe una nueva solo si la quieres cambiar' : (AUTO_CLAVE_GENERAL ? 'Vacío: usa la clave general de Kaizen' : 'sk-or-...')}"><small class="etiqueta-sec">Vacío = usa la clave general de Kaizen. Se guarda cifrada y nunca se vuelve a mostrar.</small></label>
     </div>
     <p class="etiqueta-sec">Los precios y las políticas largas se suben como Excel o PDF en Oficina (base de conocimiento).</p>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-auto-vista">Ver cómo quedará la IA</button></div>
@@ -4510,6 +4529,7 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-wa-enviar') return enviarPlantillaWaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
+  if (a === 'emp-auto-clave-ia') return guardarClaveIAUI();
 
   if (a === 'emp-crear') {
     // Revisión antes de enviar: se marca el campo con problema y se lleva la vista a él.

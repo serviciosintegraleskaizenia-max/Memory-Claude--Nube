@@ -668,7 +668,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       activo: ia.activa === true,
       nombre: fila.nombre, slug: fila.slug, modelo,
       prompt: armarPrompt(perfil, fila.nombre, await promptsList()),
-      openrouter_key: descifrarAuto(ia.clave_openrouter_enc)
+      openrouter_key: descifrarAuto(ia.clave_openrouter_enc) || await claveIAGeneral()
     });
   }
 
@@ -709,6 +709,18 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   }
   async function claveN8n() {
     return (await client.query("SELECT valor FROM automatizacion_config WHERE clave = 'clave_n8n'")).rows[0]?.valor || '';
+  }
+  // Clave de OpenRouter de Kaizen: la usan los clientes que no tengan una propia.
+  async function claveIAGeneral() {
+    return descifrarAuto(await leerConfigAuto('openrouter_enc'));
+  }
+  async function guardarClaveIA(u, f) {
+    const clave = String(f.clave || '').trim();
+    if (!clave) throw Object.assign(new Error('Escribe la clave de OpenRouter.'), { codigo: 400 });
+    await client.query(`INSERT INTO automatizacion_config (clave, valor) VALUES ('openrouter_enc', $1)
+      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [cifrarAuto(clave)]);
+    await registrar(u, 'editar_clave_ia', 'automatizacion', 'openrouter', '', '', '');
+    return { ok: true };
   }
 
   function claveDe(t) {
@@ -1022,7 +1034,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
           delete p.ia.clave_openrouter_enc;
           return { ...c, perfil: p };
         });
-        return json(res, 200, { clientes: sinClave });
+        return json(res, 200, { clientes: sinClave, clave_general_configurada: Boolean(await leerConfigAuto('openrouter_enc')) });
+      }
+      if (req.method === 'POST' && url === '/api/central/automatizacion/clave-ia/guardar') {
+        return json(res, 200, await guardarClaveIA(u, await leerCuerpo(req)));
       }
       if (req.method === 'GET' && url === '/api/central/whatsapp/config') return json(res, 200, await configWhatsapp());
       if (req.method === 'GET' && url === '/api/central/whatsapp/estado') return json(res, 200, await estadoWhatsapp());
