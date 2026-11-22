@@ -20,7 +20,12 @@
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--fondo); margin: 0; color: var(--texto); transition: background 0.3s, color 0.3s; }
 
-  header { background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: white; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header { background: linear-gradient(135deg, var(--encabezado), var(--encabezado2)); color: white; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; position: relative; overflow: hidden; isolation: isolate; }
+  header .banner.visible { display: block; position: absolute; inset: 0; z-index: 0; background: none; border-radius: 0; }
+  header .banner img { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: cover; }
+  header > .cab-izq, header > .encabezado-der { position: relative; z-index: 1; }
+  #tituloEmpresa, #fecha, #datosEmpresa, #empresaNombre { text-shadow: 0 2px 8px rgba(0,0,0,.85); }
+  #btnAvisos { display: none !important; }
   header h1 { margin: 0; font-size: 24px; font-weight: 600; }
   #tituloLogin { font-size: 26px; line-height: 1.3; }
   header p { margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
@@ -48,7 +53,7 @@
   #btnSalir { align-self: flex-end; }
   .btn-tema.btn-salir { padding: 4px 11px; font-size: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.55); }
   #usuarioActivo { display: none; }
-  #tituloEmpresa .zt { font-size: 34px; }
+  #tituloEmpresa .zt { font-size: 44px; }
   .zt-empresa-bajo { font-size: 16px; font-weight: 600; color: #fff; margin-top: 2px; letter-spacing: .2px; }
   .btn-tema { background: rgba(255,255,255,0.14); color: white; border: 1px solid rgba(255,255,255,0.28); padding: 8px 15px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; backdrop-filter: blur(6px); transition: transform .15s, background .15s, box-shadow .15s; }
   .btn-tema:hover { background: rgba(255,255,255,0.26); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
@@ -601,11 +606,11 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
 </div>
 
 <div id="app" style="display:none;">
-<a class="banner" id="banner" target="_blank" rel="noopener"><img id="bannerImg" alt="Publicidad"></a>
 <header>
+  <a class="banner" id="banner" target="_blank" rel="noopener"><img id="bannerImg" alt="Publicidad"></a>
   <div class="cab-izq">
     <h1 id="tituloEmpresa">Panel de reservas</h1>
-    <div class="empresa-fila"><img id="logoEmpresa" src="/empresa/logo" alt="Logo" onerror="this.style.display='none'"><span id="empresaNombre"></span></div>
+    <div class="empresa-fila"><img id="logoEmpresa" alt="Logo"><span id="empresaNombre"></span></div>
     <p id="fecha"></p>
     <p id="datosEmpresa"></p>
   </div>
@@ -1285,7 +1290,9 @@ async function cargarEmpresa() {
   document.getElementById('redesEncabezado').innerHTML = redes;
   document.getElementById('datosEmpresa').textContent =
     [r.data.rnc && 'RNC ' + r.data.rnc, r.data.direccion].filter(Boolean).join(' · ');
-  document.getElementById('logoEmpresa').src = '/empresa/logo?v=' + v;
+  const logoEmp = document.getElementById('logoEmpresa');
+  logoEmp.style.display = r.data.tieneLogo ? 'block' : 'none';
+  if (r.data.tieneLogo) logoEmp.src = '/empresa/logo?v=' + v;
   const banner = document.getElementById('banner');
   banner.classList.toggle('visible', Boolean(r.data.tieneBanner));
   if (r.data.tieneBanner) document.getElementById('bannerImg').src = '/empresa/banner?v=' + v;
@@ -3571,7 +3578,7 @@ function marco(tab, aviso) {
   else cuerpo = formAuditoria();
 
   abrirVentana(`
-    <div class="barra-ventana"><h2>Herramientas</h2><div>${tabs}</div><button class="btn-sec" onclick="mostrarClave(false)" title="Cambiar mi contraseña">🔑 Mi contraseña</button></div>
+    <div class="barra-ventana"><h2>Herramientas</h2><div>${tabs}</div><button class="btn-sec" onclick="document.getElementById('btnAvisos').click()" title="Avisos del navegador">🔔 Activar avisos</button><button class="btn-sec" onclick="mostrarClave(false)" title="Cambiar mi contraseña">🔑 Mi contraseña</button></div>
     ${cuerpo}
     <div class="aviso" id="avisoV" style="color:#16a34a">${esc(aviso)}</div>`);
 
