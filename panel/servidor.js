@@ -168,6 +168,7 @@ async function inicializarTablas() {
   await client.query(`CREATE TABLE IF NOT EXISTS sesiones_recordadas (
     token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL)`);
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
+  await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS audio TEXT');
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
     tipo VARCHAR(10) NOT NULL,
@@ -2437,7 +2438,7 @@ http.createServer(async (req, res) => {
       if (!existe || con === u.usuario) return json(res, 400, { error: 'Contacto no válido' });
       await client.query('UPDATE mensajes SET leido = TRUE WHERE de = $1 AND para = $2 AND leido = FALSE', [con, u.usuario]);
       const r = await client.query(
-        `SELECT id, de, para, texto, fecha, (imagen IS NOT NULL) AS "tieneImagen" FROM (
+        `SELECT id, de, para, texto, fecha, (imagen IS NOT NULL) AS "tieneImagen", (audio IS NOT NULL) AS "tieneAudio" FROM (
            SELECT * FROM mensajes
            WHERE (de = $1 AND para = $2) OR (de = $2 AND para = $1)
            ORDER BY fecha DESC, id DESC LIMIT 100
@@ -2456,6 +2457,20 @@ http.createServer(async (req, res) => {
       if (!fila || !fila.imagen) return json(res, 404, { error: 'Imagen no encontrada' });
       const m = fila.imagen.match(/^data:(image\/[a-z]+);base64,(.*)$/);
       if (!m) return json(res, 404, { error: 'Imagen no válida' });
+      res.writeHead(200, { 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' });
+      return res.end(Buffer.from(m[2], 'base64'));
+    }
+
+    // Notas de voz del chat: se guardan como audio y solo las ven quien las envía y quien las recibe.
+    if (req.method === 'GET' && url === '/api/chat/audio') {
+      if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
+      const audioId = Number(new URL(req.url, 'http://localhost').searchParams.get('id'));
+      const fila = (await client.query(
+        'SELECT audio FROM mensajes WHERE id = $1 AND (de = $2 OR para = $2)', [audioId, u.usuario]
+      )).rows[0];
+      if (!fila || !fila.audio) return json(res, 404, { error: 'Nota de voz no encontrada' });
+      const m = fila.audio.match(/^data:(audio\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,(.*)$/);
+      if (!m) return json(res, 404, { error: 'Nota de voz no válida' });
       res.writeHead(200, { 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' });
       return res.end(Buffer.from(m[2], 'base64'));
     }
@@ -2486,18 +2501,21 @@ http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url === '/api/chat/enviar') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
-      const { para, texto: contenido, imagen } = await leerCuerpo(req);
+      const { para, texto: contenido, imagen, audio } = await leerCuerpo(req);
       const limpio = String(contenido || '').trim();
-      if ((!limpio && !imagen) || limpio.length > 1000) {
+      if ((!limpio && !imagen && !audio) || limpio.length > 1000) {
         return json(res, 400, { error: 'El mensaje debe tener entre 1 y 1000 caracteres.' });
       }
       if (imagen && (!/^data:image\/(png|jpeg|webp|gif);base64,/.test(imagen) || imagen.length > 3000000)) {
         return json(res, 400, { error: 'La imagen debe ser PNG, JPG, WEBP o GIF y pesar menos de 2 MB.' });
       }
+      if (audio && (!/^data:audio\/(webm|ogg|mp4|mpeg|wav|x-m4a)(;[^,]*)?;base64,/.test(audio) || audio.length > 700000)) {
+        return json(res, 400, { error: 'La nota de voz no es válida o dura más de 2 minutos.' });
+      }
       const existe = (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [para || ''])).rowCount > 0;
       if (!existe || para === u.usuario) return json(res, 400, { error: 'Destinatario no válido.' });
-      await client.query('INSERT INTO mensajes (de, para, texto, imagen) VALUES ($1, $2, $3, $4)', [u.usuario, para, limpio, imagen || null]);
-      pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), '/');
+      await client.query('INSERT INTO mensajes (de, para, texto, imagen, audio) VALUES ($1, $2, $3, $4, $5)', [u.usuario, para, limpio, imagen || null, audio || null]);
+      pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), audio && !limpio ? 'Te envió una nota de voz.' : imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), '/');
       await registrar(u, 'mensaje_enviado', 'chat', para, '', '', 'Mensaje privado a ' + para);
       return json(res, 200, { ok: true });
     }
