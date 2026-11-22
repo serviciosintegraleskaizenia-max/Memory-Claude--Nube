@@ -370,7 +370,7 @@ const VISTAS = [
   ['ganancias', 'trending-up', 'Ganancias', ['ver_administracion', 'ver_pagos'], null, 'Administración'],
   ['boletas', 'receipt', 'Boletas', 'ver_boletas', null, 'Administración'],
   ['agencias', 'briefcase', 'Agencias', 'ver_agencias', null, 'Administración'],
-  ['tiempos', 'chart-column', 'Tiempos por reserva', 'ver_control', null, 'Administración'],
+  ['control', 'chart-column', 'Control', 'ver_control', null, 'Administración'],
   ['reportes', 'chart-column', 'Reportes', 'ver_reportes_op', 'reportes', 'Administración'],
   ['config', 'settings', 'Configuración', 'configurar_operaciones', null, 'Ajustes']
 ];
@@ -400,7 +400,7 @@ async function ir(v) {
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
   const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
-    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas, tiempos: vTiempos }[v];
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas, control: vControl }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
@@ -1513,7 +1513,8 @@ const BL = { datos: null, q: '' };
 /* ================= Tiempos por reserva: correo + operaciones (mismo número de reserva) ================= */
 const TM = { desde: '', hasta: '' };
 const minTxt = s => s === null || s === undefined ? '—' : s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : Math.round(s / 60) + ' min';
-async function vTiempos() {
+// Control (gerencia): la pantalla de Control de siempre (en vivo, reparto, gráficas) y, debajo, los tiempos por reserva.
+async function vControl() {
   if (!TM.desde) { const [d1, d2] = rangoGN(); TM.desde = d1; TM.hasta = d2; }
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
   const r = await api(`/api/op/tiempos-reserva?desde=${TM.desde}&hasta=${TM.hasta}`);
@@ -1524,15 +1525,16 @@ async function vTiempos() {
       <td style="padding:7px">${esc(x.asesor || '—')}</td><td style="padding:7px">${minTxt(x.correo_seg)}</td>
       <td style="padding:7px">${esc(x.operador || '—')}</td><td style="padding:7px">${minTxt(x.operaciones_seg)}</td>
       <td style="padding:7px"><b>${minTxt(x.total_seg)}</b></td></tr>`).join('');
-  $('#vista').innerHTML = `<div class="cab"><div><h1>Tiempos por reserva</h1>
+  $('#vista').innerHTML = `<div class="caja" style="padding:0;overflow:hidden"><iframe src="/control" title="Control" style="width:100%;height:72vh;border:0;display:block"></iframe></div>
+    <div class="cab"><div><h1>Tiempos por reserva</h1>
       <div class="sub">Cuánto tarda cada reserva en el correo y en Operaciones. Es el mismo número de reserva: el reloj sigue donde lo dejó la asesora.</div></div>
       <div class="der"><div class="fecha"><input type="date" id="tmDesde" value="${TM.desde}"><input type="date" id="tmHasta" value="${TM.hasta}"></div></div></div>
     <div class="caja"><b>Promedio por reserva:</b> correo <b>${minTxt(d.promedio.correo_seg)}</b> · Operaciones <b>${minTxt(d.promedio.operaciones_seg)}</b> · total <b>${minTxt(d.promedio.total_seg)}</b></div>
     <div class="caja" style="overflow:auto">${d.reservas.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;color:var(--suave)"><th style="padding:7px">Reserva</th><th style="padding:7px">Agencia</th><th style="padding:7px">Asesor (correo)</th><th style="padding:7px">Tiempo en correo</th><th style="padding:7px">Operador</th><th style="padding:7px">Tiempo en Operaciones</th><th style="padding:7px">Total</th></tr></thead>
       <tbody>${filas}</tbody></table>` : '<div class="vacio">No hay reservas con tiempo en estas fechas.</div>'}</div>`;
-  $('#tmDesde').onchange = e => { TM.desde = e.target.value; vTiempos(); };
-  $('#tmHasta').onchange = e => { TM.hasta = e.target.value; vTiempos(); };
+  $('#tmDesde').onchange = e => { TM.desde = e.target.value; vControl(); };
+  $('#tmHasta').onchange = e => { TM.hasta = e.target.value; vControl(); };
 }
 async function vBoletas() {
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
