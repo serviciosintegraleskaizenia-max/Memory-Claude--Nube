@@ -1,14 +1,21 @@
-# Zentralia - sube la version nueva de los paneles al servidor (PowerShell de la PC; no hace falta administrador).
-# Te pide la frase de tu llave 2 veces. Reinicia los paneles: todos vuelven a entrar con su usuario.
-$ErrorActionPreference = 'Continue'
+# Zentralia - instala la versión nueva en el servidor.
+# Solo te pide la contraseña de tu llave UNA vez: sube el paquete y lo instala en la misma conexión.
+$ErrorActionPreference = 'Stop'
 $aqui = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tmp = 'zu-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+$tgz = Join-Path $env:TEMP "$tmp.tgz"
 Write-Host ''
-Write-Host '== Enviando la version nueva al servidor (escribe la frase de tu llave RAPIDO)' -ForegroundColor Cyan
-scp -r -q "$aqui\servidor" "zentralia:/tmp/$tmp"
-if ($LASTEXITCODE -ne 0) { Write-Host 'FALLO el envio. Vuelve a pegar el comando.' -ForegroundColor Red; exit 1 }
-Write-Host '== Instalando (otra vez la frase de tu llave)' -ForegroundColor Cyan
-ssh zentralia "bash /tmp/$tmp/actualizar-paneles.sh"
-if ($LASTEXITCODE -ne 0) { Write-Host 'La actualizacion no termino bien: mandame lo de arriba.' -ForegroundColor Red; exit 1 }
+if (-not (Test-Path (Join-Path $aqui 'servidor\panel\index.html'))) {
+  Write-Host 'No encuentro la carpeta servidor. Extrae el zip completo y ejecuta este archivo desde esa carpeta.' -ForegroundColor Red
+  exit 1
+}
+Write-Host '== Preparando la versión nueva' -ForegroundColor Cyan
+tar -czf $tgz -C $aqui servidor
+if ($LASTEXITCODE -ne 0) { Write-Host 'No pude preparar el paquete.' -ForegroundColor Red; exit 1 }
+Write-Host '== Instalando en el servidor. Escribe la contraseña de tu llave UNA vez.' -ForegroundColor Cyan
+cmd /c "ssh zentralia `"mkdir -p /tmp/$tmp && tar -xzf - -C /tmp/$tmp && bash /tmp/$tmp/servidor/actualizar-paneles.sh`" < `"$tgz`""
+$codigo = $LASTEXITCODE
+Remove-Item $tgz -ErrorAction SilentlyContinue
+if ($codigo -ne 0) { Write-Host 'La instalación no terminó bien: mándame lo de arriba.' -ForegroundColor Red; exit 1 }
 Write-Host ''
-Write-Host 'Listo. Abre somosviajes.kaizenia.app y toca el boton Operaciones (solo tu lo ves mientras esta en construccion).' -ForegroundColor Green
+Write-Host 'Listo. Abre el panel de Somos Viajes y revisa la cabecera.' -ForegroundColor Green
