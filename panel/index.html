@@ -1162,6 +1162,7 @@ function mostrarApp(s) {
   document.getElementById('btnCorreoNuevo').style.display = puede('enviar_correo') ? 'inline-block' : 'none';
   document.getElementById('btnAvisos').style.display = ('Notification' in window && Notification.permission === 'default') ? 'inline-block' : 'none';
   cargarBandeja();
+  recogerAvisosPush();
   cargarReservas();
   iniciarLatido();
   detenerTemporizadores();
@@ -1463,6 +1464,28 @@ function pintarBandeja() {
         </div>`).join('')
     : '<div class="bandeja-vacia">No hay notificaciones.</div>';
   actualizarTitulo();
+}
+
+// Avisos que llegaron como notificación de Windows: entran a la campanita (no se repiten).
+function agregarAvisoPush(d) {
+  const texto = String((d && (d.cuerpo || d.titulo)) || '').trim();
+  if (!texto) return;
+  const repetido = notificaciones.some(n => n.texto === texto && Date.now() - new Date(n.fecha).getTime() < 120000);
+  if (repetido) return;
+  notificaciones = [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), texto, reservaId: null, fecha: new Date().toISOString(), leida: false }, ...notificaciones].slice(0, MAX_NOTIFICACIONES);
+  guardarBandeja();
+  pintarBandeja();
+}
+let pushEscuchado = false;
+function recogerAvisosPush() {
+  if (pushEscuchado || !('serviceWorker' in navigator)) return;
+  pushEscuchado = true;
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.tipo === 'aviso-push') agregarAvisoPush(e.data.datos); });
+  navigator.serviceWorker.ready.then(reg => {
+    const canal = new MessageChannel();
+    canal.port1.onmessage = ev => (ev.data || []).slice().reverse().forEach(agregarAvisoPush);
+    if (reg.active) reg.active.postMessage({ tipo: 'pedir-pendientes' }, [canal.port2]);
+  }).catch(() => {});
 }
 
 function marcarLeida(id) {
