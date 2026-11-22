@@ -503,6 +503,9 @@
 .k-card{position:relative;overflow:hidden;border-left:5px solid var(--c)}
 .k-card .k-bg{position:absolute;right:-10px;top:-8px;opacity:.10;color:var(--c);pointer-events:none}
 .k-card .k-bg svg{width:96px;height:96px}
+.k-card[data-kpi]{cursor:pointer;transition:transform .15s,box-shadow .15s}
+.k-card[data-kpi]:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.14)}
+.k-card[data-kpi]:focus-visible{outline:3px solid var(--c);outline-offset:2px}
 .k-lab{display:flex;align-items:center;gap:7px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--texto-suave)}
 .k-lab svg{color:var(--c);flex:none}
 .k-delta{font-size:12px;color:var(--texto-suave);margin-top:4px}.k-delta.sube{color:#16a34a}.k-delta.baja{color:#dc2626}
@@ -585,11 +588,11 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   <div id="franjas"></div>
   <div id="alertasSistema" class="alertas-sistema" style="display:none;"></div>
   <div class="tarjetas">
-    <div class="tarjeta k-card t-reservas" style="--c:#3b82f6"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg><span>Reservas</span></div><div class="numero" id="n-reservas">0</div><div class="k-delta" id="d-reservas"></div><div class="k-spark" id="s-reservas"></div></div>
-    <div class="tarjeta k-card t-pendientes" style="--c:#f59e0b"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Pendientes de transcribir</span></div><div class="numero" id="n-pendientes">0</div><div class="k-delta" id="d-pendientes"></div><div class="k-spark" id="s-pendientes"></div></div>
-    <div class="tarjeta k-card t-registradas" style="--c:#22c55e"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Registradas</span></div><div class="numero" id="n-registradas">0</div><div class="k-delta" id="d-registradas"></div><div class="k-spark" id="s-registradas"></div></div>
-    <div class="tarjeta k-card t-revisar" style="--c:#ef4444"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>Para revisar</span></div><div class="numero" id="n-revisar">0</div><div class="k-delta" id="d-revisar"></div><div class="k-spark" id="s-revisar"></div></div>
-    <div class="tarjeta k-card t-total" style="--c:#94a3b8"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg><span>Correos procesados</span></div><div class="numero" id="n-total">0</div><div class="k-delta" id="d-total"></div><div class="k-spark" id="s-total"></div></div>
+    <div class="tarjeta k-card t-reservas" data-kpi="reservas" role="button" tabindex="0" title="Ver las reservas" style="--c:#3b82f6"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="m9 16 2 2 4-4"/></svg><span>Reservas</span></div><div class="numero" id="n-reservas">0</div><div class="k-delta" id="d-reservas"></div><div class="k-spark" id="s-reservas"></div></div>
+    <div class="tarjeta k-card t-pendientes" data-kpi="pendientes" role="button" tabindex="0" title="Ver lo pendiente de transcribir" style="--c:#f59e0b"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Pendientes de transcribir</span></div><div class="numero" id="n-pendientes">0</div><div class="k-delta" id="d-pendientes"></div><div class="k-spark" id="s-pendientes"></div></div>
+    <div class="tarjeta k-card t-registradas" data-kpi="registradas" role="button" tabindex="0" title="Ver las reservas registradas" style="--c:#22c55e"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><span>Registradas</span></div><div class="numero" id="n-registradas">0</div><div class="k-delta" id="d-registradas"></div><div class="k-spark" id="s-registradas"></div></div>
+    <div class="tarjeta k-card t-revisar" data-kpi="revisar" role="button" tabindex="0" title="Ver lo que está para revisar" style="--c:#ef4444"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg><span>Para revisar</span></div><div class="numero" id="n-revisar">0</div><div class="k-delta" id="d-revisar"></div><div class="k-spark" id="s-revisar"></div></div>
+    <div class="tarjeta k-card t-total" data-kpi="total" role="button" tabindex="0" title="Ver todos los correos" style="--c:#94a3b8"><div class="k-bg"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg></div><div class="k-lab"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg><span>Correos procesados</span></div><div class="numero" id="n-total">0</div><div class="k-delta" id="d-total"></div><div class="k-spark" id="s-total"></div></div>
   </div>
 
   <div class="conectados" id="conectados"></div>
@@ -1649,6 +1652,32 @@ function pintarKpis() {
   const colores = { reservas: '#3b82f6', pendientes: '#f59e0b', registradas: '#22c55e', revisar: '#ef4444', total: '#94a3b8' };
   for (const k of Object.keys(series)) { dibujarKpi(k, series[k], colores[k]); deltaKpi(k, series[k]); }
 }
+// Cada tarjeta del resumen abre la lista que cuenta, con los filtros que le corresponden.
+function abrirDesdeTarjeta(kpi) {
+  const ir = {
+    reservas: { vista: 'todas', intencion: 'RESERVA', estado: '' },
+    pendientes: { vista: 'todas', intencion: '', estado: 'pendiente de transcribir' },
+    registradas: { vista: 'registradas', intencion: '', estado: '' },
+    revisar: { vista: 'revision', intencion: '', estado: '' },
+    total: { vista: 'todas', intencion: '', estado: '' }
+  }[kpi];
+  if (!ir) return;
+  document.getElementById('filtroIntencion').value = ir.intencion;
+  document.getElementById('filtroEstado').value = ir.estado;
+  document.getElementById('filtroRevision').value = '';
+  document.getElementById('buscarHistorico').value = '';
+  cambiarVista(ir.vista);
+  document.getElementById('pestanas').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.querySelector('.tarjetas').addEventListener('click', e => {
+  const k = e.target.closest('[data-kpi]');
+  if (k) abrirDesdeTarjeta(k.dataset.kpi);
+});
+document.querySelector('.tarjetas').addEventListener('keydown', e => {
+  const k = e.target.closest && e.target.closest('[data-kpi]');
+  if (k && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirDesdeTarjeta(k.dataset.kpi); }
+});
+
 function actualizarContadores() {
   // Cada número usa el mismo filtro que su pestaña: el número y la lista siempre coinciden.
   document.getElementById('cnt-todas').textContent = agruparReservas(filtrar('todas')).length;
