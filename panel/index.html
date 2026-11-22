@@ -1340,7 +1340,7 @@ function pintarRedes(redes) {
   const grupos = {};
   for (const x of listaRedes(redes).filter(x => /^(https?:|mailto:)/i.test(x.url))) (grupos[sedeDeRed(x)] ||= []).push(x);
   const orden = ['Punta Cana', 'Orlando', ''];
-  return orden.filter(k => grupos[k]).map(sede => { const items = grupos[sede]; return `<div class="redes-grupo"><span class="redes-etiqueta">${esc(ETIQUETA_SEDE[sede])}</span><div class="redes-iconos">${items.map(x => {
+  return orden.filter(k => grupos[k]).map(sede => { const items = grupos[sede]; return `<div class="redes-grupo">${sede ? `<span class="redes-etiqueta">${esc(ETIQUETA_SEDE[sede])}</span>` : ''}<div class="redes-iconos">${items.map(x => {
     const [nombre, svg] = ICONOS_RED[x.red]; const titulo = nombre + (x.nombre ? ' · ' + x.nombre : '');
     return `<a class="red-${x.red}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(titulo)}" aria-label="${esc(titulo)}">${svg}</a>`; }).join('')}</div></div>`; }).join('');
 }
