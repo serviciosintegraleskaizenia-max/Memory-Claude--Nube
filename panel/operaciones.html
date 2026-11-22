@@ -370,6 +370,7 @@ const VISTAS = [
   ['ganancias', 'trending-up', 'Ganancias', ['ver_administracion', 'ver_pagos'], null, 'Administración'],
   ['boletas', 'receipt', 'Boletas', 'ver_boletas', null, 'Administración'],
   ['agencias', 'briefcase', 'Agencias', 'ver_agencias', null, 'Administración'],
+  ['tiempos', 'chart-column', 'Tiempos por reserva', 'ver_control', null, 'Administración'],
   ['reportes', 'chart-column', 'Reportes', 'ver_reportes_op', 'reportes', 'Administración'],
   ['config', 'settings', 'Configuración', 'configurar_operaciones', null, 'Ajustes']
 ];
@@ -399,7 +400,7 @@ async function ir(v) {
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
   const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
-    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas }[v];
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas, tiempos: vTiempos }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
@@ -581,6 +582,7 @@ function htmlGantt() {
 async function abrirDetalle(id) {
   const x = S.servicios.find(s => s.id === id);
   if (!x) return;
+  arrancarTiempoOp(id);
   const ev = await api('/api/op/eventos?id=' + id);
   const [icono, nombre, cls] = TIPO[x.tipo] || TIPO.OTRO;
   const v = x.vuelo_vivo;
@@ -614,7 +616,7 @@ async function abrirDetalle(id) {
   $('#lat').dataset.id = id;
   $('#lat').classList.add('abierto'); $('#fondo').classList.add('abierto');
 }
-function cerrarLat() { $('#lat').classList.remove('abierto', 'grande'); $('#fondo').classList.remove('abierto'); $('#vMin').style.display = 'none'; }
+function cerrarLat() { detenerTiempoOp(); $('#lat').classList.remove('abierto', 'grande'); $('#fondo').classList.remove('abierto'); $('#vMin').style.display = 'none'; }
 // Toda ficha lateral lleva minimizar, agrandar y cerrar (X), junto al botón X que ya trae.
 new MutationObserver(() => {
   const x = $('#cerrarLat');
@@ -1377,7 +1379,24 @@ function pintarReservas() {
       <tbody>${d.reservas.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>`;
 }
 // Ficha de una reserva: los servicios, la agencia, los documentos y el acceso al correo (sin mostrar el correo aquí).
+// Reloj de Operaciones: mientras la ficha de la reserva está abierta aquí, sigue contando el mismo número
+// que en el panel de correo. Así se suma: tiempo del correo + tiempo en Operaciones.
+let TIEMPO_OP = null;
+function arrancarTiempoOp(opId) {
+  detenerTiempoOp();
+  const latir = () => api('/api/op/tiempo/latido', { op_id: opId, activo: true }).catch(() => {});
+  latir();
+  TIEMPO_OP = { opId, timer: setInterval(latir, 20000) };
+}
+function detenerTiempoOp() {
+  if (!TIEMPO_OP) return;
+  clearInterval(TIEMPO_OP.timer);
+  api('/api/op/tiempo/latido', { op_id: TIEMPO_OP.opId, activo: false }).catch(() => {});
+  TIEMPO_OP = null;
+}
+window.addEventListener('pagehide', detenerTiempoOp);
 async function abrirReserva(opId) {
+  arrancarTiempoOp(opId);
   const r = await api('/api/op/reserva-detalle?id=' + opId);
   if (!r.ok) return aviso(r.data.error || 'No se pudo abrir');
   const d = r.data, L = d.servicios, a = L[0], precios = I.permisos.ver_precios && I.modulos.precios;
@@ -1491,6 +1510,30 @@ function pintarGanancias() {
 }
 // Boletas: venta contra costo de cada reserva (documento interno de administración).
 const BL = { datos: null, q: '' };
+/* ================= Tiempos por reserva: correo + operaciones (mismo número de reserva) ================= */
+const TM = { desde: '', hasta: '' };
+const minTxt = s => s === null || s === undefined ? '—' : s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : Math.round(s / 60) + ' min';
+async function vTiempos() {
+  if (!TM.desde) { const [d1, d2] = rangoGN(); TM.desde = d1; TM.hasta = d2; }
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  const r = await api(`/api/op/tiempos-reserva?desde=${TM.desde}&hasta=${TM.hasta}`);
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
+  const d = r.data;
+  const filas = d.reservas.map(x => `<tr style="border-top:1px solid var(--borde)">
+      <td style="padding:7px"><b>#${x.reserva}</b><div class="sub">${esc(x.cliente || '')}</div></td><td style="padding:7px">${esc(x.agencia || '')}</td>
+      <td style="padding:7px">${esc(x.asesor || '—')}</td><td style="padding:7px">${minTxt(x.correo_seg)}</td>
+      <td style="padding:7px">${esc(x.operador || '—')}</td><td style="padding:7px">${minTxt(x.operaciones_seg)}</td>
+      <td style="padding:7px"><b>${minTxt(x.total_seg)}</b></td></tr>`).join('');
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Tiempos por reserva</h1>
+      <div class="sub">Cuánto tarda cada reserva en el correo y en Operaciones. Es el mismo número de reserva: el reloj sigue donde lo dejó la asesora.</div></div>
+      <div class="der"><div class="fecha"><input type="date" id="tmDesde" value="${TM.desde}"><input type="date" id="tmHasta" value="${TM.hasta}"></div></div></div>
+    <div class="caja"><b>Promedio por reserva:</b> correo <b>${minTxt(d.promedio.correo_seg)}</b> · Operaciones <b>${minTxt(d.promedio.operaciones_seg)}</b> · total <b>${minTxt(d.promedio.total_seg)}</b></div>
+    <div class="caja" style="overflow:auto">${d.reservas.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--suave)"><th style="padding:7px">Reserva</th><th style="padding:7px">Agencia</th><th style="padding:7px">Asesor (correo)</th><th style="padding:7px">Tiempo en correo</th><th style="padding:7px">Operador</th><th style="padding:7px">Tiempo en Operaciones</th><th style="padding:7px">Total</th></tr></thead>
+      <tbody>${filas}</tbody></table>` : '<div class="vacio">No hay reservas con tiempo en estas fechas.</div>'}</div>`;
+  $('#tmDesde').onchange = e => { TM.desde = e.target.value; vTiempos(); };
+  $('#tmHasta').onchange = e => { TM.hasta = e.target.value; vTiempos(); };
+}
 async function vBoletas() {
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
   const [desde, hasta] = rangoGN();

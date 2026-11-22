@@ -323,6 +323,13 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       cantidad INTEGER NOT NULL DEFAULT 1, precio NUMERIC NOT NULL DEFAULT 0, cobra BOOLEAN NOT NULL DEFAULT FALSE, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await q('CREATE INDEX IF NOT EXISTS op_servicio_cortesias_op ON op_servicio_cortesias (op_id)');
     await q('ALTER TABLE op_servicios ADD COLUMN IF NOT EXISTS extras NUMERIC NOT NULL DEFAULT 0');
+    // Reloj de Operaciones: usa el mismo número de reserva que el panel de correo (clasificacion.id).
+    // El tiempo del correo sigue en tiempo_reserva; este guarda el trabajo hecho aquí, para sumarlo después.
+    await q(`CREATE TABLE IF NOT EXISTS op_tiempos (id SERIAL PRIMARY KEY, reserva_id INTEGER NOT NULL, usuario VARCHAR(50) NOT NULL,
+      inicio TIMESTAMPTZ NOT NULL DEFAULT NOW(), visto TIMESTAMPTZ NOT NULL DEFAULT NOW(), fin TIMESTAMPTZ)`);
+    await q('CREATE INDEX IF NOT EXISTS op_tiempos_reserva ON op_tiempos (reserva_id)');
+    // Si el latido se corta (cerró la ficha o la pestaña), el tramo termina solo a los 3 minutos sin señal.
+    setInterval(() => q(`UPDATE op_tiempos SET fin = visto WHERE fin IS NULL AND visto < NOW() - INTERVAL '3 minutes'`).catch(() => {}), 60 * 1000).unref();
     if (!(await client.query('SELECT 1 FROM op_cortesias LIMIT 1')).rowCount) {
       const ej = [['Bebida de bienvenida', 0, false, true], ['Toallitas frías', 0, false, true], ['Asistencia con el equipaje', 0, false, false], ['Silla de bebé', 0, false, false],
         ['Parada en el supermercado', 10, true, false], ['Botella de champaña', 25, true, false], ['Espera extra (por hora)', 15, true, false]];
@@ -1535,7 +1542,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           client.query('SELECT * FROM op_cortesias WHERE activo ORDER BY orden, nombre')]);
         const empresa = ((await client.query('SELECT nombre, marca_nombre, logo IS NOT NULL AS logo, rnc, direccion FROM empresa_datos WHERE id = 1').catch(() => ({ rows: [] }))).rows[0] || {});
         const perms = ['ver_operaciones', 'asignar_servicios', 'crear_reservas', 'ver_precios', 'ver_reportes_op', 'ver_choferes_vivo', 'imprimir_operativo', 'crear_paquetes', 'configurar_operaciones',
-          'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos']
+          'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos', 'ver_control']
           .reduce((a, k) => ({ ...a, [k]: prog || puede(k) }), {});
         return json(res, 200, { ...est, permisos: perms, usuario: { nombre: u.nombre, grupo: u.grupo, usuario: u.usuario }, empresa, hoy: hoyLocal(),
           choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, agencias: ags.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
@@ -1607,6 +1614,43 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       if (req.method === 'GET' && url === '/api/op/aviones') { pide('ver_vuelos', 'No tienes permiso para ver los vuelos.'); return json(res, 200, await buscarAviones(p.get('ahora') === '1')); }
       // ---------- Reservas (lo registrado en el panel de correo + las manuales) ----------
       if (req.method === 'GET' && url === '/api/op/reservas') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await listaReservas(p, prog || puede('ver_precios'))); }
+      // Reloj de Operaciones: mientras la ficha de la reserva está abierta aquí, el tiempo se suma a la del correo.
+      if (req.method === 'POST' && url === '/api/op/tiempo/latido') {
+        pide('ver_reservas_op', 'No tienes permiso para ver las reservas.');
+        const f = await leerCuerpo(req);
+        const op = (await client.query('SELECT servicio_id FROM op_servicios WHERE id = $1', [Number(f.op_id) || 0])).rows[0];
+        if (!op || !op.servicio_id) throw error('Esa reserva no existe.', 404);
+        const reservaId = op.servicio_id;
+        if (f.activo === false) {
+          await client.query('UPDATE op_tiempos SET fin = NOW(), visto = NOW() WHERE reserva_id = $1 AND usuario = $2 AND fin IS NULL', [reservaId, u.usuario]);
+        } else {
+          const abierto = (await client.query('SELECT id FROM op_tiempos WHERE reserva_id = $1 AND usuario = $2 AND fin IS NULL ORDER BY id DESC LIMIT 1', [reservaId, u.usuario])).rows[0];
+          if (abierto) await client.query('UPDATE op_tiempos SET visto = NOW() WHERE id = $1', [abierto.id]);
+          else await client.query('INSERT INTO op_tiempos (reserva_id, usuario) VALUES ($1, $2)', [reservaId, u.usuario]);
+        }
+        return json(res, 200, { ok: true, reserva: reservaId });
+      }
+      // Tiempos por reserva: cuánto tardó en el correo (panel) y cuánto en Operaciones, con el mismo número.
+      if (req.method === 'GET' && url === '/api/op/tiempos-reserva') {
+        if (!prog && !puede('ver_control')) throw error('Solo quien tiene el permiso Ver control puede ver los tiempos.', 403);
+        const fecha = (k, por) => (/^\d{4}-\d{2}-\d{2}$/.test(p.get(k) || '') ? p.get(k) : por);
+        const desde = fecha('desde', '2000-01-01'), hasta = fecha('hasta', '2100-01-01');
+        const rango = 'inicio >= $1::date AND inicio < ($2::date + 1)';
+        const correo = (await client.query(`SELECT reserva_id, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS seg,
+            (array_agg(usuario ORDER BY inicio))[1] AS asesor FROM tiempo_reserva WHERE ${rango} GROUP BY reserva_id`, [desde, hasta])).rows;
+        const oper = (await client.query(`SELECT reserva_id, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS seg,
+            (array_agg(usuario ORDER BY inicio))[1] AS operador FROM op_tiempos WHERE ${rango} GROUP BY reserva_id`, [desde, hasta])).rows;
+        const ids = [...new Set([...correo, ...oper].map(x => x.reserva_id))].slice(0, 500);
+        const info = new Map(ids.length ? (await client.query('SELECT id, nombre_cliente, asunto, agencia FROM clasificacion WHERE id = ANY($1::int[])', [ids])).rows.map(c => [c.id, c]) : []);
+        const cm = new Map(correo.map(x => [x.reserva_id, x])), om = new Map(oper.map(x => [x.reserva_id, x]));
+        const filas = ids.map(id => {
+          const c = cm.get(id), o = om.get(id), i = info.get(id) || {};
+          const sc = c ? Math.round(c.seg) : 0, so = o ? Math.round(o.seg) : 0;
+          return { reserva: id, cliente: i.nombre_cliente || '', asunto: i.asunto || '', agencia: i.agencia || '', asesor: c ? c.asesor : '', operador: o ? o.operador : '', correo_seg: sc, operaciones_seg: so, total_seg: sc + so };
+        }).sort((a, b) => b.total_seg - a.total_seg);
+        const promedio = k => { const v = filas.map(x => x[k]).filter(x => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+        return json(res, 200, { desde, hasta, reservas: filas, promedio: { correo_seg: promedio('correo_seg'), operaciones_seg: promedio('operaciones_seg'), total_seg: promedio('total_seg') } });
+      }
       if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
       // ---------- Administración (gerencia) ----------
       // ---------- Pagos (permiso "Ver pagos"): cuentas, pagos por reserva, comprobantes y verificación ----------
