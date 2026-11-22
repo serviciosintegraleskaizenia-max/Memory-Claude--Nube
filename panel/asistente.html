@@ -65,11 +65,12 @@
   .tema-switch.on .ico-sol { display: none; }
   .tema-switch.on .ico-luna { display: block; }
   /* Selector de modo: solo iconos, grandes */
-  .modo { display:flex; gap:8px; }
-  .modo button { width:44px; height:44px; border-radius:10px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
-  .modo button svg { width:24px; height:24px; }
-  .modo button.on { color:#fff; border-color:#1679c2; background:#1679c2; box-shadow:0 0 0 2px rgba(22,121,194,.35); }
-  .modo button[data-modo="venta"].on { background:#1e293b; border-color:#94a3b8; box-shadow:none; color:#fff; }
+  .modo { display:flex; align-items:center; gap:2px; background:#0f172a; border:1px solid #334155; border-radius:999px; padding:2px; }
+  .modo button { height:26px; border:0; border-radius:999px; background:transparent; color:#94a3b8; font-family:inherit; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:5px; padding:0 10px 0 8px; cursor:pointer; }
+  .modo button svg { width:13px; height:13px; flex:none; }
+  .modo button.on { color:#fff; }
+  .modo button[data-modo="entrenamiento"].on { background:#1679c2; }
+  .modo button[data-modo="venta"].on { background:#f97316; }
   .grabando { background: #ef4444 !important; color: #fff !important; }
 </style>
 </head>
@@ -77,10 +78,7 @@
 <header>
   <div><h1>🤖 Asistente</h1></div>
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-    <div class="modo" id="modo" role="group" aria-label="Modo del asistente">
-      <button type="button" data-modo="entrenamiento" title="Entrenamiento" aria-label="Entrenamiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M2 9.5L12 5l10 4.5L12 14z"/><path d="M6.5 11.5V16c0 1.4 2.5 2.8 5.5 2.8s5.5-1.4 5.5-2.8v-4.5"/><path d="M22 9.5v5"/></svg></button>
-      <button type="button" data-modo="venta" title="Venta" aria-label="Venta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><circle cx="9" cy="20" r="1.6"/><circle cx="18" cy="20" r="1.6"/><path d="M2 3.5h3l2.6 11.6a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.5L22 7H6.2"/></svg></button>
-    </div>
+    <div class="modo" id="modo" role="group" aria-label="Modo del asistente"><button type="button" data-modo="entrenamiento" title="Entrenamiento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M2 9.5L12 5l10 4.5L12 14z"/><path d="M6.5 11.5V16c0 1.4 2.5 2.8 5.5 2.8s5.5-1.4 5.5-2.8v-4.5"/><path d="M22 9.5v5"/></svg><span>Entrenar</span></button><button type="button" data-modo="venta" title="Venta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><circle cx="9" cy="20" r="1.6"/><circle cx="18" cy="20" r="1.6"/><path d="M2 3.5h3l2.6 11.6a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.5L22 7H6.2"/></svg><span>Vender</span></button></div>
     <button class="tema-switch" id="btnTema" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
   </div>
 </header>

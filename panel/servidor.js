@@ -2459,11 +2459,8 @@ http.createServer(async (req, res) => {
         [u.usuario]
       );
       const pendientes = new Map(no.rows.map(x => [x.de, x.n]));
-      const choferes = (await client.query('SELECT id, nombre, (foto IS NOT NULL) AS "tieneFoto" FROM op_choferes WHERE activo = TRUE ORDER BY nombre')).rows
-        .filter(x => 'chofer-' + x.id !== u.usuario)
-        .map(x => ({ usuario: 'chofer-' + x.id, nombre: x.nombre, grupo: 'Chofer', tieneFoto: x.tieneFoto }));
-      const todos = [...r.rows, ...choferes].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
-      return json(res, 200, todos.map(x => ({
+      // Por ahora solo usuarios del panel. Los choferes se sumarán cuando tengan la casilla "Aparece en el chat".
+      return json(res, 200, r.rows.map(x => ({
         usuario: x.usuario,
         nombre: x.nombre,
         grupo: x.grupo,
