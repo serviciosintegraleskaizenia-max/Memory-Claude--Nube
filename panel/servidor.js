@@ -2558,7 +2558,8 @@ http.createServer(async (req, res) => {
         const enlaceValido = enlaceRed(red, x.url);
         const nombreRed = String(x.nombre || '').trim().slice(0, 40);
         if (!enlaceValido) return json(res, 400, { error: `No entendí el enlace de ${red}${nombreRed ? ' (' + nombreRed + ')' : ''}. Pega la dirección completa (https://...).` });
-        redes.push({ red, nombre: nombreRed, url: enlaceValido });
+        const sede = ['Punta Cana', 'Orlando'].includes(x.sede) ? x.sede : '';
+        redes.push({ red, nombre: nombreRed, sede, url: enlaceValido });
       }
       const previa = (await client.query(
         'SELECT nombre, rnc, direccion, banner_enlace, logo IS NOT NULL AS logo, banner IS NOT NULL AS banner FROM empresa_datos WHERE id = 1'

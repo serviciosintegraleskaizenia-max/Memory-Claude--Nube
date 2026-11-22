@@ -32,6 +32,11 @@
   @media (max-width: 760px) { .encabezado-der { flex-wrap: wrap; } .encabezado-columna { align-items: flex-start; } .encabezado-botones, #redesEncabezado { justify-content: flex-start; } }
   .logo-caja { background: white; border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; justify-content: center; }
   .logo-caja img { height: 64px; width: auto; max-width: 200px; display: block; }
+  .logo-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .btn-tema.btn-salir { padding: 4px 11px; font-size: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.55); }
+  #usuarioActivo { display: none; }
+  #tituloEmpresa .zt { font-size: 34px; }
+  .zt-empresa-bajo { font-size: 16px; font-weight: 600; color: #fff; margin-top: 2px; letter-spacing: .2px; }
   .btn-tema { background: rgba(255,255,255,0.14); color: white; border: 1px solid rgba(255,255,255,0.28); padding: 8px 15px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; backdrop-filter: blur(6px); transition: transform .15s, background .15s, box-shadow .15s; }
   .btn-tema:hover { background: rgba(255,255,255,0.26); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
   .btn-tema.btn-chat { background: linear-gradient(135deg, #c084fc, #f472b6); color: #fff; border-color: transparent; font-weight: 800; padding: 9px 19px; box-shadow: 0 8px 20px rgba(192,132,252,0.55); }
@@ -67,6 +72,9 @@
   .conectados { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; min-height: 24px; }
   .chip { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 999px; padding: 4px 11px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
   .punto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .punto.verde { background: #22c55e; }
+  .punto.naranja { background: #f97316; }
+  .punto.rojo { background: #ef4444; }
   .verde { background: #16a34a; }
   .amarillo { background: #f59e0b; }
   .gris { background: #94a3b8; }
@@ -486,9 +494,9 @@
   .red-threads { background: #000; } .red-pinterest { background: #E60023; } .red-maps { background: #fff; border: 1px solid #e2e8f0; } .red-tripadvisor { background: #34E0A1; }
   .red-email { background: #0b4f8a; }
   .redes a svg { width: 18px; height: 18px; }
-  .red-fila { display: grid; grid-template-columns: 34px 150px 1fr 1.4fr 38px; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .red-fila { display: grid; grid-template-columns: 34px 130px 120px 1fr 1.4fr 38px; gap: 8px; align-items: center; margin-bottom: 6px; }
   .red-fila .redes a { width: 30px; height: 30px; }
-  @media (max-width: 760px) { .red-fila { grid-template-columns: 34px 1fr 38px; } .red-fila input { grid-column: 1 / -1; } }
+  @media (max-width: 760px) { .red-fila { grid-template-columns: 34px 1fr 1fr 38px; } .red-fila input { grid-column: 1 / -1; } }
   .caja-login { background: var(--tarjeta); color: var(--texto); padding: 30px; border-radius: 14px; width: min(360px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.3); }
   .caja-login h2 { margin: 0 0 6px; font-size: 18px; }
   .caja-login p { margin: 0 0 18px; font-size: 13px; color: var(--texto-suave); }
@@ -585,12 +593,12 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
     <button class="btn-tema" id="btnAsistente" style="display:none;" title="Probar el asistente de redes sociales">🤖 Asistente</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
     <button class="btn-tema" id="btnTema">🌙 Modo oscuro</button>
-    <button class="btn-tema" id="btnSalir">Cerrar sesión</button>
     </div>
     <!-- Las redes van debajo de los botones; el logo queda al lado de "Salir". -->
     <div class="redes" id="redesEncabezado"></div>
    </div>
-    <div class="logo-caja"><img id="logoEmpresa" src="/empresa/logo" alt="Logo"></div>
+    <div class="logo-col"><div class="logo-caja"><img id="logoEmpresa" src="/empresa/logo" alt="Logo"></div>
+      <button class="btn-tema btn-salir" id="btnSalir">Cerrar sesión</button></div>
   </div>
 </header>
 
@@ -1234,7 +1242,7 @@ async function cargarEmpresa() {
   const v = encodeURIComponent(r.data.version || '');
   const nombreMarca = r.data.marca_nombre || r.data.nombre;
   const titulo = 'Zentralia App · ' + nombreMarca;
-  document.getElementById('tituloEmpresa').innerHTML = marcaZentralia(nombreMarca);
+  document.getElementById('tituloEmpresa').innerHTML = marcaZentralia('') + `<div class="zt-empresa-bajo">${esc(nombreMarca)}</div>`;
   // Un título propio de la empresa (si lo configuró) va debajo de la marca.
   const propio = r.data.login_titulo && !/^reservas\s*-/i.test(r.data.login_titulo) ? r.data.login_titulo : '';
   document.getElementById('tituloLogin').innerHTML = marcaZentralia(nombreMarca) + (propio ? `<div class="zt-propio">${esc(propio)}</div>` : '');
@@ -1288,6 +1296,7 @@ function listaRedes(redes) {
 // Las redes se agrupan por sede (Punta Cana, Orlando...) con su etiqueta, para que se sepa cuáles son de cada una.
 // Cada enlace va a la burbuja de su sede: Punta Cana u Orlando, según el nombre que se le puso.
 function sedeDeRed(x) {
+  if (x.sede === 'Punta Cana' || x.sede === 'Orlando') return x.sede;
   const t = String(x.nombre || '');
   if (/orlando/i.test(t)) return 'Orlando';
   if (/punta|cana/i.test(t)) return 'Punta Cana';
@@ -1309,6 +1318,7 @@ function filaRedForm(x = {}) {
   return `<div class="red-fila">
     <span class="redes"><a class="red-${x.red || 'instagram'}">${muestra[1]}</a></span>
     <select data-red="red">${opciones}</select>
+    <select data-red="sede" title="¿De qué sede es?"><option value="">Sin sede</option><option ${x.sede === 'Punta Cana' ? 'selected' : ''}>Punta Cana</option><option ${x.sede === 'Orlando' ? 'selected' : ''}>Orlando</option></select>
     <input data-red="nombre" maxlength="40" placeholder="Nombre (opcional): Punta Cana, Orlando..." value="${esc(x.nombre || '')}">
     <input data-red="url" maxlength="200" placeholder="${esc(muestra[2])}" value="${esc(valor)}">
     <button type="button" class="btn-mini" data-red-quitar title="Quitar">🗑</button>
@@ -2886,8 +2896,8 @@ function pintarConectados(lista) {
   el.innerHTML = lista.length
     ? lista.map(c => `
         <span class="chip">
-          <span class="punto ${c.estado === 'en linea' ? 'verde' : 'amarillo'}"></span>
-          ${esc(c.nombre)} · ${esc(c.grupo)} · ${c.estado === 'en linea' ? 'en línea' : 'ausente'}
+          <span class="punto ${c.estado === 'en linea' ? 'verde' : 'naranja'}" title="${c.estado === 'en linea' ? 'En línea' : 'Ausente'}"></span>
+          ${esc(c.nombre)} · ${esc(c.grupo)}
         </span>`).join('')
     : '<span class="chip">Sin usuarios conectados</span>';
 }
@@ -4962,7 +4972,7 @@ async function guardarEmpresa() {
     nombre: val('eNombre').trim(), rnc: val('eRnc').trim(), direccion: val('eDireccion').trim(),
     banner_enlace: val('eEnlace').trim(), logo, banner, fondo,
     login_titulo: val('eLoginTitulo').trim(), login_subtitulo: val('eLoginSubtitulo').trim(), marca_nombre: val('eMarcaNombre').trim(),
-    redes: [...document.querySelectorAll('#eRedes .red-fila')].map(f => ({ red: f.querySelector('[data-red=red]').value, nombre: f.querySelector('[data-red=nombre]').value.trim(), url: f.querySelector('[data-red=url]').value.trim() })).filter(x => x.url)
+    redes: [...document.querySelectorAll('#eRedes .red-fila')].map(f => ({ red: f.querySelector('[data-red=red]').value, sede: f.querySelector('[data-red=sede]').value, nombre: f.querySelector('[data-red=nombre]').value.trim(), url: f.querySelector('[data-red=url]').value.trim() })).filter(x => x.url)
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los datos de la empresa.', false);
   await cargarEmpresa();
