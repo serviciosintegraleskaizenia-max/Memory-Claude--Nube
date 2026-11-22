@@ -32,7 +32,15 @@
   @media (max-width: 760px) { .encabezado-der { flex-wrap: wrap; } .encabezado-columna { align-items: flex-start; } .encabezado-botones, #redesEncabezado { justify-content: flex-start; } }
   .logo-caja { background: white; border-radius: 10px; padding: 6px; display: flex; align-items: center; justify-content: center; }
   .logo-caja img { height: 40px; width: 40px; display: block; }
-  .btn-tema { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .btn-tema { background: rgba(255,255,255,0.14); color: white; border: 1px solid rgba(255,255,255,0.28); padding: 8px 15px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; backdrop-filter: blur(6px); transition: transform .15s, background .15s, box-shadow .15s; }
+  .btn-tema:hover { background: rgba(255,255,255,0.26); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+  .btn-tema.btn-chat { background: linear-gradient(135deg, #fde047, #f97316); color: #3b1d00; border-color: transparent; font-weight: 800; padding: 9px 19px; box-shadow: 0 6px 18px rgba(249,115,22,0.5); }
+  .btn-tema.btn-chat:hover { background: linear-gradient(135deg, #fef08a, #fb923c); }
+  #btnTema { background: rgba(15,23,42,0.45); border-color: rgba(255,255,255,0.22); }
+  .usuario-activo { cursor: pointer; text-decoration: underline dotted rgba(255,255,255,0.5); text-underline-offset: 3px; }
+  .redes-grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .redes-grupo + .redes-grupo { margin-left: 14px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,0.35); }
+  .redes-etiqueta { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; opacity: .9; margin-right: 2px; }
   .usuario-activo { font-size: 13px; opacity: 0.9; }
   .banner { display: none; background: var(--tarjeta); }
   .banner.visible { display: block; }
@@ -566,15 +574,14 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
     <div class="encabezado-botones">
     <span class="usuario-activo" id="usuarioActivo"></span>
     <button class="btn-tema campana" id="btnCampana" title="Notificaciones">🔔<span class="badge" id="badgeCampana" style="display:none;"></span></button>
-    <button class="btn-tema" id="btnChat" style="display:none;">Chat <span class="badge" id="badgeChat" style="display:none;"></span></button>
+    <button class="btn-tema btn-chat" id="btnChat" style="display:none;">💬 Chat<span class="badge" id="badgeChat" style="display:none;"></span></button>
     <button class="btn-tema" id="btnAvisos" style="display:none;">Activar avisos</button>
     <button class="btn-tema" id="btnControl" style="display:none;" title="Tiempos y gráficas de los asesores">Control</button>
     <button class="btn-tema" id="btnOperaciones" style="display:none;" title="Asignar choferes, operativo del día, precios, paquetes y reportes">🚐 Operaciones</button>
     <button class="btn-tema" id="btnCrm" style="display:none;" title="Personas, conversaciones y etapas de venta (servicio CRM)">👥 CRM</button>
     <button class="btn-tema" id="btnAsistente" style="display:none;" title="Probar el asistente de redes sociales">🤖 Asistente</button>
     <button class="btn-tema" id="btnHerramientas" style="display:none;">Herramientas</button>
-    <button class="btn-tema" id="btnMiClave">Mi contraseña</button>
-    <button class="btn-tema" id="btnTema">Modo oscuro</button>
+    <button class="btn-tema" id="btnTema">🌙 Modo oscuro</button>
     <button class="btn-tema" id="btnSalir">Salir</button>
     </div>
     <!-- Las redes van debajo de los botones; el logo queda al lado de "Salir". -->
@@ -718,7 +725,6 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
 </div>
 </div>
 
-<button class="chat-flotante" id="btnChatFlotante" style="display:none;">Chat</button>
 
 <!-- Asistente en ventana flotante: se mueve arrastrando la barra, se minimiza, se agranda y se cierra. -->
 <div class="ventana-flotante" id="ventanaAsistente" style="display:none;">
@@ -1112,7 +1118,6 @@ function mostrarApp(s) {
   document.getElementById('btnHerramientas').style.display =
     (puede('administrar_usuarios') || puede('configurar_empresa') || puede('ver_auditoria')) ? 'inline-block' : 'none';
   document.getElementById('btnChat').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
-  document.getElementById('btnChatFlotante').style.display = puede('usar_chat') && mod.chat !== false ? 'inline-block' : 'none';
   cargarFranjas();
   document.getElementById('btnExcel').style.display = puede('exportar_datos') ? 'inline-block' : 'none';
   document.getElementById('btnCorreoNuevo').style.display = puede('enviar_correo') ? 'inline-block' : 'none';
@@ -1278,11 +1283,13 @@ function listaRedes(redes) {
   if (Array.isArray(redes)) return redes.filter(x => x && ICONOS_RED[x.red] && x.url);
   return Object.keys(ICONOS_RED).filter(k => redes && redes[k]).map(k => ({ red: k, nombre: '', url: redes[k] }));
 }
+// Las redes se agrupan por sede (Punta Cana, Orlando...) con su etiqueta, para que se sepa cuáles son de cada una.
 function pintarRedes(redes) {
-  return listaRedes(redes).filter(x => /^(https?:|mailto:)/i.test(x.url))
-    .map(x => { const [nombre, svg] = ICONOS_RED[x.red]; const titulo = nombre + (x.nombre ? ' · ' + x.nombre : '');
-      return `<a class="red-${x.red}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(titulo)}" aria-label="${esc(titulo)}">${svg}</a>`; })
-    .join('');
+  const grupos = {};
+  for (const x of listaRedes(redes).filter(x => /^(https?:|mailto:)/i.test(x.url))) (grupos[x.nombre || ''] ||= []).push(x);
+  return Object.entries(grupos).map(([sede, items]) => `<div class="redes-grupo">${sede ? `<span class="redes-etiqueta">${esc(sede)}</span>` : ''}${items.map(x => {
+    const [nombre, svg] = ICONOS_RED[x.red]; const titulo = nombre + (x.nombre ? ' · ' + x.nombre : '');
+    return `<a class="red-${x.red}" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(titulo)}" aria-label="${esc(titulo)}">${svg}</a>`; }).join('')}</div>`).join('');
 }
 function filaRedForm(x = {}) {
   const opciones = Object.entries(ICONOS_RED).map(([k, [n]]) => `<option value="${k}" ${k === x.red ? 'selected' : ''}>${n}</option>`).join('');
@@ -3039,7 +3046,6 @@ function actualizarBadge(lista) {
   const badge = document.getElementById('badgeChat');
   badge.textContent = total;
   badge.style.display = total ? 'inline-block' : 'none';
-  document.getElementById('btnChatFlotante').textContent = total ? `Chat (${total})` : 'Chat';
 }
 
 async function actualizarBadgeChat() {
@@ -3511,7 +3517,7 @@ function marco(tab, aviso) {
   else cuerpo = formAuditoria();
 
   abrirVentana(`
-    <div class="barra-ventana"><h2>Herramientas</h2><div>${tabs}</div></div>
+    <div class="barra-ventana"><h2>Herramientas</h2><div>${tabs}</div><button class="btn-sec" onclick="mostrarClave(false)" title="Cambiar mi contraseña">🔑 Mi contraseña</button></div>
     ${cuerpo}
     <div class="aviso" id="avisoV" style="color:#16a34a">${esc(aviso)}</div>`);
 
@@ -5453,11 +5459,11 @@ document.getElementById('codigo').addEventListener('keydown', e => { if (e.key =
 document.getElementById('formClave').addEventListener('submit', enviarClave);
 document.getElementById('btnCancelarClave').addEventListener('click', cancelarClave);
 document.getElementById('btnSalir').addEventListener('click', cerrarSesion);
-document.getElementById('btnMiClave').addEventListener('click', () => mostrarClave(false));
+// Mi contraseña: se abre tocando tu nombre arriba y también desde Herramientas.
+document.getElementById('usuarioActivo').addEventListener('click', () => mostrarClave(false));
 document.getElementById('btnHerramientas').addEventListener('click', () => abrirHerramientas(
   puedeVerEmpresas() ? 'empresas' : puede('administrar_usuarios') ? 'usuarios' : puede('configurar_empresa') ? 'empresa' : 'auditoria'));
 document.getElementById('btnChat').addEventListener('click', abrirChat);
-document.getElementById('btnChatFlotante').addEventListener('click', abrirChat);
 document.getElementById('btnAvisos').addEventListener('click', async () => {
   await Notification.requestPermission();
   document.getElementById('btnAvisos').style.display = 'none';
