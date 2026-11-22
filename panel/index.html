@@ -3976,7 +3976,8 @@ function resumenRedes(c) {
   const chip = (nombre, ok) => `<span class="chip ${ok ? 'chip-verde' : 'chip-amarillo'}">${nombre}: ${ok ? 'listo' : 'pendiente'}</span>`;
   const metaOk = ['socio_agregado', 'pagina_asignada', 'instagram_asignado', 'whatsapp_verificado', 'permisos_aprobados'].filter(k => m[k]).length;
   const crmOn = Boolean(p.crm && p.crm.activo);
-  return chip('WhatsApp', !!(r.whatsapp && r.whatsapp.cuenta_id)) + chip('Instagram', !!(r.instagram && r.instagram.cuenta_id)) +
+  // WhatsApp solo está listo con la cuenta Y el número de teléfono; con solo la cuenta sigue pendiente.
+  return chip('WhatsApp', !!(r.whatsapp && r.whatsapp.cuenta_id && r.whatsapp.numero_id)) + chip('Instagram', !!(r.instagram && r.instagram.cuenta_id)) +
     chip('Facebook', !!(r.facebook && r.facebook.pagina_id)) + chip('TikTok', !!(r.tiktok && r.tiktok.cuenta)) +
     `<span class="chip ${metaOk === 5 ? 'chip-verde' : 'chip-amarillo'}">Meta: ${metaOk} de 5</span>` +
     `<span class="chip ${crmOn ? 'chip-verde' : 'chip-gris'}">CRM ${crmOn ? 'activo' : 'apagado'}</span>`;
