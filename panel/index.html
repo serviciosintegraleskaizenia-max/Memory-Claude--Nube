@@ -52,15 +52,6 @@
   #redesEncabezado .redes-etiqueta { font-size: 11px; min-width: 70px; text-align: right; }
   #btnSalir { align-self: flex-end; }
   #btnVozChat.grabando { background: #ef4444; color: #fff; border-radius: 50%; }
-  .barra-voz { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 8px 10px; margin: 6px 0; }
-  .barra-voz button { width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer; font-size: 14px; }
-  .barra-voz .bv-descartar { background: #334155; color: #e2e8f0; }
-  .barra-voz .bv-enviar { background: #2563eb; color: #fff; }
-  .barra-voz .bv-punto { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,.25); animation: bvParpadeo 1s infinite; }
-  @keyframes bvParpadeo { 50% { opacity: .35; } }
-  .barra-voz .bv-tiempo { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 40px; color: #e2e8f0; }
-  .barra-voz .bv-ondas { display: flex; align-items: center; gap: 2px; height: 28px; flex: 1; }
-  .barra-voz .bv-ondas i { display: block; width: 3px; height: 4px; background: #f87171; border-radius: 2px; }
   .btn-tema.btn-salir { padding: 4px 11px; font-size: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.55); }
   #usuarioActivo { display: none; }
   #tituloEmpresa .zt { font-size: 44px; }
@@ -573,6 +564,52 @@
 .k-delta{font-size:12px;color:var(--texto-suave);margin-top:4px}.k-delta.sube{color:#16a34a}.k-delta.baja{color:#dc2626}
 .k-spark{margin-top:8px}.k-spark svg{display:block}.k-semana{font-size:10.5px;color:var(--texto-suave);margin-top:2px}
 body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
+  /* ---- Chat privado al estilo WhatsApp ---- */
+  .chat-mensajes { background: #efeae2; }
+  body.oscuro .chat-mensajes { background: #0b141a; }
+  .burbuja.mia, .burbuja.otra { border: 0; border-radius: 8px; padding: 6px 9px 4px; font-size: 14px; line-height: 1.35; box-shadow: 0 1px 0.5px rgba(11,20,26,.13); max-width: 80%; }
+  .burbuja.mia { background: #d9fdd3; color: #111b21; border-top-right-radius: 0; }
+  .burbuja.otra { background: #ffffff; color: #111b21; border-top-left-radius: 0; }
+  body.oscuro .burbuja.mia { background: #005c4b; color: #e9edef; }
+  body.oscuro .burbuja.otra { background: #202c33; color: #e9edef; }
+  .burbuja small { display: block; text-align: right; font-size: 11px; color: #667781; opacity: 1; margin-top: 2px; }
+  body.oscuro .burbuja small { color: #8696a0; }
+  .nv { display: flex; align-items: center; gap: 8px; min-width: 210px; max-width: 280px; padding: 4px 0 2px; }
+  .nv-play { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #00a884; color: #fff; cursor: pointer; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .nv-play:disabled { opacity: .5; cursor: wait; }
+  .nv-ondas { display: flex; align-items: center; gap: 2px; height: 30px; flex: 1; }
+  .nv-ondas i { display: block; width: 3px; border-radius: 2px; background: #8696a0; }
+  .nv-ondas i.hecha { background: #00a884; }
+  .nv-tiempo { font-size: 12px; color: #667781; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  body.oscuro .nv-tiempo { color: #8696a0; }
+  .nv-error { font-size: 12px; color: #b91c1c; margin-top: 4px; }
+  .nv-error[hidden] { display: none; }
+  .barra-voz { display: flex; align-items: center; gap: 10px; background: #f0f2f5; border-radius: 26px; padding: 6px 8px 6px 6px; margin: 6px 0 8px; }
+  body.oscuro .barra-voz { background: #202c33; }
+  .barra-voz button { border: 0; background: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; flex: none; }
+  .barra-voz .bv-papelera { width: 40px; height: 40px; border-radius: 50%; color: #54656f; }
+  body.oscuro .barra-voz .bv-papelera { color: #aebac1; }
+  .barra-voz .bv-punto { width: 10px; height: 10px; border-radius: 50%; background: #ea0038; flex: none; animation: bvParpadeo 1s infinite; }
+  .barra-voz .bv-tiempo { font-size: 15px; color: #3b4a54; min-width: 40px; font-variant-numeric: tabular-nums; }
+  body.oscuro .barra-voz .bv-tiempo { color: #e9edef; }
+  .barra-voz .bv-ondas { display: flex; align-items: center; gap: 2px; height: 30px; flex: 1; overflow: hidden; }
+  .barra-voz .bv-ondas i { display: block; width: 2px; height: 3px; border-radius: 2px; background: #8696a0; flex: none; }
+  .barra-voz .bv-pausa { width: 36px; height: 36px; color: #ea0038; }
+  .barra-voz .bv-enviar { width: 46px; height: 46px; border-radius: 50%; background: #111b21; color: #fff; }
+  body.oscuro .barra-voz .bv-enviar { background: #00a884; }
+  @keyframes bvParpadeo { 50% { opacity: .3; } }
+  .av { border-radius: 50%; object-fit: cover; flex: none; display: inline-block; }
+  .av-ini { color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .fila { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
+  .fila.mia { justify-content: flex-end; }
+  .cc-izq { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .cc-texto { display: flex; flex-direction: column; min-width: 0; }
+  .cc-texto b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cc-texto small { font-size: 11.5px; color: var(--suave); display: flex; align-items: center; gap: 4px; }
+  .chat-contacto .badge { flex: none; }
+  #btnMiFoto { margin-left: auto; background: var(--hover); border: 1px solid var(--borde); border-radius: 8px; padding: 4px 9px; font-size: 12.5px; cursor: pointer; color: var(--texto); font-family: inherit; }
+  #btnQuitarFoto { background: none; border: 0; color: var(--suave); font-size: 12px; cursor: pointer; text-decoration: underline; font-family: inherit; }
+  #btnQuitarFoto[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -793,6 +830,9 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   <div class="modal chat-modal" role="dialog" aria-modal="true">
     <div class="modal-cabecera">
       <h2>Chat privado</h2>
+      <button type="button" id="btnMiFoto">📷 Subir mi foto</button>
+      <button type="button" id="btnQuitarFoto" hidden>Quitar</button>
+      <input type="file" id="archivoFoto" accept="image/*" style="display:none;">
       <button class="tema-switch" style="margin-left:auto;margin-right:8px" id="btnTemaChat" type="button" title="Cambiar a modo oscuro" aria-label="Cambiar entre modo claro y oscuro" aria-pressed="false"><span class="ts-pista ts-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ts-pista ts-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><span class="ts-bola"><span class="ico-sol"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span><span class="ico-luna"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span></span></button>
       <button class="cerrar" id="btnCerrarChat" title="Cerrar">&times;</button>
     </div>
@@ -2984,7 +3024,8 @@ function pintarConectados(lista) {
 
 async function latido() {
   if (!sesionActual) return;
-  const activo = Date.now() - ultimaActividad < 5 * 60 * 1000;
+  // Conectado mientras la pestaña está abierta y visible (no hace falta mover el mouse).
+  const activo = document.visibilityState === 'visible';
   await api('/api/latido', { activo });
   const r = await api('/api/conectados');
   if (r.ok) pintarConectados(r.data);
@@ -3158,12 +3199,15 @@ async function actualizarBadgeChat() {
 async function cargarContactos() {
   const r = await api('/api/chat/contactos');
   if (!r.ok) return;
+  conFoto = new Set(r.data.filter(c => c.tieneFoto).map(c => c.usuario));
+  nombresCon = new Map(r.data.map(c => [c.usuario, c.nombre]));
+  cargarMiPerfil();
   actualizarBadge(r.data);
   const cont = document.getElementById('chatContactos');
   cont.innerHTML = r.data.length
     ? r.data.map(c => `
         <div class="chat-contacto ${contactoChat === c.usuario ? 'activo' : ''}" data-usuario="${esc(c.usuario)}">
-          <span><span class="punto ${clasePunto(c.estado)}"></span> ${esc(c.nombre)}</span>
+          <span class="cc-izq">${avatarHtml(c.usuario, c.nombre, 34)}<span class="cc-texto"><b>${esc(c.nombre)}</b><small><span class="punto ${clasePunto(c.estado)}"></span>${etiquetaEstado(c.estado)}</small></span></span>
           ${c.noLeidos ? `<span class="badge">${c.noLeidos}</span>` : ''}
         </div>`).join('')
     : '<div class="vacio-total">No hay otros usuarios.</div>';
@@ -3183,109 +3227,282 @@ async function cargarMensajes(irAlFinal) {
   const r = await api('/api/chat/mensajes?con=' + encodeURIComponent(contactoChat));
   if (!r.ok) return;
   const cercaDelFinal = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
-  box.innerHTML = r.data.length
-    ? r.data.map(m => `
-        <div class="burbuja ${m.de === sesionActual.usuario ? 'mia' : 'otra'}">
-          ${m.tieneImagen ? `<img class='adjunta' src='/api/chat/imagen?id=${m.id}' alt='Imagen' onclick='window.open(this.src)'>` : ''}${m.tieneAudio ? `<audio controls preload='metadata' src='/api/chat/audio?id=${m.id}' style='max-width:240px;display:block;margin-top:4px'></audio><small>🎤 ${formatoTiempo(m.audioSeg || 0)}</small>` : ''}
-          ${esc(m.texto)}
-          <small>${fechaHora(m.fecha)}</small>
-        </div>`).join('')
-    : '<div class="vacio-total">Sin mensajes todavía.</div>';
+  box.innerHTML = r.data.length ? r.data.map(htmlMensaje).join('') : '<div class="vacio-total">Sin mensajes todavía.</div>';
+  notasCargadas.forEach((n, id) => { const nd = nodoNota(id); if (nd) pintarNota(nd, !n.audio.paused); });
   if (irAlFinal || cercaDelFinal) box.scrollTop = box.scrollHeight;
 }
 
-// Notas de voz tipo WhatsApp: contador, barra que se mueve con la voz, enviar (➤) o descartar (🗑).
-let grabador = null, trozosVoz = [], temporizadorVoz = null, tiempoInicio = 0, flujoVoz = null, contextoVoz = null, animacionVoz = null, barraVoz = null, tickVoz = null;
+// Notas de voz al estilo WhatsApp: grabadora con papelera, pausa y enviar. Mientras grabas se reconoce el texto
+// (si el navegador lo permite) y se manda debajo de la nota. Cada nota tiene su propio reproductor.
+let grabador = null, trozosVoz = [], flujoVoz = null, contextoVoz = null, animacionVoz = null, barraVoz = null, tickVoz = null, temporizadorVoz = null;
+let segundosVoz = 0, desdeVoz = 0, reconocedor = null, textoVoz = '', pausadaVoz = false;
+const SVG_PAPELERA = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+const SVG_PAUSA = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+const SVG_PLAY = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const SVG_ENVIAR = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>';
+const notasCargadas = new Map(); // id de la nota -> { audio }
 function tipoAudioGrabado() {
   return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
 }
 function formatoTiempo(seg) {
-  const m = Math.floor(seg / 60), s = Math.floor(seg % 60);
-  return m + ':' + String(s).padStart(2, '0');
+  const s = Math.max(0, Math.round(Number(seg) || 0));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
-function quitarBarraVoz() {
-  if (barraVoz) barraVoz.remove();
-  barraVoz = null;
-  clearInterval(tickVoz);
-  cancelAnimationFrame(animacionVoz);
-  if (contextoVoz) { contextoVoz.close().catch(() => {}); contextoVoz = null; }
-  if (flujoVoz) { flujoVoz.getTracks().forEach(t => t.stop()); flujoVoz = null; }
-}
+function segundosActuales() { return segundosVoz + (pausadaVoz ? 0 : (Date.now() - desdeVoz) / 1000); }
 function pintarBotonVoz(grabando) {
   const b = document.getElementById('btnVozChat');
   b.classList.toggle('grabando', grabando);
   b.textContent = grabando ? '⏹' : '🎤';
 }
 function crearBarraVoz() {
-  const caja = document.getElementById('chatTexto').parentElement;
+  const caja = document.querySelector('.chat-enviar');
+  caja.style.display = 'none';
   barraVoz = document.createElement('div');
   barraVoz.className = 'barra-voz';
-  barraVoz.innerHTML = '<button type="button" class="bv-descartar" title="Descartar">🗑</button><span class="bv-punto"></span><span class="bv-tiempo">0:00</span><span class="bv-ondas"></span><button type="button" class="bv-enviar" title="Enviar nota de voz">➤</button>';
+  barraVoz.innerHTML = `<button type="button" class="bv-papelera" title="Descartar">${SVG_PAPELERA}</button><span class="bv-punto"></span><span class="bv-tiempo">0:00</span><span class="bv-ondas"></span><button type="button" class="bv-pausa" title="Pausar">${SVG_PAUSA}</button><button type="button" class="bv-enviar" title="Enviar nota de voz">${SVG_ENVIAR}</button>`;
   caja.parentElement.insertBefore(barraVoz, caja);
-  barraVoz.querySelector('.bv-descartar').addEventListener('click', () => { if (grabador) { grabador.onstop = null; grabador.stop(); } grabador = null; quitarBarraVoz(); pintarBotonVoz(false); });
-  barraVoz.querySelector('.bv-enviar').addEventListener('click', () => { if (grabador) grabador.stop(); });
+  barraVoz.querySelector('.bv-papelera').addEventListener('click', descartarNotaVoz);
+  barraVoz.querySelector('.bv-enviar').addEventListener('click', () => { if (grabador) { try { grabador.stop(); } catch (e) {} } });
+  barraVoz.querySelector('.bv-pausa').addEventListener('click', alternarPausaVoz);
   const ondas = barraVoz.querySelector('.bv-ondas');
-  for (let k = 0; k < 24; k++) ondas.appendChild(document.createElement('i'));
+  for (let k = 0; k < 40; k++) ondas.appendChild(document.createElement('i'));
   return ondas;
 }
+function quitarBarraVoz() {
+  if (barraVoz) barraVoz.remove();
+  barraVoz = null;
+  const caja = document.querySelector('.chat-enviar');
+  if (caja) caja.style.display = '';
+}
+function limpiarGrabacion() {
+  grabador = null;
+  clearInterval(tickVoz); clearTimeout(temporizadorVoz); cancelAnimationFrame(animacionVoz);
+  if (reconocedor) { const r = reconocedor; reconocedor = null; r.onend = null; try { r.stop(); } catch (e) {} }
+  if (flujoVoz) { flujoVoz.getTracks().forEach(t => t.stop()); flujoVoz = null; }
+  if (contextoVoz) { contextoVoz.close().catch(() => {}); contextoVoz = null; }
+  quitarBarraVoz();
+  pintarBotonVoz(false);
+}
+function descartarNotaVoz() {
+  if (grabador) { grabador.onstop = null; try { grabador.stop(); } catch (e) {} }
+  limpiarGrabacion();
+}
+function alternarPausaVoz() {
+  if (!grabador || !barraVoz) return;
+  const b = barraVoz.querySelector('.bv-pausa');
+  if (grabador.state === 'recording') {
+    grabador.pause();
+    segundosVoz = segundosActuales(); pausadaVoz = true;
+    if (reconocedor) { const r = reconocedor; reconocedor = null; r.onend = null; try { r.stop(); } catch (e) {} }
+    b.innerHTML = SVG_PLAY; b.title = 'Seguir grabando';
+  } else if (grabador.state === 'paused') {
+    grabador.resume();
+    desdeVoz = Date.now(); pausadaVoz = false;
+    arrancarReconocimiento();
+    b.innerHTML = SVG_PAUSA; b.title = 'Pausar';
+  }
+}
+function arrancarReconocimiento() {
+  const R = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!R) return;
+  const r = new R();
+  r.lang = 'es-PE'; r.continuous = true; r.interimResults = false; r.maxAlternatives = 1;
+  r.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) textoVoz += e.results[i][0].transcript + ' '; };
+  r.onerror = ev => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') reconocedor = null; };
+  r.onend = () => { if (reconocedor === r && grabador && grabador.state === 'recording') { try { r.start(); } catch (e) { reconocedor = null; } } };
+  reconocedor = r;
+  try { r.start(); } catch (e) { reconocedor = null; }
+}
 async function alternarNotaVoz() {
-  if (grabador) { grabador.stop(); return; }
+  if (grabador) { try { grabador.stop(); } catch (e) {} return; }
   if (!contactoChat) { alert('Elige a una persona para mandarle la nota de voz.'); return; }
   if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Este navegador no permite grabar audio.'); return; }
   let flujo;
   try { flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
   catch (e) { alert('No pude usar el micrófono. Revisa el permiso del navegador.'); return; }
-  flujoVoz = flujo;
+  flujoVoz = flujo; trozosVoz = []; textoVoz = ''; segundosVoz = 0; pausadaVoz = false;
   const tipo = tipoAudioGrabado();
-  trozosVoz = [];
   grabador = new MediaRecorder(flujo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : {});
   grabador.ondataavailable = e => { if (e.data && e.data.size) trozosVoz.push(e.data); };
   grabador.onstop = async () => {
-    const duracion = Math.round((Date.now() - tiempoInicio) / 1000);
+    if (reconocedor) {
+      // Se espera a que el reconocimiento termine la última frase antes de enviar.
+      const r = reconocedor; reconocedor = null;
+      await new Promise(res => { r.onend = res; setTimeout(res, 1200); try { r.stop(); } catch (e) { res(); } });
+    }
+    const duracion = Math.round(segundosActuales());
+    const texto = textoVoz.trim().slice(0, 1000);
     const blob = new Blob(trozosVoz, { type: (grabador && grabador.mimeType) || 'audio/webm' });
-    grabador = null;
-    clearTimeout(temporizadorVoz);
-    quitarBarraVoz();
-    pintarBotonVoz(false);
+    limpiarGrabacion();
     if (blob.size < 2000 || duracion < 1) return;
     const lector = new FileReader();
     lector.onload = async () => {
-      const r = await api('/api/chat/enviar', { para: contactoChat, texto: '', audio: lector.result, audioSeg: duracion });
+      const r = await api('/api/chat/enviar', { para: contactoChat, texto, audio: lector.result, audioSeg: duracion });
       if (!r.ok) return alert(r.data.error || 'No se pudo enviar la nota de voz.');
       cargarMensajes(true);
       cargarContactos();
     };
     lector.readAsDataURL(blob);
   };
+  desdeVoz = Date.now();
   grabador.start(250);
-  tiempoInicio = Date.now();
   pintarBotonVoz(true);
   const ondas = crearBarraVoz();
   const tiempo = barraVoz.querySelector('.bv-tiempo');
-  tickVoz = setInterval(() => { if (grabador) tiempo.textContent = formatoTiempo((Date.now() - tiempoInicio) / 1000); }, 250);
-  // La barra se mueve con el volumen del micrófono.
+  tickVoz = setInterval(() => { if (grabador) tiempo.textContent = formatoTiempo(segundosActuales()); }, 250);
+  arrancarReconocimiento();
+  // Las ondas avanzan con la voz: cada cierto tiempo entra un nivel nuevo por la derecha.
+  const niveles = new Array(ondas.children.length).fill(0);
   try {
     contextoVoz = new (window.AudioContext || window.webkitAudioContext)();
     const analizador = contextoVoz.createAnalyser();
     analizador.fftSize = 256;
     contextoVoz.createMediaStreamSource(flujo).connect(analizador);
     const datos = new Uint8Array(analizador.frequencyBinCount);
-    const pintar = () => {
+    let ultimo = 0;
+    const pintar = t => {
       if (!grabador) return;
-      analizador.getByteTimeDomainData(datos);
-      let suma = 0;
-      for (const v of datos) suma += Math.abs(v - 128);
-      const nivel = Math.min(1, (suma / datos.length) / 40);
-      [...ondas.children].forEach((barra, k) => { barra.style.height = (4 + nivel * 22 * (0.4 + 0.6 * Math.abs(Math.sin(k + Date.now() / 150)))) + 'px'; });
+      if (!pausadaVoz && t - ultimo > 90) {
+        ultimo = t;
+        analizador.getByteTimeDomainData(datos);
+        let suma = 0;
+        for (const v of datos) suma += Math.abs(v - 128);
+        niveles.push(Math.min(1, (suma / datos.length) / 40));
+        niveles.shift();
+      }
+      [...ondas.children].forEach((barra, k) => { barra.style.height = (3 + niveles[k] * 24) + 'px'; });
       animacionVoz = requestAnimationFrame(pintar);
     };
-    pintar();
-  } catch (e) { /* sin barras animadas: el contador sigue funcionando */ }
+    animacionVoz = requestAnimationFrame(pintar);
+  } catch (e) { /* sin ondas: el contador sigue funcionando */ }
   // A los 10 minutos se pregunta si sigue; si no, se envía lo que llevas.
   temporizadorVoz = setTimeout(() => {
-    if (grabador && !confirm('Llevas 10 minutos grabando. ¿Quieres seguir? Si cancelas, se envía lo que llevas.')) grabador.stop();
+    if (grabador && !confirm('Llevas 10 minutos grabando. ¿Quieres seguir? Si cancelas, se envía lo que llevas.')) { try { grabador.stop(); } catch (e) {} }
   }, 600000);
 }
+// Reproductor de la nota: botón redondo, ondas que se pintan al avanzar y tiempo restante.
+function htmlNota(m) {
+  let s = (Number(m.id) * 7919 + 17) % 2147483647 || 1;
+  const barras = [];
+  for (let k = 0; k < 34; k++) { s = (s * 16807) % 2147483647; barras.push(5 + (s % 19)); }
+  return `<div class="nv" data-nota="${m.id}" data-seg="${Number(m.audioSeg) || 0}"><button type="button" class="nv-play" title="Reproducir">${SVG_PLAY}</button><div class="nv-ondas">${barras.map(h => `<i style="height:${h}px"></i>`).join('')}</div><span class="nv-tiempo">${formatoTiempo(m.audioSeg)}</span></div><div class="nv-error" hidden></div>`;
+}
+function nodoNota(id) { return document.querySelector(`.nv[data-nota="${id}"]`); }
+function pintarNota(nodo, reproduciendo) {
+  const id = nodo.dataset.nota, seg = Number(nodo.dataset.seg) || 0;
+  const nota = notasCargadas.get(id);
+  const actual = nota ? nota.audio.currentTime : 0;
+  nodo.querySelector('.nv-play').innerHTML = reproduciendo ? SVG_PAUSA : SVG_PLAY;
+  const barras = [...nodo.querySelectorAll('.nv-ondas i')];
+  const avance = seg > 0 ? Math.min(1, actual / seg) : 0;
+  barras.forEach((b, k) => b.classList.toggle('hecha', k / barras.length < avance));
+  nodo.querySelector('.nv-tiempo').textContent = formatoTiempo(Math.max(0, seg - actual));
+}
+function mostrarErrorNota(nodo, texto) {
+  const aviso = nodo && nodo.nextElementSibling;
+  if (aviso) { aviso.textContent = texto; aviso.hidden = false; }
+}
+async function reproducirNota(nodo) {
+  if (!nodo) return;
+  const id = nodo.dataset.nota;
+  let nota = notasCargadas.get(id);
+  if (!nota) {
+    const boton = nodo.querySelector('.nv-play');
+    boton.disabled = true;
+    try {
+      const r = await fetch('/api/chat/audio?id=' + encodeURIComponent(id), { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('el servidor respondió ' + r.status);
+      const blob = await r.blob();
+      if (!blob.size) throw new Error('la nota llegó vacía');
+      const audio = new Audio(URL.createObjectURL(blob));
+      nota = { audio };
+      notasCargadas.set(id, nota);
+      audio.addEventListener('timeupdate', () => { const n = nodoNota(id); if (n) pintarNota(n, !audio.paused); });
+      audio.addEventListener('ended', () => { audio.currentTime = 0; const n = nodoNota(id); if (n) pintarNota(n, false); });
+      audio.addEventListener('error', () => {
+        notasCargadas.delete(id);
+        const n = nodoNota(id);
+        if (n) mostrarErrorNota(n, 'No se pudo reproducir (código ' + (audio.error ? audio.error.code : '?') + ').');
+      });
+    } catch (e) {
+      boton.disabled = false;
+      return mostrarErrorNota(nodo, 'No se pudo cargar la nota: ' + e.message + '.');
+    }
+    boton.disabled = false;
+  }
+  const a = nota.audio;
+  if (a.paused) {
+    notasCargadas.forEach((otra, otroId) => { if (otroId !== id && !otra.audio.paused) otra.audio.pause(); });
+    a.play().catch(err => mostrarErrorNota(nodoNota(id) || nodo, 'No se pudo reproducir: ' + err.name + '.'));
+  } else {
+    a.pause();
+  }
+  const n = nodoNota(id) || nodo;
+  pintarNota(n, !a.paused);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.nv-play');
+  if (b && !b.disabled) reproducirNota(b.closest('.nv'));
+});
+
+// Fotos de perfil en el chat: cada persona sube la suya. Si no tiene, se ve su inicial sobre un color propio.
+let conFoto = new Set(), nombresCon = new Map(), miFoto = false, versionFotos = Date.now();
+const COLORES_AV = ['#0ea5e9', '#8b5cf6', '#f97316', '#10b981', '#e11d48', '#14b8a6', '#f59e0b', '#6366f1'];
+function colorDe(texto) { let h = 0; for (const ch of String(texto)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return COLORES_AV[h % COLORES_AV.length]; }
+function avatarHtml(usuario, nombre, tam) {
+  tam = tam || 32;
+  const propio = sesionActual && usuario === sesionActual.usuario;
+  const tiene = propio ? miFoto : conFoto.has(usuario);
+  if (tiene) return `<img class="av" style="width:${tam}px;height:${tam}px" alt="" src="/api/chat/foto?u=${encodeURIComponent(usuario)}&v=${versionFotos}">`;
+  const ini = esc(String(nombre || usuario || '?').trim().charAt(0).toUpperCase());
+  return `<span class="av av-ini" style="width:${tam}px;height:${tam}px;background:${colorDe(usuario)};font-size:${Math.round(tam * 0.42)}px">${ini}</span>`;
+}
+function etiquetaEstado(estado) { return ({ 'en linea': 'En línea', ausente: 'Ausente' })[estado] || 'Desconectado'; }
+function htmlMensaje(m) {
+  const mia = m.de === sesionActual.usuario;
+  const cuerpo = `${m.tieneImagen ? `<img class='adjunta' src='/api/chat/imagen?id=${m.id}' alt='Imagen' onclick='window.open(this.src)'>` : ''}${m.tieneAudio ? htmlNota(m) : ''}${m.texto ? esc(m.texto) : ''}<small>${fechaHora(m.fecha)}</small>`;
+  return `<div class="fila ${mia ? 'mia' : 'otra'}">${mia ? '' : avatarHtml(m.de, nombresCon.get(m.de) || m.de, 28)}<div class="burbuja ${mia ? 'mia' : 'otra'}">${cuerpo}</div></div>`;
+}
+async function cargarMiPerfil() {
+  const r = await api('/api/perfil');
+  if (!r.ok) return;
+  miFoto = !!r.data.tieneFoto;
+  pintarMiFoto();
+}
+function pintarMiFoto() {
+  const b = document.getElementById('btnMiFoto');
+  if (b) b.textContent = miFoto ? '📷 Cambiar mi foto' : '📷 Subir mi foto';
+  const q = document.getElementById('btnQuitarFoto');
+  if (q) q.hidden = !miFoto;
+}
+async function subirMiFoto(archivo) {
+  let img;
+  try {
+    img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(archivo); });
+  } catch (e) { return alert('No pude leer esa imagen. Prueba con JPG o PNG.'); }
+  const lado = Math.min(img.width, img.height);
+  const c = document.createElement('canvas');
+  c.width = 160; c.height = 160;
+  c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 160, 160);
+  const r = await api('/api/perfil/foto', { foto: c.toDataURL('image/jpeg', 0.85) });
+  if (!r.ok) return alert(r.data.error || 'No se pudo guardar la foto.');
+  miFoto = true; versionFotos = Date.now(); pintarMiFoto();
+  cargarContactos(); cargarMensajes(false);
+}
+async function quitarMiFoto() {
+  if (!confirm('¿Quitar tu foto de perfil?')) return;
+  const r = await api('/api/perfil/foto', { foto: null });
+  if (!r.ok) return alert(r.data.error || 'No se pudo quitar la foto.');
+  miFoto = false; versionFotos = Date.now(); pintarMiFoto();
+  cargarContactos(); cargarMensajes(false);
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('#btnMiFoto')) return document.getElementById('archivoFoto').click();
+  if (e.target.closest('#btnQuitarFoto')) return quitarMiFoto();
+});
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'archivoFoto' && e.target.files[0]) { subirMiFoto(e.target.files[0]); e.target.value = ''; }
+});
 
 async function enviarChat() {
   const input = document.getElementById('chatTexto');

@@ -352,6 +352,7 @@ async function inicializarTablas() {
     correo TEXT NOT NULL DEFAULT '',
     creada TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resuelta TIMESTAMPTZ)`);
+  await client.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto TEXT');
   // Quién está conectado ahora (lo lee la Oficina del central para el chat con cada negocio).
   await client.query(`CREATE TABLE IF NOT EXISTS conectados_ahora (
     usuario VARCHAR(50) PRIMARY KEY,
@@ -2423,7 +2424,7 @@ http.createServer(async (req, res) => {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const estados = estadosConectados();
       const r = await client.query(
-        'SELECT usuario, nombre, grupo FROM usuarios WHERE activo = TRUE AND usuario <> $1 ORDER BY nombre',
+        'SELECT usuario, nombre, grupo, (foto IS NOT NULL) AS "tieneFoto" FROM usuarios WHERE activo = TRUE AND usuario <> $1 ORDER BY nombre',
         [u.usuario]
       );
       const no = await client.query(
@@ -2436,7 +2437,8 @@ http.createServer(async (req, res) => {
         nombre: x.nombre,
         grupo: x.grupo,
         estado: estados.get(x.usuario)?.estado || 'desconectado',
-        noLeidos: pendientes.get(x.usuario) || 0
+        noLeidos: pendientes.get(x.usuario) || 0,
+        tieneFoto: !!x.tieneFoto
       })));
     }
 
@@ -2515,6 +2517,35 @@ http.createServer(async (req, res) => {
     }
 
     // Notas de voz del chat: se guardan como audio y solo las ven quien las envía y quien las recibe.
+    // Fotos de perfil del chat: cada persona sube la suya; se ven en la lista y en las burbujas.
+    if (req.method === 'GET' && url === '/api/chat/foto') {
+      if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
+      const quien = String(new URL(req.url, 'http://localhost').searchParams.get('u') || '');
+      const fila = (await client.query('SELECT foto FROM usuarios WHERE usuario = $1 AND activo = TRUE', [quien])).rows[0];
+      const m = fila && fila.foto ? fila.foto.match(/^data:(image\/(?:jpeg|png|webp));base64,(.*)$/) : null;
+      if (!m) return json(res, 404, { error: 'Sin foto' });
+      const bytes = Buffer.from(m[2], 'base64');
+      res.writeHead(200, { 'Content-Type': m[1], 'Content-Length': bytes.length, 'Cache-Control': 'private, max-age=300' });
+      return res.end(bytes);
+    }
+    if (req.method === 'GET' && url === '/api/perfil') {
+      const fila = (await client.query('SELECT (foto IS NOT NULL) AS "tieneFoto" FROM usuarios WHERE usuario = $1', [u.usuario])).rows[0];
+      return json(res, 200, { tieneFoto: !!(fila && fila.tieneFoto) });
+    }
+    if (req.method === 'POST' && url === '/api/perfil/foto') {
+      const f = await leerCuerpo(req);
+      if (f.foto === null) {
+        await client.query('UPDATE usuarios SET foto = NULL WHERE usuario = $1', [u.usuario]);
+        await registrar(u, 'perfil_foto', 'usuario', u.usuario, '', '', 'Quitó su foto de perfil');
+        return json(res, 200, { ok: true });
+      }
+      if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(f.foto || '')) || String(f.foto).length > 400000) {
+        return json(res, 400, { error: 'La foto debe ser JPG, PNG o WEBP y pesar menos de 300 KB.' });
+      }
+      await client.query('UPDATE usuarios SET foto = $2 WHERE usuario = $1', [u.usuario, f.foto]);
+      await registrar(u, 'perfil_foto', 'usuario', u.usuario, '', '', 'Cambió su foto de perfil');
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && url === '/api/chat/audio') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const audioId = Number(new URL(req.url, 'http://localhost').searchParams.get('id'));
