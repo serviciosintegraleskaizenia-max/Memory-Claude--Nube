@@ -52,6 +52,15 @@
   #redesEncabezado .redes-etiqueta { font-size: 11px; min-width: 70px; text-align: right; }
   #btnSalir { align-self: flex-end; }
   #btnVozChat.grabando { background: #ef4444; color: #fff; border-radius: 50%; }
+  .barra-voz { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 8px 10px; margin: 6px 0; }
+  .barra-voz button { width: 34px; height: 34px; border-radius: 50%; border: 0; cursor: pointer; font-size: 14px; }
+  .barra-voz .bv-descartar { background: #334155; color: #e2e8f0; }
+  .barra-voz .bv-enviar { background: #2563eb; color: #fff; }
+  .barra-voz .bv-punto { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,.25); animation: bvParpadeo 1s infinite; }
+  @keyframes bvParpadeo { 50% { opacity: .35; } }
+  .barra-voz .bv-tiempo { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 40px; color: #e2e8f0; }
+  .barra-voz .bv-ondas { display: flex; align-items: center; gap: 2px; height: 28px; flex: 1; }
+  .barra-voz .bv-ondas i { display: block; width: 3px; height: 4px; background: #f87171; border-radius: 2px; }
   .btn-tema.btn-salir { padding: 4px 11px; font-size: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.55); }
   #usuarioActivo { display: none; }
   #tituloEmpresa .zt { font-size: 44px; }
@@ -3172,7 +3181,7 @@ async function cargarMensajes(irAlFinal) {
   box.innerHTML = r.data.length
     ? r.data.map(m => `
         <div class="burbuja ${m.de === sesionActual.usuario ? 'mia' : 'otra'}">
-          ${m.tieneImagen ? `<img class='adjunta' src='/api/chat/imagen?id=${m.id}' alt='Imagen' onclick='window.open(this.src)'>` : ''}${m.tieneAudio ? `<audio controls preload='none' src='/api/chat/audio?id=${m.id}' style='max-width:240px;display:block;margin-top:4px'></audio>` : ''}
+          ${m.tieneImagen ? `<img class='adjunta' src='/api/chat/imagen?id=${m.id}' alt='Imagen' onclick='window.open(this.src)'>` : ''}${m.tieneAudio ? `<audio controls preload='metadata' src='/api/chat/audio?id=${m.id}' style='max-width:240px;display:block;margin-top:4px'></audio><small>🎤 ${formatoTiempo(m.audioSeg || 0)}</small>` : ''}
           ${esc(m.texto)}
           <small>${fechaHora(m.fecha)}</small>
         </div>`).join('')
@@ -3180,46 +3189,97 @@ async function cargarMensajes(irAlFinal) {
   if (irAlFinal || cercaDelFinal) box.scrollTop = box.scrollHeight;
 }
 
-// Notas de voz: se graban en el navegador y se envían como audio (máximo 2 minutos).
-let grabador = null, trozosVoz = [], temporizadorVoz = null;
+// Notas de voz tipo WhatsApp: contador, barra que se mueve con la voz, enviar (➤) o descartar (🗑).
+let grabador = null, trozosVoz = [], temporizadorVoz = null, tiempoInicio = 0, flujoVoz = null, contextoVoz = null, animacionVoz = null, barraVoz = null, tickVoz = null;
 function tipoAudioGrabado() {
   return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+}
+function formatoTiempo(seg) {
+  const m = Math.floor(seg / 60), s = Math.floor(seg % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+function quitarBarraVoz() {
+  if (barraVoz) barraVoz.remove();
+  barraVoz = null;
+  clearInterval(tickVoz);
+  cancelAnimationFrame(animacionVoz);
+  if (contextoVoz) { contextoVoz.close().catch(() => {}); contextoVoz = null; }
+  if (flujoVoz) { flujoVoz.getTracks().forEach(t => t.stop()); flujoVoz = null; }
 }
 function pintarBotonVoz(grabando) {
   const b = document.getElementById('btnVozChat');
   b.classList.toggle('grabando', grabando);
   b.textContent = grabando ? '⏹' : '🎤';
 }
+function crearBarraVoz() {
+  const caja = document.getElementById('chatTexto').parentElement;
+  barraVoz = document.createElement('div');
+  barraVoz.className = 'barra-voz';
+  barraVoz.innerHTML = '<button type="button" class="bv-descartar" title="Descartar">🗑</button><span class="bv-punto"></span><span class="bv-tiempo">0:00</span><span class="bv-ondas"></span><button type="button" class="bv-enviar" title="Enviar nota de voz">➤</button>';
+  caja.parentElement.insertBefore(barraVoz, caja);
+  barraVoz.querySelector('.bv-descartar').addEventListener('click', () => { if (grabador) { grabador.onstop = null; grabador.stop(); } grabador = null; quitarBarraVoz(); pintarBotonVoz(false); });
+  barraVoz.querySelector('.bv-enviar').addEventListener('click', () => { if (grabador) grabador.stop(); });
+  const ondas = barraVoz.querySelector('.bv-ondas');
+  for (let k = 0; k < 24; k++) ondas.appendChild(document.createElement('i'));
+  return ondas;
+}
 async function alternarNotaVoz() {
   if (grabador) { grabador.stop(); return; }
   if (!contactoChat) { alert('Elige a una persona para mandarle la nota de voz.'); return; }
   if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Este navegador no permite grabar audio.'); return; }
   let flujo;
-  try { flujo = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  try { flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
   catch (e) { alert('No pude usar el micrófono. Revisa el permiso del navegador.'); return; }
+  flujoVoz = flujo;
   const tipo = tipoAudioGrabado();
   trozosVoz = [];
-  grabador = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : {});
-  grabador.ondataavailable = e => { if (e.data.size) trozosVoz.push(e.data); };
+  grabador = new MediaRecorder(flujo, tipo ? { mimeType: tipo, audioBitsPerSecond: 32000 } : {});
+  grabador.ondataavailable = e => { if (e.data && e.data.size) trozosVoz.push(e.data); };
   grabador.onstop = async () => {
-    flujo.getTracks().forEach(t => t.stop());
-    clearTimeout(temporizadorVoz);
-    const blob = new Blob(trozosVoz, { type: grabador.mimeType || 'audio/webm' });
+    const duracion = Math.round((Date.now() - tiempoInicio) / 1000);
+    const blob = new Blob(trozosVoz, { type: (grabador && grabador.mimeType) || 'audio/webm' });
     grabador = null;
+    clearTimeout(temporizadorVoz);
+    quitarBarraVoz();
     pintarBotonVoz(false);
-    if (blob.size < 2000) return;
+    if (blob.size < 2000 || duracion < 1) return;
     const lector = new FileReader();
     lector.onload = async () => {
-      const r = await api('/api/chat/enviar', { para: contactoChat, texto: '', audio: lector.result });
+      const r = await api('/api/chat/enviar', { para: contactoChat, texto: '', audio: lector.result, audioSeg: duracion });
       if (!r.ok) return alert(r.data.error || 'No se pudo enviar la nota de voz.');
       cargarMensajes(true);
       cargarContactos();
     };
     lector.readAsDataURL(blob);
   };
-  grabador.start();
+  grabador.start(250);
+  tiempoInicio = Date.now();
   pintarBotonVoz(true);
-  temporizadorVoz = setTimeout(() => { if (grabador) grabador.stop(); }, 120000);
+  const ondas = crearBarraVoz();
+  const tiempo = barraVoz.querySelector('.bv-tiempo');
+  tickVoz = setInterval(() => { if (grabador) tiempo.textContent = formatoTiempo((Date.now() - tiempoInicio) / 1000); }, 250);
+  // La barra se mueve con el volumen del micrófono.
+  try {
+    contextoVoz = new (window.AudioContext || window.webkitAudioContext)();
+    const analizador = contextoVoz.createAnalyser();
+    analizador.fftSize = 256;
+    contextoVoz.createMediaStreamSource(flujo).connect(analizador);
+    const datos = new Uint8Array(analizador.frequencyBinCount);
+    const pintar = () => {
+      if (!grabador) return;
+      analizador.getByteTimeDomainData(datos);
+      let suma = 0;
+      for (const v of datos) suma += Math.abs(v - 128);
+      const nivel = Math.min(1, (suma / datos.length) / 40);
+      [...ondas.children].forEach((barra, k) => { barra.style.height = (4 + nivel * 22 * (0.4 + 0.6 * Math.abs(Math.sin(k + Date.now() / 150)))) + 'px'; });
+      animacionVoz = requestAnimationFrame(pintar);
+    };
+    pintar();
+  } catch (e) { /* sin barras animadas: el contador sigue funcionando */ }
+  // A los 10 minutos se pregunta si sigue; si no, se envía lo que llevas.
+  temporizadorVoz = setTimeout(() => {
+    if (grabador && !confirm('Llevas 10 minutos grabando. ¿Quieres seguir? Si cancelas, se envía lo que llevas.')) grabador.stop();
+  }, 600000);
 }
 
 async function enviarChat() {

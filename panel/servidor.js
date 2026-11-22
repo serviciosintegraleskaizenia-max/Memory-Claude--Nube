@@ -169,6 +169,7 @@ async function inicializarTablas() {
     token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL)`);
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS imagen TEXT');
   await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS audio TEXT');
+  await client.query('ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS audio_seg INTEGER');
   await client.query(`CREATE TABLE IF NOT EXISTS bloqueos (
     id SERIAL PRIMARY KEY,
     tipo VARCHAR(10) NOT NULL,
@@ -2438,7 +2439,7 @@ http.createServer(async (req, res) => {
       if (!existe || con === u.usuario) return json(res, 400, { error: 'Contacto no válido' });
       await client.query('UPDATE mensajes SET leido = TRUE WHERE de = $1 AND para = $2 AND leido = FALSE', [con, u.usuario]);
       const r = await client.query(
-        `SELECT id, de, para, texto, fecha, (imagen IS NOT NULL) AS "tieneImagen", (audio IS NOT NULL) AS "tieneAudio" FROM (
+        `SELECT id, de, para, texto, fecha, (imagen IS NOT NULL) AS "tieneImagen", (audio IS NOT NULL) AS "tieneAudio", COALESCE(audio_seg, 0) AS "audioSeg" FROM (
            SELECT * FROM mensajes
            WHERE (de = $1 AND para = $2) OR (de = $2 AND para = $1)
            ORDER BY fecha DESC, id DESC LIMIT 100
@@ -2471,8 +2472,17 @@ http.createServer(async (req, res) => {
       if (!fila || !fila.audio) return json(res, 404, { error: 'Nota de voz no encontrada' });
       const m = fila.audio.match(/^data:(audio\/[a-z0-9.+-]+)(?:;[^,]*)?;base64,(.*)$/);
       if (!m) return json(res, 404, { error: 'Nota de voz no válida' });
-      res.writeHead(200, { 'Content-Type': m[1], 'Cache-Control': 'private, max-age=3600' });
-      return res.end(Buffer.from(m[2], 'base64'));
+      // Se sirve con tamaño y con pedidos parciales (Range): así el navegador conoce la duración y puede reproducirla bien.
+      const bytes = Buffer.from(m[2], 'base64');
+      const rango = String(req.headers.range || '').match(/bytes=(\d*)-(\d*)/);
+      if (rango) {
+        const ini = rango[1] ? Number(rango[1]) : 0;
+        const fin = rango[2] ? Math.min(Number(rango[2]), bytes.length - 1) : bytes.length - 1;
+        res.writeHead(206, { 'Content-Type': m[1], 'Accept-Ranges': 'bytes', 'Content-Length': fin - ini + 1, 'Content-Range': `bytes ${ini}-${fin}/${bytes.length}`, 'Cache-Control': 'private, max-age=3600' });
+        return res.end(bytes.subarray(ini, fin + 1));
+      }
+      res.writeHead(200, { 'Content-Type': m[1], 'Accept-Ranges': 'bytes', 'Content-Length': bytes.length, 'Cache-Control': 'private, max-age=3600' });
+      return res.end(bytes);
     }
 
     // Avisos del navegador: suscripción (Web Push) y mensajes nuevos para el aviso de la página abierta.
@@ -2501,7 +2511,7 @@ http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url === '/api/chat/enviar') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
-      const { para, texto: contenido, imagen, audio } = await leerCuerpo(req);
+      const { para, texto: contenido, imagen, audio, audioSeg } = await leerCuerpo(req);
       const limpio = String(contenido || '').trim();
       if ((!limpio && !imagen && !audio) || limpio.length > 1000) {
         return json(res, 400, { error: 'El mensaje debe tener entre 1 y 1000 caracteres.' });
@@ -2514,7 +2524,7 @@ http.createServer(async (req, res) => {
       }
       const existe = (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [para || ''])).rowCount > 0;
       if (!existe || para === u.usuario) return json(res, 400, { error: 'Destinatario no válido.' });
-      await client.query('INSERT INTO mensajes (de, para, texto, imagen, audio) VALUES ($1, $2, $3, $4, $5)', [u.usuario, para, limpio, imagen || null, audio || null]);
+      await client.query('INSERT INTO mensajes (de, para, texto, imagen, audio, audio_seg) VALUES ($1, $2, $3, $4, $5, $6)', [u.usuario, para, limpio, imagen || null, audio || null, audio ? Math.max(0, Math.min(Number(audioSeg) || 0, 86400)) : null]);
       pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), audio && !limpio ? 'Te envió una nota de voz.' : imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), '/');
       await registrar(u, 'mensaje_enviado', 'chat', para, '', '', 'Mensaje privado a ' + para);
       return json(res, 200, { ok: true });
