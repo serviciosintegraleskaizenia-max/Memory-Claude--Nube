@@ -987,6 +987,22 @@ function texto(v) {
   return typeof v === 'object' ? JSON.stringify(v) : String(v);
 }
 
+// Chat: un chofer se identifica como 'chofer-<id>'. Su foto y su existencia viven en op_choferes.
+const esChoferChat = usuario => String(usuario || '').startsWith('chofer-');
+const idChoferChat = usuario => { const n = Number(String(usuario).slice(7)); return Number.isInteger(n) ? n : -1; };
+async function fotoDeChat(usuario) {
+  if (esChoferChat(usuario)) return (await client.query('SELECT foto FROM op_choferes WHERE id = $1 AND activo', [idChoferChat(usuario)])).rows[0]?.foto || null;
+  return (await client.query('SELECT foto FROM usuarios WHERE usuario = $1 AND activo = TRUE', [usuario])).rows[0]?.foto || null;
+}
+async function guardarFotoChat(usuario, foto) {
+  if (esChoferChat(usuario)) return client.query('UPDATE op_choferes SET foto = $2 WHERE id = $1', [idChoferChat(usuario), foto]);
+  return client.query('UPDATE usuarios SET foto = $2 WHERE usuario = $1', [usuario, foto]);
+}
+async function existeDestinoChat(usuario) {
+  if (esChoferChat(usuario)) return (await client.query('SELECT 1 FROM op_choferes WHERE id = $1 AND activo', [idChoferChat(usuario)])).rowCount > 0;
+  return (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [usuario])).rowCount > 0;
+}
+
 async function registrar(u, accion, entidad, entidadId, anterior, nuevo, detalle = '') {
   await client.query(
     'INSERT INTO auditoria (usuario, nombre, accion, entidad, entidad_id, anterior, nuevo, detalle) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
@@ -1739,7 +1755,7 @@ async function usuarioDeSesion(req) {
 
 http.createServer(async (req, res) => {
   try {
-    const url = req.url.split('?')[0];
+    let url = req.url.split('?')[0];
 
     // El panel central espera a que este panel esté completamente listo antes de configurarlo.
     if (req.method === 'GET' && url === '/api/listo') {
@@ -1797,6 +1813,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/operaciones') return archivo(res, path.join(CARPETA, 'operaciones.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/crm') return archivo(res, path.join(CARPETA, 'crm.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/asesor') return archivo(res, path.join(CARPETA, 'asesor.html'), 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url === '/chat-app.js') return archivo(res, path.join(CARPETA, 'chat-app.js'), 'text/javascript; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer') return archivo(res, path.join(CARPETA, 'chofer.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/chofer.webmanifest') return archivo(res, path.join(CARPETA, 'chofer.webmanifest'), 'application/manifest+json');
     if (req.method === 'GET' && url === '/chofer-icono.svg') return archivo(res, path.join(CARPETA, 'chofer-icono.svg'), 'image/svg+xml');
@@ -1936,7 +1953,17 @@ http.createServer(async (req, res) => {
       return oficina.conocimiento.manejarPublico(req, res, url, { json, leerCuerpo });
     }
 
-    const u = await usuarioDeSesion(req);
+    let u = await usuarioDeSesion(req);
+    // /api/app/*: la app del celular (asesores con su sesión, choferes con su código y PIN). Solo chat, latido, avisos y perfil.
+    if (url.startsWith('/api/app/')) {
+      const rutaApp = url.replace(/^\/api\/app/, '/api');
+      if (!/^\/api\/(chat|latido|push|perfil)(\/|$)/.test(rutaApp)) return json(res, 404, { error: 'Ruta no encontrada' });
+      if (!u) {
+        u = await operaciones.identidadChofer(req);
+        if (!u) return json(res, 401, { error: 'Entra con tu código y PIN.' });
+      }
+      url = rutaApp;
+    }
 
     if (req.method === 'GET' && url === '/api/sesion') {
       if (!u) return json(res, 401, { error: 'Sin sesión' });
@@ -2018,7 +2045,7 @@ http.createServer(async (req, res) => {
       return json(res, 200, lista);
     }
 
-    const permisos = permisosDe(u, await mapaGrupos());
+    const permisos = u.permisosFijos || permisosDe(u, await mapaGrupos());
     const puede = p => Boolean(permisos[p]);
 
     if (url.startsWith('/api/crm/')) return crm.manejar(req, res, url, u, { json, leerCuerpo });
@@ -2432,7 +2459,11 @@ http.createServer(async (req, res) => {
         [u.usuario]
       );
       const pendientes = new Map(no.rows.map(x => [x.de, x.n]));
-      return json(res, 200, r.rows.map(x => ({
+      const choferes = (await client.query('SELECT id, nombre, (foto IS NOT NULL) AS "tieneFoto" FROM op_choferes WHERE activo = TRUE ORDER BY nombre')).rows
+        .filter(x => 'chofer-' + x.id !== u.usuario)
+        .map(x => ({ usuario: 'chofer-' + x.id, nombre: x.nombre, grupo: 'Chofer', tieneFoto: x.tieneFoto }));
+      const todos = [...r.rows, ...choferes].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+      return json(res, 200, todos.map(x => ({
         usuario: x.usuario,
         nombre: x.nombre,
         grupo: x.grupo,
@@ -2445,7 +2476,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/chat/mensajes') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const con = new URL(req.url, 'http://localhost').searchParams.get('con') || '';
-      const existe = (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [con])).rowCount > 0;
+      const existe = await existeDestinoChat(con);
       if (!existe || con === u.usuario) return json(res, 400, { error: 'Contacto no válido' });
       await client.query('UPDATE mensajes SET leido = TRUE WHERE de = $1 AND para = $2 AND leido = FALSE', [con, u.usuario]);
       const r = await client.query(
@@ -2521,28 +2552,28 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/chat/foto') {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const quien = String(new URL(req.url, 'http://localhost').searchParams.get('u') || '');
-      const fila = (await client.query('SELECT foto FROM usuarios WHERE usuario = $1 AND activo = TRUE', [quien])).rows[0];
-      const m = fila && fila.foto ? fila.foto.match(/^data:(image\/(?:jpeg|png|webp));base64,(.*)$/) : null;
+      const foto = await fotoDeChat(quien);
+      const m = foto ? foto.match(/^data:(image\/(?:jpeg|png|webp));base64,(.*)$/) : null;
       if (!m) return json(res, 404, { error: 'Sin foto' });
       const bytes = Buffer.from(m[2], 'base64');
       res.writeHead(200, { 'Content-Type': m[1], 'Content-Length': bytes.length, 'Cache-Control': 'private, max-age=300' });
       return res.end(bytes);
     }
     if (req.method === 'GET' && url === '/api/perfil') {
-      const fila = (await client.query('SELECT (foto IS NOT NULL) AS "tieneFoto" FROM usuarios WHERE usuario = $1', [u.usuario])).rows[0];
-      return json(res, 200, { tieneFoto: !!(fila && fila.tieneFoto) });
+      const foto = await fotoDeChat(u.usuario);
+      return json(res, 200, { usuario: u.usuario, nombre: u.nombre || u.usuario, tieneFoto: !!foto });
     }
     if (req.method === 'POST' && url === '/api/perfil/foto') {
       const f = await leerCuerpo(req);
       if (f.foto === null) {
-        await client.query('UPDATE usuarios SET foto = NULL WHERE usuario = $1', [u.usuario]);
+        await guardarFotoChat(u.usuario, null);
         await registrar(u, 'perfil_foto', 'usuario', u.usuario, '', '', 'Quitó su foto de perfil');
         return json(res, 200, { ok: true });
       }
       if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(f.foto || '')) || String(f.foto).length > 400000) {
         return json(res, 400, { error: 'La foto debe ser JPG, PNG o WEBP y pesar menos de 300 KB.' });
       }
-      await client.query('UPDATE usuarios SET foto = $2 WHERE usuario = $1', [u.usuario, f.foto]);
+      await guardarFotoChat(u.usuario, f.foto);
       await registrar(u, 'perfil_foto', 'usuario', u.usuario, '', '', 'Cambió su foto de perfil');
       return json(res, 200, { ok: true });
     }
@@ -2605,10 +2636,10 @@ http.createServer(async (req, res) => {
       if (audio && (!/^data:audio\/(webm|ogg|mp4|mpeg|wav|x-m4a)(;[^,]*)?;base64,/.test(audio) || audio.length > 700000)) {
         return json(res, 400, { error: 'La nota de voz no es válida o dura más de 2 minutos.' });
       }
-      const existe = (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [para || ''])).rowCount > 0;
+      const existe = await existeDestinoChat(para || '');
       if (!existe || para === u.usuario) return json(res, 400, { error: 'Destinatario no válido.' });
       await client.query('INSERT INTO mensajes (de, para, texto, imagen, audio, audio_seg) VALUES ($1, $2, $3, $4, $5, $6)', [u.usuario, para, limpio, imagen || null, audio || null, audio ? Math.max(0, Math.min(Number(audioSeg) || 0, 86400)) : null]);
-      pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), audio && !limpio ? 'Te envió una nota de voz.' : imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), '/');
+      pushAvisos.avisarUsuario(para, 'Mensaje de ' + (u.nombre || u.usuario), audio && !limpio ? 'Te envió una nota de voz.' : imagen && !limpio ? 'Te envió una imagen.' : limpio.slice(0, 160), esChoferChat(para) ? '/chofer' : '/');
       await registrar(u, 'mensaje_enviado', 'chat', para, '', '', 'Mensaje privado a ' + para);
       return json(res, 200, { ok: true });
     }

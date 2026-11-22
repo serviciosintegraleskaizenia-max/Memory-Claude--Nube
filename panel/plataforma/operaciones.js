@@ -266,6 +266,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       licencia_vence TEXT NOT NULL DEFAULT '', vehiculo_id INTEGER, sede TEXT NOT NULL DEFAULT '', pago_servicio NUMERIC NOT NULL DEFAULT 0,
       codigo TEXT UNIQUE, pin_hash TEXT NOT NULL DEFAULT '', activo BOOLEAN NOT NULL DEFAULT TRUE, libre_desde TEXT NOT NULL DEFAULT '', libre_hasta TEXT NOT NULL DEFAULT '',
       notas TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await q('ALTER TABLE op_choferes ADD COLUMN IF NOT EXISTS foto TEXT');
     await q(`CREATE TABLE IF NOT EXISTS op_proveedores (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'transportista',
       contacto TEXT NOT NULL DEFAULT '', telefono TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', sede TEXT NOT NULL DEFAULT '',
       activo BOOLEAN NOT NULL DEFAULT TRUE, notas TEXT NOT NULL DEFAULT '')`);
@@ -1173,6 +1174,18 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     if (!m || Number(m[2]) < Date.now()) return null;
     return { chofer_id: Number(m[1]), vence: Number(m[2]), firma: m[3] };
   }
+  // Identidad de chat de un chofer que usa la app del celular (cookie del chofer). Sirve para hablar con el equipo.
+  async function identidadChofer(req) {
+    const mods = await modulos();
+    if (!mods.app_chofer) return null;
+    const s = choferDeReq(req);
+    if (!s) return null;
+    const ch = (await client.query('SELECT id, nombre, pin_hash FROM op_choferes WHERE id = $1 AND activo', [s.chofer_id])).rows[0];
+    if (!ch) return null;
+    const esperada = firmaChofer(ch.id, s.vence, ch.pin_hash);
+    if (esperada.length !== s.firma.length || !crypto.timingSafeEqual(Buffer.from(esperada), Buffer.from(s.firma))) return null;
+    return { usuario: 'chofer-' + ch.id, nombre: ch.nombre, grupo: 'Chofer', permisosFijos: { usar_chat: true }, esChofer: true };
+  }
   const intentosChofer = new Map();
   async function manejarChofer(req, res, url, { json, leerCuerpo, esLocal }) {
     const mods = await modulos();
@@ -2002,5 +2015,5 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     setInterval(() => buscarAviones().catch(e => console.log('Aviones:', e.message)), 60 * 1000);
   }
 
-  return { preparar, iniciar, manejar, manejarChofer, estadoPublico, sincronizar, chatwootConfig, _probar: { mejorTarifa, importe, tiempos, marcarChoques, identVuelo, cifrar, descifrar, agenciaDe, zonaDe } };
+  return { preparar, iniciar, manejar, manejarChofer, identidadChofer, estadoPublico, sincronizar, chatwootConfig, _probar: { mejorTarifa, importe, tiempos, marcarChoques, identVuelo, cifrar, descifrar, agenciaDe, zonaDe } };
 };
