@@ -353,6 +353,12 @@ async function inicializarTablas() {
     creada TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resuelta TIMESTAMPTZ)`);
   await client.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto TEXT');
+  await client.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS en_chat BOOLEAN NOT NULL DEFAULT FALSE');
+  // Una sola vez: quién aparece en el chat desde el inicio (el Programador y las personas indicadas). Después lo decides tú en Herramientas.
+  await client.query('CREATE TABLE IF NOT EXISTS migraciones_app (clave TEXT PRIMARY KEY, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+  if ((await client.query("INSERT INTO migraciones_app (clave) VALUES ('en_chat_inicial') ON CONFLICT DO NOTHING RETURNING clave")).rowCount) {
+    await client.query("UPDATE usuarios SET en_chat = TRUE WHERE grupo = 'Programador' OR nombre ILIKE '%Quintero%' OR nombre ILIKE '%Betancourt%'");
+  }
   // Quién está conectado ahora (lo lee la Oficina del central para el chat con cada negocio).
   await client.query(`CREATE TABLE IF NOT EXISTS conectados_ahora (
     usuario VARCHAR(50) PRIMARY KEY,
@@ -999,8 +1005,8 @@ async function guardarFotoChat(usuario, foto) {
   return client.query('UPDATE usuarios SET foto = $2 WHERE usuario = $1', [usuario, foto]);
 }
 async function existeDestinoChat(usuario) {
-  if (esChoferChat(usuario)) return (await client.query('SELECT 1 FROM op_choferes WHERE id = $1 AND activo', [idChoferChat(usuario)])).rowCount > 0;
-  return (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE', [usuario])).rowCount > 0;
+  if (esChoferChat(usuario)) return (await client.query('SELECT 1 FROM op_choferes WHERE id = $1 AND activo AND en_chat', [idChoferChat(usuario)])).rowCount > 0;
+  return (await client.query('SELECT 1 FROM usuarios WHERE usuario = $1 AND activo = TRUE AND en_chat = TRUE', [usuario])).rowCount > 0;
 }
 
 async function registrar(u, accion, entidad, entidadId, anterior, nuevo, detalle = '') {
@@ -2451,7 +2457,7 @@ http.createServer(async (req, res) => {
       if (!puede('usar_chat')) return json(res, 403, { error: 'No tienes permiso para usar el chat.' });
       const estados = estadosConectados();
       const r = await client.query(
-        'SELECT usuario, nombre, grupo, (foto IS NOT NULL) AS "tieneFoto" FROM usuarios WHERE activo = TRUE AND usuario <> $1 ORDER BY nombre',
+        'SELECT usuario, nombre, grupo, (foto IS NOT NULL) AS "tieneFoto" FROM usuarios WHERE activo = TRUE AND en_chat = TRUE AND usuario <> $1 ORDER BY nombre',
         [u.usuario]
       );
       const no = await client.query(
@@ -2459,8 +2465,12 @@ http.createServer(async (req, res) => {
         [u.usuario]
       );
       const pendientes = new Map(no.rows.map(x => [x.de, x.n]));
-      // Por ahora solo usuarios del panel. Los choferes se sumarán cuando tengan la casilla "Aparece en el chat".
-      return json(res, 200, r.rows.map(x => ({
+      // Choferes: solo los que tienen marcada la casilla "Aparece en el chat".
+      const choferes = (await client.query('SELECT id, nombre, (foto IS NOT NULL) AS "tieneFoto" FROM op_choferes WHERE activo = TRUE AND en_chat = TRUE ORDER BY nombre')).rows
+        .filter(x => 'chofer-' + x.id !== u.usuario)
+        .map(x => ({ usuario: 'chofer-' + x.id, nombre: x.nombre, grupo: 'Chofer', tieneFoto: x.tieneFoto }));
+      const todos = [...r.rows, ...choferes].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+      return json(res, 200, todos.map(x => ({
         usuario: x.usuario,
         nombre: x.nombre,
         grupo: x.grupo,
@@ -2559,6 +2569,14 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/api/perfil') {
       const foto = await fotoDeChat(u.usuario);
       return json(res, 200, { usuario: u.usuario, nombre: u.nombre || u.usuario, tieneFoto: !!foto });
+    }
+    if (req.method === 'POST' && url === '/api/perfil/nombre') {
+      if (esChoferChat(u.usuario)) return json(res, 403, { error: 'Tu nombre lo cambia la oficina.' });
+      const nombre = String((await leerCuerpo(req)).nombre || '').trim().slice(0, 100);
+      if (nombre.length < 2) return json(res, 400, { error: 'Escribe un nombre de al menos 2 letras.' });
+      await client.query('UPDATE usuarios SET nombre = $2 WHERE usuario = $1', [u.usuario, nombre]);
+      await registrar(u, 'perfil_nombre', 'usuario', u.usuario, u.nombre || '', nombre, 'Cambió su nombre');
+      return json(res, 200, { ok: true, nombre });
     }
     if (req.method === 'POST' && url === '/api/perfil/foto') {
       const f = await leerCuerpo(req);
@@ -3615,7 +3633,7 @@ http.createServer(async (req, res) => {
       }
 
       if (req.method === 'GET' && url === '/api/usuarios') {
-        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos, email FROM usuarios ORDER BY id');
+        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos, email, en_chat FROM usuarios ORDER BY id');
         return json(res, 200, r.rows);
       }
 
@@ -3648,7 +3666,7 @@ http.createServer(async (req, res) => {
       }
 
       if (req.method === 'POST' && url === '/api/usuarios/editar') {
-        const { id, nombre, grupo, empresa, permisos, email } = await leerCuerpo(req);
+        const { id, nombre, grupo, empresa, permisos, email, enChat } = await leerCuerpo(req);
         const correoU = email === undefined ? undefined : String(email || '').trim().toLowerCase().slice(0, 200);
         if (correoU && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correoU)) return json(res, 400, { error: 'El correo no es válido.' });
         const destino = await buscarPorId(id);
@@ -3665,8 +3683,8 @@ http.createServer(async (req, res) => {
         if (!nombre || !nombre.trim()) return json(res, 400, { error: 'El nombre es obligatorio.' });
         if (!(await grupoExiste(grupo))) return json(res, 400, { error: 'Grupo no válido' });
         if (!EMPRESAS.includes(empresa)) return json(res, 400, { error: 'Empresa no válida' });
-        await client.query('UPDATE usuarios SET nombre = $1, grupo = $2, empresa = $3, permisos = $5, email = COALESCE($6, email) WHERE id = $4',
-          [nombre.trim(), grupo, empresa, destino.id, JSON.stringify(filtrarPermisos(permisos)), correoU === undefined ? null : correoU]);
+        await client.query('UPDATE usuarios SET nombre = $1, grupo = $2, empresa = $3, permisos = $5, email = COALESCE($6, email), en_chat = COALESCE($7, en_chat) WHERE id = $4',
+          [nombre.trim(), grupo, empresa, destino.id, JSON.stringify(filtrarPermisos(permisos)), correoU === undefined ? null : correoU, typeof enChat === 'boolean' ? enChat : null]);
         if (correoU !== undefined && correoU !== (destino.email || '')) await registrar(u, 'editar_correo_usuario', 'usuario', destino.id, destino.email || '', correoU, destino.usuario);
         await registrar(u, 'editar_usuario', 'usuario', destino.id,
           { nombre: destino.nombre, grupo: destino.grupo, empresa: destino.empresa },

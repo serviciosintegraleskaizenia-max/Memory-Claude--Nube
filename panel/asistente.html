@@ -6,50 +6,55 @@
 <title>Zentralia App · Asistente</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23f97316'/%3E%3Cstop offset='1' stop-color='%23fbbf24'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='56' height='56' rx='14' fill='url(%23g)'/%3E%3Cpath d='M19 18h26v6L28 41h17v6H19v-6l17-17H19z' fill='%23fff'/%3E%3C/svg%3E">
 <style>
-  :root { --fondo:#eef2f7; --tarjeta:#fff; --texto:#1e293b; --suave:#64748b; --borde:#e2e8f0; --enc:#0b4f8a; --enc2:#1679c2; --azul:#1679c2; }
-  body.oscuro { --fondo:#0f172a; --tarjeta:#1e293b; --texto:#e2e8f0; --suave:#94a3b8; --borde:#334155; --enc:#0b1f3a; --enc2:#134e8a; }
+  :root { --verde:#008069; --tarjeta:#fff; --texto:#111b21; --suave:#667781; --borde:#e9edef; --chat:#efeae2; }
+  body.oscuro { --tarjeta:#202c33; --texto:#e9edef; --suave:#8696a0; --borde:#2a3942; --chat:#0b141a; }
   * { box-sizing:border-box; }
-  body { font-family:'Segoe UI',Arial,sans-serif; background:var(--fondo); color:var(--texto); margin:0; }
-  header { background:linear-gradient(135deg,var(--enc),var(--enc2)); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
-  header h1 { margin:0; font-size:19px; }
-  main { max-width:860px; margin:0 auto; padding:16px 16px 30px; }
-  .caja { background:var(--tarjeta); border-radius:14px; padding:14px 16px; box-shadow:0 1px 3px #0f172a14; margin-bottom:14px; }
-  .ayuda { font-size:13.5px; line-height:1.5; color:var(--suave); margin:0; }
+  html, body { height:100%; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#f0f2f5; color:var(--texto); margin:0; display:flex; flex-direction:column; }
+  body.oscuro { background:#111b21; }
+  header { background:var(--verde); color:#fff; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:17px; font-weight:600; }
+  main { flex:1; min-height:0; display:flex; flex-direction:column; padding:0; }
+  .caja { background:transparent; padding:6px 12px; }
+  .ayuda { font-size:12.5px; line-height:1.45; color:var(--suave); margin:0; }
   .ayuda b { color:var(--texto); }
-  .barra { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .barra { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 4px; }
   select, textarea { font-family:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--borde); border-radius:8px; background:var(--tarjeta); color:var(--texto); }
-  .btn, .btn-sec, .mini { border-radius:8px; cursor:pointer; font-size:13.5px; border:1px solid var(--borde); font-family:inherit; }
-  .btn { background:var(--azul); color:#fff; border-color:var(--azul); padding:9px 16px; font-weight:600; }
-  .btn-sec { background:var(--tarjeta); color:var(--texto); padding:8px 12px; }
-  .mini { background:var(--tarjeta); color:var(--texto); padding:3px 9px; font-size:12.5px; }
-  .chat { display:flex; flex-direction:column; gap:8px; background:var(--fondo); border-radius:12px; padding:12px; min-height:300px; max-height:calc(100vh - 330px); overflow-y:auto; }
-  .burbuja { max-width:80%; padding:9px 12px; border-radius:12px; font-size:14.5px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
-  .cliente { align-self:flex-end; background:#dcf8c6; color:#0f172a; border-bottom-right-radius:4px; }
-  body.oscuro .cliente { background:#14532d; color:#e2e8f0; }
-  .bot { align-self:flex-start; background:var(--tarjeta); border:1px solid var(--borde); border-bottom-left-radius:4px; }
-  .meta { align-self:flex-start; font-size:12px; color:var(--suave); display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:-3px 0 4px 2px; }
-  .chip { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11.5px; font-weight:600; background:#dbeafe; color:#1e40af; }
-  body.oscuro .chip { background:#172554; color:#bfdbfe; }
+  .btn, .btn-sec, .mini { border-radius:8px; cursor:pointer; font-size:13.5px; border:0; font-family:inherit; }
+  .btn { background:var(--verde); color:#fff; padding:9px 16px; font-weight:600; border-radius:999px; }
+  .btn-sec { background:var(--tarjeta); color:var(--texto); padding:8px 12px; border:1px solid var(--borde); }
+  .mini { background:#fff; color:var(--verde); padding:3px 10px; font-size:12px; border:1px solid #d1d7db; border-radius:999px; }
+  .chat { flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; background:var(--chat); padding:12px 10px; overflow-y:auto; }
+  .burbuja { max-width:80%; padding:6px 9px 4px; border-radius:8px; font-size:14.2px; line-height:1.38; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:0 1px 0.5px rgba(11,20,26,.13); }
+  .cliente { align-self:flex-end; background:#d9fdd3; color:#111b21; border-top-right-radius:0; }
+  .bot { align-self:flex-start; background:#fff; color:#111b21; border-top-left-radius:0; }
+  body.oscuro .cliente { background:#005c4b; color:#e9edef; }
+  body.oscuro .bot { background:#202c33; color:#e9edef; }
+  .meta { align-self:flex-start; font-size:12px; color:var(--suave); display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:-2px 0 2px 2px; }
+  .chip { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11.5px; font-weight:600; background:#fff; color:var(--verde); border:1px solid #d1d7db; }
   .asesor { align-self:flex-start; max-width:80%; background:#fef3c7; color:#78350f; border:1px solid #fde68a; border-radius:10px; padding:7px 10px; font-size:13px; }
-  body.oscuro .asesor { background:#451a03; color:#fde68a; border-color:#92400e; }
   .error { align-self:flex-start; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:10px; padding:7px 10px; font-size:13px; }
-  .sugerir { align-self:flex-start; width:min(560px,90%); background:var(--tarjeta); border:1px solid var(--borde); border-radius:10px; padding:10px; }
-  .sugerir textarea { width:100%; resize:vertical; }
-  .regla-ok { font-size:12px; color:#15803d; }
-  .escribir { display:flex; gap:8px; margin-top:10px; }
-  .escribir textarea { flex:1; resize:none; height:62px; }
-  .dictado { display:flex; align-items:center; gap:10px; margin-top:10px; padding:8px 12px; border-radius:10px; background:#fee2e2; color:#991b1b; font-size:13.5px; }
+  .sugerir { align-self:flex-start; width:min(560px,92%); background:#fff; border:1px solid #d1d7db; border-radius:10px; padding:10px; }
+  .sugerir textarea { width:100%; resize:vertical; border-radius:8px; }
+  .regla-ok { font-size:12px; color:var(--verde); }
+  .escribir { display:flex; gap:6px; align-items:flex-end; padding:8px; background:#f0f2f5; }
+  .escribir textarea { flex:1; resize:none; height:42px; border-radius:22px; border:0; background:#fff; padding:11px 14px; font-size:15px; }
+  .escribir .btn-sec { border-radius:50%; width:42px; height:42px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent; border:0; color:#54656f; }
+  .escribir .btn-sec svg { width:20px; height:20px; }
+  .escribir .btn { border-radius:50%; width:42px; height:42px; padding:0; display:flex; align-items:center; justify-content:center; }
+  .escribir .btn svg { width:20px; height:20px; }
+  .dictado { display:flex; align-items:center; gap:10px; margin:0 8px 6px; padding:6px 6px 6px 14px; border-radius:24px; background:#fff; color:#3b4a54; font-size:14px; box-shadow:0 1px 2px rgba(11,20,26,.12); }
   .dictado[hidden] { display:none; }
-  .dictado .punto { width:10px; height:10px; border-radius:50%; background:#ef4444; animation:parpadeo 1s infinite; }
-  @keyframes parpadeo { 50% { opacity:.2; } }
-  .dictado b { font-variant-numeric:tabular-nums; }
-  .dictado .btn-sec { margin-left:auto; }
+  .dictado .punto { width:10px; height:10px; border-radius:50%; background:#ea0038; animation:parpadeo 1s infinite; flex:none; }
+  @keyframes parpadeo { 50% { opacity:.25; } }
+  .dictado b { font-variant-numeric:tabular-nums; font-size:15px; }
+  .dictado .btn-sec { margin-left:auto; width:40px; height:40px; border-radius:50%; background:#111b21; color:#fff; border:0; padding:0; display:flex; align-items:center; justify-content:center; }
   .vacio { text-align:center; color:var(--suave); padding:40px 10px; font-size:14px; }
-  .toast { position:fixed; right:16px; bottom:16px; background:#0f172a; color:#fff; padding:10px 15px; border-radius:10px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast { position:fixed; right:16px; bottom:16px; background:#111b21; color:#fff; padding:10px 15px; border-radius:10px; font-size:13.5px; opacity:0; transition:opacity .2s; pointer-events:none; }
   .toast.visible { opacity:1; }
-  @media (max-width:600px) { .burbuja, .asesor { max-width:92%; } .chat { max-height:none; } }
+  @media (max-width:600px) { .burbuja, .asesor { max-width:88%; } }
   /* Interruptor claro/oscuro */
-  .tema-switch { position: relative; width: 58px; height: 28px; border-radius: 999px; background: rgba(15,23,42,.55); border: 1px solid rgba(255,255,255,.3); cursor: pointer; padding: 0; flex: none; transition: background .25s, box-shadow .2s; }
+  .tema-switch { position: relative; width: 58px; height: 28px; border-radius: 999px; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.3); cursor: pointer; padding: 0; flex: none; transition: background .25s, box-shadow .2s; }
   .tema-switch:hover { box-shadow: 0 0 0 3px rgba(255,255,255,.18); }
   .tema-switch svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tema-switch .ts-pista { position: absolute; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: rgba(255,255,255,.85); }
@@ -64,14 +69,14 @@
   .tema-switch.on .ts-bola { left: 35px; }
   .tema-switch.on .ico-sol { display: none; }
   .tema-switch.on .ico-luna { display: block; }
-  /* Selector de modo: solo iconos, grandes */
-  .modo { display:flex; align-items:center; gap:2px; background:#0f172a; border:1px solid #334155; border-radius:999px; padding:2px; }
-  .modo button { height:26px; border:0; border-radius:999px; background:transparent; color:#94a3b8; font-family:inherit; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:5px; padding:0 10px 0 8px; cursor:pointer; }
+  /* Selector Entrenar / Vender: píldora aprobada */
+  .modo { display:flex; align-items:center; gap:2px; background:rgba(0,0,0,.22); border:1px solid rgba(255,255,255,.2); border-radius:999px; padding:2px; }
+  .modo button { height:26px; border:0; border-radius:999px; background:transparent; color:#d1fae5; font-family:inherit; font-size:11.5px; font-weight:600; display:flex; align-items:center; gap:5px; padding:0 10px 0 8px; cursor:pointer; }
   .modo button svg { width:13px; height:13px; flex:none; }
   .modo button.on { color:#fff; }
   .modo button[data-modo="entrenamiento"].on { background:#1679c2; }
   .modo button[data-modo="venta"].on { background:#f97316; }
-  .grabando { background: #ef4444 !important; color: #fff !important; }
+  .grabando { background:#ea0038 !important; color:#fff !important; }
 </style>
 </head>
 <body>
@@ -96,12 +101,12 @@
     <div class="dictado" id="dictadoBarra" hidden>
       <span class="punto"></span>
       <span>Escuchando <b id="dictadoTiempo">0:00</b></span>
-      <button class="btn-sec" id="dictadoParar" type="button">⏹ Parar</button>
+      <button class="btn-sec" id="dictadoParar" type="button" title="Parar"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg></button>
     </div>
     <div class="escribir">
       <textarea id="texto" placeholder="Ej: Hola, ¿cuánto cuesta Isla Saona para 2 adultos y un niño de 7?"></textarea>
       <button class="btn-sec" id="dictarTexto" title="Dictar por voz"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-      <button class="btn" id="enviar">Enviar</button>
+      <button class="btn" id="enviar" title="Enviar"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></button>
     </div>
   </div>
 </main>
@@ -139,7 +144,7 @@ function pintarModo() {
   ayuda.innerHTML = modo === 'venta'
     ? '<b>🛒 Venta:</b> responde solo con las reglas aprobadas.'
     : '<b>🎓 Entrenamiento:</b> en una respuesta, toca 💡 Enseñar para proponer una regla.';
-  document.getElementById('texto').placeholder = modo === 'venta' ? 'Escribe como cliente para probar la venta…' : 'Escribe como cliente y, si algo sale mal, enséñale…';
+  document.getElementById('texto').placeholder = 'Escribe como cliente…';
 }
 function pintar() {
   const c = document.getElementById('chat');

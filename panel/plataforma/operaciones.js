@@ -267,6 +267,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       codigo TEXT UNIQUE, pin_hash TEXT NOT NULL DEFAULT '', activo BOOLEAN NOT NULL DEFAULT TRUE, libre_desde TEXT NOT NULL DEFAULT '', libre_hasta TEXT NOT NULL DEFAULT '',
       notas TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await q('ALTER TABLE op_choferes ADD COLUMN IF NOT EXISTS foto TEXT');
+    await q('ALTER TABLE op_choferes ADD COLUMN IF NOT EXISTS en_chat BOOLEAN NOT NULL DEFAULT FALSE');
     await q(`CREATE TABLE IF NOT EXISTS op_proveedores (id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, tipo TEXT NOT NULL DEFAULT 'transportista',
       contacto TEXT NOT NULL DEFAULT '', telefono TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', sede TEXT NOT NULL DEFAULT '',
       activo BOOLEAN NOT NULL DEFAULT TRUE, notas TEXT NOT NULL DEFAULT '')`);
@@ -1240,7 +1241,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
 
   // ---------- catálogos (Configuración) ----------
   const CATALOGOS = {
-    choferes: { tabla: 'op_choferes', campos: { nombre: 'txt', telefono: 'txt', licencia: 'txt', licencia_vence: 'fecha', vehiculo_id: 'id', sede: 'txt', pago_servicio: 'num', codigo: 'txt', activo: 'bool', libre_desde: 'fecha', libre_hasta: 'fecha', notas: 'txt' } },
+    choferes: { tabla: 'op_choferes', campos: { nombre: 'txt', telefono: 'txt', licencia: 'txt', licencia_vence: 'fecha', vehiculo_id: 'id', sede: 'txt', pago_servicio: 'num', codigo: 'txt', activo: 'bool', en_chat: 'bool', libre_desde: 'fecha', libre_hasta: 'fecha', notas: 'txt' } },
     vehiculos: { tabla: 'op_vehiculos', campos: { nombre: 'txt', placa: 'txt', capacidad: 'int', tipo: 'txt', sede: 'txt', seguro_vence: 'fecha', marbete_vence: 'fecha', activo: 'bool', notas: 'txt' } },
     proveedores: { tabla: 'op_proveedores', campos: { nombre: 'txt', tipo: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', sede: 'txt', activo: 'bool', notas: 'txt' } },
     agencias: { tabla: 'op_agencias', campos: { nombre: 'txt', alias: 'txt', tarifario_id: 'id', mercado: 'txt', tipo_agencia: 'txt', modalidad: 'txt', contacto: 'txt', telefono: 'txt', email: 'txt', activo: 'bool', notas: 'txt' } },
@@ -1889,7 +1890,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
           const [tarifarios, tarifas, agencias2, hoteles2, choferes, vehiculos, proveedores, paquetes, cortesias] = await Promise.all([
             client.query('SELECT * FROM op_tarifarios ORDER BY tipo, nombre'), client.query('SELECT * FROM op_tarifas ORDER BY tarifario_id, servicio, nombre, zona, pax_desde'),
             client.query('SELECT * FROM op_agencias ORDER BY nombre'), client.query('SELECT * FROM op_hoteles ORDER BY sede, zona, hotel'),
-            client.query('SELECT id, nombre, telefono, licencia, licencia_vence, vehiculo_id, sede, pago_servicio, codigo, activo, libre_desde, libre_hasta, notas, (pin_hash <> \'\') AS tiene_pin FROM op_choferes ORDER BY nombre'),
+            client.query('SELECT id, nombre, telefono, licencia, licencia_vence, vehiculo_id, sede, pago_servicio, codigo, activo, libre_desde, libre_hasta, notas, en_chat, (pin_hash <> \'\') AS tiene_pin FROM op_choferes ORDER BY nombre'),
             client.query('SELECT * FROM op_vehiculos ORDER BY nombre'), client.query('SELECT * FROM op_proveedores ORDER BY nombre'), client.query('SELECT * FROM op_paquetes ORDER BY orden, id'),
             client.query('SELECT * FROM op_cortesias ORDER BY orden, nombre')]);
           const llaves = await cfg('llaves', {});
