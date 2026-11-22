@@ -126,15 +126,27 @@ label.campo input,label.campo select,label.campo textarea{display:block;width:10
     <label class="chk"><input type="checkbox" id="fSeg"> Con seguimiento pendiente</label>
   </div>
   <div class="barra" style="margin-top:8px">
+    <input id="fTel" type="search" placeholder="Número o parte del número" aria-label="Buscar por teléfono">
+    <select id="fCampo" aria-label="Fecha que se usa para filtrar">
+      <option value="ultimo">Fecha: último mensaje del cliente</option>
+      <option value="alta">Fecha: cuando se registró</option>
+    </select>
+    <input id="fDesde" type="date" aria-label="Desde la fecha">
+    <input id="fHasta" type="date" aria-label="Hasta la fecha">
+    <select id="fHoraDesde" aria-label="Desde la hora"></select>
+    <select id="fHoraHasta" aria-label="Hasta la hora"></select>
+  </div>
+  <div class="barra" style="margin-top:8px">
     <button id="btnNueva" class="btn principal" type="button">+ Nueva persona</button>
     <button id="btnSync" class="btn" type="button" disabled>Sincronizar con Chatwoot</button>
+    <button id="btnExcel" class="btn" type="button">Descargar Excel (lo filtrado)</button>
     <button id="btnEtapas" class="btn" type="button" hidden>Etapas de venta</button>
   </div>
   <div class="sub" id="sincTxt"></div>
   <div class="resumen" id="resumen"></div>
 
   <section id="vTablero"><div class="tablero" id="tablero"></div></section>
-  <section id="vLista" hidden><div class="tabla-wrap"><table><thead><tr><th>Persona</th><th>Canal</th><th>Etapa</th><th>Etiquetas</th><th>Último mensaje</th></tr></thead><tbody id="filas"></tbody></table></div></section>
+  <section id="vLista" hidden><div class="tabla-wrap"><table><thead><tr><th>Persona</th><th>Canal</th><th>Etapa</th><th>Etiquetas</th><th>Último mensaje</th><th>Alta</th></tr></thead><tbody id="filas"></tbody></table></div></section>
   <section id="vSeguimientos" hidden><div id="listaSeg"></div></section>
 </main>
 
@@ -182,7 +194,7 @@ const hace = iso => {
 };
 
 let ESTADO = null, TABLERO = null, VISTA = 'tablero', FICHA = null, FICHA_TAB = 'conv', ETAPAS_EDIT = [];
-let FILTRO = { q: '', canal: '', sinRespuesta: '', etiqueta: '', seguimiento: false };
+let FILTRO = { q: '', canal: '', sinRespuesta: '', etiqueta: '', seguimiento: false, telefono: '', campo: 'ultimo', desde: '', hasta: '', horaDesde: '', horaHasta: '' };
 let temporizadorBuscar = null, temporizadorAviso = null;
 
 async function api(url, cuerpo) {
@@ -209,6 +221,12 @@ function queryFiltros() {
   if (FILTRO.sinRespuesta) p.set('sin_respuesta_horas', FILTRO.sinRespuesta);
   if (FILTRO.etiqueta) p.set('etiqueta', FILTRO.etiqueta);
   if (FILTRO.seguimiento) p.set('seguimiento', 'pendiente');
+  if (FILTRO.telefono) p.set('telefono', FILTRO.telefono);
+  if (FILTRO.campo === 'alta') p.set('campo', 'alta');
+  if (FILTRO.desde) p.set('desde', FILTRO.desde);
+  if (FILTRO.hasta) p.set('hasta', FILTRO.hasta);
+  if (FILTRO.horaDesde !== '') p.set('hora_desde', FILTRO.horaDesde);
+  if (FILTRO.horaHasta !== '') p.set('hora_hasta', FILTRO.horaHasta);
   return p.toString();
 }
 
@@ -274,7 +292,8 @@ async function cargarLista() {
       <td>${esc(etapaNombre(c.etapa))}</td>
       <td><div class="chips">${chipsEtiquetas(c, 5)}</div></td>
       <td>${esc(hace(c.ultimo_entrante))}</td>
-    </tr>`).join('') : '<tr><td colspan="5" class="vacio">No hay personas con ese filtro.</td></tr>';
+      <td>${esc(c.creado || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="vacio">No hay personas con ese filtro.</td></tr>';
 }
 
 async function cargarSeguimientos() {
@@ -335,6 +354,10 @@ function pintarFicha() {
         <label class="campo">Nombre<input name="nombre" value="${esc(c.nombre)}" maxlength="120"></label>
         <label class="campo">Teléfono<input name="telefono" value="${esc(c.telefono)}" maxlength="40"></label>
         <label class="campo">Correo<input name="correo" value="${esc(c.correo)}" maxlength="120"></label>
+        <label class="campo">Dirección<input name="direccion" value="${esc(c.direccion || '')}" maxlength="300"></label>
+        <label class="campo">Instagram (usuario)<input name="instagram" value="${esc((c.redes || {}).instagram || '')}" maxlength="120"></label>
+        <label class="campo">Facebook / Messenger<input name="messenger" value="${esc((c.redes || {}).messenger || '')}" maxlength="120"></label>
+        <label class="campo">TikTok<input name="tiktok" value="${esc((c.redes || {}).tiktok || '')}" maxlength="120"></label>
         <label class="campo">Etapa<select name="etapa">${ESTADO.etapas.filter(e => e.activa || e.clave === c.etapa).map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></label>
         <label class="campo">Etiquetas (separadas por coma). Las de la IA también aparecen aquí.<input name="etiquetas" value="${esc((c.etiquetas || []).join(', '))}" maxlength="300"></label>
         <label class="campo">Notas<textarea name="notas" rows="3" maxlength="2000">${esc(c.notas)}</textarea></label>
@@ -380,7 +403,8 @@ async function guardarDatos(form) {
   const f = Object.fromEntries(new FormData(form));
   const r = await api('/api/crm/contactos/guardar', {
     id: c.id, canal: c.canal, identificador: c.identificador, origen: c.origen,
-    nombre: f.nombre, telefono: f.telefono, correo: f.correo, etapa: f.etapa, etiquetas: f.etiquetas, notas: f.notas
+    nombre: f.nombre, telefono: f.telefono, correo: f.correo, etapa: f.etapa, etiquetas: f.etiquetas, notas: f.notas,
+    direccion: f.direccion, redes: { instagram: f.instagram, messenger: f.messenger, tiktok: f.tiktok }
   });
   if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.', 5000);
   aviso('Datos guardados.');
@@ -469,6 +493,7 @@ document.addEventListener('click', ev => {
   const cerrar = t.closest('[data-cerrar]'); if (cerrar) return ($('#' + cerrar.dataset.cerrar).hidden = true);
   if (t.id === 'btnNueva') return abrirNueva();
   if (t.id === 'btnSync') return sincronizar();
+  if (t.id === 'btnExcel') { location.href = '/api/crm/exportar?' + queryFiltros(); return; }
   if (t.id === 'btnEtapas') return abrirEtapas();
   if (t.id === 'btnAgregarEtapa') { const cur = leerEtapas(); cur.push({ clave: '', nombre: '', activa: true }); ETAPAS_EDIT = cur; return pintarEtapas(); }
   if (t.id === 'btnGuardarEtapas') return guardarEtapas();
@@ -524,6 +549,18 @@ $('#fCanal').addEventListener('change', e => { FILTRO.canal = e.target.value; pi
 $('#fSin').addEventListener('change', e => { FILTRO.sinRespuesta = e.target.value; pintarVista(); });
 $('#fEtiqueta').addEventListener('change', e => { FILTRO.etiqueta = e.target.value; pintarVista(); });
 $('#fSeg').addEventListener('change', e => { FILTRO.seguimiento = e.target.checked; pintarVista(); });
+for (const [id, texto] of [['fHoraDesde', 'Desde la hora'], ['fHoraHasta', 'Hasta la hora']]) {
+  $('#' + id).innerHTML = `<option value="">${texto}</option>` + Array.from({ length: 24 }, (_, h) => `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`).join('');
+  $('#' + id).addEventListener('change', e => { FILTRO[id === 'fHoraDesde' ? 'horaDesde' : 'horaHasta'] = e.target.value; pintarVista(); });
+}
+$('#fCampo').addEventListener('change', e => { FILTRO.campo = e.target.value; pintarVista(); });
+$('#fDesde').addEventListener('change', e => { FILTRO.desde = e.target.value; pintarVista(); });
+$('#fHasta').addEventListener('change', e => { FILTRO.hasta = e.target.value; pintarVista(); });
+let temporizadorTel = null;
+$('#fTel').addEventListener('input', e => {
+  clearTimeout(temporizadorTel);
+  temporizadorTel = setTimeout(() => { FILTRO.telefono = e.target.value.replace(/\D/g, ''); pintarVista(); }, 250);
+});
 
 iniciar();
 </script>

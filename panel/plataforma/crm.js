@@ -13,6 +13,10 @@
 // desde el último mensaje de la persona. Fuera de ese plazo, el seguimiento queda como "requiere plantilla".
 
 const CANALES = { whatsapp: 'WhatsApp', instagram: 'Instagram', messenger: 'Messenger', tiktok: 'TikTok', web: 'Web / chat', manual: 'Carga manual' };
+// Redes sociales que se guardan en la ficha (mismas claves que los canales).
+const REDES_CRM = ['instagram', 'messenger', 'tiktok'];
+const redesDeCanal = (canal, identificador) => (REDES_CRM.includes(canal) ? { [canal]: identificador } : {});
+const { escribirExcel } = require('./lector-xlsx');
 const ETAPAS_INICIALES = [
   { clave: 'nuevo', nombre: 'Nuevo' }, { clave: 'interesado', nombre: 'Interesado' }, { clave: 'cotizado', nombre: 'Cotizado' },
   { clave: 'cerrado', nombre: 'Cerrado' }, { clave: 'perdido', nombre: 'Perdido' }
@@ -46,6 +50,10 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     for (const c of ['conv_id BIGINT', 'ultimo_entrante TIMESTAMPTZ', 'ultimo_saliente TIMESTAMPTZ', "etiquetado_en TIMESTAMPTZ"]) {
       await client.query(`ALTER TABLE crm_contactos ADD COLUMN IF NOT EXISTS ${c}`);
     }
+    // Dirección y redes sociales de la persona (redes = { instagram, messenger, tiktok }).
+    await client.query("ALTER TABLE crm_contactos ADD COLUMN IF NOT EXISTS direccion TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE crm_contactos ADD COLUMN IF NOT EXISTS redes JSONB NOT NULL DEFAULT '{}'::jsonb");
+    await client.query('CREATE INDEX IF NOT EXISTS crm_contactos_ultimo ON crm_contactos (ultimo_entrante)');
     await client.query(`CREATE TABLE IF NOT EXISTS crm_mensajes (
       id SERIAL PRIMARY KEY, contacto_id INTEGER NOT NULL REFERENCES crm_contactos(id) ON DELETE CASCADE,
       direccion TEXT NOT NULL, texto TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -112,25 +120,55 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const f = {
       q: texto(p.get('q'), 100).toLowerCase(), etapa: texto(p.get('etapa'), 60), canal: texto(p.get('canal'), 20),
       etiqueta: texto(p.get('etiqueta'), 40).toLowerCase(), sinRespuesta: Math.min(Number(p.get('sin_respuesta_horas')) || 0, 24 * 365),
-      seguimiento: p.get('seguimiento') === 'pendiente'
+      seguimiento: p.get('seguimiento') === 'pendiente',
+      telefono: texto(p.get('telefono'), 25).replace(/\D/g, ''), correo: texto(p.get('correo'), 120).toLowerCase(),
+      desde: /^\d{4}-\d{2}-\d{2}$/.test(p.get('desde') || '') ? p.get('desde') : '',
+      hasta: /^\d{4}-\d{2}-\d{2}$/.test(p.get('hasta') || '') ? p.get('hasta') : '',
+      campo: p.get('campo') === 'alta' ? 'alta' : 'ultimo',
+      horaDesde: /^\d{1,2}$/.test(p.get('hora_desde') || '') ? Math.min(Number(p.get('hora_desde')), 23) : null,
+      horaHasta: /^\d{1,2}$/.test(p.get('hora_hasta') || '') ? Math.min(Number(p.get('hora_hasta')), 23) : null
     };
     const where = [], val = [];
     const ph = v => { val.push(v); return '$' + val.length; };
-    if (f.q) { const n = ph(f.q); where.push(`(lower(nombre) LIKE '%' || ${n} || '%' OR lower(telefono) LIKE '%' || ${n} || '%' OR lower(correo) LIKE '%' || ${n} || '%')`); }
+    // Fecha y hora de referencia en hora de Lima: último mensaje del cliente (o alta si nunca escribió).
+    const fechaRef = f.campo === 'alta' ? 'creado' : 'COALESCE(ultimo_entrante, creado)';
+    const enLima = `(${fechaRef} AT TIME ZONE 'America/Lima')`;
+    if (f.q) { const n = ph(f.q); where.push(`(lower(nombre) LIKE '%' || ${n} || '%' OR lower(telefono) LIKE '%' || ${n} || '%' OR lower(correo) LIKE '%' || ${n} || '%' OR lower(direccion) LIKE '%' || ${n} || '%' OR lower(redes::text) LIKE '%' || ${n} || '%')`); }
+    if (f.telefono) where.push(`regexp_replace(telefono, '[^0-9]', '', 'g') LIKE '%' || ${ph(f.telefono)} || '%'`);
+    if (f.correo) where.push(`lower(correo) LIKE '%' || ${ph(f.correo)} || '%'`);
     if (f.etapa) where.push(`etapa = ${ph(f.etapa)}`);
-    if (f.canal) where.push(`canal = ${ph(f.canal)}`);
+    if (f.canal) { const n = ph(f.canal); where.push(`(canal = ${n} OR redes ? ${n})`); }
+    if (f.desde) where.push(`${enLima}::date >= ${ph(f.desde)}::date`);
+    if (f.hasta) where.push(`${enLima}::date <= ${ph(f.hasta)}::date`);
+    if (f.horaDesde !== null) where.push(`EXTRACT(HOUR FROM ${enLima}) >= ${ph(f.horaDesde)}`);
+    if (f.horaHasta !== null) where.push(`EXTRACT(HOUR FROM ${enLima}) <= ${ph(f.horaHasta)}`);
     if (f.etiqueta) where.push(`etiquetas ? ${ph(f.etiqueta)}`);
     if (f.sinRespuesta) where.push(`ultimo_entrante IS NOT NULL AND ultimo_entrante < NOW() - (${ph(String(f.sinRespuesta))} || ' hours')::interval`);
     if (f.seguimiento) where.push("EXISTS (SELECT 1 FROM crm_seguimientos s WHERE s.contacto_id = crm_contactos.id AND s.estado IN ('pendiente','requiere_plantilla'))");
     return { sql: where.length ? 'WHERE ' + where.join(' AND ') : '', val, f };
   }
 
-  const COLUMNAS = 'id, canal, identificador, nombre, telefono, correo, origen, etiquetas, etapa, ultimo_entrante, ultimo_saliente, conv_id, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado';
+  const COLUMNAS = 'id, canal, identificador, nombre, telefono, correo, direccion, redes, origen, etiquetas, etapa, ultimo_entrante, ultimo_saliente, conv_id, TO_CHAR(creado AT TIME ZONE \'America/Lima\', \'YYYY-MM-DD HH24:MI\') AS creado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado';
 
   async function listar(p) {
     const f = filtrosDe(p);
     const filas = (await client.query(`SELECT ${COLUMNAS} FROM crm_contactos ${f.sql} ORDER BY COALESCE(ultimo_entrante, actualizado) DESC LIMIT 300`, f.val)).rows;
     return { contactos: filas, etapas: await etapas(), canales: CANALES };
+  }
+
+  // Exporta a Excel las personas que se ven con los mismos filtros de la lista.
+  async function exportar(p) {
+    const f = filtrosDe(p);
+    const nombresEtapa = Object.fromEntries((await etapas()).map(e => [e.clave, e.nombre]));
+    const filas = (await client.query(`SELECT nombre, canal, etapa, telefono, correo, direccion, redes, etiquetas, notas, origen,
+        TO_CHAR(creado AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS alta,
+        TO_CHAR(ultimo_entrante AT TIME ZONE 'America/Lima', 'YYYY-MM-DD HH24:MI') AS ultimo
+      FROM crm_contactos ${f.sql} ORDER BY COALESCE(ultimo_entrante, creado) DESC LIMIT 5000`, f.val)).rows;
+    const fila = valores => Object.fromEntries(valores.map((v, i) => [i + 1, { v: v === null || v === undefined ? '' : String(v) }]));
+    const cab = ['Nombre', 'Canal', 'Etapa', 'Teléfono', 'Correo', 'Dirección', 'Instagram', 'Messenger (Facebook)', 'TikTok', 'Etiquetas', 'Notas', 'Origen', 'Alta', 'Último mensaje del cliente'];
+    const cuerpo = filas.map(r => fila([r.nombre, CANALES[r.canal] || r.canal, nombresEtapa[r.etapa] || r.etapa, r.telefono, r.correo, r.direccion,
+      (r.redes || {}).instagram, (r.redes || {}).messenger, (r.redes || {}).tiktok, (r.etiquetas || []).join(', '), r.notas, r.origen, r.alta, r.ultimo]));
+    return escribirExcel([{ nombre: 'Contactos', filas: [fila(cab), ...cuerpo] }]);
   }
 
   // Tablero: columnas por etapa, con el total real de cada una.
@@ -158,6 +196,13 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     return { contacto: c, mensajes, historial, seguimientos, ventana_abierta: ventanaAbierta(c) };
   }
 
+  // Redes de la ficha: solo las claves conocidas y texto corto.
+  function redesDe(r) {
+    const salida = {};
+    for (const k of REDES_CRM) { const v = texto(r && r[k], 120); if (v) salida[k] = v; }
+    return salida;
+  }
+
   async function guardar(f, u) {
     const canal = Object.prototype.hasOwnProperty.call(CANALES, f.canal) ? f.canal : 'manual';
     const etapa = texto(f.etapa, 60) || 'nuevo';
@@ -166,18 +211,24 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const identificador = texto(f.identificador || f.telefono || f.correo || nombre, 120);
     if (!identificador) throw error('Escribe al menos el nombre, teléfono o correo de la persona.');
     const etiquetas = JSON.stringify(etiquetasDe(f.etiquetas));
-    const v = [canal, identificador, nombre, texto(f.telefono, 40), texto(f.correo, 120), texto(f.origen, 120), etiquetas, etapa, texto(f.notas, 2000)];
+    const redes = redesDe(f.redes);
+    const v = [canal, identificador, nombre, texto(f.telefono, 40), texto(f.correo, 120), texto(f.origen, 120), etiquetas, etapa, texto(f.notas, 2000), texto(f.direccion, 300), JSON.stringify(redes)];
     const id = Number(f.id) || 0;
     if (id) {
-      const previo = (await client.query('SELECT etapa, etiquetas FROM crm_contactos WHERE id = $1', [id])).rows[0];
+      const previo = (await client.query('SELECT etapa, etiquetas, nombre, telefono, correo, direccion, redes FROM crm_contactos WHERE id = $1', [id])).rows[0];
       if (!previo) throw error('Ese contacto ya no existe.', 404);
       try {
         await client.query(`UPDATE crm_contactos SET canal=$1, identificador=$2, nombre=$3, telefono=$4, correo=$5,
-          origen=$6, etiquetas=$7::jsonb, etapa=$8, notas=$9, actualizado=NOW() WHERE id=$10`, [...v, id]);
+          origen=$6, etiquetas=$7::jsonb, etapa=$8, notas=$9, direccion=$10, redes=$11::jsonb, actualizado=NOW() WHERE id=$12`, [...v, id]);
       } catch (e) {
         if (e.code === '23505') throw error('Ya existe otra persona con ese dato en este canal.', 409);
         throw e;
       }
+      // Historial: qué datos de la persona cambiaron (quién y cuándo queda en el historial).
+      const cambiosDatos = [['nombre', nombre, previo.nombre], ['teléfono', v[3], previo.telefono], ['correo', v[4], previo.correo], ['dirección', v[9], previo.direccion]]
+        .filter(([, nuevo, viejo]) => String(nuevo) !== String(viejo || '')).map(([k]) => k);
+      if (JSON.stringify(redes) !== JSON.stringify(previo.redes || {})) cambiosDatos.push('redes sociales');
+      if (cambiosDatos.length) await histo(id, 'datos', `Cambió: ${cambiosDatos.join(', ')}`, quien(u));
       if (previo.etapa !== etapa) {
         const nombreEtapa = (await client.query('SELECT nombre FROM crm_etapas WHERE clave = $1', [etapa])).rows[0].nombre;
         await histo(id, 'etapa', `Pasó a ${nombreEtapa}`, quien(u));
@@ -188,8 +239,8 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     }
     const existe = (await client.query('SELECT id FROM crm_contactos WHERE canal = $1 AND identificador = $2', [canal, identificador])).rows[0];
     if (existe) throw error('Ya existe una persona con ese dato en este canal.', 409);
-    const r = await client.query(`INSERT INTO crm_contactos (canal, identificador, nombre, telefono, correo, origen, etiquetas, etapa, notas)
-      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING id`, v);
+    const r = await client.query(`INSERT INTO crm_contactos (canal, identificador, nombre, telefono, correo, origen, etiquetas, etapa, notas, direccion, redes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11::jsonb) RETURNING id`, v);
     await histo(r.rows[0].id, 'creado', `Persona creada (${CANALES[canal]})`, quien(u));
     await registrar(u, 'crm_contactos', 'crm', nombre || identificador, '', '', 'creado');
     return { id: r.rows[0].id };
@@ -383,14 +434,15 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
         const canal = CANAL_CHATWOOT[(conv.meta && conv.meta.channel) || ''] || 'web';
         const telefono = String(sender.phone_number || '');
         const identificador = canal === 'whatsapp' && telefono ? telefono.replace(/\D/g, '') : (sender.identifier || ('cw-' + sender.id));
-        const r = await client.query(`INSERT INTO crm_contactos (canal, identificador, nombre, telefono, correo, origen, conv_id)
-          VALUES ($1, $2, $3, $4, $5, 'Chatwoot', $6)
+        const r = await client.query(`INSERT INTO crm_contactos (canal, identificador, nombre, telefono, correo, origen, conv_id, redes)
+          VALUES ($1, $2, $3, $4, $5, 'Chatwoot', $6, $7::jsonb)
           ON CONFLICT (canal, identificador) DO UPDATE SET
             nombre = CASE WHEN crm_contactos.nombre = '' THEN EXCLUDED.nombre ELSE crm_contactos.nombre END,
             telefono = CASE WHEN crm_contactos.telefono = '' THEN EXCLUDED.telefono ELSE crm_contactos.telefono END,
             correo = CASE WHEN crm_contactos.correo = '' THEN EXCLUDED.correo ELSE crm_contactos.correo END,
+            redes = crm_contactos.redes || EXCLUDED.redes,
             conv_id = EXCLUDED.conv_id
-          RETURNING id, (xmax = 0) AS nuevo`, [canal, identificador, texto(sender.name, 120), texto(telefono, 40), texto(sender.email, 120), conv.id]);
+          RETURNING id, (xmax = 0) AS nuevo`, [canal, identificador, texto(sender.name, 120), texto(telefono, 40), texto(sender.email, 120), conv.id, JSON.stringify(redesDeCanal(canal, identificador))]);
         const contactoId = r.rows[0].id;
         if (r.rows[0].nuevo) { contactosNuevos++; await histo(contactoId, 'creado', `Llegó por ${CANALES[canal]} (Chatwoot)`, 'Chatwoot'); }
         const mensajes = (await pedir(`/conversations/${conv.id}/messages`))?.payload || [];
@@ -473,6 +525,11 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
       if (req.method === 'POST' && url === '/api/crm/etapas/guardar') return json(res, 200, await guardarEtapas(await leerCuerpo(req), u));
       if (req.method === 'POST' && url === '/api/crm/sincronizar') return json(res, 200, await sincronizar(u));
       if (req.method === 'POST' && url === '/api/crm/etiquetar') return json(res, 200, await etiquetarManual(await leerCuerpo(req), u));
+      if (req.method === 'GET' && url === '/api/crm/exportar') {
+        const libro = await exportar(p);
+        res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="contactos-${new Date().toISOString().slice(0, 10)}.xlsx"`, 'Cache-Control': 'no-store' });
+        return res.end(libro);
+      }
       return json(res, 404, { error: 'No existe esa ruta del CRM.' });
     } catch (e) {
       if (!e.codigo) console.log('CRM:', e.message);
