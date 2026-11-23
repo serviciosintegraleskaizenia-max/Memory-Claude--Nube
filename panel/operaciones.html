@@ -1479,6 +1479,7 @@ function pintarReservas() {
       <div class="campo"><label>Llegó por</label><select data-rvf="origen"><option value="">Correo y manual</option><option value="correo" ${RV.origen === 'correo' ? 'selected' : ''}>Correo</option><option value="manual" ${RV.origen === 'manual' ? 'selected' : ''}>Manual (oficina, teléfono, WhatsApp)</option></select></div>
       </div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn s mini" id="rvLimpiar">Limpiar</button><button class="btn p mini" id="rvAplicar">Aplicar</button></div></div>` : ''}
     <div class="rv-res">${d.resumen.reservas} reserva(s) · ${d.resumen.pax} pax · ${d.resumen.servicios} servicio(s)${precios && d.resumen.venta !== undefined ? ` · <b>${dinero(d.resumen.venta)}</b> en ventas` : ''}${precios && d.resumen.sin_precio ? ` · <b style="color:var(--suave)">${d.resumen.sin_precio} servicio(s) sin precio</b> (por confirmar)` : ''}${d.total > d.reservas.length ? ` · se muestran las ${d.reservas.length} más recientes` : ''}</div>
+    ${barraPaginasRV(rb)}
     <div class="card"><table><thead><tr><th>Reserva</th><th>Cliente y agencia</th><th>Servicios</th><th>Pax</th><th>Asesor</th><th>Estado</th>${precios ? '<th style="text-align:right">Venta</th>' : ''}</tr></thead>
       <tbody>${visibles.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>${barraPaginasRV(rb)}`;
 }
