@@ -1409,7 +1409,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
     if (hasta) cond.push(`o.fecha <= ${par(hasta)}`);
     if (altaDesde) cond.push(`c.creado >= ${par(altaDesde)}::date`);
     if (altaHasta) cond.push(`c.creado < ${par(altaHasta)}::date + 1`);
-    if (!desde && !hasta && !altaDesde && !altaHasta) cond.push(`(o.fecha >= ${par(masDias(hoyLocal(), -30))} OR c.creado > NOW() - INTERVAL '30 days')`);
+    // Sin fechas se ven todas las registradas (la lista tiene tope de filas). Antes solo se veían los últimos 30 días.
     const agencia = txt(p.get('agencia'), 120); if (agencia) cond.push(`lower(c.agencia) = lower(${par(agencia)})`);
     const sede = txt(p.get('sede'), 60); if (sede) cond.push(`o.sede = ${par(sede)}`);
     const vuelo = txt(p.get('vuelo'), 20).replace(/\s+/g, ''); if (vuelo) cond.push(`replace(upper(c.vuelo), ' ', '') LIKE ${par(vuelo.toUpperCase() + '%')}`);
