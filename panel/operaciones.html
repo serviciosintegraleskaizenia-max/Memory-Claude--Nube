@@ -321,6 +321,191 @@ tr.fila.fila-activa td{background:rgba(31,95,174,.08)}
   .cb-form select,.cb-form input{padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:#fff;color:#0f172a}
   .cb-aviso{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-left:4px solid #f97316;margin-bottom:12px}
 </style>
+<style>
+#ctl{
+    --c-fondo: #eef2f7; --c-tarjeta: #ffffff; --c-texto: #1e293b; --c-texto-suave: #64748b;
+    --c-borde: #e2e8f0; --c-encabezado: #0b4f8a; --c-encabezado2: #1679c2; --c-hover: #f8fafc;
+    --c-serie-1: #2a78d6; --c-serie-2: #eb6834; --c-rejilla: #e5e7eb; --c-tarde: #dc2626; --c-tarde-fondo: #fee2e2; --c-tarde-texto: #991b1b;
+  }
+body.oscuro #ctl{
+    --c-fondo: #0f172a; --c-tarjeta: #1e293b; --c-texto: #e2e8f0; --c-texto-suave: #94a3b8;
+    --c-borde: #334155; --c-encabezado: #0b1f3a; --c-encabezado2: #134e8a; --c-hover: #273449;
+    --c-serie-1: #3987e5; --c-serie-2: #d95926; --c-rejilla: #334155; --c-tarde: #f87171; --c-tarde-fondo: #450a0a; --c-tarde-texto: #fecaca;
+  }
+#ctl *{ box-sizing: border-box; }
+#ctl{ font-family: 'Segoe UI', Arial, sans-serif; background: var(--c-fondo); margin: 0; color: var(--c-texto); }
+#ctl header{ background: linear-gradient(135deg, var(--c-encabezado), var(--c-encabezado2)); color: white; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+#ctl header h1{ margin: 0; font-size: 20px; font-weight: 600; }
+#ctl header p{ margin: 3px 0 0; opacity: 0.85; font-size: 13px; }
+#ctl .btn-tema{ background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.35); padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+#ctl main{ padding: 18px 24px 40px; max-width: 1400px; margin: 0 auto; }
+#ctl .barra{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+#ctl .barra input,
+#ctl .barra select{ padding: 7px 9px; border: 1px solid var(--c-borde); border-radius: 8px; background: var(--c-tarjeta); color: var(--c-texto); font-size: 13px; }
+#ctl .btn,
+#ctl .btn-sec{ padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; border: 1px solid var(--c-borde); }
+#ctl .btn{ background: #1679c2; color: white; border-color: #1679c2; }
+#ctl .btn-sec{ background: var(--c-tarjeta); color: var(--c-texto); }
+#ctl .btn-sec.activo{ border-color: #1679c2; color: #1679c2; font-weight: 600; }
+#ctl .tarjetas{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+#ctl .tarjeta{ background: var(--c-tarjeta); border-radius: 12px; padding: 12px 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.08); }
+#ctl .tarjeta .etiqueta{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--c-texto-suave); }
+#ctl .tarjeta .numero{ font-size: 26px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+#ctl .tarjeta .nota{ font-size: 12px; color: var(--c-texto-suave); margin-top: 2px; }
+#ctl .seccion{ background: var(--c-tarjeta); border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.08); margin-bottom: 16px; }
+#ctl .seccion h2{ font-size: 15px; margin: 0 0 4px; }
+#ctl .seccion .sub{ font-size: 12px; color: var(--c-texto-suave); margin: 0 0 10px; }
+#ctl .cabeza{ display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+#ctl .rejilla{ display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+#ctl .tabla-wrap{ overflow-x: auto; }
+#ctl table{ border-collapse: collapse; width: 100%; font-size: 13px; }
+#ctl th,
+#ctl td{ text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--c-borde); white-space: nowrap; }
+#ctl th{ font-size: 12px; color: var(--c-texto-suave); font-weight: 600; }
+#ctl td.num,
+#ctl th.num{ text-align: right; font-variant-numeric: tabular-nums; }
+#ctl .tarde{ background: var(--c-tarde-fondo); color: var(--c-tarde-texto); border-radius: 6px; padding: 1px 7px; font-weight: 700; display: inline-block; }
+#ctl .vacio{ text-align: center; color: var(--c-texto-suave); padding: 24px; }
+#ctl .leyenda{ display: flex; gap: 14px; font-size: 12px; color: var(--c-texto-suave); flex-wrap: wrap; }
+#ctl .leyenda span{ display: inline-flex; align-items: center; gap: 6px; }
+#ctl .muestra{ width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+#ctl .grafica{ position: relative; }
+#ctl .grafica svg{ display: block; width: 100%; height: auto; overflow: visible; }
+#ctl .grafica text{ fill: var(--c-texto-suave); font-size: 11px; }
+#ctl .grafica .valor{ fill: var(--c-texto); font-size: 11px; font-weight: 600; }
+#ctl .tooltip{ position: absolute; pointer-events: none; background: var(--c-texto); color: var(--c-tarjeta); font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; transition: opacity 0.1s; z-index: 5; }
+#ctl .tooltip.visible{ opacity: 1; }
+#ctl .hit{ fill: transparent; cursor: default; }
+#ctl .hit:hover{ fill: var(--c-hover); }
+#ctl .podio{ list-style: none; margin: 0; padding: 0; }
+#ctl .podio li{ display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--c-borde); }
+#ctl .podio li:last-child{ border-bottom: none; }
+#ctl .podio .medalla{ font-size: 24px; width: 32px; text-align: center; }
+#ctl .podio .quien{ flex: 1; min-width: 0; }
+#ctl .podio .quien strong{ display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctl .podio .quien small{ color: var(--c-texto-suave); font-size: 12px; }
+#ctl .podio .cuanto{ font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+#ctl .podio .cuanto small{ font-size: 11px; font-weight: 400; color: var(--c-texto-suave); display: block; text-align: right; }
+#ctl .podio li.primero{ background: var(--c-hover); border-radius: 8px; }
+#ctl tr.mejor td{ font-weight: 700; }
+#ctl .mensaje{ color: var(--c-tarde); padding: 30px; text-align: center; }
+#ctl details summary{ cursor: pointer; font-size: 12px; color: var(--c-texto-suave); margin-top: 8px; }
+#ctl .titulo-vivo{ display: flex; align-items: center; gap: 8px; }
+#ctl .pulso{ width: 9px; height: 9px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 0 rgba(22,163,74,.6); animation: pulso 2s infinite; }
+@keyframes pulso{ 0% { box-shadow: 0 0 0 0 rgba(22,163,74,.55); } 70% { box-shadow: 0 0 0 8px rgba(22,163,74,0); } 100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); } }
+@media (prefers-reduced-motion: reduce){
+#ctl .pulso{ animation: none; }
+}
+#ctl .personas{ display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+#ctl .persona{ border: 1px solid var(--c-borde); border-radius: 12px; padding: 12px 14px; background: var(--c-tarjeta); display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+#ctl .persona.desconectado{ opacity: .72; }
+#ctl .persona-cabeza{ display: flex; align-items: center; gap: 10px; }
+#ctl .avatar{ width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; flex: none; font-size: 14px; }
+#ctl .persona-nombre{ flex: 1; min-width: 0; }
+#ctl .persona-nombre strong{ display: block; overflow-wrap: anywhere; line-height: 1.25; }
+#ctl .persona-nombre small{ color: var(--c-texto-suave); font-size: 12px; display: block; }
+#ctl .estado{ font-size: 12px; border-radius: 999px; padding: 2px 9px; font-weight: 600; white-space: nowrap; }
+#ctl .estado.en-linea{ background: #dcfce7; color: #166534; }
+#ctl .estado.ausente{ background: #fef3c7; color: #92400e; }
+#ctl .estado.desconectado{ background: var(--c-hover); color: var(--c-texto-suave); }
+body.oscuro #ctl .estado.en-linea{ background: #14532d; color: #bbf7d0; }
+body.oscuro #ctl .estado.ausente{ background: #451a03; color: #fde68a; }
+#ctl .abierta{ border-radius: 10px; padding: 9px 11px; background: #eff6ff; border: 1px solid #bfdbfe; }
+body.oscuro #ctl .abierta{ background: #172554; border-color: #1e3a8a; }
+#ctl .abierta.tarde-caja{ background: var(--c-tarde-fondo); border-color: var(--c-tarde); }
+#ctl .abierta .que{ font-size: 12px; color: var(--c-texto-suave); }
+#ctl .abierta .cliente{ font-weight: 700; font-size: 14px; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctl .abierta .datos{ font-size: 12px; color: var(--c-texto-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctl .reloj{ display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; }
+#ctl .reloj b{ font-variant-numeric: tabular-nums; font-size: 14px; }
+#ctl .barrita{ flex: 1; height: 6px; background: var(--c-borde); border-radius: 6px; overflow: hidden; }
+#ctl .barrita i{ display: block; height: 6px; background: #2563eb; border-radius: 6px; }
+#ctl .barrita i.lleno{ background: #16a34a; }
+#ctl .barrita i.rojo{ background: var(--c-tarde); }
+#ctl .libre{ font-size: 13px; color: var(--c-texto-suave); padding: 8px 10px; border: 1px dashed var(--c-borde); border-radius: 10px; }
+#ctl .cifras{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; }
+#ctl .cifras div{ background: var(--c-hover); border-radius: 8px; padding: 5px 2px; }
+#ctl .cifras b{ display: block; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ctl .cifras span{ font-size: 10.5px; color: var(--c-texto-suave); white-space: nowrap; }
+#ctl .ultimas{ list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+#ctl .ultimas li{ display: flex; gap: 6px; padding: 3px 0; border-top: 1px solid var(--c-borde); min-width: 0; }
+#ctl .ultimas li .hora{ color: var(--c-texto-suave); font-variant-numeric: tabular-nums; flex: none; }
+#ctl .ultimas li .txt{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctl .reparto-cabeza{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+#ctl .chip{ display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600; }
+#ctl .chip.si{ background: #dcfce7; color: #166534; }
+#ctl .chip.no{ background: var(--c-tarde-fondo); color: var(--c-tarde-texto); }
+#ctl .chip.info{ background: var(--c-hover); color: var(--c-texto); font-weight: 500; }
+body.oscuro #ctl .chip.si{ background: #14532d; color: #bbf7d0; }
+#ctl .toca{ background: #fef9c3; color: #854d0e; border-radius: 6px; padding: 1px 7px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+body.oscuro #ctl .toca{ background: #422006; color: #fde68a; }
+#ctl .editor-reparto{ border: 1px solid var(--c-borde); border-radius: 10px; padding: 12px; margin-top: 10px; display: none; }
+#ctl .editor-reparto.abierto{ display: block; }
+#ctl .editor-reparto label{ font-size: 13px; display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+#ctl .editor-reparto input[type=number]{ width: 70px; padding: 5px 7px; border: 1px solid var(--c-borde); border-radius: 6px; background: var(--c-tarjeta); color: var(--c-texto); }
+#ctl .editor-reparto select{ padding: 6px 8px; border: 1px solid var(--c-borde); border-radius: 6px; background: var(--c-tarjeta); color: var(--c-texto); }
+#ctl .linea-tiempo{ list-style: none; margin: 0; padding: 0; }
+#ctl .linea-tiempo .hora-grupo{ font-size: 12px; font-weight: 700; color: var(--c-texto-suave); padding: 10px 0 4px; text-transform: uppercase; letter-spacing: .4px; }
+#ctl .evento{ display: grid; grid-template-columns: 70px 34px 1fr; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--c-borde); }
+#ctl .evento .hora{ font-size: 12px; color: var(--c-texto-suave); font-variant-numeric: tabular-nums; padding-top: 6px; white-space: nowrap; }
+#ctl #vivoActividad{ max-height: 620px; overflow-y: auto; padding-right: 4px; }
+#ctl .evento .icono{ width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: var(--c-hover); }
+#ctl .evento .frase{ font-size: 13.5px; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+#ctl .evento .frase small{ display: block; color: var(--c-texto-suave); font-size: 12px; }
+#ctl .evento.alerta .icono{ background: var(--c-tarde-fondo); }
+#ctl .evento.bien .icono{ background: #dcfce7; }
+body.oscuro #ctl .evento.bien .icono{ background: #14532d; }
+#ctl .filtros-act{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; align-items: center; }
+#ctl .filtros-act select,
+#ctl .filtros-act input{ padding: 6px 8px; border: 1px solid var(--c-borde); border-radius: 8px; background: var(--c-tarjeta); color: var(--c-texto); font-size: 13px; }
+#ctl .mas{ text-align: center; margin-top: 10px; }
+#ctl .accesos{ position: sticky; top: 0; z-index: 20; background: var(--c-fondo); display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0; margin-bottom: 6px; }
+#ctl .accesos a{ text-decoration: none; color: var(--c-texto); background: var(--c-tarjeta); border: 1px solid var(--c-borde); border-radius: 999px; padding: 6px 13px; font-size: 13px; white-space: nowrap; }
+#ctl .accesos a:hover{ border-color: #1679c2; color: #1679c2; }
+#ctl .seccion,
+#ctl #mejores,
+#ctl #estadisticas{ scroll-margin-top: 60px; }
+#ctl .btn-chat-tarjeta{ border: 1px solid var(--c-borde); background: var(--c-tarjeta); color: var(--c-texto); border-radius: 8px; padding: 4px 9px; cursor: pointer; font-size: 13px; flex: none; }
+#ctl .btn-chat-tarjeta:hover{ border-color: #1679c2; color: #1679c2; }
+#ctl .btn-avisar{ margin-top: 8px; width: 100%; background: var(--c-tarde); color: #fff; border: none; border-radius: 8px; padding: 7px 10px; font-weight: 600; cursor: pointer; font-size: 13px; }
+#ctl .num-chat{ background: #dc2626; color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
+#ctl #panelChat{ position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100vw; background: var(--c-tarjeta); border-left: 1px solid var(--c-borde); box-shadow: -6px 0 24px rgba(15,23,42,.18); z-index: 50; display: none; flex-direction: column; }
+#ctl #panelChat.abierto{ display: flex; }
+@media (min-width: 1300px){
+}
+#ctl .chat-cabeza{ display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: linear-gradient(135deg, var(--c-encabezado), var(--c-encabezado2)); color: #fff; }
+#ctl .chat-cabeza strong{ flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ctl .chat-cabeza button{ background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+#ctl .chat-lista{ overflow-y: auto; flex: 1; }
+#ctl .chat-contacto{ display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--c-borde); cursor: pointer; }
+#ctl .chat-contacto:hover{ background: var(--c-hover); }
+#ctl .chat-contacto .quien{ flex: 1; min-width: 0; }
+#ctl .chat-contacto .quien small{ display: block; color: var(--c-texto-suave); font-size: 12px; }
+#ctl .chat-mensajes{ flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--c-fondo); }
+#ctl .burbuja{ max-width: 82%; padding: 7px 10px; border-radius: 12px; font-size: 13.5px; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; }
+#ctl .burbuja.mia{ align-self: flex-end; background: #1679c2; color: #fff; border-bottom-right-radius: 4px; }
+#ctl .burbuja.otra{ align-self: flex-start; background: var(--c-tarjeta); border: 1px solid var(--c-borde); border-bottom-left-radius: 4px; }
+#ctl .burbuja small{ display: block; font-size: 10.5px; opacity: .75; margin-top: 3px; }
+#ctl .burbuja img{ max-width: 100%; border-radius: 8px; display: block; margin-bottom: 4px; cursor: pointer; }
+#ctl .chat-escribir{ display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--c-borde); }
+#ctl .chat-escribir textarea{ flex: 1; resize: none; height: 64px; padding: 8px; border: 1px solid var(--c-borde); border-radius: 8px; background: var(--c-tarjeta); color: var(--c-texto); font: inherit; font-size: 13.5px; }
+#ctl .chat-contexto{ font-size: 12px; padding: 7px 12px; background: var(--c-tarde-fondo); color: var(--c-tarde-texto); }
+@media (max-width: 600px){
+#ctl .personas{ grid-template-columns: 1fr; }
+#ctl .cifras span{ font-size: 9.5px; }
+#ctl .cifras b{ font-size: 14px; }
+#ctl main{ padding: 12px 16px 30px; }
+#ctl header{ padding: 12px 16px; }
+#ctl .rejilla{ grid-template-columns: 1fr; }
+}
+
+/* Colores de Operaciones (claro y oscuro) */
+#ctl { --c-fondo: var(--bg); --c-tarjeta: var(--card); --c-texto: var(--txt); --c-texto-suave: var(--suave); --c-borde: var(--borde); background: transparent; margin: 0; font-family: inherit; color: var(--txt); }
+body.oscuro #ctl { --c-fondo: var(--bg); --c-tarjeta: var(--card); --c-texto: var(--txt); --c-texto-suave: var(--suave); --c-borde: var(--borde); }
+#ctl .accesos { position: static; background: transparent; }
+#ctl #panelChat { position: fixed; }
+
+</style>
 </head>
 <body>
 <div class="app" id="app" style="display:none">
@@ -1633,7 +1818,7 @@ async function vControl() {
       <td style="padding:7px">${esc(x.asesor || '—')}</td><td style="padding:7px">${minTxt(x.correo_seg)}</td>
       <td style="padding:7px">${esc(x.operador || '—')}</td><td style="padding:7px">${minTxt(x.operaciones_seg)}</td>
       <td style="padding:7px"><b>${minTxt(x.total_seg)}</b></td></tr>`).join('');
-  $('#vista').innerHTML = `<div class="caja" style="padding:0;overflow:hidden"><iframe src="/control" title="Control" style="width:100%;height:72vh;border:0;display:block"></iframe></div>
+  $('#vista').innerHTML = `<div class="cab"><div><h1>Control</h1><div class="sub">Lo que pasa hoy, en vivo, y el tiempo de cada reserva. Todo en esta misma página.</div></div></div>${CTL_HTML}
     <div class="cab"><div><h1>Tiempos por reserva</h1>
       <div class="sub">Cuánto tarda cada reserva en el correo y en Operaciones. Es el mismo número de reserva: el reloj sigue donde lo dejó la asesora.</div></div>
       <div class="der"><div class="fecha"><input type="date" id="tmDesde" value="${TM.desde}"><input type="date" id="tmHasta" value="${TM.hasta}"></div></div></div>
@@ -1641,6 +1826,7 @@ async function vControl() {
     <div class="caja" style="overflow:auto">${d.reservas.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;color:var(--suave)"><th style="padding:7px">Reserva</th><th style="padding:7px">Agencia</th><th style="padding:7px">Asesor (correo)</th><th style="padding:7px">Tiempo en correo</th><th style="padding:7px">Operador</th><th style="padding:7px">Tiempo en Operaciones</th><th style="padding:7px">Total</th></tr></thead>
       <tbody>${filas}</tbody></table><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px"><span>${d.reservas.length} reservas · página ${TM.pag + 1} de ${npag}</span><span><button class="btn s" id="tmAnt" ${TM.pag <= 0 ? 'disabled' : ''}>Anterior</button> <button class="btn s" id="tmSig" ${TM.pag >= npag - 1 ? 'disabled' : ''}>Siguiente</button></span></div>` : '<div class="vacio">No hay reservas con tiempo en estas fechas.</div>'}</div>`;
+  ctlIniciar();
   $('#tmDesde').onchange = e => { TM.desde = e.target.value; TM.pag = 0; vControl(); };
   $('#tmHasta').onchange = e => { TM.hasta = e.target.value; TM.pag = 0; vControl(); };
   if ($('#tmAnt')) $('#tmAnt').onclick = () => { TM.pag--; vControl(); };
@@ -2236,6 +2422,933 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => {
   if (e.target.matches && (e.target.matches('[data-cb-monto]') || e.target.id === 'cbTotal')) cbActualizarSuma();
 });
+</script>
+<script>
+
+/* ---------- Control (dentro de Operaciones): oyentes y temporizadores que se pueden soltar al cambiar de pantalla ---------- */
+let CTL_OYENTES = [], CTL_TIMERS = [];
+function ctlOn(obj, tipo, fn, opts) {
+  const envoltura = e => { if (document.getElementById('ctl')) fn(e); };
+  CTL_OYENTES.push([obj, tipo, envoltura, opts]);
+  obj.addEventListener(tipo, envoltura, opts);
+}
+function ctlIntervalo(fn, ms) { const id = setInterval(() => { if (document.getElementById('ctl')) fn(); }, ms); CTL_TIMERS.push(id); return id; }
+function ctlSoltar() {
+  CTL_OYENTES.forEach(([o, t, f, op]) => o.removeEventListener(t, f, op));
+  CTL_OYENTES = [];
+  CTL_TIMERS.forEach(clearInterval);
+  CTL_TIMERS = [];
+}
+const CTL_HTML = `<div id="ctl"><div class="cab" style="margin-bottom:6px"><div><p id="subtitulo" class="sub"></p></div>
+  <div class="der"><button class="btn s" id="btnChat" style="display:none">💬 Chat <span class="num-chat" id="numChat" style="display:none"></span></button>
+  <button class="btn s" id="btnActualizar">Actualizar</button></div></div><nav class="accesos" aria-label="Ir a">
+    <a href="#" data-ctl-ir="secVivo">🟢 En vivo</a>
+    <a href="#" data-ctl-ir="secReparto">🎯 Reparto</a>
+    <a href="#" data-ctl-ir="secActividad">📋 Actividad</a>
+    <a href="#" data-ctl-ir="mejores">🏆 Top 3 del día y del mes</a>
+    <a href="#" data-ctl-ir="estadisticas">📊 Estadísticas y gráficas</a>
+    <a href="#" data-ctl-ir="resumenAnio">📅 Año</a>
+  </nav>
+  <div class="seccion" id="secVivo">
+    <div class="cabeza">
+      <div><h2 class="titulo-vivo"><span class="pulso" aria-hidden="true"></span>En vivo ahora</h2>
+      <p class="sub">Qué está haciendo cada persona en este momento. Se actualiza solo cada 10 segundos.</p></div>
+    </div>
+    <div id="vivoPersonas"><div class="vacio">Cargando…</div></div>
+  </div>
+  <div class="seccion" id="secReparto">
+    <h2>🎯 Reparto de reservas ahora</h2>
+    <p class="sub">A quién le van llegando las reservas nuevas. Solo reciben las personas en línea.</p>
+    <div id="vivoReparto"><div class="vacio">Cargando…</div></div>
+  </div>
+  <div class="seccion" id="secActividad">
+    <div class="cabeza">
+      <div><h2>📋 Actividad</h2><p class="sub">Todo lo que se hizo en el día, explicado en palabras. Lo más reciente arriba.</p></div>
+      <div class="filtros-act">
+        <input type="date" id="actDia" title="Día">
+        <select id="actUsuario" title="Persona"><option value="">Todas las personas</option></select>
+        <select id="actTipo" title="Tipo">
+          <option value="">Todo</option>
+          <option value="reservas">Reservas</option>
+          <option value="correos">Correos</option>
+          <option value="reparto">Reparto</option>
+          <option value="accesos">Entradas y salidas</option>
+          <option value="sistema">Sistema y ajustes</option>
+        </select>
+      </div>
+    </div>
+    <div id="vivoActividad"><div class="vacio">Cargando…</div></div>
+  </div>
+  <div id="contenido"><div class="vacio">Cargando…</div></div>
+<div class="tooltip" id="tooltip"></div>
+<aside id="panelChat" aria-label="Chat">
+  <div class="chat-cabeza">
+    <button id="chatAtras" style="display:none" title="Volver a la lista">←</button>
+    <strong id="chatTitulo">Chat</strong>
+    <button id="chatCerrar" title="Cerrar">✕</button>
+  </div>
+  <div class="chat-lista" id="chatLista"></div>
+  <div id="chatConversacion" style="display:none;flex:1;flex-direction:column;min-height:0">
+    <div class="chat-contexto" id="chatContexto" style="display:none"></div>
+    <div class="chat-mensajes" id="chatMensajes"></div>
+    <div class="chat-escribir">
+      <textarea id="chatTexto" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter nueva línea)" maxlength="1000"></textarea>
+      <button class="btn" id="chatEnviar">Enviar</button>
+    </div>
+  </div>
+</aside>
+
+</div>`;
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-ctl-ir]');
+  if (!a || !document.getElementById('ctl')) return;
+  e.preventDefault();
+  const sec = document.getElementById(a.dataset.ctlIr);
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+function ctlIniciar() {
+  ctlSoltar();
+
+const ZONA = 'America/Santo_Domingo';
+let datos = null;
+let periodoSerie = 7;
+let mesElegido = '';
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function hoy() { return new Date().toLocaleDateString('sv-SE', { timeZone: ZONA }); }
+function diaMenos(n) {
+  const d = new Date(hoy() + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+function duracion(seg) {
+  if (seg === null || seg === undefined) return '—';
+  const s = Math.max(0, Math.round(seg));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h) return `${h} h ${String(m).padStart(2, '0')} min`;
+  return `${m} min ${String(s % 60).padStart(2, '0')} s`;
+}
+function horas(seg) {
+  return (seg / 3600).toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' h';
+}
+function diaCorto(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+function diaLargo(iso) {
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+async function api(url) {
+  try {
+    const r = await fetch(url);
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: 'No hay conexión con el servidor.' } };
+  }
+}
+
+async function cargar() {
+  const desde = document.getElementById('desde') ? document.getElementById('desde').value : hoy();
+  const hasta = document.getElementById('hasta') ? document.getElementById('hasta').value : hoy();
+  const r = await api(`/api/control?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}${mesElegido ? '&mes=' + encodeURIComponent(mesElegido) : ''}`);
+  if (r.status === 401) {
+    document.getElementById('contenido').innerHTML = '<div class="mensaje">Tu sesión terminó. Entra de nuevo en el panel y vuelve a abrir Control.</div>';
+    return;
+  }
+  if (!r.ok) {
+    document.getElementById('contenido').innerHTML = `<div class="mensaje">${esc(r.data.error || 'No se pudo cargar la pantalla de control.')}</div>`;
+    return;
+  }
+  datos = r.data;
+  pintar(desde, hasta);
+}
+
+function barraFechas(desde, hasta) {
+  const rango = (d, h, texto) => {
+    const activo = desde === diaMenos(d) && hasta === diaMenos(h);
+    return `<button class="btn-sec ${activo ? 'activo' : ''}" data-rango="${d},${h}">${texto}</button>`;
+  };
+  return `<div class="barra">
+    ${rango(0, 0, 'Hoy')}${rango(1, 1, 'Ayer')}${rango(6, 0, 'Últimos 7 días')}${rango(29, 0, 'Últimos 30 días')}
+    <input type="date" id="desde" value="${esc(desde)}" title="Desde">
+    <input type="date" id="hasta" value="${esc(hasta)}" title="Hasta">
+    <button class="btn" id="btnVer">Ver</button>
+  </div>`;
+}
+
+function pintar(desde, hasta) {
+  const d = datos;
+  const t = d.totales;
+  const limiteMin = Math.round(d.limite / 60);
+  const registradasConTiempo = d.usuarios.reduce((a, u) => a + u.medidas, 0);
+  const promedioGeneral = registradasConTiempo
+    ? d.usuarios.reduce((a, u) => a + (u.promedio || 0) * u.medidas, 0) / registradasConTiempo : null;
+  const textoRango = desde === hasta ? diaLargo(desde) : `${diaLargo(desde)} al ${diaLargo(hasta)}`;
+  document.getElementById('subtitulo').textContent = `Período: ${textoRango} · tiempo máximo por reserva: ${limiteMin} min`;
+
+  document.getElementById('contenido').innerHTML = `
+    <div id="estadisticas"></div>
+    ${barraFechas(desde, hasta)}
+    <div class="tarjetas">
+      <div class="tarjeta"><div class="etiqueta">Correos que entraron</div><div class="numero">${t.correos}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Reservas y cambios que entraron</div><div class="numero">${t.reservas}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Reservas registradas</div><div class="numero">${t.registradas}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Tiempo trabajado en reservas</div><div class="numero">${horas(t.segundos)}</div><div class="nota">suma de todos los asesores</div></div>
+      <div class="tarjeta"><div class="etiqueta">Promedio por reserva</div><div class="numero">${promedioGeneral === null ? '—' : duracion(promedioGeneral)}</div></div>
+      <div class="tarjeta"><div class="etiqueta">Pasadas de ${limiteMin} min</div><div class="numero">${t.pasadas ? `<span class="tarde">⚠ ${t.pasadas}</span>` : '0'}</div></div>
+    </div>
+
+    ${seccionMejores(d)}
+
+    <div class="seccion">
+      <h2>Por asesor</h2>
+      <p class="sub">Tiempo = solo el tiempo con reservas abiertas. Promedio y máximo se calculan sobre las reservas que el asesor registró en el período.</p>
+      ${tablaUsuarios(d)}
+    </div>
+
+    <div class="seccion">
+      <div class="cabeza">
+        <div><h2>Reservas por día</h2><p class="sub">Reservas y cambios que entraron a la bandeja contra las que se registraron.</p></div>
+        <div class="barra" style="margin:0">
+          <button class="btn-sec ${periodoSerie === 7 ? 'activo' : ''}" data-periodo="7">Semana</button>
+          <button class="btn-sec ${periodoSerie === 30 ? 'activo' : ''}" data-periodo="30">Mes</button>
+        </div>
+      </div>
+      <div class="leyenda"><span><i class="muestra" style="background:var(--serie-1)"></i>Entraron</span><span><i class="muestra" style="background:var(--serie-2)"></i>Registradas</span></div>
+      <div class="grafica" id="gReservas"></div>
+      ${tablaSerie(d, 'reservas')}
+    </div>
+
+    <div class="rejilla">
+      <div class="seccion">
+        <h2>Correos que entraron por día</h2>
+        <p class="sub">Todos los correos de la bandeja (${periodoSerie === 7 ? 'última semana' : 'último mes'}).</p>
+        <div class="grafica" id="gCorreos"></div>
+      </div>
+      <div class="seccion">
+        <h2>Horas trabajadas por día</h2>
+        <p class="sub">Suma del tiempo con reservas abiertas de todos los asesores.</p>
+        <div class="grafica" id="gHoras"></div>
+      </div>
+    </div>
+
+    <div class="rejilla">
+      <div class="seccion">
+        <h2>Promedio por reserva y asesor</h2>
+        <p class="sub">La línea marca el máximo de ${limiteMin} minutos.</p>
+        <div class="grafica" id="gPromedio"></div>
+      </div>
+      <div class="seccion">
+        <h2>Reservas registradas por asesor</h2>
+        <p class="sub">En el período elegido.</p>
+        <div class="grafica" id="gRegistradas"></div>
+      </div>
+    </div>
+
+    ${seccionAnio(d)}
+
+    <div class="seccion">
+      <h2>Reservas registradas y su tiempo</h2>
+      <p class="sub">De la más lenta a la más rápida (hasta 300).</p>
+      ${tablaDetalle(d)}
+    </div>`;
+
+  const serie = d.serie.slice(-periodoSerie);
+  columnasAgrupadas('gReservas', serie, [
+    { clave: 'reservas', nombre: 'Entraron', color: 'var(--serie-1)' },
+    { clave: 'registradas', nombre: 'Registradas', color: 'var(--serie-2)' }
+  ]);
+  columnasAgrupadas('gCorreos', serie, [{ clave: 'correos', nombre: 'Correos', color: 'var(--serie-1)' }]);
+  columnasAgrupadas('gHoras', serie.map(x => ({ ...x, horas: Math.round(x.segundos / 360) / 10 })),
+    [{ clave: 'horas', nombre: 'Horas', color: 'var(--serie-1)', formato: v => v.toLocaleString('es-DO') + ' h' }]);
+  barrasHorizontales('gPromedio', d.usuarios.filter(u => u.promedio !== null)
+    .map(u => ({ nombre: u.nombre, valor: u.promedio / 60, tarde: u.promedio > d.limite })), {
+    formato: v => v.toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' min', referencia: limiteMin,
+    vacio: 'Todavía no hay reservas registradas con tiempo medido.'
+  });
+  barrasHorizontales('gRegistradas', d.usuarios.filter(u => u.registradas)
+    .map(u => ({ nombre: u.nombre, valor: u.registradas })), {
+    formato: v => String(v), vacio: 'Nadie registró reservas en este período.'
+  });
+}
+
+function nombreMes(mes) {
+  const [a, m] = mes.split('-');
+  const largo = new Date(Date.UTC(Number(a), Number(m) - 1, 15)).toLocaleDateString('es-DO', { month: 'long', timeZone: 'UTC' });
+  return largo.charAt(0).toUpperCase() + largo.slice(1) + ' ' + a;
+}
+
+function podio(lista, vacio) {
+  if (!lista.length) return `<div class="vacio">${esc(vacio)}</div>`;
+  const medallas = ['🥇', '🥈', '🥉'];
+  return `<ol class="podio">${lista.map((u, i) => `
+    <li class="${i === 0 ? 'primero' : ''}">
+      <span class="medalla" aria-label="Puesto ${i + 1}">${medallas[i]}</span>
+      <span class="quien"><strong>${esc(u.nombre)}</strong><small>${i === 0 ? 'Mejor asesor · ' : ''}promedio ${u.promedio === null ? 'sin medir' : duracion(u.promedio)}</small></span>
+      <span class="cuanto">${u.registradas}<small>${u.registradas === 1 ? 'reserva' : 'reservas'}</small></span>
+    </li>`).join('')}</ol>`;
+}
+
+function seccionMejores(d) {
+  const k = d.ranking;
+  const opciones = k.meses.map(m => `<option value="${esc(m)}" ${m === k.mes ? 'selected' : ''}>${esc(nombreMes(m))}</option>`).join('');
+  return `
+    <div class="rejilla" id="mejores">
+      <div class="seccion">
+        <h2>🏆 Mejores asesores del día</h2>
+        <p class="sub">${esc(diaLargo(k.dia))} · más reservas registradas (si empatan, el de menor tiempo promedio).</p>
+        ${podio(k.topDia, 'Nadie ha registrado reservas este día.')}
+      </div>
+      <div class="seccion">
+        <div class="cabeza">
+          <div><h2>🏆 Mejores asesores del mes</h2><p class="sub">Cada mes empieza en cero; los meses anteriores quedan guardados.</p></div>
+          <select id="mesSel" title="Mes">${opciones}</select>
+        </div>
+        ${podio(k.topMes, 'Nadie ha registrado reservas en este mes.')}
+      </div>
+    </div>
+    <div class="seccion">
+      <h2>Reservas registradas por asesor en ${esc(nombreMes(k.mes))}</h2>
+      <p class="sub">Total del mes de cada usuario.</p>
+      ${k.totalesMes.length ? `<div class="tabla-wrap"><table>
+        <thead><tr><th>#</th><th>Asesor</th><th class="num">Reservas del mes</th><th class="num">Promedio por reserva</th></tr></thead>
+        <tbody>${k.totalesMes.map((u, i) => `<tr class="${i === 0 ? 'mejor' : ''}"><td>${i + 1}</td><td>${esc(u.nombre)}</td>
+          <td class="num">${u.registradas}</td>
+          <td class="num">${u.promedio !== null && u.promedio > d.limite ? `<span class="tarde">⚠ ${duracion(u.promedio)}</span>` : duracion(u.promedio)}</td></tr>`).join('')}</tbody>
+      </table></div>` : '<div class="vacio">Sin reservas registradas en este mes.</div>'}
+    </div>`;
+}
+
+function seccionAnio(d) {
+  const k = d.ranking;
+  if (!k.resumenAnio.length) {
+    return `<div class="seccion" id="resumenAnio"><h2>Resumen del año ${esc(k.anio)}</h2><div class="vacio">Sin reservas registradas en ${esc(k.anio)}.</div></div>`;
+  }
+  const totalMes = MESES.map((_, i) => k.resumenAnio.reduce((a, u) => a + u.meses[i], 0));
+  const mejor = k.resumenAnio[0];
+  return `<div class="seccion" id="resumenAnio">
+    <h2>Resumen del año ${esc(k.anio)}</h2>
+    <p class="sub">Reservas registradas por cada asesor, mes por mes. 🏆 Mejor asesor del año: <strong>${esc(mejor.nombre)}</strong> con ${mejor.total} reservas.</p>
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Asesor</th>${MESES.map(m => `<th class="num">${m}</th>`).join('')}<th class="num">Total</th></tr></thead>
+      <tbody>${k.resumenAnio.map((u, i) => `<tr class="${i === 0 ? 'mejor' : ''}"><td>${i === 0 ? '🏆 ' : ''}${esc(u.nombre)}</td>${u.meses.map(n => `<td class="num">${n || '—'}</td>`).join('')}<td class="num"><strong>${u.total}</strong></td></tr>`).join('')}
+        <tr><td><strong>Total</strong></td>${totalMes.map(n => `<td class="num"><strong>${n || '—'}</strong></td>`).join('')}<td class="num"><strong>${totalMes.reduce((a, b) => a + b, 0)}</strong></td></tr>
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+function tablaEnCurso(d) {
+  if (!d.enCurso.length) return '<div class="vacio">Nadie tiene una reserva abierta ahora.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Asesor</th><th>Reserva</th><th>Cliente</th><th class="num">Tiempo</th></tr></thead>
+    <tbody>${d.enCurso.map(x => `<tr>
+      <td>${esc(x.nombre)}</td><td>#${x.reserva_id}</td><td>${esc(x.nombre_cliente || x.asunto || '')}</td>
+      <td class="num">${x.segundos > d.limite ? `<span class="tarde">⚠ ${duracion(x.segundos)}</span>` : duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+// Reparto por cupos: cuántas reservas lleva hoy cada persona de su cupo diario.
+function tablaCupos(d) {
+  if (!d.cuposHoy || !d.cuposHoy.length) return '';
+  return `<h2 style="margin-top:18px">Cupos de hoy (reparto por cupos)</h2><div class="tabla-wrap"><table>
+    <thead><tr><th>Persona</th><th class="num">Recibidas hoy</th><th class="num">Cupo diario</th><th>Avance</th></tr></thead>
+    <tbody>${d.cuposHoy.map(c => {
+      const pct = c.cupo ? Math.min(100, Math.round(100 * c.hoy / c.cupo)) : 0;
+      return `<tr><td>${esc(c.nombre)}</td><td class="num">${c.hoy}</td><td class="num">${c.cupo || '—'}</td>
+        <td>${c.cupo ? `<div style="background:var(--borde);border-radius:6px;height:10px;width:160px;overflow:hidden"><div style="height:10px;width:${pct}%;background:${c.hoy >= c.cupo ? '#16a34a' : '#2563eb'}"></div></div> ${c.hoy} / ${c.cupo}` : 'Sin cupo (recibe cuando todos llegaron)'}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+function tablaUsuarios(d) {
+  if (!d.usuarios.length) return '<div class="vacio">No hay actividad de asesores en este período.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Asesor</th><th>Grupo</th><th class="num">Registradas</th><th class="num">Tiempo trabajado</th>
+      <th class="num">Promedio por reserva</th><th class="num">Máximo</th><th class="num">Dentro de ${Math.round(d.limite / 60)} min</th>
+      <th class="num">Pasadas</th><th class="num">Abiertas ahora</th></tr></thead>
+    <tbody>${d.usuarios.map(u => `<tr>
+      <td>${esc(u.nombre)}</td><td>${esc(u.grupo)}</td>
+      <td class="num">${u.registradas}</td>
+      <td class="num">${duracion(u.segundos)}</td>
+      <td class="num">${u.promedio !== null && u.promedio > d.limite ? `<span class="tarde">⚠ ${duracion(u.promedio)}</span>` : duracion(u.promedio)}</td>
+      <td class="num">${u.maximo !== null && u.maximo > d.limite ? `<span class="tarde">⚠ ${duracion(u.maximo)}</span>` : duracion(u.maximo)}</td>
+      <td class="num">${u.dentro === null ? '—' : u.dentro + ' %'}</td>
+      <td class="num">${u.pasadas ? `<span class="tarde">⚠ ${u.pasadas}</span>` : '0'}</td>
+      <td class="num">${u.abiertas}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function tablaSerie(d, clave) {
+  const serie = d.serie.slice(-periodoSerie);
+  return `<details><summary>Ver como tabla</summary><div class="tabla-wrap"><table>
+    <thead><tr><th>Día</th><th class="num">Correos</th><th class="num">Reservas que entraron</th><th class="num">Registradas</th><th class="num">Tiempo trabajado</th></tr></thead>
+    <tbody>${serie.map(x => `<tr><td>${esc(diaLargo(x.dia))}</td><td class="num">${x.correos}</td><td class="num">${x.reservas}</td><td class="num">${x.registradas}</td><td class="num">${duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div></details>`;
+}
+
+function tablaDetalle(d) {
+  if (!d.detalle.length) return '<div class="vacio">No hay reservas registradas en este período.</div>';
+  return `<div class="tabla-wrap"><table>
+    <thead><tr><th>Reserva</th><th>Cliente</th><th>Asesor</th><th>Día</th><th class="num">Tiempo</th></tr></thead>
+    <tbody>${d.detalle.map(x => `<tr>
+      <td>#${x.reserva_id}</td><td>${esc(x.cliente)}</td><td>${esc(x.nombre)}</td><td>${esc(diaCorto(x.dia))}</td>
+      <td class="num">${x.segundos === null ? 'sin medir' : x.segundos > d.limite ? `<span class="tarde">⚠ ${duracion(x.segundos)}</span>` : duracion(x.segundos)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+/* ---------- Gráficas (SVG, sin librerías) ---------- */
+
+function escalaBonita(maximo) {
+  if (maximo <= 0) return { tope: 4, paso: 1 };
+  const bruto = maximo / 4;
+  const pot = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const paso = [1, 2, 2.5, 5, 10].map(m => m * pot).find(p => p >= bruto);
+  return { tope: Math.ceil(maximo / paso) * paso, paso };
+}
+
+// Columna con la punta redondeada (4px) y la base recta.
+function columna(x, y, ancho, alto, color) {
+  if (alto <= 0) return '';
+  const r = Math.min(4, ancho / 2, alto);
+  return `<path d="M${x},${y + alto} V${y + r} Q${x},${y} ${x + r},${y} H${x + ancho - r} Q${x + ancho},${y} ${x + ancho},${y + r} V${y + alto} Z" fill="${color}"/>`;
+}
+
+function columnasAgrupadas(id, serie, series) {
+  const caja = document.getElementById(id);
+  // El dibujo usa el ancho real de la caja para que las letras no crezcan en pantallas grandes.
+  const W = Math.max(300, caja.clientWidth || 720), H = 240, izq = 40, der = 8, arriba = 18, abajo = 30;
+  const max = Math.max(0, ...serie.flatMap(x => series.map(s => x[s.clave] || 0)));
+  const { tope, paso } = escalaBonita(max);
+  const ancho = (W - izq - der) / serie.length;
+  const grosor = Math.min(24, (ancho * 0.7 - (series.length - 1) * 2) / series.length);
+  const yDe = v => arriba + (H - arriba - abajo) * (1 - v / tope);
+  const formato = series[0].formato || (v => v.toLocaleString('es-DO'));
+  let svg = '';
+  for (let v = 0; v <= tope + 1e-9; v += paso) {
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(v)}" y2="${yDe(v)}" stroke="var(--rejilla)" stroke-width="1"/>`;
+    svg += `<text x="${izq - 6}" y="${yDe(v) + 4}" text-anchor="end">${Number(v.toFixed(2)).toLocaleString('es-DO')}</text>`;
+  }
+  const cadaCuanto = serie.length > 14 ? Math.ceil(serie.length / 10) : 1;
+  serie.forEach((x, i) => {
+    const centro = izq + ancho * i + ancho / 2;
+    const total = series.length * grosor + (series.length - 1) * 2;
+    series.forEach((s, j) => {
+      const v = x[s.clave] || 0;
+      const xs = centro - total / 2 + j * (grosor + 2);
+      svg += columna(xs, yDe(v), grosor, yDe(0) - yDe(v), s.color);
+    });
+    if (i % cadaCuanto === 0 || i === serie.length - 1) {
+      svg += `<text x="${centro}" y="${H - abajo + 16}" text-anchor="middle">${esc(serie.length > 7 ? x.dia.slice(8) : diaCorto(x.dia))}</text>`;
+    }
+    const detalle = `<strong>${esc(diaLargo(x.dia))}</strong><br>` + series.map(s => `${esc(s.nombre)}: ${esc((s.formato || formato)(x[s.clave] || 0))}`).join('<br>');
+    svg += `<rect class="hit" x="${izq + ancho * i}" y="${arriba}" width="${ancho}" height="${H - arriba - abajo}" data-tip="${esc(detalle)}"/>`;
+  });
+  // Etiqueta solo en el valor más alto de la primera serie.
+  const iMax = serie.reduce((m, x, i) => (x[series[0].clave] || 0) > (serie[m][series[0].clave] || 0) ? i : m, 0);
+  const vMax = serie.length ? serie[iMax][series[0].clave] || 0 : 0;
+  if (vMax > 0) {
+    const centro = izq + ancho * iMax + ancho / 2;
+    const total = series.length * grosor + (series.length - 1) * 2;
+    svg += `<text class="valor" x="${centro - total / 2 + grosor / 2}" y="${yDe(vMax) - 5}" text-anchor="middle">${esc(formato(vMax))}</text>`;
+  }
+  svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(0)}" y2="${yDe(0)}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.nombre).join(' y '))} por día">${svg}</svg>`;
+}
+
+function barrasHorizontales(id, filas, op) {
+  const caja = document.getElementById(id);
+  if (!filas.length) {
+    caja.innerHTML = `<div class="vacio">${esc(op.vacio)}</div>`;
+    return;
+  }
+  const alto = 30, izq = 130, der = 80, arriba = 8;
+  const W = Math.max(300, caja.clientWidth || 520), H = arriba + filas.length * alto + 22;
+  const max = Math.max(op.referencia || 0, ...filas.map(f => f.valor));
+  const { tope } = escalaBonita(max);
+  const xDe = v => izq + (W - izq - der) * (v / tope);
+  let svg = '';
+  filas.forEach((f, i) => {
+    const y = arriba + i * alto + (alto - 18) / 2;
+    const largo = Math.max(0, xDe(f.valor) - izq);
+    const r = Math.min(4, largo / 2);
+    const color = f.tarde ? 'var(--tarde)' : 'var(--serie-1)';
+    if (largo > 0) svg += `<path d="M${izq},${y} H${izq + largo - r} Q${izq + largo},${y} ${izq + largo},${y + r} V${y + 18 - r} Q${izq + largo},${y + 18} ${izq + largo - r},${y + 18} H${izq} Z" fill="${color}"/>`;
+    const nombre = f.nombre.length > 18 ? f.nombre.slice(0, 17) + '…' : f.nombre;
+    svg += `<text x="${izq - 8}" y="${y + 13}" text-anchor="end">${esc(nombre)}</text>`;
+    svg += `<text class="valor" x="${izq + largo + 6}" y="${y + 13}">${f.tarde ? '⚠ ' : ''}${esc(op.formato(f.valor))}</text>`;
+    svg += `<rect class="hit" x="0" y="${arriba + i * alto}" width="${W}" height="${alto}" data-tip="${esc(`<strong>${esc(f.nombre)}</strong><br>${esc(op.formato(f.valor))}${f.tarde ? ' · pasa del máximo' : ''}`)}"/>`;
+  });
+  if (op.referencia) {
+    const x = xDe(op.referencia);
+    svg += `<line x1="${x}" x2="${x}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--tarde)" stroke-width="1"/>`;
+    svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">máx. ${op.referencia} min</text>`;
+  }
+  svg += `<line x1="${izq}" x2="${izq}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${svg}</svg>`;
+}
+
+/* ---------- Tooltip y eventos ---------- */
+
+const tip = document.getElementById('tooltip');
+ctlOn(document, 'mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tip.classList.remove('visible'); return; }
+  tip.innerHTML = t.dataset.tip;
+  tip.classList.add('visible');
+});
+ctlOn(document, 'mousemove', e => {
+  if (!tip.classList.contains('visible')) return;
+  const x = Math.min(e.pageX + 14, window.scrollX + document.documentElement.clientWidth - tip.offsetWidth - 8);
+  tip.style.left = x + 'px';
+  tip.style.top = (e.pageY + 14) + 'px';
+});
+ctlOn(document, 'click', e => {
+  const r = e.target.closest('[data-rango]');
+  if (r) {
+    const [d, h] = r.dataset.rango.split(',').map(Number);
+    document.getElementById('desde').value = diaMenos(d);
+    document.getElementById('hasta').value = diaMenos(h);
+    return cargar();
+  }
+  const p = e.target.closest('[data-periodo]');
+  if (p) {
+    periodoSerie = Number(p.dataset.periodo);
+    return pintar(document.getElementById('desde').value, document.getElementById('hasta').value);
+  }
+  if (e.target.id === 'btnVer') return cargar();
+});
+document.getElementById('btnActualizar').addEventListener('click', () => { cargar(); cargarVivo(); });
+ctlOn(document, 'change', e => {
+  if (e.target.id === 'mesSel') {
+    mesElegido = e.target.value;
+    cargar();
+  }
+});
+let timerTamano = null;
+ctlOn(window, 'resize', () => {
+  clearTimeout(timerTamano);
+  timerTamano = setTimeout(() => { if (datos) pintar(document.getElementById('desde').value, document.getElementById('hasta').value); }, 200);
+});
+// Dentro de Operaciones (marco) no se muestra el botón de volver al panel de correo.
+
+/* ---------- En vivo, Reparto ahora y Actividad ---------- */
+
+let vivo = null;
+let vivoRecibido = 0;
+let editandoReparto = false;
+let actLimite = 80;
+const COLORES = ['#2563eb', '#db2777', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4f46e5', '#65a30d', '#c2410c'];
+
+function colorDe(usuario) {
+  let h = 0;
+  for (const c of String(usuario)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return COLORES[h % COLORES.length];
+}
+function iniciales(nombre) {
+  return String(nombre || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+}
+function horaDe(iso) {
+  return new Date(iso).toLocaleTimeString('es-DO', { hour: 'numeric', minute: '2-digit', timeZone: ZONA });
+}
+function haceCuanto(iso) {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'hace un momento';
+  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+  return `hace ${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')} min`;
+}
+function reloj(seg) {
+  const s = Math.max(0, Math.round(seg));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
+}
+function textoEstado(e) {
+  return e === 'en linea' ? '🟢 En línea' : e === 'ausente' ? '🟡 Ausente' : '⚪ Desconectado';
+}
+function claseEstado(e) { return e === 'en linea' ? 'en-linea' : e === 'ausente' ? 'ausente' : 'desconectado'; }
+function textoReserva(r, id) {
+  const partes = [];
+  if (id) partes.push('#' + id);
+  if (r && (r.cliente || r.asunto)) partes.push(r.cliente || r.asunto);
+  return partes.join(' · ');
+}
+function corto(t, n) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+const ESTADOS_BONITOS = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', descartada: 'Descartada', historico: 'Histórico' };
+function estadoBonito(e) { return ESTADOS_BONITOS[e] || e || '—'; }
+
+// Convierte un registro de la auditoría en una frase clara con su ícono.
+function frase(x, sinQuien) {
+  const quien = sinQuien ? '' : `<strong>${esc(x.nombre || x.usuario)}</strong> `;
+  const res = x.reserva;
+  const id = x.entidad === 'reserva' ? x.entidad_id : '';
+  const cual = `<strong>${esc(textoReserva(res, id) || ('#' + id))}</strong>`;
+  const extra = res && res.agencia ? `Agencia: ${esc(res.agencia)}` : '';
+  const R = (icono, texto, nota, tipo, clase) => ({ icono, texto, nota: nota || '', tipo, clase: clase || '' });
+  switch (x.accion) {
+    case 'abrir_reserva': return R('📂', `${quien}abrió la reserva ${cual}`, extra, 'reservas');
+    case 'cerrar_reserva': return R('📁', `${quien}cerró la reserva ${cual}`, '', 'reservas');
+    case 'cambiar_estado':
+      if (x.nuevo === 'registrada') return R('✅', `${quien}registró la reserva ${cual}`, extra, 'reservas', 'bien');
+      return R('🔄', `${quien}cambió ${cual} de <em>${esc(estadoBonito(x.anterior))}</em> a <em>${esc(estadoBonito(x.nuevo))}</em>`, extra, 'reservas');
+    case 'editar_agencia': return R('✏️', `${quien}corrigió la agencia de ${cual}`, `${esc(x.anterior || '(vacía)')} → ${esc(x.nuevo)}`, 'reservas');
+    case 'pedir_reanalisis': return R('🤖', `${quien}pidió a la IA leer otra vez ${cual}`, '', 'reservas');
+    case 'responder_correo': return R('✉️', `${quien}respondió el correo de ${cual}`, `Para: ${esc(x.nuevo)}${x.detalle ? ' · ' + esc(x.detalle) : ''}`, 'correos', 'bien');
+    case 'enviar_correo': return R('📤', `${quien}envió un correo nuevo a <strong>${esc(x.entidad_id)}</strong>`, `Asunto: ${esc(x.nuevo)}`, 'correos', 'bien');
+    case 'guardar_copia': return R('💾', `${quien}guardó una copia del correo de ${cual}`, '', 'correos');
+    case 'descargar_adjunto': return R('📎', `${quien}descargó un adjunto de ${cual}`, esc(x.detalle), 'correos');
+    case 'abrir_adjunto': return R('📎', `${quien}abrió un adjunto de ${cual}`, esc(x.detalle), 'correos');
+    case 'marcar_leido_fallido': return R('⚠️', `No se pudo marcar un correo como leído`, esc(x.detalle), 'correos', 'alerta');
+    case 'marcar_leido': return R('👁️', `${quien}marcó un correo como leído`, esc(x.detalle), 'correos');
+    case 'reparto_asignada': return R('🎯', `El reparto le dio a <strong>${esc(x.nombreNuevo || x.nuevo)}</strong> la reserva ${cual}`, extra, 'reparto');
+    case 'reparto_devuelta': return R('↩️', `Una reserva de <strong>${esc(x.nombreAnterior || x.anterior)}</strong> volvió al reparto`, esc(x.detalle), 'reparto');
+    case 'reasignar_reserva':
+      if (!x.nuevo) return R('👥', `${quien}le quitó ${cual} a <strong>${esc(x.nombreAnterior || x.anterior)}</strong>`, 'Vuelve a repartirse', 'reparto');
+      return R('👥', `${quien}pasó ${cual} a <strong>${esc(x.nombreNuevo || x.nuevo)}</strong>`, x.anterior ? `Antes la tenía ${esc(x.nombreAnterior || x.anterior)}` : '', 'reparto');
+    case 'cambiar_reparto': return R('⚙️', `${quien}cambió el reparto: <strong>${esc(x.nuevo)}</strong>`, esc(x.detalle), 'reparto');
+    case 'reserva_pasada_de_tiempo': return R('⏰', `La reserva ${cual} pasó del tiempo máximo (${esc(x.nuevo)})`, esc(x.detalle), 'reservas', 'alerta');
+    case 'modificacion_recibida': return R('📨', `Llegó un cambio para la reserva ${cual}`, x.anterior ? `Estaba en ${esc(estadoBonito(x.anterior))}; pasa a Actualizada` : '', 'reservas');
+    case 'login': return R('🟢', `${quien}entró al panel`, '', 'accesos');
+    case 'logout': return R('⚪', `${quien}salió del panel`, '', 'accesos');
+    case 'login_fallido': return R('⛔', `Intento de entrada fallido con el usuario <strong>${esc(x.usuario)}</strong>`, 'Usuario o contraseña incorrectos', 'accesos', 'alerta');
+    case 'login_bloqueado': return R('🔒', `Intento de entrada bloqueado (<strong>${esc(x.usuario)}</strong>)`, esc(x.detalle), 'accesos', 'alerta');
+    case 'login_rechazado': return R('🚫', `${quien}no pudo entrar`, esc(x.detalle), 'accesos', 'alerta');
+    case 'cambiar_clave_propia': return R('🔑', `${quien}cambió su contraseña`, '', 'accesos');
+    case 'exportar': return R('📊', `${quien}descargó un Excel de reservas`, esc(x.detalle), 'sistema');
+    case 'mensaje_enviado': return R('💬', `${quien}envió un mensaje por el chat`, '', 'sistema');
+    case 'editar_empresa': return R('🏢', `${quien}cambió los datos de la empresa`, '', 'sistema');
+    case 'crear_usuario': return R('👤', `${quien}creó el usuario <strong>${esc(x.entidad_id)}</strong>`, '', 'sistema');
+    case 'eliminar_usuario': return R('🗑️', `${quien}eliminó un usuario`, esc(x.detalle), 'sistema', 'alerta');
+    case 'editar_usuario': return R('👤', `${quien}editó el usuario <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'activar_usuario': return R('👤', `${quien}activó a <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'desactivar_usuario': return R('👤', `${quien}desactivó a <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'restablecer_clave': return R('🔑', `${quien}restableció la contraseña de <strong>${esc(x.detalle)}</strong>`, '', 'sistema');
+    case 'alerta_falla': return R('⚠️', `Alerta del sistema: ${esc(x.detalle)}`, '', 'sistema', 'alerta');
+    case 'alerta_resuelta': return R('✔️', `Se resolvió una alerta`, esc(x.detalle), 'sistema', 'bien');
+    case 'motor_error': return R('⚠️', `El lector de correos tuvo un problema`, esc(x.detalle), 'sistema', 'alerta');
+    case 'panel_reiniciado': return R('🔁', `El panel se reinició`, esc(x.detalle), 'sistema');
+    default: return R('•', `${quien ? quien.trim() + ': ' : ''}${esc(String(x.accion).replace(/_/g, ' '))}`, esc([x.entidad_id, x.detalle].filter(Boolean).join(' · ')), 'sistema');
+  }
+}
+
+async function cargarVivo() {
+  const dia = document.getElementById('actDia').value;
+  const r = await api('/api/control/vivo' + (dia ? '?dia=' + encodeURIComponent(dia) : ''));
+  if (!r.ok) {
+    const msg = `<div class="mensaje">${esc(r.status === 401 ? 'Tu sesión terminó. Entra de nuevo en el panel.' : (r.data.error || 'No se pudo cargar.'))}</div>`;
+    document.getElementById('vivoPersonas').innerHTML = msg;
+    return;
+  }
+  vivo = r.data;
+  vivoRecibido = Date.now();
+  document.getElementById('btnChat').style.display = vivo.puedeChat ? '' : 'none';
+  if (vivo.puedeChat) await cargarContactosChat();
+  if (!document.getElementById('actDia').value) document.getElementById('actDia').value = vivo.dia;
+  document.getElementById('actDia').max = vivo.hoy;
+  pintarPersonas();
+  if (!editandoReparto) pintarReparto();
+  pintarActividad();
+}
+
+function pintarPersonas() {
+  const v = vivo;
+  const caja = document.getElementById('vivoPersonas');
+  if (!v.personas.length) { caja.innerHTML = '<div class="vacio">No hay nadie conectado ni ha trabajado nadie hoy todavía.</div>'; return; }
+  const enLinea = v.personas.filter(p => p.estado !== 'desconectado').length;
+  caja.innerHTML = `<p class="sub" style="margin-top:-4px">${enLinea === 1 ? '1 persona conectada' : enLinea + ' personas conectadas'} ahora${v.personas.length - enLinea ? ` · ${v.personas.length - enLinea === 1 ? '1 trabajó hoy y ya no está conectada' : (v.personas.length - enLinea) + ' trabajaron hoy y ya no están conectadas'}` : ''}. Recibidas = reservas que le dio el reparto hoy · Correos = respuestas y correos enviados hoy · Tiempo = con reservas abiertas hoy.</p>
+  <div class="personas">${v.personas.map(p => {
+    const h = p.hoy;
+    const abiertas = p.abiertas.length ? p.abiertas.map(a => `
+      <div class="abierta" data-limite-caja="${a.segundos}">
+        <div class="que">📂 ${p.estado === 'desconectado' ? 'Dejó abierta (queda apartada unos minutos)' : 'Revisando ahora'}${a.categoria === 'MODIFICACION' ? ' un <strong>cambio</strong>' : ''} · ${esc(estadoBonito(a.estado))}</div>
+        <div class="cliente" title="${esc(a.cliente || a.asunto)}">#${a.id} · ${esc(a.cliente || a.asunto || 'Sin nombre')}</div>
+        <div class="datos" title="${esc([a.agencia, a.servicio, a.fecha_servicio, a.buzon].filter(Boolean).join(' · '))}">${esc([a.agencia && 'Agencia: ' + a.agencia, a.servicio, a.fecha_servicio, a.buzon && 'Llegó a: ' + a.buzon].filter(Boolean).join(' · ') || corto(a.asunto, 80))}</div>
+        <div class="reloj">⏱ <b data-seg="${a.segundos}">${reloj(a.segundos)}</b>
+          <span class="barrita"><i data-barra="${a.segundos}" style="width:${Math.min(100, 100 * a.segundos / v.limite)}%"></i></span>
+          <span style="color:var(--texto-suave)">de ${Math.round(v.limite / 60)} min</span></div>
+        <div class="datos" style="margin-top:3px">Abierta desde las ${esc(horaDe(a.desde))}</div>
+        ${v.puedeChat && p.usuario !== v.yo ? `<button class="btn-avisar" data-avisar="${esc(p.usuario)}" data-reserva="${a.id}" style="display:${a.segundos > v.limite ? 'block' : 'none'}">⏰ Avisar que se apure</button>` : ''}
+      </div>`).join('')
+      : `<div class="libre">${p.estado === 'desconectado' ? `Desconectada${h.ultima ? ' · última actividad ' + esc(haceCuanto(h.ultima)) : ''}` : `Sin reserva abierta${h.pendientes ? ` · tiene <strong>${h.pendientes}</strong> pendiente(s) por atender` : ''}`}</div>`;
+    return `<div class="persona ${claseEstado(p.estado)}">
+      <div class="persona-cabeza">
+        <div class="avatar" style="background:${colorDe(p.usuario)}">${esc(iniciales(p.nombre))}</div>
+        <div class="persona-nombre"><strong>${esc(p.nombre)}</strong><small>${esc(p.grupo)}${h.primera ? ' · desde las ' + esc(horaDe(h.primera)) : ''}</small></div>
+        <span class="estado ${claseEstado(p.estado)}">${textoEstado(p.estado)}</span>
+        ${v.puedeChat && p.usuario !== v.yo ? `<button class="btn-chat-tarjeta" data-chat="${esc(p.usuario)}" title="Escribirle por el chat">💬${noLeidosDe(p.usuario) ? `<span class="num-chat">${noLeidosDe(p.usuario)}</span>` : ''}</button>` : ''}
+      </div>
+      ${abiertas}
+      <div class="cifras">
+        <div><b>${h.recibidas}${h.cupo ? `<span style="font-size:11px;font-weight:400">/${h.cupo}</span>` : ''}</b><span>Recibidas</span></div>
+        <div><b>${h.registradas}</b><span>Registradas</span></div>
+        <div><b>${h.respuestas}</b><span>Correos</span></div>
+        <div><b>${h.pendientes}</b><span>Pendientes</span></div>
+        <div><b>${h.segundos >= 3600 ? horas(h.segundos) : Math.round(h.segundos / 60) + ' min'}</b><span>Tiempo</span></div>
+      </div>
+      ${p.ultimas.length ? `<ul class="ultimas">${p.ultimas.map(x => { const f = frase(x, true); const t = f.texto.replace(/^[a-záéíóú]/, c => c.toUpperCase()); return `<li><span class="hora">${esc(horaDe(x.fecha))}</span><span>${f.icono}</span><span class="txt" title="${esc(t.replace(/<[^>]+>/g, ''))}">${t}</span></li>`; }).join('')}</ul>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+  tic();
+}
+
+function pintarReparto() {
+  const r = vivo.reparto;
+  const caja = document.getElementById('vivoReparto');
+  const modoTexto = r.modo === 'cupos' ? 'Por cupos diarios' : 'Automático (al que tenga menos pendientes)';
+  const nombreSig = r.siguiente ? (r.personas.find(x => x.usuario === r.siguiente) || {}).nombre || r.siguiente : '';
+  const filas = r.personas.map(x => {
+    const pct = x.cupo ? Math.min(100, Math.round(100 * x.hoy / x.cupo)) : 0;
+    return `<tr>
+      <td><span class="avatar" style="display:inline-grid;width:24px;height:24px;font-size:11px;vertical-align:middle;margin-right:6px;background:${colorDe(x.usuario)}">${esc(iniciales(x.nombre))}</span>${esc(x.nombre)}${r.activo && x.usuario === r.siguiente ? '<span class="toca">le toca la próxima</span>' : ''}</td>
+      <td><span class="estado ${claseEstado(x.estado)}">${textoEstado(x.estado)}</span></td>
+      <td class="num">${x.pendientes}</td>
+      <td class="num">${x.hoy}</td>
+      ${r.modo === 'cupos' ? `<td>${x.cupo ? `<div style="display:flex;align-items:center;gap:8px"><span class="barrita" style="width:120px;flex:none"><i class="${x.hoy >= x.cupo ? 'lleno' : ''}" style="width:${pct}%"></i></span>${x.hoy} / ${x.cupo}${x.hoy >= x.cupo ? ' ✔' : ''}</div>` : '<span style="color:var(--texto-suave)">Sin cupo</span>'}</td>` : ''}
+    </tr>`;
+  }).join('');
+  caja.innerHTML = `
+    <div class="reparto-cabeza">
+      <span class="chip ${r.activo ? 'si' : 'no'}">${r.activo ? '● Encendido' : '● Apagado'}</span>
+      <span class="chip info">${esc(modoTexto)}</span>
+      <span class="chip info" title="Reservas abiertas que no tienen dueño (llegaron con el reparto apagado o antes de encenderlo): las ve todo el equipo">${r.sinAsignar} sin dueño</span>
+      ${r.activo && nombreSig ? `<span class="chip info">Próxima para: <strong>${esc(nombreSig)}</strong></span>` : ''}
+      ${r.activo && !r.siguiente ? '<span class="chip no">Nadie en línea para recibir</span>' : ''}
+      ${r.todosLlenos ? '<span class="chip info">Todos llegaron a su cupo: ahora va al que tenga menos pendientes</span>' : ''}
+      ${r.puedeCambiar ? '<button class="btn-sec" id="btnEditarReparto" style="margin-left:auto">Cambiar reparto</button>' : ''}
+    </div>
+    ${r.personas.length ? `<div class="tabla-wrap"><table>
+      <thead><tr><th>Persona</th><th>Estado</th><th class="num">Pendientes ahora</th><th class="num">Recibidas hoy</th>${r.modo === 'cupos' ? '<th>Cupo de hoy</th>' : ''}</tr></thead>
+      <tbody>${filas}</tbody></table></div>`
+      : '<div class="vacio">Nadie tiene el permiso "Recibir reservas".</div>'}
+    ${r.puedeCambiar ? `<div class="editor-reparto" id="editorReparto">
+      <div style="margin-bottom:10px">
+        <label><input type="checkbox" id="rActivo" ${r.activo ? 'checked' : ''}> Reparto encendido</label>
+        <label>Modo <select id="rModo">
+          <option value="automatico" ${r.modo !== 'cupos' ? 'selected' : ''}>Automático: al que tenga menos pendientes</option>
+          <option value="cupos" ${r.modo === 'cupos' ? 'selected' : ''}>Por cupos diarios</option>
+        </select></label>
+      </div>
+      <div id="rCupos" style="display:${r.modo === 'cupos' ? 'block' : 'none'}">
+        <p class="sub">Cuántas reservas por día recibe cada persona. 0 = solo recibe cuando todos llegaron a su cupo.</p>
+        ${r.personas.map(x => `<label>${esc(x.nombre)} <input type="number" min="0" max="1000" data-cupo="${esc(x.usuario)}" value="${x.cupo}"></label>`).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn" id="btnGuardarReparto">Guardar</button>
+        <button class="btn-sec" id="btnCancelarReparto">Cancelar</button>
+        <span id="rMensaje" style="font-size:13px;align-self:center"></span>
+      </div>
+    </div>` : ''}`;
+}
+
+function pintarActividad() {
+  const caja = document.getElementById('vivoActividad');
+  const sel = document.getElementById('actUsuario');
+  if (vivo.actividad === null) {
+    document.getElementById('secActividad').style.display = 'none';
+    return;
+  }
+  const elegido = sel.value;
+  sel.innerHTML = '<option value="">Todas las personas</option>' + vivo.usuarios.map(x => `<option value="${esc(x.usuario)}" ${x.usuario === elegido ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
+  const tipo = document.getElementById('actTipo').value;
+  const lista = vivo.actividad.map(x => ({ x, f: frase(x) }))
+    .filter(({ x, f }) => (!elegido || x.usuario === elegido || x.nuevo === elegido || x.anterior === elegido) && (!tipo || f.tipo === tipo));
+  if (!lista.length) { caja.innerHTML = '<div class="vacio">No hay actividad con estos filtros.</div>'; return; }
+  let html = '<ul class="linea-tiempo">';
+  let horaPrevia = '';
+  for (const { x, f } of lista.slice(0, actLimite)) {
+    const hora = new Date(x.fecha).toLocaleTimeString('es-DO', { hour: 'numeric', timeZone: ZONA });
+    if (hora !== horaPrevia) { html += `<li class="hora-grupo">${esc(hora.replace(/\s/g, ' '))}</li>`; horaPrevia = hora; }
+    html += `<li class="evento ${f.clase}"><span class="hora">${esc(horaDe(x.fecha))}</span><span class="icono">${f.icono}</span>
+      <span class="frase">${f.texto}${f.nota ? `<small>${f.nota}</small>` : ''}</span></li>`;
+  }
+  html += '</ul>';
+  if (lista.length > actLimite) html += `<div class="mas"><button class="btn-sec" id="btnMasActividad">Ver más (${lista.length - actLimite} más)</button></div>`;
+  caja.innerHTML = html;
+}
+
+// Relojes en vivo: avanzan cada segundo sin pedir nada al servidor.
+function tic() {
+  if (!vivo) return;
+  const extra = (Date.now() - vivoRecibido) / 1000;
+  document.querySelectorAll('[data-seg]').forEach(b => { b.textContent = reloj(Number(b.dataset.seg) + extra); });
+  document.querySelectorAll('[data-barra]').forEach(i => {
+    const s = Number(i.dataset.barra) + extra;
+    i.style.width = Math.min(100, 100 * s / vivo.limite) + '%';
+    i.classList.toggle('rojo', s > vivo.limite);
+  });
+  document.querySelectorAll('[data-limite-caja]').forEach(c => {
+    const tarde = Number(c.dataset.limiteCaja) + extra > vivo.limite;
+    c.classList.toggle('tarde-caja', tarde);
+    const b = c.querySelector('.btn-avisar');
+    if (b) b.style.display = tarde ? 'block' : 'none';
+  });
+}
+
+ctlOn(document, 'click', async e => {
+  if (e.target.id === 'btnEditarReparto') {
+    editandoReparto = document.getElementById('editorReparto').classList.toggle('abierto');
+    return;
+  }
+  if (e.target.id === 'btnCancelarReparto') { editandoReparto = false; return pintarReparto(); }
+  if (e.target.id === 'btnMasActividad') { actLimite += 150; return pintarActividad(); }
+  if (e.target.id === 'btnGuardarReparto') {
+    const cupos = {};
+    document.querySelectorAll('[data-cupo]').forEach(i => { cupos[i.dataset.cupo] = Number(i.value) || 0; });
+    e.target.disabled = true;
+    try {
+      const r = await fetch('/api/reparto', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activo: document.getElementById('rActivo').checked, modo: document.getElementById('rModo').value, cupos }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { document.getElementById('rMensaje').textContent = d.error || 'No se pudo guardar.'; e.target.disabled = false; return; }
+      editandoReparto = false;
+      await cargarVivo();
+    } catch (err) {
+      document.getElementById('rMensaje').textContent = 'No hay conexión con el servidor.';
+      e.target.disabled = false;
+    }
+  }
+});
+ctlOn(document, 'change', e => {
+  if (e.target.id === 'rModo') document.getElementById('rCupos').style.display = e.target.value === 'cupos' ? 'block' : 'none';
+  if (e.target.id === 'actUsuario' || e.target.id === 'actTipo') { actLimite = 80; pintarActividad(); }
+  if (e.target.id === 'actDia') { actLimite = 80; cargarVivo(); }
+});
+
+/* ---------- Chat (el mismo chat del panel) ---------- */
+
+let contactosChat = [];
+let chatCon = null;
+let timerChat = null;
+
+function noLeidosDe(usuario) { return (contactosChat.find(c => c.usuario === usuario) || {}).noLeidos || 0; }
+
+async function cargarContactosChat() {
+  const r = await api('/api/chat/contactos');
+  if (!r.ok) return;
+  contactosChat = r.data;
+  const total = contactosChat.reduce((a, c) => a + (c.noLeidos || 0), 0);
+  const n = document.getElementById('numChat');
+  n.textContent = total;
+  n.style.display = total ? '' : 'none';
+  if (document.getElementById('panelChat').classList.contains('abierto') && !chatCon) pintarListaChat();
+}
+
+function pintarListaChat() {
+  document.getElementById('chatTitulo').textContent = 'Chat';
+  document.getElementById('chatAtras').style.display = 'none';
+  document.getElementById('chatConversacion').style.display = 'none';
+  const lista = document.getElementById('chatLista');
+  lista.style.display = '';
+  const orden = { 'en linea': 0, ausente: 1, desconectado: 2 };
+  lista.innerHTML = contactosChat.length ? contactosChat.slice()
+    .sort((a, b) => (b.noLeidos || 0) - (a.noLeidos || 0) || orden[a.estado] - orden[b.estado] || a.nombre.localeCompare(b.nombre))
+    .map(c => `<div class="chat-contacto" data-chat="${esc(c.usuario)}">
+      <span class="avatar" style="width:30px;height:30px;font-size:12px;background:${colorDe(c.usuario)}">${esc(iniciales(c.nombre))}</span>
+      <span class="quien"><strong>${esc(c.nombre)}</strong><small>${textoEstado(c.estado)} · ${esc(c.grupo || '')}</small></span>
+      ${c.noLeidos ? `<span class="num-chat">${c.noLeidos}</span>` : ''}
+    </div>`).join('') : '<div class="vacio">No hay otros usuarios.</div>';
+}
+
+function abrirPanelChat(usuario, texto, contexto) {
+  document.getElementById('panelChat').classList.add('abierto');
+  clearInterval(timerChat);
+  timerChat = ctlIntervalo(() => { cargarContactosChat(); if (chatCon) cargarMensajesChat(false); }, 3000);
+  if (!usuario) { chatCon = null; return cargarContactosChat().then(pintarListaChat); }
+  chatCon = usuario;
+  const c = contactosChat.find(x => x.usuario === usuario) || { nombre: usuario, estado: 'desconectado' };
+  document.getElementById('chatTitulo').textContent = c.nombre + ' · ' + textoEstado(c.estado).replace(/^\S+\s/, '');
+  document.getElementById('chatAtras').style.display = '';
+  document.getElementById('chatLista').style.display = 'none';
+  document.getElementById('chatConversacion').style.display = 'flex';
+  const ctx = document.getElementById('chatContexto');
+  ctx.style.display = contexto ? '' : 'none';
+  ctx.textContent = contexto || '';
+  const caja = document.getElementById('chatTexto');
+  if (texto !== undefined) caja.value = texto;
+  caja.focus();
+  caja.selectionStart = caja.selectionEnd = caja.value.length;
+  cargarMensajesChat(true);
+}
+
+function cerrarPanelChat() {
+  document.getElementById('panelChat').classList.remove('abierto');
+  clearInterval(timerChat);
+  timerChat = null;
+  chatCon = null;
+}
+
+async function cargarMensajesChat(alFinal) {
+  if (!chatCon) return;
+  const con = chatCon;
+  const r = await api('/api/chat/mensajes?con=' + encodeURIComponent(con));
+  if (!r.ok || con !== chatCon) return;
+  const box = document.getElementById('chatMensajes');
+  const cerca = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  box.innerHTML = r.data.length ? r.data.map(m => `<div class="burbuja ${m.de === vivo.yo ? 'mia' : 'otra'}">${m.tieneImagen ? `<img src="/api/chat/imagen?id=${m.id}" alt="Imagen" data-ver-imagen="1">` : ''}${esc(m.texto)}<small>${esc(new Date(m.fecha).toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: ZONA }))}</small></div>`).join('')
+    : '<div class="vacio">Todavía no hay mensajes. Escribe el primero.</div>';
+  if (alFinal || cerca) box.scrollTop = box.scrollHeight;
+}
+
+async function enviarMensajeChat() {
+  const caja = document.getElementById('chatTexto');
+  const texto = caja.value.trim();
+  if (!chatCon || !texto) return;
+  const boton = document.getElementById('chatEnviar');
+  boton.disabled = true;
+  try {
+    const r = await fetch('/api/chat/enviar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ para: chatCon, texto }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return alert(d.error || 'No se pudo enviar el mensaje.');
+    caja.value = '';
+    document.getElementById('chatContexto').style.display = 'none';
+    await cargarMensajesChat(true);
+  } catch (e) {
+    alert('No hay conexión con el servidor.');
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+ctlOn(document, 'click', e => {
+  const c = e.target.closest('[data-chat]');
+  if (c) return abrirPanelChat(c.dataset.chat);
+  const a = e.target.closest('[data-avisar]');
+  if (a) {
+    const p = (vivo.personas || []).find(x => x.usuario === a.dataset.avisar) || {};
+    const res = (p.abiertas || []).find(x => String(x.id) === a.dataset.reserva) || {};
+    const min = Math.round(((res.segundos || 0) + (Date.now() - vivoRecibido) / 1000) / 60);
+    const nombre = String(p.nombre || '').split(' ')[0];
+    const cliente = res.cliente || res.asunto || '';
+    return abrirPanelChat(a.dataset.avisar,
+      `Hola ${nombre}, llevas ${min} minutos con la reserva #${res.id}${cliente ? ' (' + cliente + ')' : ''}. ¿Necesitas ayuda o ya la terminas?`,
+      `⏰ ${p.nombre} lleva ${min} min con la reserva #${res.id}. Puedes cambiar el mensaje antes de enviarlo.`);
+  }
+  if (e.target.closest('#btnChat')) return document.getElementById('panelChat').classList.contains('abierto') ? cerrarPanelChat() : abrirPanelChat();
+  if (e.target.id === 'chatCerrar') return cerrarPanelChat();
+  if (e.target.id === 'chatAtras') { chatCon = null; return pintarListaChat(); }
+  if (e.target.id === 'chatEnviar') return enviarMensajeChat();
+  if (e.target.dataset && e.target.dataset.verImagen) window.open(e.target.src);
+});
+document.getElementById('chatTexto').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeChat(); }
+});
+ctlOn(document, 'keydown', e => { if (e.key === 'Escape' && document.getElementById('panelChat').classList.contains('abierto')) cerrarPanelChat(); });
+
+cargarVivo();
+ctlIntervalo(() => { if (!document.hidden) cargarVivo(); }, 10 * 1000);
+ctlIntervalo(tic, 1000);
+cargar();
+// "Trabajando ahora" se refresca solo cada minuto.
+ctlIntervalo(() => { if (!document.hidden) cargar(); }, 60 * 1000);
+
+}
+
 </script>
 </body>
 </html>
