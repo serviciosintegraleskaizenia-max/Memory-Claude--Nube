@@ -81,6 +81,12 @@ function revisarPermitidos(entrada) {
   if (limpios.length > MAX_PERMITIDOS) return { error: `Como mucho ${MAX_PERMITIDOS} números.` };
   return { numeros: limpios };
 }
+// Variables de la plantilla «retomar_conversacion»: {{1}} = primer nombre de la persona (o «hola» si no hay nombre).
+function variablesRetomar(c) {
+  const primer = String((c && c.nombre) || '').trim().split(/\s+/)[0] || '';
+  return [primer || 'hola'];
+}
+
 // Modo prueba (CRM-8): con el modo activo, solo los números de la lista pueden recibir seguimientos.
 // Con el modo activo y la lista vacía, no sale ninguno (es lo más seguro).
 function permitidoEnPrueba(modo, telefono) {
@@ -89,7 +95,7 @@ function permitidoEnPrueba(modo, telefono) {
   return Boolean(numero) && (modo.numeros || []).includes(numero);
 }
 
-module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveIA }) {
+module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveIA, enviarPlantilla }) {
   const error = (m, codigo = 400) => Object.assign(new Error(m), { codigo });
   const texto = (v, max = 300) => String(v ?? '').trim().slice(0, max);
   const etiquetasDe = v => (Array.isArray(v) ? v : String(v || '').split(',')).map(x => texto(x, 40).toLowerCase()).filter(Boolean).slice(0, 20);
@@ -676,10 +682,20 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const c = (await client.query(`SELECT ${COLUMNAS} FROM crm_contactos WHERE id = $1`, [Number(f.id) || 0])).rows[0];
     if (!c) throw error('Ese contacto ya no existe.', 404);
     if (ventanaAbierta(c)) throw error('La ventana de 24 h sigue abierta: puedes escribirle con normalidad.');
-    if (!(await ajustesLeer()).plantilla_retomar_aprobada) {
-      throw error('Falta la plantilla «retomar_conversacion» aprobada por Meta. Envíala a aprobar en Ajustes → Conexiones.', 409);
+    const ajustes = await ajustesLeer();
+    if (!ajustes.plantilla_retomar_aprobada) {
+      throw error('Falta la plantilla «retomar_conversacion» aprobada por Meta. Envíala a aprobar en Oficina → Plantillas de WhatsApp.', 409);
     }
-    throw error('El envío de la plantilla todavía no está conectado. Pendiente en el hito CRM-4.', 501);
+    if (!permitidoEnPrueba(ajustes.modo_prueba, c.telefono)) {
+      throw error('Modo prueba: este número no está en la lista permitida.', 409);
+    }
+    const telefono = String(c.telefono || '').replace(/\D/g, '');
+    if (!telefono) throw error('Esta persona no tiene teléfono de WhatsApp.', 400);
+    if (!enviarPlantilla) throw error('El envío de plantillas no está disponible en este momento.', 503);
+    await enviarPlantilla({ destino: telefono, plantilla: 'retomar_conversacion', variables: variablesRetomar(c) });
+    await client.query(`INSERT INTO crm_mensajes (contacto_id, direccion, texto) VALUES ($1, 'saliente', $2)`, [c.id, 'Plantilla «retomar_conversacion» enviada']);
+    await histo(c.id, 'seguimiento', 'Retomar conversación: plantilla enviada por WhatsApp', u && (u.nombre || u.usuario) || 'CRM');
+    return { ok: true, mensaje: 'Plantilla enviada. Revisa la conversación en unos minutos.' };
   }
 
   async function manejar(req, res, url, u, { json, leerCuerpo }) {
@@ -726,5 +742,5 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     }
   }
 
-  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, probarConexion, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, permitidoEnPrueba, ACCIONES, MAX_PERMITIDOS } };
+  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, probarConexion, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, permitidoEnPrueba, variablesRetomar, ACCIONES, MAX_PERMITIDOS } };
 };

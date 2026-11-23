@@ -609,12 +609,19 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     await registrar(u, 'guardar_token_wa', 'whatsapp', numero, '', '', 'token guardado (cifrado)');
     return { ok: true };
   }
+  // Número de WhatsApp por defecto: el primero que tenga token guardado (lo usa el CRM si no se indica otro).
+  async function numeroPorDefecto() {
+    const fila = (await client.query("SELECT clave FROM automatizacion_config WHERE clave LIKE 'token_wa_%' ORDER BY clave LIMIT 1")).rows[0];
+    return fila ? fila.clave.replace(/^token_wa_/, '') : '';
+  }
   // Envía una plantilla aprobada a un número de WhatsApp, usando la API de Meta.
   async function enviarPlantillaWa(u, f) {
-    const numero = String(f.numero_id || '').trim();
+    let numero = String(f.numero_id || '').trim();
+    if (!numero) numero = await numeroPorDefecto();
     const destino = String(f.destino || '').replace(/\D/g, '');
     const plantilla = String(f.plantilla || '').trim();
     const idioma = String(f.idioma || 'es_PE').trim();
+    const variables = Array.isArray(f.variables) ? f.variables.map(v => String(v ?? '').slice(0, 1024)) : [];
     if (!/^\d{6,25}$/.test(numero)) throw Object.assign(new Error('Escribe el ID del número de teléfono.'), { codigo: 400 });
     if (!/^\d{8,15}$/.test(destino)) throw Object.assign(new Error('El destinatario debe llevar código de país, solo números (ej.: 51979000000).'), { codigo: 400 });
     if (!/^[a-z0-9_]{3,512}$/.test(plantilla)) throw Object.assign(new Error('Nombre de plantilla no válido.'), { codigo: 400 });
@@ -625,7 +632,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       const r = await fetch(`https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(numero)}/messages`, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messaging_product: 'whatsapp', to: destino, type: 'template', template: { name: plantilla, language: { code: idioma } } }),
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: destino, type: 'template', template: { name: plantilla, language: { code: idioma }, ...(variables.length ? { components: [{ type: 'body', parameters: variables.map(v => ({ type: 'text', text: v })) }] } : {}) } }),
         signal: AbortSignal.timeout(20000)
       });
       respuesta = await r.json().catch(() => ({}));
@@ -1408,5 +1415,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe, revisarPlantilla, variablesDe, payloadPlantillaMeta } };
+  // Lo usa el CRM (retomar conversación): envía la plantilla por la misma vía que Oficina.
+  async function enviarPlantilla(f) {
+    return enviarPlantillaWa({ usuario: 'crm', nombre: 'CRM' }, f);
+  }
+  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, enviarPlantilla, _probar: { alertasDe, revisarPlantilla, variablesDe, payloadPlantillaMeta } };
 };

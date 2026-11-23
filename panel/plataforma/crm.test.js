@@ -81,3 +81,9 @@ test('modo prueba (CRM-8): apagado, todos pasan', () => {
   assert.equal(P.permitidoEnPrueba({ activo: false, numeros: [] }, '51977000000'), true);
   assert.equal(P.permitidoEnPrueba(undefined, '51977000000'), true);
 });
+
+test('retomar (CRM-4): la plantilla lleva el primer nombre de la persona', () => {
+  assert.deepEqual(P.variablesRetomar({ nombre: 'María Fernanda Pérez' }), ['María']);
+  assert.deepEqual(P.variablesRetomar({ nombre: '' }), ['hola']);
+  assert.deepEqual(P.variablesRetomar({}), ['hola']);
+});

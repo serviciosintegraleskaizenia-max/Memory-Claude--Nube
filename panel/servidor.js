@@ -33,7 +33,7 @@ const ESTADOS = ['pendiente de transcribir', 'transcrita', 'registrada', 'revisa
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const SISTEMA = { usuario: 'sistema', nombre: 'Sistema' };
 const cuenta = crearCuenta({ client, config, avisar: (...a) => avisar(...a), registrar: (...a) => registrar(...a), SISTEMA });
-const crm = require('./plataforma/crm')({ client, cuenta, registrar: (...a) => registrar(...a), chatwoot: () => operaciones.chatwootConfig(), claveIA: () => claveIAGuardada() });
+const crm = require('./plataforma/crm')({ client, cuenta, registrar: (...a) => registrar(...a), chatwoot: () => operaciones.chatwootConfig(), claveIA: () => claveIAGuardada(), enviarPlantilla: f => central.enviarPlantilla(f) });
 // Panel central de Kaizen IA (pestaña Empresas): solo si config.central.activo es true.
 const central = crearCentral({ client, config, registrar: (...a) => registrar(...a), CARPETA: __dirname });
 // Oficina de Kaizen IA (solo en el central): clientes, cobros, gastos, calendario, estado de cada negocio, chat y enlaces.
