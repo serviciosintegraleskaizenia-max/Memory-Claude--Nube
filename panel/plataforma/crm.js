@@ -81,6 +81,13 @@ function revisarPermitidos(entrada) {
   if (limpios.length > MAX_PERMITIDOS) return { error: `Como mucho ${MAX_PERMITIDOS} números.` };
   return { numeros: limpios };
 }
+// Modo prueba (CRM-8): con el modo activo, solo los números de la lista pueden recibir seguimientos.
+// Con el modo activo y la lista vacía, no sale ninguno (es lo más seguro).
+function permitidoEnPrueba(modo, telefono) {
+  if (!modo || !modo.activo) return true;
+  const numero = String(telefono || '').replace(/\D/g, '');
+  return Boolean(numero) && (modo.numeros || []).includes(numero);
+}
 
 module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveIA }) {
   const error = (m, codigo = 400) => Object.assign(new Error(m), { codigo });
@@ -466,14 +473,11 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
         await histo(c.id, 'seguimiento', 'Seguimiento vencido: requiere plantilla aprobada de Meta', 'sistema');
         continue;
       }
-      // Modo prueba (CRM-8): con el modo activo, solo salen mensajes a los números de la lista.
+      // Modo prueba (CRM-8): solo salen seguimientos a los números de la lista; el resto queda omitido.
       const ajustes = await ajustesLeer();
-      if (ajustes.modo_prueba && ajustes.modo_prueba.activo) {
-        const numero = String(c.telefono || '').replace(/\D/g, '');
-        if (!ajustes.modo_prueba.numeros.includes(numero)) {
-          await client.query("UPDATE crm_seguimientos SET estado = 'omitido', resultado = 'Modo prueba: este número no está en la lista permitida' WHERE id = $1", [s.id]);
-          continue;
-        }
+      if (!permitidoEnPrueba(ajustes.modo_prueba, c.telefono)) {
+        await client.query("UPDATE crm_seguimientos SET estado = 'omitido', resultado = 'Modo prueba: este número no está en la lista permitida' WHERE id = $1", [s.id]);
+        continue;
       }
       try {
         const mensaje = s.mensaje || await redactarSeguimiento(c);
@@ -722,5 +726,5 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     }
   }
 
-  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, probarConexion, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, ACCIONES, MAX_PERMITIDOS } };
+  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, probarConexion, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, permitidoEnPrueba, ACCIONES, MAX_PERMITIDOS } };
 };

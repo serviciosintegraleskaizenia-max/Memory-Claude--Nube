@@ -68,3 +68,16 @@ test('revisarPermitidos: rechaza listas vacías, inválidas o de más de diez', 
 test('ACCIONES tiene exactamente las tres acciones de la ficha', () => {
   assert.deepEqual(Object.keys(P.ACCIONES).sort(), ['devolver_asistente', 'es_publicidad', 'lo_llevo_yo']);
 });
+
+test('modo prueba (CRM-8): con el modo activo solo pasan los números de la lista', () => {
+  const activo = { activo: true, numeros: ['18095551234'] };
+  assert.equal(P.permitidoEnPrueba(activo, '+1 (809) 555-1234'), true);
+  assert.equal(P.permitidoEnPrueba(activo, '+51977000000'), false);
+  assert.equal(P.permitidoEnPrueba(activo, ''), false);
+  assert.equal(P.permitidoEnPrueba({ activo: true, numeros: [] }, '18095551234'), false);
+});
+
+test('modo prueba (CRM-8): apagado, todos pasan', () => {
+  assert.equal(P.permitidoEnPrueba({ activo: false, numeros: [] }, '51977000000'), true);
+  assert.equal(P.permitidoEnPrueba(undefined, '51977000000'), true);
+});
