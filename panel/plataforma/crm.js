@@ -437,6 +437,22 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
   }
 
   // Temporizador: envía los seguimientos cuya hora ya llegó.
+  // Prueba real de la conexión con Chatwoot (botón «Arreglar» en Ajustes).
+  async function probarConexion() {
+    const cw = chatwoot ? await chatwoot().catch(() => null) : null;
+    if (!cw || !cw.url || !cw.cuenta || !cw.token) return { ok: false, mensaje: 'Chatwoot no está configurado. El Programador lo conecta en Operaciones (WhatsApp).' };
+    try {
+      const r = await fetch(`${String(cw.url).replace(/\/$/, '')}/api/v1/accounts/${encodeURIComponent(cw.cuenta)}/conversations?page=1`, {
+        headers: { api_access_token: cw.token }, signal: AbortSignal.timeout(10000)
+      });
+      if (r.status === 401 || r.status === 403) return { ok: false, mensaje: 'El token de Chatwoot no es válido. Hay que cambiarlo en Operaciones (WhatsApp).' };
+      if (r.status === 404) return { ok: false, mensaje: 'La cuenta de Chatwoot no existe. Revisa el número de cuenta.' };
+      if (!r.ok) return { ok: false, mensaje: `Chatwoot respondió ${r.status}. Intenta de nuevo en un momento.` };
+      return { ok: true, mensaje: 'Chatwoot responde bien y la cuenta es correcta.' };
+    } catch (e) {
+      return { ok: false, mensaje: 'No hay conexión con Chatwoot. Revisa la dirección del servidor.' };
+    }
+  }
   async function procesarSeguimientos() {
     const vencidos = (await client.query(`SELECT s.id, s.contacto_id, s.mensaje FROM crm_seguimientos s
       WHERE s.estado = 'pendiente' AND s.cuando <= NOW() ORDER BY s.cuando LIMIT 20`)).rows;
@@ -449,6 +465,15 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
         await client.query(`UPDATE crm_seguimientos SET estado = 'requiere_plantilla', resultado = 'Pasó la ventana de 24 h: se necesita una plantilla aprobada' WHERE id = $1`, [s.id]);
         await histo(c.id, 'seguimiento', 'Seguimiento vencido: requiere plantilla aprobada de Meta', 'sistema');
         continue;
+      }
+      // Modo prueba (CRM-8): con el modo activo, solo salen mensajes a los números de la lista.
+      const ajustes = await ajustesLeer();
+      if (ajustes.modo_prueba && ajustes.modo_prueba.activo) {
+        const numero = String(c.telefono || '').replace(/\D/g, '');
+        if (!ajustes.modo_prueba.numeros.includes(numero)) {
+          await client.query("UPDATE crm_seguimientos SET estado = 'omitido', resultado = 'Modo prueba: este número no está en la lista permitida' WHERE id = $1", [s.id]);
+          continue;
+        }
       }
       try {
         const mensaje = s.mensaje || await redactarSeguimiento(c);
@@ -679,6 +704,7 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
       if (req.method === 'GET' && url === '/api/crm/hoy') return json(res, 200, await hoy());
       if (req.method === 'GET' && url === '/api/crm/novedades') return json(res, 200, await novedades(p));
       if (req.method === 'GET' && url === '/api/crm/ajustes') return json(res, 200, await ajustesLeer());
+      if (req.method === 'POST' && url === '/api/crm/conexion/probar') return json(res, 200, await probarConexion());
       if (req.method === 'POST' && url === '/api/crm/ajustes') return json(res, 200, await ajustesGuardar(await leerCuerpo(req), u));
       if (req.method === 'POST' && url === '/api/crm/citas/guardar') return json(res, 200, await guardarCita(await leerCuerpo(req), u));
       if (req.method === 'POST' && url === '/api/crm/citas/cancelar') return json(res, 200, await cancelarCita(await leerCuerpo(req), u));
@@ -696,5 +722,5 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     }
   }
 
-  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, ACCIONES, MAX_PERMITIDOS } };
+  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, probarConexion, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, ACCIONES, MAX_PERMITIDOS } };
 };

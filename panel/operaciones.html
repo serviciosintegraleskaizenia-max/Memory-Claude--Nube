@@ -876,7 +876,34 @@ async function vOperativo() {
   S.filtro = 'todo'; await cargar();
   const pl = I.plantillas.operativo;
   $('#vista').innerHTML = cabeceraDia('Operativo del día', modoOperativo() === 'ls' ? 'Como el Excel de Somos Viaje: Llegadas y Salidas' : 'Hoja para los choferes, agrupada por chofer o transportista',
-    `<div class="seg"><button class="${modoOperativo() === 'ls' ? 'a' : ''}" data-opmodo="ls">Llegadas / Salidas</button><button class="${modoOperativo() === 'chofer' ? 'a' : ''}" data-opmodo="chofer">Por chofer</button></div><button class="btn s" id="btnOpExcel">${ic('download')}Excel</button><button class="btn p" id="btnImprimir">${ic('printer')}Imprimir / PDF</button>`) + `<div class="caja" id="hojaOp">${htmlOperativo(pl)}</div>`;
+    `<div class="seg"><button class="${modoOperativo() === 'ls' ? 'a' : ''}" data-opmodo="ls">Llegadas / Salidas</button><button class="${modoOperativo() === 'chofer' ? 'a' : ''}" data-opmodo="chofer">Por chofer</button></div><button class="btn s" id="btnOpExcel">${ic('download')}Excel</button><button class="btn s" id="btnWaOp">${ic('send')}Copiar para WhatsApp</button><button class="btn p" id="btnImprimir">${ic('printer')}Imprimir / PDF</button>`) + `<div class="caja" id="hojaOp">${htmlOperativo(pl)}</div>`;
+}
+// Texto para WhatsApp: el mismo operativo que se ve en pantalla (fecha, sede y filtros actuales), en texto simple.
+function textoWhatsappOperativo() {
+  const lista = S.servicios.filter(x => x.estado !== 'cancelado' && x.clase === 'transporte');
+  const pax = lista.reduce((a, x) => a + (x.pax_total || 0), 0);
+  let t = `*Operativo ${S.fecha || ''} · ${S.sede || 'Todas las sedes'}*\n${lista.length} servicios · ${pax} pax`;
+  for (const [titulo, l] of filasOperativo()) {
+    if (!l.length) continue;
+    const nombre = modoOperativo() === 'ls' ? titulo : (titulo === 'zz' ? '⚠ Sin asignar' : (l[0].chofer || l[0].proveedor || 'Sin asignar'));
+    t += `\n\n*${nombre}* (${l.length})`;
+    for (const x of l) {
+      const hora = (x.tipo === 'OUT' ? x.recogida : x.hora || x.recogida) || '--:--';
+      const que = x.tipo === 'IN' ? 'Llegada' : x.tipo === 'OUT' ? 'Salida' : (x.actividad || 'Servicio');
+      t += `\n• ${hora} ${que} · ${x.cliente || ''} · ${x.pax_total || 0} pax${x.vuelo ? ' · vuelo ' + x.vuelo : ''}`;
+      t += `\n   ${x.desde || ''} → ${x.hasta || ''}${x.agencia ? ' · ' + x.agencia : ''}${x.chofer ? ' · ' + x.chofer : ''}`;
+    }
+  }
+  return t;
+}
+async function copiarOperativoWa() {
+  const texto = textoWhatsappOperativo();
+  try { await navigator.clipboard.writeText(texto); aviso('Copiado. Pégalo en WhatsApp.'); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = texto; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); aviso('Copiado. Pégalo en WhatsApp.'); } catch (e2) { aviso('No se pudo copiar. Selecciona el texto manualmente.'); }
+    ta.remove();
+  }
 }
 // Formato del operativo: "ls" = Llegadas y Salidas como el Excel de Somos Viaje; "chofer" = una tabla por chofer.
 function modoOperativo() { try { return localStorage.getItem('opModo') || 'ls'; } catch (e) { return 'ls'; } }
@@ -1710,6 +1737,7 @@ document.addEventListener('click', async ev => {
   if (t.closest('#btnLoteQuitar')) { S.sel.clear(); return pintarOperaciones(); }
   const gb = t.closest('.g-b'); if (gb) return abrirDetalle(Number(gb.dataset.id));
   const fila = t.closest('tr.fila[data-id]'); if (fila && !t.closest('input,button,[data-asig],select,textarea')) return abrirDetalle(Number(fila.dataset.id));
+  if (t.closest('#btnWaOp')) return copiarOperativoWa();
   if (t.closest('#btnImprimir')) { const w = window.open('', '_blank'); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Operativo</title><style>body{font-family:'Segoe UI',Arial,sans-serif;margin:18px;color:#0f1b2d}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;text-align:left}.sub2{color:#64748b;font-size:12px}@page{size:landscape}</style></head><body>${$('#hojaOp').innerHTML.replace(/src="\/empresa\/logo"/g, `src="${location.origin}/empresa/logo"`)}<script>setTimeout(()=>print(),400)<\/script></body></html>`); w.document.close(); return; }
   // reserva manual
   if (t.closest('#nAgregar')) { const u = nuevos[nuevos.length - 1] || {}; nuevos.push({ tipo: 'OUT', fecha: u.fecha || S.fecha, hora: '', vuelo: '', aeropuerto: u.aeropuerto || 'PUJ', actividad: '' }); return pintarNuevos(); }

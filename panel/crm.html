@@ -754,10 +754,12 @@ async function guardarAjuste(cambios) {
 function guardarModoPrueba() {
   return guardarAjuste({ modo_prueba: { activo: $('#ajPrueba').checked, numeros: numerosDe($('#ajNumeros').value) } });
 }
-function arreglar(que) {
-  aviso(que === 'chatwoot'
-    ? 'Los mensajes se conectan en Operaciones, sección WhatsApp. Lo hace el Programador.'
-    : 'La clave de IA se pone en la configuración de la empresa. Lo hace el Programador.', 7000);
+async function arreglar(que) {
+  if (que !== 'chatwoot') return aviso('La clave de IA se pone en la configuración de la empresa. Lo hace el Programador.', 7000);
+  const r = await api('/api/crm/conexion/probar', {});
+  const mensaje = (r.data && r.data.mensaje) || 'No se pudo probar la conexión.';
+  aviso(mensaje, 8000);
+  $('#ajConexiones').insertAdjacentHTML('beforeend', `<p class="sub" style="color:${r.data && r.data.ok ? 'var(--verde)' : 'var(--rojo)'}">${esc(mensaje)}</p>`);
 }
 
 // ---------- Aviso de personas nuevas: contador en la pestaña y sonido (CRM-9) ----------
