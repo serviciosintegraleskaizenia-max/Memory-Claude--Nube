@@ -210,7 +210,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
         if (corteActual && correo.date && new Date(correo.date) < corteActual) continue;
         let imagenes = [];
         try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
-        const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
+        const respuesta = await ia.clasificarConReintento(claveIA(), correo, imagenes, a.modelo, a.perfil);
         const filas = ia.filasDesdeRespuesta(correo, respuesta);
         if (filas[0].error_ia) {
           await client.query(`INSERT INTO motor_fallos (message_id, n) VALUES ($1, 1)
@@ -247,7 +247,6 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
 
   // Comparación del modo sombra: lo que sacó el motor contra lo que guardó n8n en el panel.
   async function comparar() {
-    const norm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const filas = (await client.query(
       `SELECT s.message_id, s.numero_servicio, s.datos, s.imagenes, s.error_ia, s.motivo, s.creado, row_to_json(c) AS n8n
        FROM motor_sombra s
@@ -261,7 +260,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
       if (!f.n8n) d.sinN8n = true;
       else {
         for (const campo of COMPARAR) {
-          if (norm(f.datos[campo]) !== norm(f.n8n[campo])) d.diferencias.push({ servicio: f.numero_servicio, campo, n8n: f.n8n[campo] ?? '', motor: f.datos[campo] ?? '' });
+          if (ia.normalizarComparacion(campo, f.datos[campo]) !== ia.normalizarComparacion(campo, f.n8n[campo])) d.diferencias.push({ servicio: f.numero_servicio, campo, n8n: f.n8n[campo] ?? '', motor: f.datos[campo] ?? '' });
         }
       }
       porCorreo.set(f.message_id, d);
@@ -344,7 +343,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
             const correo = leido.correo;
             let imagenes = [];
             try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
-            const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
+            const respuesta = await ia.clasificarConReintento(claveIA(), correo, imagenes, a.modelo, a.perfil);
             const filas = ia.filasDesdeRespuesta(correo, respuesta);
             // La fila de Histórico (sin análisis) se quita justo antes de guardar el resultado: si la IA falla, el correo sigue ahí.
             await client.query("DELETE FROM clasificacion WHERE message_id = $1 AND estado = 'historico' AND estado_antes IS NULL", [correo.id]);

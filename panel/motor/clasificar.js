@@ -133,6 +133,36 @@ async function llamarIA(ia, cuerpo) {
 
 /* ---------- Respuesta de la IA → filas del panel (igual que "Code in JavaScript") ---------- */
 
+// Cantidad de pasajeros que trae el asunto, por ejemplo «Sebastian Lopez x 3» o «PAX MEDINA JUAN X 09».
+function paxDeAsunto(asunto) {
+  const m = String(asunto || '').match(/\bx\s*(\d{1,2})\b/i);
+  return m ? Number(m[1]) : 0;
+}
+
+// Respuesta que dice NO_ENTENDIDO: el motor la vuelve a pedir una vez (igual que la intención de la cadena).
+function esNoEntendido(respuesta) {
+  const texto = (respuesta && respuesta.choices && respuesta.choices[0] && respuesta.choices[0].message && respuesta.choices[0].message.content) || '';
+  try {
+    const m = texto.match(/\{[\s\S]*\}/);
+    const datos = JSON.parse(m ? m[0] : texto);
+    return String(datos.categoria || '').toUpperCase() === 'NO_ENTENDIDO';
+  } catch (e) { return false; }
+}
+
+async function clasificarConReintento(clave, correo, imagenes, modelo, perfil) {
+  const primera = await llamarIA(clave, pedidoIA(correo, imagenes, modelo, perfil));
+  if (!esNoEntendido(primera)) return primera;
+  const segunda = await llamarIA(clave, pedidoIA(correo, imagenes, modelo, perfil));
+  return esNoEntendido(segunda) ? primera : segunda;
+}
+
+// Valor que se compara entre n8n y el motor: sin tildes ni signos; en vuelos, sin ceros a la izquierda (AV 0129 = AV 129).
+function normalizarComparacion(campo, v) {
+  let t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (campo === 'vuelo') t = t.replace(/^([a-z]{2})0+(?=\d)/, '$1');
+  return t;
+}
+
 // Pasajeros de cada servicio (un grupo puede llegar en un vuelo y otro en otro); si la IA no los da, los de la reserva.
 function paxServicio(s, base, esReserva) {
   const p = s && s.pax;
@@ -163,9 +193,19 @@ function filasDesdeRespuesta(correo, respuesta) {
   }
   const categoria = String(datos.categoria || 'NO_ENTENDIDO').toUpperCase();
   const esReserva = ['RESERVA', 'MODIFICACION'].includes(categoria);
-  const pax = datos.pax || {};
+  let pax = datos.pax || {};
   const clientes = esReserva && Array.isArray(datos.clientes) ? datos.clientes.join(', ') : '';
   const servicios = esReserva && Array.isArray(datos.servicios) && datos.servicios.length > 0 ? datos.servicios : [{}];
+  // Si la IA dejó los pasajeros en 0, se toman de los servicios o, si no hay, del asunto (por ejemplo «x 3»).
+  const sumaPax = a => (Number(a && a.adultos) || 0) + (Number(a && a.ninos) || 0) + (Number(a && a.infantes) || 0);
+  if (esReserva && !sumaPax(pax)) {
+    const delServicio = servicios.reduce((acc, s) => {
+      const p = (s && s.pax) || {};
+      return { adultos: acc.adultos + (Number(p.adultos) || 0), ninos: acc.ninos + (Number(p.ninos) || 0), infantes: acc.infantes + (Number(p.infantes) || 0) };
+    }, { adultos: 0, ninos: 0, infantes: 0 });
+    if (sumaPax(delServicio)) pax = delServicio;
+    else if (paxDeAsunto(correo.subject)) pax = { adultos: paxDeAsunto(correo.subject) };
+  }
   let estado;
   if (categoria === 'PUBLICIDAD' || categoria === 'OTRO') estado = 'sin accion';
   else if (esReserva) {
@@ -193,4 +233,4 @@ function filasDesdeRespuesta(correo, respuesta) {
   }));
 }
 
-module.exports = { decodificar, htmlATexto, desdeGraph, elegirImagenes, pedidoIA, llamarIA, filasDesdeRespuesta, huella };
+module.exports = { decodificar, htmlATexto, desdeGraph, elegirImagenes, pedidoIA, llamarIA, filasDesdeRespuesta, huella, paxDeAsunto, esNoEntendido, clasificarConReintento, normalizarComparacion };
