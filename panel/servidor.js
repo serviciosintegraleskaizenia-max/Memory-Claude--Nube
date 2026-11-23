@@ -1951,7 +1951,7 @@ http.createServer(async (req, res) => {
     if (oficina.activo && (url === '/app' || url.startsWith('/app/'))) {
       return oficina.apps.manejarPublico(req, res, url, { json, leerCuerpo });
     }
-    // API para sistemas externos (SYSSTOURS u otros): llave propia de solo lectura, sin sesión del panel.
+    // API para sistemas externos: llave propia de solo lectura, sin sesión del panel.
     if (url.startsWith('/api/v1/')) {
       if (await apiExterna.manejarApi(client, req, res, url, { json })) return;
     }

@@ -2551,12 +2551,12 @@ function vIntegraciones() {
   const tabla = !integEmpresa ? '<div class="caja ay">Elige una empresa para ver sus sistemas conectados.</div>'
     : !INTEG.llaves.length ? '<div class="caja ay">Esta empresa no tiene sistemas conectados.</div>'
     : `<div class="caja"><table><thead><tr><th>Sistema</th><th>Llave</th><th>Alcance</th><th>Vence</th><th>Último uso</th><th>Estado</th><th></th></tr></thead><tbody>${INTEG.llaves.map(x => `<tr><td><b>${esc(x.nombre)}</b></td><td>••••${esc(x.fin)}</td><td>${esc(INTEG.alcances && INTEG.alcances[x.alcance] || x.alcance)}</td><td>${esc(x.vence)}</td><td>${esc(x.ultimo_uso || '—')}</td><td>${x.vigente ? '<b>Activa</b>' : 'Vencida o revocada'}</td><td>${x.activo ? `<button class="btn-sec" data-revocar-integracion="${x.id}">Revocar</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-  return cabecera('🔌 Integraciones', 'Llaves para que otros sistemas (SYSSTOURS u otros) lean reservas y operaciones. Solo lectura.', '<button class="btn" data-nueva-integracion>+ Conectar sistema</button>') +
+  return cabecera('🔌 Integraciones', 'Llaves para que otros sistemas lean reservas y operaciones. Solo lectura.', '<button class="btn" data-nueva-integracion>+ Conectar sistema</button>') +
     `<div class="caja"><div class="fila2"><div class="campo" style="margin:0"><label for="integEmp">Empresa</label><select id="integEmp" onchange="integEmpresa=Number(this.value)||0;cargarIntegraciones().then(()=>ir('integraciones',false))">${opcionesEmpresa(integEmpresa, 'Elige una empresa')}</select></div><div style="text-align:right"><b>${vigentes}</b><div class="ay">llaves vigentes en esta empresa</div></div></div></div>` + tabla;
 }
 function formIntegracion() {
   abrirModal(`<h2>Conectar sistema</h2>
-    ${campo('inNom', 'Nombre del sistema', '<input id="inNom" placeholder="Ej.: SYSSTOURS">')}
+    ${campo('inNom', 'Nombre del sistema', '<input id="inNom" placeholder="Ej.: Nombre del sistema">')}
     ${campo('inEmp', 'Empresa', `<select id="inEmp">${opcionesEmpresa(integEmpresa, 'Elige una empresa')}</select>`)}
     ${campo('inDia', 'Días de vigencia', '<input id="inDia" type="number" min="1" max="365" value="365">')}
     <div class="ay">Solo lectura de reservas y servicios. No incluye precios, costos ni datos de contacto.</div>

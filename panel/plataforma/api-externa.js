@@ -1,4 +1,4 @@
-// API de Zentralia para sistemas externos (SYSSTOURS u otros): solo lectura de reservas y operaciones.
+// API de Zentralia para sistemas externos: solo lectura de reservas y operaciones.
 //
 // Oficina crea una llave por sistema y la guarda (solo su huella SHA-256) en la base de la empresa,
 // en la tabla op_api_llaves. La llave se muestra una sola vez. El panel de la empresa la revisa en cada
