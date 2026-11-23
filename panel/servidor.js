@@ -3429,6 +3429,39 @@ http.createServer(async (req, res) => {
       return json(res, 404, { error: 'Ruta no encontrada' });
     }
 
+    // Reinicio del correo (solo Programador): guarda una copia, borra los correos clasificados y su historial.
+    // El motor ignora desde entonces los correos recibidos antes de este momento. Solo con el flujo de n8n apagado.
+    if (req.method === 'POST' && url === '/api/correo/reinicio') {
+      if (!u || u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el Programador puede reiniciar el correo.' });
+      const f = await leerCuerpo(req);
+      if (String(f.escribio || '').trim() !== 'REINICIAR') return json(res, 400, { error: 'Escribe la palabra REINICIAR para confirmar.' });
+      const cuenta = (await client.query('SELECT password_hash FROM usuarios WHERE id = $1', [u.id])).rows[0];
+      if (!cuenta || !(await bcrypt.compare(String(f.contrasena || ''), cuenta.password_hash))) return json(res, 403, { error: 'Contraseña incorrecta.' });
+      const flujo = await chequearFlujoActivo();
+      if (flujo.estado === 'bien' || flujo.estado === 'sin datos') {
+        return json(res, 409, { error: 'Primero apaga el flujo "Correos - leer y clasificar" en n8n, para que no vuelva a leer correos viejos. ' + flujo.detalle });
+      }
+      const tablas = ['clasificacion', 'correo_copia', 'correo_adjunto', 'correo_historico', 'motor_sombra', 'motor_imagenes', 'motor_fallos', 'facturas_pago', 'asignaciones', 'tiempo_reserva', 'revisiones'];
+      const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+      const copias = [];
+      await client.query('BEGIN');
+      try {
+        for (const t of tablas) {
+          const nombre = `${t}_resp_${stamp}`;
+          await client.query(`CREATE TABLE ${nombre} AS SELECT * FROM ${t}`);
+          copias.push(nombre);
+        }
+        const historial = `auditoria_correo_resp_${stamp}`;
+        await client.query(`CREATE TABLE ${historial} AS SELECT * FROM auditoria WHERE entidad = 'correo'`);
+        copias.push(historial);
+        await client.query(`TRUNCATE ${tablas.join(', ')} RESTART IDENTITY`);
+        await client.query(`DELETE FROM auditoria WHERE entidad = 'correo'`);
+        await client.query(`UPDATE motor_estado SET corte_correo = NOW() WHERE id = 1`);
+        await client.query('COMMIT');
+      } catch (err) { await client.query('ROLLBACK'); throw err; }
+      await registrar(u, 'correo_reinicio', 'correo', stamp, '', '', `Reinicio del correo · copia ${stamp} (${copias.length} tablas)`);
+      return json(res, 200, { ok: true, respaldo: stamp, tablas: copias });
+    }
     if (url.startsWith('/api/correo')) {
       if (req.method === 'GET' && url === '/api/correo/buzones') {
         if (!puede('responder_correo') && !puede('enviar_correo')) {

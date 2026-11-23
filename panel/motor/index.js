@@ -60,6 +60,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
       huella TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, correos TEXT[] NOT NULL DEFAULT '{}', visto TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await client.query(`CREATE TABLE IF NOT EXISTS motor_fallos (
       message_id TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0, visto TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query('ALTER TABLE motor_estado ADD COLUMN IF NOT EXISTS corte_correo TIMESTAMPTZ');
     await client.query('INSERT INTO motor_estado (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
   }
 
@@ -85,8 +86,16 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     if (extra && extra.buzon && extra.imap && !base.some(c => c.buzon === extra.buzon)) base.push(extra);
     return base;
   }
+  // Corte del reinicio del correo: los correos recibidos antes de esa fecha no se leen.
+  let corteActual = null;
+  async function leerCorte() {
+    const f = (await client.query('SELECT corte_correo FROM motor_estado WHERE id = 1')).rows[0];
+    return f && f.corte_correo ? new Date(f.corte_correo) : null;
+  }
   async function correosPendientes(a, abiertas, cuentas) {
-    const desde = new Date(Date.now() - a.ventanaDias * 86400000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    let desdeFecha = new Date(Date.now() - a.ventanaDias * 86400000);
+    if (corteActual && corteActual > desdeFecha) desdeFecha = corteActual;
+    const desde = desdeFecha.toISOString().replace(/\.\d{3}Z$/, 'Z');
     const leidos = [];
     for (const cuenta of cuentas) {
       if (cuenta.proveedor === 'imap') {
@@ -175,11 +184,13 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
       if (!cuentas.length) throw new Error('No hay buzones para leer (motor.cuentas en config.js).');
       for (const c of cuentas) { const falta = faltaDato(c); if (falta) throw new Error(falta); }
       if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter en config.js (openrouter.apiKey o motor.ia.apiKey).');
+      corteActual = await leerCorte();
       const { leidos, pendientes } = await correosPendientes(a, abiertas, cuentas);
       cuenta.leidos = leidos;
       // Aviso de vida: el panel sabe que la lectura de correos funciona (solo en modo real; en sombra lo sigue dando n8n).
       if (!a.sombra) await client.query('INSERT INTO salud_n8n (id, visto) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET visto = NOW()');
       for (const item of pendientes.slice(0, a.maximoPorCiclo)) {
+        if (corteActual && item.correo && item.correo.date && new Date(item.correo.date) < corteActual) continue;
         const fallos = (await client.query('SELECT n, visto FROM motor_fallos WHERE message_id = $1', [item.id])).rows[0];
         // Un correo que falla muchas veces se vuelve a intentar cada 6 horas (no en cada vuelta).
         if (fallos && fallos.n >= MAXIMO_FALLOS && Date.now() - new Date(fallos.visto).getTime() < 6 * 3600000) { cuenta.en_espera++; continue; }
@@ -196,6 +207,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
           continue;
         }
         const correo = leido.correo;
+        if (corteActual && correo.date && new Date(correo.date) < corteActual) continue;
         let imagenes = [];
         try { imagenes = await ia.elegirImagenes(correo.id, leido.adjuntos, vistas); } catch (e) { imagenes = []; }
         const respuesta = await ia.llamarIA(claveIA(), ia.pedidoIA(correo, imagenes, a.modelo, a.perfil));
