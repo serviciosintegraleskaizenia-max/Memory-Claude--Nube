@@ -23,6 +23,8 @@ const NOMBRE_ESTADO = { por_asignar: 'Por asignar', asignado: 'Asignado', en_cam
 const TIPOS_TARIFA = ['TRASLADO', 'IN', 'OUT', 'INOUT', 'INTERHOTEL', 'ACTIVIDAD', 'ENTRADA', 'TRANSPORTE', 'OTRO'];
 const TIPOS_PROVEEDOR = ['transportista', 'tours', 'entradas', 'otro'];
 
+// Mismo límite que MINUTOS_LIMITE_RESERVA en servidor.js (25 min).
+const LIMITE_RESERVA_SEG = 25 * 60;
 const MODULOS_INICIALES = { operaciones: true, reserva_manual: true, operativo: true, precios: true, reportes: true, paquetes: true, vuelos: false, aviones: true, app_chofer: false, whatsapp: false };
 const REGLAS_INICIALES = {
   antes_aeropuerto_min: 180,   // salida: el cliente debe estar en el aeropuerto X minutos antes del vuelo
@@ -1658,23 +1660,50 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       // Tiempos por reserva: cuánto tardó en el correo (panel) y cuánto en Operaciones, con el mismo número.
       if (req.method === 'GET' && url === '/api/op/tiempos-reserva') {
         if (!prog && !puede('ver_control')) throw error('Solo quien tiene el permiso Ver control puede ver los tiempos.', 403);
+        const hoyT = new Date().toISOString().slice(0, 10);
         const fecha = (k, por) => (/^\d{4}-\d{2}-\d{2}$/.test(p.get(k) || '') ? p.get(k) : por);
-        const desde = fecha('desde', '2000-01-01'), hasta = fecha('hasta', '2100-01-01');
+        const desde = fecha('desde', hoyT), hasta = fecha('hasta', hoyT);
+        if (Date.parse(hasta + 'T00:00:00Z') < Date.parse(desde + 'T00:00:00Z')) throw error('La fecha "desde" es posterior a "hasta".', 400);
+        if (Date.parse(hasta + 'T00:00:00Z') - Date.parse(desde + 'T00:00:00Z') > 31 * 86400000) throw error('Elige hasta 31 días a la vez.', 400);
         const rango = 'inicio >= $1::date AND inicio < ($2::date + 1)';
         const correo = (await client.query(`SELECT reserva_id, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS seg,
             (array_agg(usuario ORDER BY inicio))[1] AS asesor FROM tiempo_reserva WHERE ${rango} GROUP BY reserva_id`, [desde, hasta])).rows;
         const oper = (await client.query(`SELECT reserva_id, SUM(EXTRACT(EPOCH FROM (COALESCE(fin, NOW()) - inicio)))::float AS seg,
             (array_agg(usuario ORDER BY inicio))[1] AS operador FROM op_tiempos WHERE ${rango} GROUP BY reserva_id`, [desde, hasta])).rows;
-        const ids = [...new Set([...correo, ...oper].map(x => x.reserva_id))].slice(0, 500);
+        const ids = [...new Set([...correo, ...oper].map(x => x.reserva_id))].slice(0, 2000);
         const info = new Map(ids.length ? (await client.query('SELECT id, nombre_cliente, asunto, agencia FROM clasificacion WHERE id = ANY($1::int[])', [ids])).rows.map(c => [c.id, c]) : []);
         const cm = new Map(correo.map(x => [x.reserva_id, x])), om = new Map(oper.map(x => [x.reserva_id, x]));
-        const filas = ids.map(id => {
+        const todas = ids.map(id => {
           const c = cm.get(id), o = om.get(id), i = info.get(id) || {};
           const sc = c ? Math.round(c.seg) : 0, so = o ? Math.round(o.seg) : 0;
           return { reserva: id, cliente: i.nombre_cliente || '', asunto: i.asunto || '', agencia: i.agencia || '', asesor: c ? c.asesor : '', operador: o ? o.operador : '', correo_seg: sc, operaciones_seg: so, total_seg: sc + so };
         }).sort((a, b) => b.total_seg - a.total_seg);
-        const promedio = k => { const v = filas.map(x => x[k]).filter(x => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
-        return json(res, 200, { desde, hasta, reservas: filas, promedio: { correo_seg: promedio('correo_seg'), operaciones_seg: promedio('operaciones_seg'), total_seg: promedio('total_seg') } });
+        // Filtros: número de reserva, cliente, agencia, asesor (que trabajó el correo).
+        const buscar = txt(p.get('buscar'), 80).toLowerCase();
+        const agenciaQ = txt(p.get('agencia'), 80).toLowerCase();
+        const asesorQ = txt(p.get('asesor'), 80).toLowerCase();
+        const lista = todas.filter(x =>
+          (!buscar || String(x.reserva) === buscar.replace(/\D/g, '') || (!/^\d+$/.test(buscar) && x.cliente.toLowerCase().includes(buscar))) &&
+          (!agenciaQ || x.agencia.toLowerCase().includes(agenciaQ)) &&
+          (!asesorQ || String(x.asesor || '').toLowerCase().includes(asesorQ)));
+        const promedio = k => { const v = lista.map(x => x[k]).filter(x => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+        // Resumen por agencia: cuántas reservas, qué asesores las trabajaron y cuántas pasaron del límite.
+        const grupos = new Map();
+        for (const x of lista) {
+          const k = x.agencia || 'Sin agencia';
+          const g = grupos.get(k) || { agencia: k, reservas: 0, total: 0, pasadas: 0, asesores: new Map() };
+          g.reservas++; g.total += x.total_seg; if (x.total_seg > LIMITE_RESERVA_SEG) g.pasadas++;
+          const a = x.asesor || '—';
+          g.asesores.set(a, (g.asesores.get(a) || 0) + 1);
+          grupos.set(k, g);
+        }
+        const porAgencia = [...grupos.values()].map(g => ({
+          agencia: g.agencia, reservas: g.reservas, promedio_seg: Math.round(g.total / g.reservas), pasadas: g.pasadas,
+          asesores: [...g.asesores].map(([asesor, n]) => ({ asesor, reservas: n })).sort((a, b) => b.reservas - a.reservas)
+        })).sort((a, b) => b.reservas - a.reservas);
+        const alertas = lista.filter(x => x.total_seg > LIMITE_RESERVA_SEG).slice(0, 50);
+        return json(res, 200, { desde, hasta, limite: LIMITE_RESERVA_SEG, total: lista.length, reservas: lista.slice(0, 500),
+          alertas, porAgencia, promedio: { correo_seg: promedio('correo_seg'), operaciones_seg: promedio('operaciones_seg'), total_seg: promedio('total_seg') } });
       }
       if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
       // ---------- Administración (gerencia) ----------
