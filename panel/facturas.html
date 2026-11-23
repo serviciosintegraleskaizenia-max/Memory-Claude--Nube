@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Facturas de pago</title>
+<style>
+  :root { --fondo:#f4f6fa; --tarjeta:#ffffff; --borde:#dfe5ee; --texto:#0f1b2d; --suave:#64748b; --acento:#0b4f8a; --verde:#15803d; --ambar:#b45309; --rojo:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fondo:#0b1424; --tarjeta:#121d31; --borde:#22304a; --texto:#e7edf6; --suave:#8fa0ba; --acento:#3b82f6; --verde:#4ade80; --ambar:#fbbf24; --rojo:#f87171; } }
+  :root[data-theme="dark"] { --fondo:#0b1424; --tarjeta:#121d31; --borde:#22304a; --texto:#e7edf6; --suave:#8fa0ba; --acento:#3b82f6; --verde:#4ade80; --ambar:#fbbf24; --rojo:#f87171; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:var(--fondo); color:var(--texto); font-size:14px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--borde); background:var(--tarjeta); }
+  header h1 { margin:0; font-size:18px; } header small { color:var(--suave); }
+  .volver { color:var(--acento); text-decoration:none; font-size:13px; }
+  main { display:grid; grid-template-columns: minmax(260px, 340px) 1fr; gap:14px; padding:14px 18px; align-items:start; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .caja { background:var(--tarjeta); border:1px solid var(--borde); border-radius:12px; padding:12px; }
+  .pestanas { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .pestanas button { border:1px solid var(--borde); background:transparent; color:var(--texto); border-radius:999px; padding:5px 11px; font-size:12.5px; cursor:pointer; }
+  .pestanas button.on { background:var(--acento); border-color:var(--acento); color:#fff; }
+  .item { display:block; width:100%; text-align:left; border:1px solid var(--borde); background:transparent; color:var(--texto); border-radius:10px; padding:9px 10px; margin-bottom:8px; cursor:pointer; }
+  .item.on { border-color:var(--acento); box-shadow: inset 3px 0 0 var(--acento); }
+  .item b { display:block; } .item small { color:var(--suave); }
+  .chip { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--borde); margin-right:4px; }
+  .chip.v { color:var(--verde); border-color:var(--verde); } .chip.a { color:var(--ambar); border-color:var(--ambar); } .chip.r { color:var(--rojo); border-color:var(--rojo); }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  label { display:block; font-size:12.5px; color:var(--suave); }
+  input, select, textarea { width:100%; margin-top:4px; padding:8px; border:1px solid var(--borde); border-radius:8px; background:var(--fondo); color:var(--texto); font:inherit; }
+  .lista-reservas { display:grid; grid-template-columns: 1fr 140px; gap:6px; margin-top:6px; }
+  .acciones { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center; }
+  .btn { border:1px solid var(--borde); background:var(--tarjeta); color:var(--texto); border-radius:8px; padding:8px 13px; cursor:pointer; font:inherit; }
+  .btn.p { background:var(--acento); border-color:var(--acento); color:#fff; font-weight:700; }
+  .btn.r { color:var(--rojo); }
+  .problemas { background:rgba(180,83,9,.08); border:1px solid var(--ambar); border-radius:10px; padding:9px 12px; margin-bottom:10px; font-size:13px; }
+  .problemas li { margin:3px 0; }
+  .correo { white-space:pre-wrap; font-size:12.5px; color:var(--suave); max-height:200px; overflow:auto; border:1px dashed var(--borde); border-radius:8px; padding:8px; margin-top:10px; }
+  .aviso { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#0b1f3a; color:#fff; padding:10px 16px; border-radius:10px; display:none; max-width:90vw; }
+  .aviso.v { display:block; }
+  .vacio { color:var(--suave); padding:20px; text-align:center; }
+  .suma { color:var(--suave); font-size:12.5px; }
+</style></head><body>
+<header>
+  <div><h1>Facturas de pago</h1><small>La IA lee cada factura y propone el pago. Tú confirmas.</small></div>
+  <div><a class="volver" href="/">← Volver al panel</a></div>
+</header>
+<main>
+  <section class="caja">
+    <div class="pestanas" id="pestanas"></div>
+    <div id="lista"><div class="vacio">Cargando…</div></div>
+  </section>
+  <section class="caja" id="detalle"><div class="vacio">Elige una factura de la lista.</div></section>
+</main>
+<div id="aviso" class="aviso" role="status"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const dinero = n => 'US$ ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let ESTADO = 'pendiente', DATOS = null, ACTUAL = null;
+
+function aviso(t, ms = 4000) { const el = $('#aviso'); el.textContent = t; el.classList.add('v'); clearTimeout(window.__t); window.__t = setTimeout(() => el.classList.remove('v'), ms); }
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  if (r.status === 401) location.href = '/';
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+async function cargar() {
+  const r = await api('/api/facturas?estado=' + ESTADO);
+  if (!r.ok) { $('#lista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar.')}</div>`; return; }
+  DATOS = r.data;
+  const c = r.data.conteo || {};
+  const pestanas = [['pendiente', 'Por revisar'], ['registrada', 'Registradas'], ['rechazada', 'Rechazadas'], ['error', 'No se pudieron leer']];
+  $('#pestanas').innerHTML = pestanas.map(([k, n]) => `<button class="${ESTADO === k ? 'on' : ''}" data-estado="${k}">${n} (${c[k] || 0})</button>`).join('');
+  $('#lista').innerHTML = r.data.facturas.length ? r.data.facturas.map(f => {
+    const d = f.datos || {};
+    return `<button class="item ${ACTUAL === f.id ? 'on' : ''}" data-id="${f.id}">
+      <b>${esc(d.agencia || f.remitente || 'Sin agencia')}</b>
+      <small>${esc(f.asunto || '')}</small><br>
+      ${d.monto ? `<span class="chip">${dinero(d.monto)} ${esc(d.moneda || '')}</span>` : ''}
+      ${f.lista ? '<span class="chip v">lista</span>' : '<span class="chip a">revisar</span>'}
+      ${f.estado === 'error' ? '<span class="chip r">error</span>' : ''}
+    </button>`;
+  }).join('') : '<div class="vacio">No hay facturas en esta lista.</div>';
+}
+
+async function abrir(id) {
+  ACTUAL = Number(id);
+  const r = await api('/api/facturas/detalle?id=' + ACTUAL);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo abrir.');
+  pintarDetalle(r.data);
+  cargar();
+}
+
+function pintarDetalle(f) {
+  const d = f.datos || {};
+  const reservas = (d.reservas || []).join(', ');
+  const registrada = f.estado === 'registrada';
+  const problemas = (f.problemas || []);
+  const agencias = (DATOS && DATOS.agencias) || [];
+  const esNueva = d.agencia && !agencias.some(a => a.toLowerCase() === String(d.agencia).toLowerCase());
+  $('#detalle').innerHTML = `
+    <h2 style="margin:0 0 4px">${esc(d.agencia || 'Factura sin agencia')}</h2>
+    <div class="suma">De: ${esc(f.remitente || '')} · ${esc(f.asunto || '')} · ${esc(String(f.creado || '').slice(0, 16).replace('T', ' '))}</div>
+    ${f.error ? `<div class="problemas" style="margin-top:8px">${esc(f.error)}</div>` : ''}
+    ${problemas.length && !registrada ? `<ul class="problemas">${problemas.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${registrada ? `<div class="problemas" style="border-color:var(--verde)">Registrada${f.metodo_pago ? ' · pagó por ' + esc(f.metodo_pago) : ''}. Recibo de Operaciones: ${f.op_pago_id ? '#' + f.op_pago_id : '—'}.</div>` : ''}
+    <div class="grid" style="margin-top:10px">
+      <label>Agencia que paga
+        <input id="fAgencia" list="listaAgencias" value="${esc(d.agencia || '')}" ${registrada ? 'disabled' : ''}>
+        <datalist id="listaAgencias">${agencias.map(a => `<option value="${esc(a)}">`).join('')}</datalist>
+      </label>
+      <label class="crear" style="${esNueva ? '' : 'display:none'}"><input type="checkbox" id="fCrear" style="width:auto"> Crear la agencia nueva en el sistema</label>
+      <label>Monto que paga
+        <input id="fMonto" type="number" step="0.01" min="0" value="${esc(d.monto || '')}" ${registrada ? 'disabled' : ''}>
+      </label>
+      <label>Moneda
+        <select id="fMoneda" ${registrada ? 'disabled' : ''}>${['USD', 'DOP', 'EUR', 'CAD', 'MXN'].map(m => `<option ${m === d.moneda ? 'selected' : ''}>${m}</option>`).join('')}</select>
+      </label>
+      <label>¿De dónde pagó? <b style="color:var(--rojo)">*</b>
+        <select id="fMetodo" ${registrada ? 'disabled' : ''}>
+          <option value="">— elegir —</option>
+          ${['PayPal', 'Transferencia', 'Efectivo', 'Tarjeta', 'Cheque', 'Otro'].map(m => `<option ${m === (f.metodo_pago || '') ? 'selected' : ''}>${m}</option>`).join('')}
+        </select>
+      </label>
+      <label>Referencia (comprobante, transferencia o factura)
+        <input id="fRef" value="${esc(d.referencia || '')}" ${registrada ? 'disabled' : ''}>
+      </label>
+      <label>Paquete
+        <input id="fPaquete" value="${esc(d.paquete || '')}" ${registrada ? 'disabled' : ''}>
+      </label>
+      <label>Tipo de reserva
+        <select id="fTipo" ${registrada ? 'disabled' : ''}>${['Paquete', 'Tour', 'Traslado', 'Hotel', 'Otro'].map(t => `<option ${t === d.tipo_reserva ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      </label>
+      <label>Sede
+        <select id="fSede" ${registrada ? 'disabled' : ''}><option value="">—</option>${['Punta Cana', 'Orlando'].map(s => `<option ${s === d.sede ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      </label>
+      <label>Fecha del pago
+        <input id="fFecha" type="date" value="${esc(d.fecha_pago || '')}" ${registrada ? 'disabled' : ''}>
+      </label>
+    </div>
+    <label style="margin-top:10px">Reservas que paga (números separados por coma)
+      <input id="fReservas" value="${esc(reservas)}" ${registrada ? 'disabled' : ''}>
+    </label>
+    <div id="fLineas" class="lista-reservas"></div>
+    <div class="suma" id="fSuma" style="margin-top:6px"></div>
+    <label style="margin-top:10px">Notas
+      <textarea id="fNotas" rows="2" ${registrada ? 'disabled' : ''}>${esc(d.notas || '')}</textarea>
+    </label>
+    ${registrada ? '' : `<div class="acciones">
+      <button class="btn p" id="btnRegistrar">Registrar pago en Operaciones</button>
+      <button class="btn r" id="btnRechazar">Rechazar factura</button>
+    </div>`}
+    <details style="margin-top:12px"><summary class="suma">Ver el correo</summary><div class="correo">${esc(f.resumen_correo || '(sin texto)')}</div></details>
+  `;
+  ACTUAL = f.id;
+  pintarLineas(d.monto || 0, f.metodo_pago);
+  $('#fReservas') && $('#fReservas').addEventListener('input', () => pintarLineas(Number($('#fMonto').value) || 0));
+  $('#fMonto') && $('#fMonto').addEventListener('input', () => pintarLineas(Number($('#fMonto').value) || 0));
+  $('#fAgencia') && $('#fAgencia').addEventListener('input', e => {
+    const nueva = !agencias.some(a => a.toLowerCase() === e.target.value.trim().toLowerCase());
+    const caja = document.querySelector('.crear'); if (caja) caja.style.display = nueva && e.target.value.trim() ? '' : 'none';
+  });
+  $('#btnRegistrar') && ($('#btnRegistrar').onclick = registrar);
+  $('#btnRechazar') && ($('#btnRechazar').onclick = rechazar);
+}
+
+// Una casilla de monto por cada reserva. Si es una sola, toma el total.
+function pintarLineas(total, _metodo) {
+  const nums = ($('#fReservas').value || '').split(/[,;\s]+/).map(x => x.replace(/\D/g, '')).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+  const cajas = $('#fLineas');
+  const previos = {}; cajas.querySelectorAll('input[data-res]').forEach(i => { previos[i.dataset.res] = i.value; });
+  cajas.innerHTML = nums.map((n, i) => `<label style="margin:0">Reserva #${esc(n)}</label>
+    <input type="number" step="0.01" min="0" data-res="${esc(n)}" value="${previos[n] ?? (nums.length === 1 ? (total || '') : '')}" placeholder="monto" style="margin-top:0">`).join('');
+  cajas.querySelectorAll('input[data-res]').forEach(i => i.addEventListener('input', sumar));
+  sumar();
+}
+function sumar() {
+  const cajas = [...document.querySelectorAll('#fLineas input[data-res]')];
+  const suma = cajas.reduce((a, i) => a + (Number(i.value) || 0), 0);
+  const total = Number($('#fMonto') && $('#fMonto').value) || 0;
+  $('#fSuma').textContent = cajas.length ? `Repartido: ${dinero(suma)} de ${dinero(total)}${Math.abs(suma - total) > 0.009 ? ' · no cuadra' : ' · cuadra'}` : '';
+}
+
+async function registrar() {
+  const pagos = [...document.querySelectorAll('#fLineas input[data-res]')].map(i => ({ reserva: i.dataset.res, monto: Number(i.value) || 0 }));
+  const cuerpo = {
+    id: ACTUAL, agencia: $('#fAgencia').value.trim(), crear_agencia: !!($('#fCrear') && $('#fCrear').checked),
+    monto: Number($('#fMonto').value) || 0, moneda: $('#fMoneda').value, metodo_pago: $('#fMetodo').value,
+    referencia: $('#fRef').value.trim(), paquete: $('#fPaquete').value.trim(), tipo_reserva: $('#fTipo').value,
+    sede: $('#fSede').value, fecha_pago: $('#fFecha').value, notas: $('#fNotas').value.trim(), pagos
+  };
+  if (!cuerpo.metodo_pago) return aviso('Elige de dónde pagó la agencia.');
+  const r = await api('/api/facturas/confirmar', cuerpo);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo registrar.', 7000);
+  aviso(`Pago registrado. Recibo ${String(r.data.recibo).padStart(4, '0')} en Operaciones.`, 6000);
+  if (r.data.id) window.open(`/api/op/cobros/recibo?id=${r.data.id}`, '_blank');
+  ESTADO = 'registrada';
+  cargar();
+  abrir(ACTUAL);
+}
+
+async function rechazar() {
+  const motivo = prompt('¿Por qué se rechaza esta factura? (queda guardado)');
+  if (!motivo || !motivo.trim()) return;
+  const r = await api('/api/facturas/rechazar', { id: ACTUAL, motivo: motivo.trim() });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo rechazar.');
+  aviso('Factura rechazada.');
+  ESTADO = 'rechazada'; cargar(); $('#detalle').innerHTML = '<div class="vacio">Factura rechazada.</div>';
+}
+
+document.addEventListener('click', ev => {
+  const e = ev.target.closest('[data-estado]'); if (e) { ESTADO = e.dataset.estado; ACTUAL = null; return cargar(); }
+  const it = ev.target.closest('.item[data-id]'); if (it) return abrir(it.dataset.id);
+});
+cargar();
+</script>
+</body></html>

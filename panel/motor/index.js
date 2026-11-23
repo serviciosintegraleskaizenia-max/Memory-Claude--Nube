@@ -8,6 +8,7 @@
 const ms = require('./microsoft');
 const ia = require('./clasificar');
 const imap = require('./imap');
+const fact = require('./facturas');
 
 const COLUMNAS = ['categoria', 'remitente', 'asunto', 'estado', 'fecha', 'cuerpo', 'message_id', 'buzon', 'agencia',
   'nombre_cliente', 'telefono', 'adultos', 'ninos', 'infantes', 'error_ia', 'motivo', 'numero_servicio', 'tipo_servicio',
@@ -46,6 +47,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
   let reloj = null;
 
   async function preparar() {
+    await fact.preparar(client);
     await client.query(`CREATE TABLE IF NOT EXISTS motor_estado (
       id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       inicio TIMESTAMPTZ, fin TIMESTAMPTZ, leidos INTEGER NOT NULL DEFAULT 0, nuevos INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +138,15 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     return { correo: item.correo, adjuntos };
   }
 
+  // Factura de pago: se lee con la IA y la propuesta queda lista para revisar en el panel de facturas.
+  async function leerSiEsFactura(a, filas, correo) {
+    if (a.sombra || !filas || !filas[0] || filas[0].categoria !== 'FACTURA' || filas[0].error_ia) return;
+    const r = await client.query('SELECT id FROM clasificacion WHERE message_id = $1 ORDER BY id DESC LIMIT 1', [correo.id]);
+    if (!r.rows[0]) return;
+    await fact.leerFactura({ client, ia, claveIA: claveIA(), modelo: a.modelo, clasificacionId: r.rows[0].id, correo })
+      .catch(e => console.log('Facturas:', e.message));
+  }
+
   async function guardar(a, filas, imagenes) {
     if (a.sombra) {
       await client.query('DELETE FROM motor_sombra WHERE message_id = $1', [filas[0].message_id]);
@@ -196,6 +207,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
           await client.query('DELETE FROM motor_fallos WHERE message_id = $1', [correo.id]);
         }
         await guardar(a, filas, imagenes.length);
+        await leerSiEsFactura(a, filas, correo);
         cuenta.nuevos++;
         if (filas[0].error_ia) cuenta.con_error++;
         if (imagenes.length) cuenta.imagenes++;
@@ -325,6 +337,7 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
             // La fila de Histórico (sin análisis) se quita justo antes de guardar el resultado: si la IA falla, el correo sigue ahí.
             await client.query("DELETE FROM clasificacion WHERE message_id = $1 AND estado = 'historico' AND estado_antes IS NULL", [correo.id]);
             await guardar({ ...a, sombra: false }, filas, imagenes.length);
+            await leerSiEsFactura({ ...a, sombra: false }, filas, correo);
             if (filas[0].error_ia) recuperacion.con_error++; else recuperacion.nuevos++;
           } catch (e) {
             recuperacion.con_error++;

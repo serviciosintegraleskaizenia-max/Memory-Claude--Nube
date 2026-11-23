@@ -14,6 +14,7 @@ const crearCentral = require('./plataforma/central');
 const crearOficina = require('./plataforma/oficina');
 const apiExterna = require('./plataforma/api-externa');
 const crearMotor = require('./motor');
+const facturas = require('./motor/facturas');
 const crearPush = require('./push');
 
 const client = new Client(config.db);
@@ -1830,6 +1831,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url === '/asistente') {
       return archivo(res, path.join(CARPETA, 'asistente.html'), 'text/html; charset=utf-8');
     }
+    if (req.method === 'GET' && url === '/facturas') return archivo(res, path.join(CARPETA, 'facturas.html'), 'text/html; charset=utf-8');
     if (req.method === 'GET' && url === '/control') {
       return archivo(res, path.join(CARPETA, 'control.html'), 'text/html; charset=utf-8');
     }
@@ -2055,6 +2057,7 @@ http.createServer(async (req, res) => {
     const puede = p => Boolean(permisos[p]);
 
     if (url.startsWith('/api/crm/')) return crm.manejar(req, res, url, u, { json, leerCuerpo });
+    if (url.startsWith('/api/facturas')) return facturas.manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones });
     if (url.startsWith('/api/op/')) return operaciones.manejar(req, res, url, u, { json, leerCuerpo, puede });
 
     // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
