@@ -3,15 +3,18 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Plantilla por cliente\n1. En n8n: copiar este flujo y ponerle el nombre del cliente.\n2. En el nodo **Datos del cliente** cambiar los textos que dicen CAMBIAR.\n3. En el nodo **Recibir de Chatwoot** cambiar la ruta por el subdominio del cliente.\n4. En Chatwoot del cliente: Configuración → Integraciones → Webhooks → agregar la dirección del nodo.\n5. Activar el flujo (Publish).\n\nEste flujo no tiene claves. La respuesta automática todavía no está conectada: el último nodo es un marcador.",
-        "height": 340,
+        "content": "## Automatización multicanal (plantilla por cliente)\n\nUn solo flujo para todos los clientes. Chatwoot recibe **WhatsApp** (prioridad), **Instagram**, **Messenger / Facebook** y **TikTok**, y este flujo responde por el mismo lugar.\n\n1. Copiar este flujo y ponerle el nombre del cliente.\n2. En **Datos del cliente** cambiar los textos que dicen CAMBIAR (subdominio, cuenta de Chatwoot, sede opcional).\n3. Crear dos credenciales (no escribir claves en el flujo):\n   - **Clave del asistente** (Header Auth, cabecera Authorization, valor `Bearer <clave>`): la de Oficina → Clientes → IA.\n   - **Chatwoot** (Header Auth, cabecera api_access_token): token de la cuenta del cliente.\n4. Cambiar la URL del panel en **Pedir respuesta al asistente** y la de Chatwoot en **Responder en Chatwoot**.\n5. Activar el flujo y pegar la URL del webhook en Chatwoot (Integraciones → Webhooks, evento *message created*).\n\nEl asistente decide si responde o si pasa la conversación a un asesor. En ese caso se deja una nota privada y la etiqueta «asesor».",
+        "height": 380,
         "width": 420
       },
-      "id": "nota-instrucciones",
+      "id": "nota-plantilla",
       "name": "Nota: cómo usar esta plantilla",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-100, -180]
+      "position": [
+        -100,
+        -260
+      ]
     },
     {
       "parameters": {
@@ -24,7 +27,10 @@
       "name": "Recibir de Chatwoot",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 200],
+      "position": [
+        240,
+        200
+      ],
       "webhookId": "CAMBIAR-subdominio-chatwoot"
     },
     {
@@ -64,14 +70,17 @@
       "name": "Solo mensajes del cliente",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [480, 200]
+      "position": [
+        480,
+        200
+      ]
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "nombre-cliente",
+              "id": "cliente",
               "name": "cliente",
               "value": "CAMBIAR: nombre del cliente",
               "type": "string"
@@ -89,6 +98,12 @@
               "type": "string"
             },
             {
+              "id": "sede",
+              "name": "sede",
+              "value": "",
+              "type": "string"
+            },
+            {
               "id": "conversacion",
               "name": "conversacion",
               "value": "={{ $json.body.conversation.id }}",
@@ -98,6 +113,12 @@
               "id": "canal",
               "name": "canal",
               "value": "={{ $json.body.inbox.channel_type }}",
+              "type": "string"
+            },
+            {
+              "id": "canal-nombre",
+              "name": "canal_nombre",
+              "value": "={{ ({'Channel::Whatsapp':'WhatsApp','Channel::Instagram':'Instagram','Channel::FacebookPage':'Messenger','Channel::Tiktok':'TikTok','Channel::WebWidget':'Web','Channel::Email':'Correo'})[$json.body?.inbox?.channel_type ?? $json.canal] ?? 'Otro canal' }}",
               "type": "string"
             },
             {
@@ -114,15 +135,187 @@
       "name": "Datos del cliente",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [720, 120]
+      "position": [
+        720,
+        120
+      ]
     },
     {
-      "parameters": {},
-      "id": "respuesta-pendiente",
-      "name": "Respuesta automática (pendiente)",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [960, 120]
+      "parameters": {
+        "method": "POST",
+        "url": "https://CAMBIAR-panel/api/conocimiento/responder",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sede: $json.sede, mensajes: [{ rol: 'cliente', texto: $json.mensaje }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "pedir-asistente",
+      "name": "Pedir respuesta al asistente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CAMBIAR-clave-asistente",
+          "name": "CAMBIAR: clave del asistente"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "hay-texto",
+              "leftValue": "={{ $json.respuesta }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "hay-texto",
+      "name": "¿Hay respuesta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://CAMBIAR-chatwoot/api/v1/accounts/{{ $('Datos del cliente').item.json.cuenta_chatwoot }}/conversations/{{ $('Datos del cliente').item.json.conversacion }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.respuesta, message_type: 'outgoing', private: false }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "responder-chatwoot",
+      "name": "Responder en Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CAMBIAR-chatwoot",
+          "name": "CAMBIAR: token de Chatwoot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "pasar",
+              "leftValue": "={{ $('Pedir respuesta al asistente').item.json.pasar_a_asesor }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "pasar-asesor",
+      "name": "¿Pasar a un asesor?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://CAMBIAR-chatwoot/api/v1/accounts/{{ $('Datos del cliente').item.json.cuenta_chatwoot }}/conversations/{{ $('Datos del cliente').item.json.conversacion }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: 'Pasa a asesor' + ($('Pedir respuesta al asistente').item.json.motivo ? ': ' + $('Pedir respuesta al asistente').item.json.motivo : '') + '\\n\\n' + ($('Pedir respuesta al asistente').item.json.resumen_para_asesor || ''), message_type: 'outgoing', private: true }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "nota-privada",
+      "name": "Nota privada para el asesor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CAMBIAR-chatwoot",
+          "name": "CAMBIAR: token de Chatwoot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://CAMBIAR-chatwoot/api/v1/accounts/{{ $('Datos del cliente').item.json.cuenta_chatwoot }}/conversations/{{ $('Datos del cliente').item.json.conversacion }}/labels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"labels\": [\"asesor\"]}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "etiqueta-asesor",
+      "name": "Etiqueta asesor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        -40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CAMBIAR-chatwoot",
+          "name": "CAMBIAR: token de Chatwoot"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -154,7 +347,64 @@
       "main": [
         [
           {
-            "node": "Respuesta automática (pendiente)",
+            "node": "Pedir respuesta al asistente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedir respuesta al asistente": {
+      "main": [
+        [
+          {
+            "node": "¿Hay respuesta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay respuesta?": {
+      "main": [
+        [
+          {
+            "node": "Responder en Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Responder en Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "¿Pasar a un asesor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Pasar a un asesor?": {
+      "main": [
+        [
+          {
+            "node": "Nota privada para el asesor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Nota privada para el asesor": {
+      "main": [
+        [
+          {
+            "node": "Etiqueta asesor",
             "type": "main",
             "index": 0
           }
