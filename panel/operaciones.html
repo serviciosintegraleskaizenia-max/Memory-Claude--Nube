@@ -296,6 +296,20 @@ tr.fila.fila-activa td{background:rgba(31,95,174,.08)}
   #vista td{border:none!important;padding:3px 4px!important}
   .tablero{grid-template-columns:1fr!important}
 }
+
+  .cb-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 14px}
+  .cb-corte{font-size:13px;color:#475569;display:flex;gap:8px;align-items:center}
+  .cb-tabla{width:100%;border-collapse:collapse;font-size:13px} .cb-tabla th{text-align:left;color:#64748b;font-size:11.5px;font-weight:700;padding:8px;border-bottom:1px solid #e2e8f0}
+  .cb-tabla td{padding:8px;border-bottom:1px solid #f1f5f9} .cb-tabla .n,.cb-tabla th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .cb-tabla small{color:#64748b;font-weight:400} .cb-tot td{font-weight:700;border-top:2px solid #0b4f8a}
+  .cb-fila{cursor:pointer} .cb-fila:hover,.cb-fila.a{background:#eff6ff}
+  .est{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:4px}
+  .est-pagado{background:#dcfce7;color:#166534} .est-vencido{background:#fee2e2;color:#991b1b} .est-vence_pronto{background:#fef3c7;color:#92400e} .est-por_vencer{background:#e0e7ff;color:#3730a3}
+  .cb-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap} .cb-head h3{margin:0}
+  .cb-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;margin-top:8px}
+  .cb-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:#475569} .cb-form .ancho{grid-column:span 2}
+  .cb-form select,.cb-form input{padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:#fff;color:#0f172a}
+  .cb-aviso{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-left:4px solid #f97316;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -368,6 +382,7 @@ const VISTAS = [
   ['entradas', 'ticket', 'Entradas por emitir', 'crear_paquetes', 'paquetes'],
   ['operativo', 'printer', 'Operativo del día', 'imprimir_operativo', 'operativo'],
   ['ganancias', 'trending-up', 'Ganancias', ['ver_administracion', 'ver_pagos'], null, 'Administración'],
+  ['cobros', 'hand-coins', 'Cuentas por cobrar', 'ver_pagos', null, 'Administración'],
   ['boletas', 'receipt', 'Boletas', 'ver_boletas', null, 'Administración'],
   ['agencias', 'briefcase', 'Agencias', 'ver_agencias', null, 'Administración'],
   ['control', 'chart-column', 'Control', 'ver_control', null, 'Administración'],
@@ -400,7 +415,7 @@ async function ir(v) {
   clearInterval(timers.recargar);
   clearInterval(timers.reloj);
   const f = { hoy: vHoy, reservas: vReservas, operaciones: vOperaciones, tablero: vTablero, vivo: vVivo, nueva: vNueva, paquetes: vPaquetes, entradas: vEntradas, operativo: vOperativo, reportes: vReportes, config: vConfig,
-    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas, control: vControl }[v];
+    ganancias: vGanancias, boletas: vBoletas, agencias: vAgencias, archivo: vArchivo, proformas: vProformas, control: vControl, cobros: vCobros }[v];
   await f();
   if (v === 'operaciones' || v === 'vivo' || v === 'hoy') timers.recargar = setInterval(() => { if (!document.hidden && !$('#lat').classList.contains('abierto') && !$('.pop')) Promise.all([cargar(), S.vista === 'vivo' ? cargarAviones() : null]).then(() => (S.vista === 'vivo' ? pintarVivo() : S.vista === 'hoy' ? pintarHoy() : pintarOperaciones())); }, 45000);
 }
@@ -1219,6 +1234,11 @@ async function vHoy() {
   if (S.filtro === 'sin_fecha') S.filtro = 'por_asignar';
   await Promise.all([cargar(), bloquesHoy().proximos ? cargarProximos() : null]);
   pintarHoy();
+  // Recordatorio de cobros: lo vencido y lo que vence pronto (solo con permiso "Ver pagos").
+  const cob = await api('/api/op/cobros/cuentas');
+  if (cob.ok && S.vista === 'hoy' && (cob.data.vencido > 0 || cob.data.vence_pronto > 0)) {
+    $('#vista').insertAdjacentHTML('afterbegin', `<div class="caja cb-aviso"><b>Cobros a agencias</b>${cob.data.vencido > 0 ? `<span class="est est-vencido">Vencido ${dinero(cob.data.vencido)}</span>` : ''}${cob.data.vence_pronto > 0 ? `<span class="est est-vence_pronto">Vence pronto ${dinero(cob.data.vence_pronto)}</span>` : ''}<button class="btn-mini" data-ir="cobros">Ver cuentas</button></div>`);
+  }
   timers.reloj = setInterval(() => { if (S.vista !== 'hoy') return; const r = $('#reloj'); if (r) r.textContent = hhmm(ahoraMin()); document.querySelectorAll('[data-cuenta]').forEach(el => { el.textContent = faltan(Number(el.dataset.cuenta) - ahoraMin()); }); }, 20000);
 }
 function pintarHoy() {
@@ -1972,6 +1992,82 @@ document.addEventListener('click', ev => {
 setTimeout(revisarProformasNuevas, 4000);
 setInterval(revisarProformasNuevas, 30000);
 
+
+/* ---------- Cuentas por cobrar (cobros a agencias) ---------- */
+const CB = { corte: '', agencia: '' };
+const ETQ_ESTADO = { pagado: 'Pagado', vencido: 'Vencido', vence_pronto: 'Vence pronto', por_vencer: 'Por vencer' };
+const METODOS_COBRO = ['Transferencia', 'PayPal', 'Efectivo', 'Tarjeta', 'Cheque', 'Otro'];
+async function vCobros() {
+  if (!CB.corte) CB.corte = I.hoy;
+  $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
+  const r = await api('/api/op/cobros/cuentas?corte=' + CB.corte);
+  if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar.')}</div>`; return; }
+  const c = r.data;
+  const filas = c.agencias.map(a => `<tr class="cb-fila ${CB.agencia === a.agencia ? 'a' : ''}" data-cb-agencia="${esc(a.agencia)}">
+    <td><b>${esc(a.agencia)}</b><small> · plazo ${a.plazo} días</small></td>
+    <td class="n">${a.vencido > 0 ? `<span class="est est-vencido">${dinero(a.vencido)}</span>` : '—'}</td>
+    <td class="n">${a.vence_pronto > 0 ? `<span class="est est-vence_pronto">${dinero(a.vence_pronto)}</span>` : '—'}</td>
+    <td class="n">${dinero(a.por_vencer)}</td>
+    <td class="n"><b>${dinero(a.total)}</b></td></tr>`).join('');
+  $('#vista').innerHTML = cabeceraDia('Cuentas por cobrar', 'Lo que debe cada agencia a la fecha de corte', `<label class="cb-corte">Corte <input type="date" id="cbCorte" value="${CB.corte}"></label>`) +
+    `<div class="cb-kpis">
+       <div class="kpi"><div class="tile t-amb">${ic('hand-coins')}</div><div><b>${dinero(c.total)}</b><small>por cobrar</small></div></div>
+       <div class="kpi"><div class="tile t-amb">${ic('clock')}</div><div><b>${dinero(c.vence_pronto)}</b><small>vence pronto (3 días)</small></div></div>
+       <div class="kpi"><div class="tile t-rojo">${ic('triangle-alert')}</div><div><b>${dinero(c.vencido)}</b><small>vencido</small></div></div>
+     </div>
+     <div class="caja"><table class="cb-tabla"><tr><th>Agencia</th><th class="n">Vencido</th><th class="n">Vence pronto</th><th class="n">Por vencer</th><th class="n">Total</th></tr>
+       ${filas || '<tr><td colspan="5" class="vacio">Ninguna agencia debe nada a esta fecha.</td></tr>'}</table></div>
+     <div id="cbDetalle"></div>`;
+  if (CB.agencia) await cargarDetalleCobros();
+}
+async function cargarDetalleCobros() {
+  const box = $('#cbDetalle'); if (!box) return;
+  const r = await api(`/api/op/cobros/estado?agencia=${encodeURIComponent(CB.agencia)}&corte=${CB.corte}`);
+  if (!r.ok) { box.innerHTML = `<div class="caja vacio">${esc(r.data.error || 'No se pudo cargar.')}</div>`; return; }
+  const e = r.data;
+  const filas = e.reservas.map(x => `<tr>
+    <td><b>#${x.reserva}</b></td><td>${esc(x.cliente)}</td>
+    <td class="n">${dinero(x.total)}</td><td class="n">${dinero(x.abonos)}</td><td class="n">${dinero(x.descuento)}</td>
+    <td class="n"><b>${dinero(Math.max(0, x.saldo))}</b></td><td>${x.vence}</td>
+    <td><span class="est est-${x.estado}">${ETQ_ESTADO[x.estado] || x.estado}</span></td></tr>`).join('');
+  const movs = e.movimientos.length ? e.movimientos.map(m => `<tr><td>${m.fecha}</td><td>#${m.reserva}</td><td>${m.tipo === 'descuento' ? 'Descuento' : 'Abono'}</td><td>${esc(m.metodo)}</td><td>${esc(m.referencia)}</td><td class="n">${dinero(m.monto)}</td>
+    <td><button class="btn-mini" data-cb-anular="${m.id}">Anular</button></td></tr>`).join('') : '<tr><td colspan="7" class="vacio">Sin abonos ni descuentos todavía.</td></tr>';
+  const pendientes = e.reservas.filter(x => x.saldo > 0);
+  box.innerHTML = `<div class="caja">
+      <div class="cb-head"><h3>${esc(e.agencia)} <small>· corte ${e.corte}</small></h3>
+        <div class="acciones"><button class="btn-sec" data-cb-imprimir>Imprimir / PDF</button></div></div>
+      <table class="cb-tabla"><tr><th>Reserva</th><th>Cliente</th><th class="n">Total</th><th class="n">Abonos</th><th class="n">Descuento</th><th class="n">Saldo</th><th>Vence</th><th>Estado</th></tr>
+        ${filas || '<tr><td colspan="8" class="vacio">Sin servicios hasta esta fecha.</td></tr>'}
+        <tr class="cb-tot"><td colspan="2">Totales</td><td class="n">${dinero(e.subtotal)}</td><td class="n">${dinero(e.abonos)}</td><td class="n">${dinero(e.descuentos)}</td><td class="n"><b>${dinero(e.saldo)}</b></td><td colspan="2"></td></tr></table>
+    </div>
+    <div class="caja"><h3>Registrar pago o descuento</h3>
+      ${pendientes.length ? `<div class="cb-form">
+        <label>Reserva<select id="cbReserva">${pendientes.map(x => `<option value="${x.reserva}" data-saldo="${Math.max(0, x.saldo)}">#${x.reserva} · ${esc(x.cliente)} · falta ${dinero(x.saldo)}</option>`).join('')}</select></label>
+        <label>Tipo<select id="cbTipo"><option value="abono">Abono (pago)</option><option value="descuento">Descuento</option></select></label>
+        <label>Monto (US$)<input id="cbMonto" type="number" step="0.01" min="0"></label>
+        <label>Método<select id="cbMetodo">${METODOS_COBRO.map(m => `<option>${m}</option>`).join('')}</select></label>
+        <label>Referencia<input id="cbRef" maxlength="80" placeholder="# de comprobante"></label>
+        <label>Fecha<input id="cbFecha" type="date" value="${CB.corte}"></label>
+        <label class="ancho">Nota<input id="cbNota" maxlength="200"></label>
+        <div class="acciones"><button class="btn" data-cb-guardar>Guardar</button></div></div>` : '<div class="vacio">Todas las reservas de esta agencia están pagadas.</div>'}
+    </div>
+    <div class="caja"><h3>Movimientos</h3><table class="cb-tabla"><tr><th>Fecha</th><th>Reserva</th><th>Tipo</th><th>Método</th><th>Referencia</th><th class="n">Monto</th><th></th></tr>${movs}</table></div>`;
+}
+document.addEventListener('click', async ev => {
+  const t = ev.target;
+  const ag = t.closest('[data-cb-agencia]');
+  if (ag) { CB.agencia = ag.dataset.cbAgencia; return vCobros(); }
+  if (t.closest('[data-cb-imprimir]')) return window.open(`/api/op/cobros/imprimir?agencia=${encodeURIComponent(CB.agencia)}&corte=${CB.corte}`, '_blank');
+  const an = t.closest('[data-cb-anular]');
+  if (an) { if (!confirm('¿Anular este movimiento? Queda en el historial como anulado.')) return; const r = await api('/api/op/cobros/anular', { id: Number(an.dataset.cbAnular) }); aviso(r.ok ? 'Movimiento anulado.' : (r.data.error || 'No se pudo anular.')); return vCobros(); }
+  if (t.closest('[data-cb-guardar]')) {
+    const sel = $('#cbReserva'), monto = Number($('#cbMonto').value);
+    const r = await api('/api/op/cobros/movimiento', { agencia: CB.agencia, reserva: sel.value, tipo: $('#cbTipo').value, monto, metodo: $('#cbMetodo').value, referencia: $('#cbRef').value.trim(), fecha: $('#cbFecha').value, nota: $('#cbNota').value.trim() });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
+    aviso('Movimiento guardado.'); return vCobros();
+  }
+});
+document.addEventListener('change', e => { if (e.target.id === 'cbCorte') { CB.corte = e.target.value; vCobros(); } });
 </script>
 </body>
 </html>

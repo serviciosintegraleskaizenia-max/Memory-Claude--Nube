@@ -325,6 +325,12 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       cantidad INTEGER NOT NULL DEFAULT 1, precio NUMERIC NOT NULL DEFAULT 0, cobra BOOLEAN NOT NULL DEFAULT FALSE, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await q('CREATE INDEX IF NOT EXISTS op_servicio_cortesias_op ON op_servicio_cortesias (op_id)');
     await q('ALTER TABLE op_servicios ADD COLUMN IF NOT EXISTS extras NUMERIC NOT NULL DEFAULT 0');
+    // Cobros a agencias: plazo de pago por agencia y movimientos (abonos y descuentos) por reserva.
+    await q('ALTER TABLE op_agencias ADD COLUMN IF NOT EXISTS plazo_dias INTEGER NOT NULL DEFAULT 15');
+    await q(`CREATE TABLE IF NOT EXISTS op_abonos_agencia (id SERIAL PRIMARY KEY, agencia TEXT NOT NULL, reserva TEXT NOT NULL,
+      tipo TEXT NOT NULL DEFAULT 'abono', monto NUMERIC NOT NULL, metodo TEXT NOT NULL DEFAULT 'Transferencia', referencia TEXT NOT NULL DEFAULT '',
+      fecha DATE NOT NULL DEFAULT CURRENT_DATE, nota TEXT NOT NULL DEFAULT '', anulado BOOLEAN NOT NULL DEFAULT FALSE,
+      registrado_por TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
     // Reloj de Operaciones: usa el mismo número de reserva que el panel de correo (clasificacion.id).
     // El tiempo del correo sigue en tiempo_reserva; este guarda el trabajo hecho aquí, para sumarlo después.
     await q(`CREATE TABLE IF NOT EXISTS op_tiempos (id SERIAL PRIMARY KEY, reserva_id INTEGER NOT NULL, usuario VARCHAR(50) NOT NULL,
@@ -1667,6 +1673,140 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       }
       if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
       // ---------- Administración (gerencia) ----------
+      // ---------- Cobros a agencias (permiso "Ver pagos"): estado de cuenta, abonos y descuentos, cuentas por cobrar ----------
+      if (url.startsWith('/api/op/cobros/')) {
+        const hoyIso = new Date().toISOString().slice(0, 10);
+        const fechaOk = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+        const redondo = n => Math.round(Number(n || 0) * 100) / 100;
+        const sumar = (arr, fn) => redondo(arr.reduce((a, x) => a + fn(x), 0));
+        const diasEntre = (a, b) => (Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000;
+        const sumarDias = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+        // Estado de cuenta de una agencia a una fecha de corte: reservas (grupos de servicios), saldos y estados.
+        const estadoCuenta = async (agencia, corte) => {
+          const ag = (await client.query('SELECT nombre, plazo_dias FROM op_agencias WHERE lower(nombre) = lower($1) LIMIT 1', [agencia])).rows[0];
+          const plazo = ag ? Number(ag.plazo_dias) || 15 : 15;
+          const filas = (await client.query(`SELECT o.servicio_id AS reserva, o.fecha, o.precio, o.extras, c.nombre_cliente, c.actividad, c.tipo_servicio
+            FROM op_servicios o LEFT JOIN clasificacion c ON c.id = o.servicio_id
+            WHERE lower(o.agencia) = lower($1) AND o.estado <> 'cancelado' AND o.precio IS NOT NULL AND o.fecha <> '' AND o.fecha <= $2
+            ORDER BY o.fecha, o.id`, [agencia, corte])).rows;
+          const movs = (await client.query(`SELECT id, reserva, tipo, monto, metodo, referencia, to_char(fecha, 'YYYY-MM-DD') AS fecha, nota
+            FROM op_abonos_agencia WHERE lower(agencia) = lower($1) AND NOT anulado ORDER BY fecha, id`, [agencia])).rows
+            .map(m => ({ ...m, monto: Number(m.monto) }));
+          const grupos = new Map();
+          for (const s of filas) {
+            const k = String(s.reserva);
+            const g = grupos.get(k) || { reserva: s.reserva, cliente: s.nombre_cliente || '', servicios: [], total: 0, ultima: '' };
+            const monto = Number(s.precio || 0) + Number(s.extras || 0);
+            g.servicios.push({ fecha: s.fecha, servicio: s.actividad || s.tipo_servicio || 'Servicio', monto: redondo(monto) });
+            g.total = redondo(g.total + monto);
+            if (s.fecha > g.ultima) g.ultima = s.fecha;
+            grupos.set(k, g);
+          }
+          const reservas = [...grupos.values()].map(g => {
+            const mios = movs.filter(m => String(m.reserva) === String(g.reserva));
+            const descuento = sumar(mios.filter(m => m.tipo === 'descuento'), m => m.monto);
+            const abonos = sumar(mios.filter(m => m.tipo === 'abono'), m => m.monto);
+            const saldo = redondo(g.total - descuento - abonos);
+            const vence = sumarDias(g.ultima, plazo);
+            const estado = saldo <= 0 ? 'pagado' : vence < corte ? 'vencido' : diasEntre(corte, vence) <= 3 ? 'vence_pronto' : 'por_vencer';
+            return { ...g, descuento, abonos, saldo, vence, estado };
+          });
+          return { agencia: ag ? ag.nombre : agencia, corte, plazo, reservas, movimientos: movs,
+            subtotal: sumar(reservas, r => r.total), descuentos: sumar(reservas, r => r.descuento), abonos: sumar(reservas, r => r.abonos), saldo: sumar(reservas, r => Math.max(0, r.saldo)) };
+        };
+        const cuentasPorCobrar = async corte => {
+          const nombres = (await client.query(`SELECT DISTINCT o.agencia FROM op_servicios o WHERE o.agencia <> '' AND o.estado <> 'cancelado' AND o.precio IS NOT NULL AND o.fecha <> '' AND o.fecha <= $1`, [corte])).rows.map(r => r.agencia);
+          const lista = [];
+          for (const a of nombres) {
+            const e = await estadoCuenta(a, corte);
+            const por = est => sumar(e.reservas.filter(r => r.estado === est), r => Math.max(0, r.saldo));
+            const fila = { agencia: e.agencia, plazo: e.plazo, vencido: por('vencido'), vence_pronto: por('vence_pronto'), por_vencer: por('por_vencer'), total: sumar(e.reservas, r => Math.max(0, r.saldo)) };
+            if (fila.total > 0) lista.push(fila);
+          }
+          lista.sort((x, y) => y.vencido - x.vencido || y.total - x.total);
+          return { corte, agencias: lista, vencido: sumar(lista, x => x.vencido), vence_pronto: sumar(lista, x => x.vence_pronto), por_vencer: sumar(lista, x => x.por_vencer), total: sumar(lista, x => x.total) };
+        };
+        pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede ver las cuentas por cobrar.');
+        if (req.method === 'GET' && url === '/api/op/cobros/cuentas') {
+          return json(res, 200, await cuentasPorCobrar(fechaOk(p.get('corte')) || hoyIso));
+        }
+        if (req.method === 'GET' && url === '/api/op/cobros/estado') {
+          const agencia = txt(p.get('agencia'), 120);
+          if (!agencia) throw error('Falta la agencia.', 400);
+          return json(res, 200, await estadoCuenta(agencia, fechaOk(p.get('corte')) || hoyIso));
+        }
+        if (req.method === 'POST' && url === '/api/op/cobros/movimiento') {
+          const f = await leerCuerpo(req);
+          const agencia = txt(f.agencia, 120), reserva = String(Number(f.reserva) || 0);
+          const tipo = f.tipo === 'descuento' ? 'descuento' : 'abono';
+          const monto = redondo(f.monto);
+          if (!agencia || reserva === '0') throw error('Elige la agencia y la reserva.', 400);
+          if (!(monto > 0)) throw error('El monto tiene que ser mayor que cero.', 400);
+          const pertenece = (await client.query('SELECT 1 FROM op_servicios WHERE lower(agencia) = lower($1) AND servicio_id = $2 LIMIT 1', [agencia, Number(reserva)])).rowCount;
+          if (!pertenece) throw error('Esa reserva no es de esa agencia.', 400);
+          const e = await estadoCuenta(agencia, '9999-12-31');
+          const r = e.reservas.find(x => String(x.reserva) === reserva);
+          if (r && monto > Math.max(0, r.saldo) + 0.009) throw error(`Ese monto es mayor que lo que falta (US$ ${Math.max(0, r.saldo).toFixed(2)}).`, 400);
+          const ins = await client.query(`INSERT INTO op_abonos_agencia (agencia, reserva, tipo, monto, metodo, referencia, fecha, nota, registrado_por)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            [agencia, reserva, tipo, monto, txt(f.metodo, 40) || 'Transferencia', txt(f.referencia, 80), fechaOk(f.fecha) || hoyIso, txt(f.nota, 200), u.usuario]);
+          await registrar(u, 'op_cobro', 'agencias', ins.rows[0].id, '', '', `${tipo} US$ ${monto} · ${agencia} · reserva ${reserva}`);
+          return json(res, 200, { ok: true, id: ins.rows[0].id });
+        }
+        if (req.method === 'POST' && url === '/api/op/cobros/anular') {
+          const f = await leerCuerpo(req);
+          const r = await client.query('UPDATE op_abonos_agencia SET anulado = TRUE WHERE id = $1 AND NOT anulado RETURNING agencia, reserva, tipo, monto', [Number(f.id) || 0]);
+          if (!r.rowCount) throw error('Ese movimiento no existe o ya está anulado.', 404);
+          await registrar(u, 'op_cobro_anulado', 'agencias', Number(f.id) || 0, '', '', `${r.rows[0].tipo} US$ ${r.rows[0].monto} · ${r.rows[0].agencia}`);
+          return json(res, 200, { ok: true });
+        }
+        if (req.method === 'GET' && url === '/api/op/cobros/imprimir') {
+          const agencia = txt(p.get('agencia'), 120);
+          if (!agencia) throw error('Falta la agencia.', 400);
+          const e = await estadoCuenta(agencia, fechaOk(p.get('corte')) || hoyIso);
+          const emp = (await client.query('SELECT nombre, marca_nombre, rnc, direccion, logo IS NOT NULL AS logo FROM empresa_datos WHERE id = 1')).rows[0] || {};
+          const esc2 = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+          const d = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const fmtF = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+          const etiqueta = { pagado: 'Pagado', vencido: 'Vencido', vence_pronto: 'Vence pronto', por_vencer: 'Por vencer' };
+          const filasR = e.reservas.map(r => `<tr class="res"><td><b>#${r.reserva}</b></td><td>${esc2(r.cliente)}</td><td class="n">${d(r.total)}</td><td class="n">${d(r.abonos)}</td><td class="n">${d(r.descuento)}</td><td class="n"><b>${d(Math.max(0, r.saldo))}</b></td><td>${fmtF(r.vence)}</td><td><span class="st st-${r.estado}">${etiqueta[r.estado]}</span></td></tr>` +
+            r.servicios.map(s => `<tr class="sv"><td></td><td colspan="2">${fmtF(s.fecha)} · ${esc2(s.servicio)}</td><td class="n">${d(s.monto)}</td><td colspan="4"></td></tr>`).join('')).join('');
+          const filasM = e.movimientos.length ? e.movimientos.map(m => `<tr><td>${fmtF(m.fecha)}</td><td>#${m.reserva}</td><td>${m.tipo === 'descuento' ? 'Descuento' : 'Abono'}</td><td>${esc2(m.metodo)}</td><td>${esc2(m.referencia)}</td><td class="n">${d(m.monto)}</td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Sin abonos ni descuentos registrados.</td></tr>';
+          const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Estado de cuenta · ${esc2(e.agencia)}</title>
+<style>
+ @page { size: letter; margin: 14mm; }
+ *{box-sizing:border-box} body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;font-size:12px}
+ .cab{background:linear-gradient(120deg,#0b1f3a,#134e8a 60%,#1679c2);color:#fff;border-radius:14px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}
+ .pas{background:#fff;border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:12px}
+ .pas img{height:56px;max-width:170px;object-fit:contain} .emp{color:#0b1f3a;font-size:11.5px;line-height:1.5} .emp b{font-size:13px}
+ .tit{text-align:right} .tit h1{margin:0;font-size:22px;letter-spacing:.3px} .tit div{opacity:.9;line-height:1.6;font-size:12px}
+ .chip{display:inline-block;background:#f97316;color:#fff;border-radius:999px;padding:2px 10px;font-weight:700;font-size:11px;margin-top:4px}
+ .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+ .kpi{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px} .kpi small{display:block;color:#64748b;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+ .kpi b{font-size:18px} .ok b{color:#15803d} .warn b{color:#b45309} .bad b{color:#b91c1c}
+ table{width:100%;border-collapse:collapse} th{background:#0b1f3a;color:#e2e8f0;text-align:left;padding:7px 8px;font-size:11px} td{padding:6px 8px;border-bottom:1px solid #eef2f7}
+ tr.res td{background:#f8fafc;font-weight:600} tr.sv td{color:#475569;font-size:11px}
+ .n{text-align:right;font-variant-numeric:tabular-nums} .vacio{color:#64748b;text-align:center}
+ .st{border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700} .st-pagado{background:#dcfce7;color:#166534} .st-vencido{background:#fee2e2;color:#991b1b} .st-vence_pronto{background:#fef3c7;color:#92400e} .st-por_vencer{background:#e0e7ff;color:#3730a3}
+ h2{font-size:13px;color:#0b1f3a;margin:16px 0 6px} .total{margin-left:auto;width:300px;background:#0b1f3a;color:#fff;border-radius:12px;padding:12px 14px;margin-top:12px}
+ .total p{display:flex;justify-content:space-between;margin:3px 0;opacity:.9} .total .g{font-size:18px;font-weight:800;border-top:1px solid #334155;padding-top:6px;margin-top:6px;opacity:1} .total .g span:last-child{color:#fb923c}
+ .pie{margin-top:14px;color:#64748b;font-size:10.5px;display:flex;justify-content:space-between}
+</style></head><body>
+<div class="cab"><div style="display:flex;gap:14px;align-items:center"><div class="pas">${emp.logo ? '<img src="/empresa/logo" alt="">' : ''}<div class="emp"><b>${esc2(emp.nombre || '')}</b><br>${emp.rnc ? 'RNC ' + esc2(emp.rnc) + '<br>' : ''}${esc2(emp.direccion || '')}</div></div></div>
+<div class="tit"><h1>Estado de cuenta</h1><div>Agencia <b>${esc2(e.agencia)}</b><br>Corte ${fmtF(e.corte)} · US$</div><span class="chip">Pago a ${e.plazo} días</span></div></div>
+<div class="kpis"><div class="kpi"><small>Servicios</small><b>${d(e.subtotal)}</b></div><div class="kpi ok"><small>Abonado</small><b>${d(e.abonos)}</b></div><div class="kpi"><small>Descuentos</small><b>${d(e.descuentos)}</b></div><div class="kpi bad"><small>Por pagar</small><b>${d(e.saldo)}</b></div></div>
+<h2>Reservas</h2>
+<table><tr><th>Reserva</th><th>Cliente</th><th class="n">Total</th><th class="n">Abonos</th><th class="n">Descuento</th><th class="n">Saldo</th><th>Vence</th><th>Estado</th></tr>${filasR || '<tr><td colspan="8" class="vacio">Sin servicios hasta la fecha de corte.</td></tr>'}</table>
+<h2>Abonos y descuentos</h2>
+<table><tr><th>Fecha</th><th>Reserva</th><th>Tipo</th><th>Método</th><th>Referencia</th><th class="n">Monto</th></tr>${filasM}</table>
+<div class="total"><p><span>Servicios</span><span>${d(e.subtotal)}</span></p><p><span>Descuentos</span><span>-${d(e.descuentos)}</span></p><p><span>Abonos</span><span>-${d(e.abonos)}</span></p><p class="g"><span>Por pagar</span><span>${d(e.saldo)}</span></p></div>
+<div class="pie"><span>${esc2(emp.marca_nombre || emp.nombre || '')}${emp.rnc ? ' · RNC ' + esc2(emp.rnc) : ''}</span><span>Generado con Zentralia</span></div>
+</body></html>`;
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          return res.end(html);
+        }
+        return json(res, 404, { error: 'Ruta no encontrada' });
+      }
       // ---------- Pagos (permiso "Ver pagos"): cuentas, pagos por reserva, comprobantes y verificación ----------
       if (req.method === 'GET' && url === '/api/op/pagos') {
         pide('ver_pagos', 'Solo quien tiene el permiso "Ver pagos" puede ver los pagos.');
