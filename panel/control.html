@@ -677,6 +677,8 @@ window.addEventListener('resize', () => {
   timerTamano = setTimeout(() => { if (datos) pintar(document.getElementById('desde').value, document.getElementById('hasta').value); }, 200);
 });
 document.getElementById('btnPanel').addEventListener('click', () => { window.location.href = '/'; });
+// Dentro de Operaciones (marco) no se muestra el botón de volver al panel de correo.
+if (window.top !== window.self) document.getElementById('btnPanel').hidden = true;
 
 /* ---------- En vivo, Reparto ahora y Actividad ---------- */
 

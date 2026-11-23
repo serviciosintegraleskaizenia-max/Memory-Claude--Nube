@@ -393,7 +393,7 @@ const puedeVista = v => { const x = VISTAS.find(y => y[0] === v); return x && []
 function pintarMenu() {
   const e = I.empresa || {};
   const nombre = e.marca_nombre || e.nombre || 'Mi empresa';
-  let html = `<div class="marca"><div class="logoE">${e.logo ? `<img src="/empresa/logo" alt="">` : esc(iniciales(nombre))}</div><div><b>${esc(nombre)}</b><small>Operaciones</small></div></div>`;
+  let html = `<div class="marca"><div class="logoE">${e.logo ? `<img src="/empresa/logo" alt="">` : esc(iniciales(nombre))}</div><div><b>${esc(nombre)}</b><small>Reservas y operaciones</small></div></div>`;
   let seccion = '';
   for (const [k, icono, titulo, perm, mod, sec] of VISTAS) {
     if (!puedeVista(k)) continue;
@@ -1558,7 +1558,7 @@ function pintarGanancias() {
 // Boletas: venta contra costo de cada reserva (documento interno de administración).
 const BL = { datos: null, q: '' };
 /* ================= Tiempos por reserva: correo + operaciones (mismo número de reserva) ================= */
-const TM = { desde: '', hasta: '' };
+const TM = { desde: '', hasta: '', pag: 0 };
 const minTxt = s => s === null || s === undefined ? '—' : s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor((s % 3600) / 60) + ' min' : Math.round(s / 60) + ' min';
 // Control (gerencia): la pantalla de Control de siempre (en vivo, reparto, gráficas) y, debajo, los tiempos por reserva.
 async function vControl() {
@@ -1567,7 +1567,10 @@ async function vControl() {
   const r = await api(`/api/op/tiempos-reserva?desde=${TM.desde}&hasta=${TM.hasta}`);
   if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar')}</div>`; return; }
   const d = r.data;
-  const filas = d.reservas.map(x => `<tr style="border-top:1px solid var(--borde)">
+  const POR_PAG = 10, npag = Math.max(1, Math.ceil(d.reservas.length / POR_PAG));
+  TM.pag = Math.min(TM.pag || 0, npag - 1);
+  const pagina = d.reservas.slice(TM.pag * POR_PAG, TM.pag * POR_PAG + POR_PAG);
+  const filas = pagina.map(x => `<tr style="border-top:1px solid var(--borde)">
       <td style="padding:7px"><b>#${x.reserva}</b><div class="sub">${esc(x.cliente || '')}</div></td><td style="padding:7px">${esc(x.agencia || '')}</td>
       <td style="padding:7px">${esc(x.asesor || '—')}</td><td style="padding:7px">${minTxt(x.correo_seg)}</td>
       <td style="padding:7px">${esc(x.operador || '—')}</td><td style="padding:7px">${minTxt(x.operaciones_seg)}</td>
@@ -1579,9 +1582,11 @@ async function vControl() {
     <div class="caja"><b>Promedio por reserva:</b> correo <b>${minTxt(d.promedio.correo_seg)}</b> · Operaciones <b>${minTxt(d.promedio.operaciones_seg)}</b> · total <b>${minTxt(d.promedio.total_seg)}</b></div>
     <div class="caja" style="overflow:auto">${d.reservas.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;color:var(--suave)"><th style="padding:7px">Reserva</th><th style="padding:7px">Agencia</th><th style="padding:7px">Asesor (correo)</th><th style="padding:7px">Tiempo en correo</th><th style="padding:7px">Operador</th><th style="padding:7px">Tiempo en Operaciones</th><th style="padding:7px">Total</th></tr></thead>
-      <tbody>${filas}</tbody></table>` : '<div class="vacio">No hay reservas con tiempo en estas fechas.</div>'}</div>`;
-  $('#tmDesde').onchange = e => { TM.desde = e.target.value; vControl(); };
-  $('#tmHasta').onchange = e => { TM.hasta = e.target.value; vControl(); };
+      <tbody>${filas}</tbody></table><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px"><span>${d.reservas.length} reservas · página ${TM.pag + 1} de ${npag}</span><span><button class="btn s" id="tmAnt" ${TM.pag <= 0 ? 'disabled' : ''}>Anterior</button> <button class="btn s" id="tmSig" ${TM.pag >= npag - 1 ? 'disabled' : ''}>Siguiente</button></span></div>` : '<div class="vacio">No hay reservas con tiempo en estas fechas.</div>'}</div>`;
+  $('#tmDesde').onchange = e => { TM.desde = e.target.value; TM.pag = 0; vControl(); };
+  $('#tmHasta').onchange = e => { TM.hasta = e.target.value; TM.pag = 0; vControl(); };
+  if ($('#tmAnt')) $('#tmAnt').onclick = () => { TM.pag--; vControl(); };
+  if ($('#tmSig')) $('#tmSig').onclick = () => { TM.pag++; vControl(); };
 }
 async function vBoletas() {
   $('#vista').innerHTML = '<div class="vacio">Cargando…</div>';
