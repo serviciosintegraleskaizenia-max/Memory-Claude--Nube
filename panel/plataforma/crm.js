@@ -12,7 +12,7 @@
 // Regla de Meta: en WhatsApp, Instagram y Messenger solo se puede escribir libremente dentro de las 24 h
 // desde el último mensaje de la persona. Fuera de ese plazo, el seguimiento queda como "requiere plantilla".
 
-const CANALES = { whatsapp: 'WhatsApp', instagram: 'Instagram', messenger: 'Messenger', tiktok: 'TikTok', web: 'Web / chat', manual: 'Carga manual' };
+const CANALES = { whatsapp: 'WhatsApp', instagram: 'Instagram', messenger: 'Messenger', tiktok: 'TikTok', web: 'Web / chat', correo: 'Correo', manual: 'Carga manual' };
 // Redes sociales que se guardan en la ficha (mismas claves que los canales).
 const REDES_CRM = ['instagram', 'messenger', 'tiktok'];
 const redesDeCanal = (canal, identificador) => (REDES_CRM.includes(canal) ? { [canal]: identificador } : {});
@@ -34,6 +34,54 @@ const PALABRAS = [
 const PAGINA_CHATWOOT = 25;
 const PAGINAS_MAX = 8;
 
+// ---------- Reglas del CRM sin base de datos (se prueban en crm.test.js) ----------
+const HORA_MS = 3600e3;
+// «Te toca a ti» (CRM-2): la persona escribió después de nuestro último mensaje y llevamos esperando 2 h o más.
+function prioridadDe(c, ahora = Date.now()) {
+  const entrante = c.ultimo_entrante ? new Date(c.ultimo_entrante).getTime() : 0;
+  const saliente = c.ultimo_saliente ? new Date(c.ultimo_saliente).getTime() : 0;
+  if (!entrante || entrante <= saliente) return null;
+  const horas = (ahora - entrante) / HORA_MS;
+  if (horas < 2) return null;
+  return { motivo: 'Sin responder', detalle: horas >= 24 ? `${Math.floor(horas / 24)} d` : `${Math.floor(horas)} h`, nivel: horas >= 24 ? 'rojo' : horas >= 8 ? 'ambar' : 'verde', horas };
+}
+// Tablero por estado (CRM-3): lo que espera nuestra respuesta, lo que tiene visita y lo que atiende el asistente.
+function estadoAutoDe(c, citasFuturas = 0, ahora = Date.now()) {
+  if (prioridadDe(c, ahora)) return 'te_toca';
+  if (citasFuturas > 0) return 'con_visita';
+  return 'con_asistente';
+}
+// Botones de la ficha (CRM-3): cambian las etiquetas de la persona.
+const ACCIONES = {
+  lo_llevo_yo: { titulo: 'Lo llevo yo', add: 'lo llevo yo' },
+  devolver_asistente: { titulo: 'Devolver a asistente', quitar: 'lo llevo yo' },
+  es_publicidad: { titulo: 'Es publicidad', add: 'publicidad' }
+};
+function etiquetasConAccion(etiquetas, accion) {
+  const a = ACCIONES[accion];
+  if (!a) return null;
+  const set = new Set(Array.isArray(etiquetas) ? etiquetas : []);
+  if (a.add) set.add(a.add);
+  if (a.quitar) set.delete(a.quitar);
+  return [...set].slice(0, 20);
+}
+// Números permitidos del modo prueba (CRM-8): al menos uno, formato internacional, sin repetir, como mucho diez.
+const MAX_PERMITIDOS = 10;
+function revisarPermitidos(entrada) {
+  if (!Array.isArray(entrada)) return { error: 'Escribe al menos un número.' };
+  const limpios = [];
+  for (const [i, x] of entrada.entries()) {
+    const t = String(x ?? '').replace(/[\s()-]/g, '');
+    if (!t) continue;
+    if (!/^\+?\d{6,15}$/.test(t)) return { error: `El número ${i + 1} no es válido. Usa el formato internacional, por ejemplo +18095551234.`, indice: i };
+    const solo = t.replace(/^\+/, '');
+    if (!limpios.includes(solo)) limpios.push(solo);
+  }
+  if (!limpios.length) return { error: 'Escribe al menos un número.' };
+  if (limpios.length > MAX_PERMITIDOS) return { error: `Como mucho ${MAX_PERMITIDOS} números.` };
+  return { numeros: limpios };
+}
+
 module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveIA }) {
   const error = (m, codigo = 400) => Object.assign(new Error(m), { codigo });
   const texto = (v, max = 300) => String(v ?? '').trim().slice(0, max);
@@ -54,6 +102,11 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     await client.query("ALTER TABLE crm_contactos ADD COLUMN IF NOT EXISTS direccion TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE crm_contactos ADD COLUMN IF NOT EXISTS redes JSONB NOT NULL DEFAULT '{}'::jsonb");
     await client.query('CREATE INDEX IF NOT EXISTS crm_contactos_ultimo ON crm_contactos (ultimo_entrante)');
+    // Visitas y citas del CRM (CRM-5): separadas del calendario de operaciones.
+    await client.query(`CREATE TABLE IF NOT EXISTS crm_citas (id SERIAL PRIMARY KEY,
+      contacto_id INTEGER NOT NULL REFERENCES crm_contactos(id) ON DELETE CASCADE, cuando TIMESTAMPTZ NOT NULL,
+      nota TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'programada', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query('CREATE INDEX IF NOT EXISTS crm_citas_cuando ON crm_citas (cuando)');
     await client.query(`CREATE TABLE IF NOT EXISTS crm_mensajes (
       id SERIAL PRIMARY KEY, contacto_id INTEGER NOT NULL REFERENCES crm_contactos(id) ON DELETE CASCADE,
       direccion TEXT NOT NULL, texto TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -107,11 +160,23 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const cw = chatwoot ? await chatwoot().catch(() => null) : null;
     const sync = (await client.query("SELECT valor FROM crm_config WHERE clave = 'sincronizacion'")).rows[0];
     const plantilla = (await client.query("SELECT valor FROM crm_config WHERE clave = 'plantilla_wa'")).rows[0];
+    const conexion = Boolean(cw && cw.url && cw.cuenta && cw.token);
+    const personas = Number((await client.query('SELECT COUNT(*)::int AS n FROM crm_contactos')).rows[0].n);
+    const citas = Number((await client.query('SELECT COUNT(*)::int AS n FROM crm_citas')).rows[0].n);
+    const revisadas = (await client.query("SELECT 1 FROM crm_config WHERE clave = 'etapas_revisadas'")).rowCount > 0;
+    const ajustes = (await client.query("SELECT 1 FROM crm_config WHERE clave = 'ajustes_crm'")).rowCount > 0;
     return {
       puedeVer: true, servicio: await cuenta.tiene('crm'), editarEtapas: puedeEditarEtapas(u),
-      chatwoot: Boolean(cw && cw.url && cw.cuenta && cw.token), sincronizado: sync ? sync.valor : null,
+      chatwoot: conexion, sincronizado: sync ? sync.valor : null,
       ia: Boolean(claveIA && await claveIA().catch(() => '')), plantilla: plantilla ? plantilla.valor : null,
-      etapas: await etapas(), canales: CANALES, etiquetas_ia: ETIQUETAS_IA
+      etapas: await etapas(), canales: CANALES, etiquetas_ia: ETIQUETAS_IA,
+      pasos: [
+        { clave: 'conexion', titulo: 'Conectar los mensajes', hecho: conexion, ayuda: 'Chatwoot o WhatsApp directo. Lo conecta el Programador en Operaciones.' },
+        { clave: 'etapas', titulo: 'Revisar las etapas de venta', hecho: revisadas, ayuda: 'Nombres y etapas que usa tu negocio.' },
+        { clave: 'persona', titulo: 'Cargar la primera persona', hecho: personas > 0, ayuda: 'Con «+ Nueva persona» o esperando un mensaje.' },
+        { clave: 'cita', titulo: 'Agendar la primera visita', hecho: citas > 0, ayuda: 'Desde la ficha de una persona, pestaña Visitas.' },
+        { clave: 'avisos', titulo: 'Elegir cómo te avisamos', hecho: ajustes, ayuda: 'Sonido y modo prueba, en Ajustes del CRM.' }
+      ]
     };
   }
 
@@ -178,10 +243,17 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const filas = (await client.query(`SELECT ${COLUMNAS} FROM crm_contactos ${f.sql} ORDER BY COALESCE(ultimo_entrante, actualizado) DESC LIMIT 1200`, f.val)).rows;
     const pendientes = (await client.query(`SELECT contacto_id, COUNT(*)::int AS n FROM crm_seguimientos WHERE estado IN ('pendiente','requiere_plantilla') GROUP BY contacto_id`)).rows;
     const pend = Object.fromEntries(pendientes.map(r => [r.contacto_id, r.n]));
+    const conVisita = Object.fromEntries((await client.query(`SELECT contacto_id, COUNT(*)::int AS n FROM crm_citas WHERE estado = 'programada' AND cuando >= NOW() GROUP BY contacto_id`)).rows.map(r => [r.contacto_id, r.n]));
+    const ahora = Date.now();
+    const conEstado = filas.map(x => ({ ...x, seguimientos: pend[x.id] || 0, estado_auto: estadoAutoDe(x, conVisita[x.id] || 0, ahora), prioridad: prioridadDe(x, ahora) }));
     return {
       columnas: cols.map(c => {
-        const de = filas.filter(x => x.etapa === c.clave).map(x => ({ ...x, seguimientos: pend[x.id] || 0 }));
+        const de = conEstado.filter(x => x.etapa === c.clave);
         return { clave: c.clave, nombre: c.nombre, activa: c.activa, total: de.length, contactos: de.slice(0, 80) };
+      }),
+      porEstado: ['te_toca', 'con_visita', 'con_asistente'].map(k => {
+        const de = conEstado.filter(x => x.estado_auto === k);
+        return { clave: k, total: de.length, contactos: de.slice(0, 80) };
       }),
       total: filas.length
     };
@@ -193,7 +265,8 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
     const mensajes = (await client.query(`SELECT id, direccion, texto, creado FROM crm_mensajes WHERE contacto_id = $1 ORDER BY creado DESC LIMIT 300`, [id])).rows;
     const historial = (await client.query(`SELECT id, tipo, detalle, quien, creado FROM crm_historial WHERE contacto_id = $1 ORDER BY creado DESC LIMIT 300`, [id])).rows;
     const seguimientos = (await client.query(`SELECT id, plazo, cuando, mensaje, estado, resultado, quien, creado, enviado FROM crm_seguimientos WHERE contacto_id = $1 ORDER BY cuando DESC LIMIT 50`, [id])).rows;
-    return { contacto: c, mensajes, historial, seguimientos, ventana_abierta: ventanaAbierta(c) };
+    const citas = (await client.query(`SELECT id, cuando, nota, estado FROM crm_citas WHERE contacto_id = $1 ORDER BY cuando DESC LIMIT 50`, [id])).rows;
+    return { contacto: c, mensajes, historial, seguimientos, citas, ventana_abierta: ventanaAbierta(c), prioridad: prioridadDe(c) };
   }
 
   // Redes de la ficha: solo las claves conocidas y texto corto.
@@ -498,8 +571,86 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
         [clave, nombre, i + 1, e.activa !== false]);
     }
     await client.query('UPDATE crm_etapas SET activa = FALSE WHERE NOT (clave = ANY($1::text[]))', [[...usadas]]);
+    await client.query(`INSERT INTO crm_config (clave, valor) VALUES ('etapas_revisadas', 'true') ON CONFLICT (clave) DO UPDATE SET valor = 'true'`);
     await registrar(u, 'crm_etapas', 'crm', 'etapas', '', '', 'editadas');
     return { ok: true };
+  }
+
+  // ---------- «Te toca a ti» (CRM-2), citas (CRM-5), acciones, novedades, ajustes y reintento (CRM-4, CRM-8) ----------
+  async function hoy() {
+    const ahora = Date.now();
+    const sinResponder = (await client.query(`SELECT ${COLUMNAS} FROM crm_contactos WHERE ultimo_entrante IS NOT NULL AND (ultimo_saliente IS NULL OR ultimo_saliente < ultimo_entrante) ORDER BY ultimo_entrante ASC LIMIT 200`)).rows;
+    const prioridades = sinResponder.map(c => ({ ...c, prioridad: prioridadDe(c, ahora) })).filter(x => x.prioridad)
+      .sort((a, b) => b.prioridad.horas - a.prioridad.horas).slice(0, 30);
+    const inicio = new Date(); inicio.setHours(0, 0, 0, 0);
+    const fin = new Date(inicio.getTime() + 2 * 24 * HORA_MS);
+    const citas = (await client.query(`SELECT k.id, k.cuando, k.nota, c.id AS contacto_id, c.nombre, c.telefono, c.correo, c.identificador FROM crm_citas k JOIN crm_contactos c ON c.id = k.contacto_id WHERE k.estado = 'programada' AND k.cuando >= $1 AND k.cuando < $2 ORDER BY k.cuando`, [inicio.toISOString(), fin.toISOString()])).rows;
+    const seguimientos = (await client.query(`SELECT s.id, s.cuando, s.mensaje, c.id AS contacto_id, c.nombre, c.telefono, c.correo, c.identificador FROM crm_seguimientos s JOIN crm_contactos c ON c.id = s.contacto_id WHERE s.estado IN ('pendiente','requiere_plantilla') AND s.cuando < $1 ORDER BY s.cuando LIMIT 30`, [fin.toISOString()])).rows;
+    return { prioridades, citas, seguimientos };
+  }
+  async function guardarCita(f, u) {
+    const id = Number(f.contacto_id) || 0;
+    if (!(await client.query('SELECT 1 FROM crm_contactos WHERE id = $1', [id])).rowCount) throw error('Esa persona ya no existe.', 404);
+    const cuando = new Date(String(f.cuando || ''));
+    if (Number.isNaN(cuando.getTime())) throw error('Elige la fecha y la hora de la visita.');
+    const nota = texto(f.nota, 300);
+    const r = await client.query(`INSERT INTO crm_citas (contacto_id, cuando, nota) VALUES ($1, $2, $3) RETURNING id`, [id, cuando.toISOString(), nota]);
+    await histo(id, 'cita', `Visita programada para ${cuando.toLocaleString('es-PE', { timeZone: 'America/Lima' })}${nota ? ' · ' + nota : ''}`, quien(u));
+    return { ok: true, id: r.rows[0].id };
+  }
+  async function cancelarCita(f, u) {
+    const r = await client.query(`UPDATE crm_citas SET estado = 'cancelada' WHERE id = $1 AND estado = 'programada' RETURNING contacto_id`, [Number(f.id) || 0]);
+    if (!r.rowCount) throw error('Esa visita ya no está programada.', 404);
+    await histo(r.rows[0].contacto_id, 'cita', 'Visita cancelada', quien(u));
+    return { ok: true };
+  }
+  async function accion(f, u) {
+    const id = Number(f.id) || 0;
+    const c = (await client.query('SELECT etiquetas FROM crm_contactos WHERE id = $1', [id])).rows[0];
+    if (!c) throw error('Ese contacto ya no existe.', 404);
+    const nuevas = etiquetasConAccion(c.etiquetas, texto(f.accion, 40));
+    if (!nuevas) throw error('Esa acción no existe.');
+    await client.query('UPDATE crm_contactos SET etiquetas = $2, actualizado = NOW() WHERE id = $1', [id, JSON.stringify(nuevas)]);
+    await histo(id, 'etiqueta', `Acción: ${ACCIONES[f.accion].titulo}`, quien(u));
+    return { ok: true, etiquetas: nuevas };
+  }
+  // Novedades para el aviso del panel: cuántas personas nuevas hay desde el último número visto.
+  async function novedades(p) {
+    const desde = Number(p.get('desde')) || 0;
+    const r = (await client.query('SELECT COALESCE(MAX(id), 0)::int AS ultimo, COUNT(*) FILTER (WHERE id > $1)::int AS nuevos FROM crm_contactos', [desde])).rows[0];
+    return { ultimo: r.ultimo, nuevos: r.nuevos, sonido: (await ajustesLeer()).sonido };
+  }
+  const AJUSTES_INICIALES = { sonido: true, modo_prueba: { activo: false, numeros: [] }, plantilla_retomar_aprobada: false };
+  async function ajustesLeer() {
+    const fila = (await client.query("SELECT valor FROM crm_config WHERE clave = 'ajustes_crm'")).rows[0];
+    return { ...AJUSTES_INICIALES, ...(fila ? fila.valor : {}) };
+  }
+  async function ajustesGuardar(f, u) {
+    const actual = await ajustesLeer();
+    const nuevo = { ...actual, sonido: f.sonido === undefined ? actual.sonido : Boolean(f.sonido) };
+    if (f.modo_prueba !== undefined) {
+      if (!puedeEditarEtapas(u)) throw error('Solo el Programador o quien tenga «Configurar empresa» puede cambiar el modo prueba.', 403);
+      const activo = Boolean(f.modo_prueba && f.modo_prueba.activo);
+      const lista = revisarPermitidos((f.modo_prueba && f.modo_prueba.numeros) || []);
+      if (lista.error && activo) throw error(lista.error);
+      nuevo.modo_prueba = { activo, numeros: lista.numeros || [] };
+    }
+    if (f.plantilla_retomar_aprobada !== undefined) {
+      if (!puedeEditarEtapas(u)) throw error('Solo el Programador o quien tenga «Configurar empresa» puede cambiar esto.', 403);
+      nuevo.plantilla_retomar_aprobada = Boolean(f.plantilla_retomar_aprobada);
+    }
+    await client.query(`INSERT INTO crm_config (clave, valor) VALUES ('ajustes_crm', $1) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [JSON.stringify(nuevo)]);
+    return nuevo;
+  }
+  // Reintento (CRM-4): solo después de 24 h. Necesita la plantilla «retomar_conversacion» aprobada por Meta.
+  async function retomar(f, u) {
+    const c = (await client.query(`SELECT ${COLUMNAS} FROM crm_contactos WHERE id = $1`, [Number(f.id) || 0])).rows[0];
+    if (!c) throw error('Ese contacto ya no existe.', 404);
+    if (ventanaAbierta(c)) throw error('La ventana de 24 h sigue abierta: puedes escribirle con normalidad.');
+    if (!(await ajustesLeer()).plantilla_retomar_aprobada) {
+      throw error('Falta la plantilla «retomar_conversacion» aprobada por Meta. Envíala a aprobar en Ajustes → Conexiones.', 409);
+    }
+    throw error('El envío de la plantilla todavía no está conectado. Pendiente en el hito CRM-4.', 501);
   }
 
   async function manejar(req, res, url, u, { json, leerCuerpo }) {
@@ -525,6 +676,14 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
       if (req.method === 'POST' && url === '/api/crm/etapas/guardar') return json(res, 200, await guardarEtapas(await leerCuerpo(req), u));
       if (req.method === 'POST' && url === '/api/crm/sincronizar') return json(res, 200, await sincronizar(u));
       if (req.method === 'POST' && url === '/api/crm/etiquetar') return json(res, 200, await etiquetarManual(await leerCuerpo(req), u));
+      if (req.method === 'GET' && url === '/api/crm/hoy') return json(res, 200, await hoy());
+      if (req.method === 'GET' && url === '/api/crm/novedades') return json(res, 200, await novedades(p));
+      if (req.method === 'GET' && url === '/api/crm/ajustes') return json(res, 200, await ajustesLeer());
+      if (req.method === 'POST' && url === '/api/crm/ajustes') return json(res, 200, await ajustesGuardar(await leerCuerpo(req), u));
+      if (req.method === 'POST' && url === '/api/crm/citas/guardar') return json(res, 200, await guardarCita(await leerCuerpo(req), u));
+      if (req.method === 'POST' && url === '/api/crm/citas/cancelar') return json(res, 200, await cancelarCita(await leerCuerpo(req), u));
+      if (req.method === 'POST' && url === '/api/crm/accion') return json(res, 200, await accion(await leerCuerpo(req), u));
+      if (req.method === 'POST' && url === '/api/crm/retomar') return json(res, 200, await retomar(await leerCuerpo(req), u));
       if (req.method === 'GET' && url === '/api/crm/exportar') {
         const libro = await exportar(p);
         res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="contactos-${new Date().toISOString().slice(0, 10)}.xlsx"`, 'Cache-Control': 'no-store' });
@@ -533,9 +692,9 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
       return json(res, 404, { error: 'No existe esa ruta del CRM.' });
     } catch (e) {
       if (!e.codigo) console.log('CRM:', e.message);
-      return json(res, e.codigo || 500, { error: e.codigo ? e.message : 'No se pudo completar la acción del CRM.' });
+      return json(res, e.codigo || 500, { error: e.codigo ? e.message : 'No se pudo guardar en el CRM. Revisa tu conexión e inténtalo de nuevo; si sigue, avisa al Programador.' });
     }
   }
 
-  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, _probar: { filtrosDe, PALABRAS, PLAZOS } };
+  return { preparar, puede, estadoPublico, manejar, procesarSeguimientos, etiquetarMensaje, _probar: { filtrosDe, PALABRAS, PLAZOS, prioridadDe, estadoAutoDe, etiquetasConAccion, revisarPermitidos, ACCIONES, MAX_PERMITIDOS } };
 };

@@ -140,13 +140,37 @@ label.campo input,label.campo select,label.campo textarea{display:block;width:10
     .buscar-k,.estado-linea{display:none}
     main{padding:12px 14px 40px}
   }
+    .hoy-bloque{background:#fff;border:1px solid var(--borde);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+    .hoy-bloque h3{margin:0 0 10px;font-size:15px}
+    .hoy-bloque h3 small{font-weight:400;color:#64748b;margin-left:6px}
+    .fila-hoy{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border-left:4px solid #cbd5e1;background:#f8fafc;margin-bottom:6px;cursor:pointer}
+    .fila-hoy small{display:block;color:#64748b}
+    .fila-hoy.nivel-rojo{border-left-color:var(--rojo)}
+    .fila-hoy.nivel-ambar{border-left-color:var(--ambar)}
+    .fila-hoy.nivel-verde{border-left-color:var(--verde)}
+    .chip.prio-rojo{background:#fee2e2;color:#991b1b}
+    .chip.prio-ambar{background:#fef3c7;color:#92400e}
+    .chip.prio-verde{background:#dcfce7;color:#166534}
+    .seg-modo{display:inline-flex;border:1px solid var(--borde);border-radius:10px;overflow:hidden;margin-bottom:10px}
+    .seg-modo button{border:0;background:#fff;padding:7px 12px;cursor:pointer;font:inherit}
+    .seg-modo button.on{background:#0f766e;color:#fff}
+    .acciones-ficha{margin:8px 0 12px}
+    .ajuste-bloque{border-top:1px solid var(--borde);padding:12px 0}
+    .ajuste-bloque h3{margin:0 0 6px;font-size:15px}
+    .ajuste-bloque textarea{width:100%;padding:8px;border:1px solid var(--borde);border-radius:8px;margin:6px 0;font:inherit}
+    .paso{display:flex;gap:8px;padding:4px 0}
+    .paso i{font-style:normal;width:18px;text-align:center}
+    .paso.hecho{color:#166534}
+    .conexion{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;flex-wrap:wrap}
+    .hoy-pasos{background:#fef3c7;border-radius:10px;padding:10px 12px;margin-bottom:12px;display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="marca">Zentralia <span>· CRM</span></div>
   <nav class="tabs" aria-label="Vistas">
-    <button class="tab on" data-vista="tablero">Tablero <span class="n" id="nTablero"></span></button>
+    <button class="tab on" data-vista="hoy">Hoy <span class="n" id="nHoy"></span></button>
+    <button class="tab" data-vista="tablero">Tablero <span class="n" id="nTablero"></span></button>
     <button class="tab" data-vista="lista">Lista</button>
     <button class="tab" data-vista="seguimientos">Seguimientos <span class="n" id="nSeg"></span></button>
   </nav>
@@ -194,11 +218,13 @@ label.campo input,label.campo select,label.campo textarea{display:block;width:10
     <button id="btnSync" class="btn" type="button" disabled>Sincronizar con Chatwoot</button>
     <button id="btnExcel" class="btn" type="button">Descargar Excel (lo filtrado)</button>
     <button id="btnEtapas" class="btn" type="button" hidden>Etapas de venta</button>
+    <button id="btnAjustes" class="btn" type="button">Ajustes del CRM</button>
   </div>
   <div class="sub" id="sincTxt"></div>
   <div class="resumen" id="resumen"></div>
 
-  <section id="vTablero"><div class="tablero" id="tablero"></div></section>
+  <section id="vHoy"><div id="hoyPasos"></div><div id="hoyBloques"></div></section>
+  <section id="vTablero" hidden><div class="seg-modo" id="segModo"><button type="button" data-modo="etapa" class="on">Por etapa</button><button type="button" data-modo="estado">Por estado</button></div><div class="tablero" id="tablero"></div></section>
   <section id="vLista" hidden><div class="tabla-wrap"><table><thead><tr><th>Persona</th><th>Canal</th><th>Etapa</th><th>Etiquetas</th><th>Último mensaje</th><th>Alta</th></tr></thead><tbody id="filas"></tbody></table></div></section>
   <section id="vSeguimientos" hidden><div id="listaSeg"></div></section>
 </main>
@@ -231,6 +257,28 @@ label.campo input,label.campo select,label.campo textarea{display:block;width:10
   </div>
 </div>
 
+<div id="modalAjustes" class="modal" hidden>
+  <div class="caja" style="max-width:680px">
+    <h2>Ajustes del CRM</h2>
+    <p class="sub">Lo que cambies se guarda solo. <span id="ajGuardado"></span></p>
+    <div class="ajuste-bloque"><h3>1. Avisos</h3>
+      <label class="chk"><input type="checkbox" id="ajSonido"> Sonar cuando llegue una persona nueva</label>
+    </div>
+    <div class="ajuste-bloque"><h3>2. Modo prueba</h3>
+      <p class="sub">Mientras esté activo, el CRM solo escribe a estos números (máximo 10). Úsalo para probar antes de atender a clientes reales.</p>
+      <label class="chk"><input type="checkbox" id="ajPrueba"> Modo prueba activo</label>
+      <textarea id="ajNumeros" rows="3" placeholder="Un número por línea, con código de país. Por ejemplo +18095551234"></textarea>
+      <p class="sub" id="ajPruebaErr" style="color:var(--rojo)"></p>
+    </div>
+    <div class="ajuste-bloque"><h3>3. Conexiones</h3>
+      <div id="ajConexiones"></div>
+      <label class="chk" style="margin-top:8px"><input type="checkbox" id="ajPlantilla"> La plantilla «retomar_conversacion» ya está aprobada por Meta</label>
+    </div>
+    <div class="ajuste-bloque"><h3>4. Primeros pasos</h3><div id="ajPasos"></div></div>
+    <div class="acciones"><button type="button" class="btn principal" data-cerrar="modalAjustes">Listo</button></div>
+  </div>
+</div>
+
 <div id="aviso" class="aviso" role="status"></div>
 
 <script>
@@ -246,7 +294,10 @@ const hace = iso => {
   return 'hace ' + Math.floor(h / 24) + ' días';
 };
 
-let ESTADO = null, TABLERO = null, VISTA = 'tablero', FICHA = null, FICHA_TAB = 'conv', ETAPAS_EDIT = [];
+let ESTADO = null, TABLERO = null, VISTA = 'hoy', MODO_TABLERO = 'etapa', FICHA = null, FICHA_TAB = 'conv', ETAPAS_EDIT = [], AJUSTES = null;
+const TITULO = document.title;
+const ESTADO_NOMBRE = { te_toca: 'Te toca a ti', con_visita: 'Con visita agendada', con_asistente: 'Con el asistente' };
+const ACCION_OK = { lo_llevo_yo: 'Lo llevas tú.', devolver_asistente: 'Vuelve al asistente.', es_publicidad: 'Marcada como publicidad.' };
 let FILTRO = { q: '', canal: '', sinRespuesta: '', etiqueta: '', seguimiento: false, telefono: '', campo: 'ultimo', desde: '', hasta: '', horaDesde: '', horaHasta: '' };
 let temporizadorBuscar = null, temporizadorAviso = null;
 
@@ -305,9 +356,11 @@ async function iniciar() {
 
 async function pintarVista() {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.vista === VISTA));
+  $('#vHoy').hidden = VISTA !== 'hoy';
   $('#vTablero').hidden = VISTA !== 'tablero';
   $('#vLista').hidden = VISTA !== 'lista';
   $('#vSeguimientos').hidden = VISTA !== 'seguimientos';
+  if (VISTA === 'hoy') return cargarHoy();
   if (VISTA === 'tablero') return cargarTablero();
   if (VISTA === 'lista') return cargarLista();
   return cargarSeguimientos();
@@ -340,17 +393,58 @@ $('#cmdkRes').addEventListener('click', e => {
   cargar();
 });
 
+// ---------- Hoy: «Te toca a ti», visitas y seguimientos (CRM-2) ----------
+async function cargarHoy() {
+  const r = await api('/api/crm/hoy');
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cargar Hoy.', 6000);
+  const h = r.data;
+  $('#nHoy').textContent = h.prioridades.length ? `(${h.prioridades.length})` : '';
+  const pendientes = (ESTADO.pasos || []).filter(p => !p.hecho).length;
+  $('#hoyPasos').innerHTML = pendientes ? `<div class="hoy-pasos"><span>Faltan ${pendientes} pasos para dejar el CRM listo.</span><button class="btn chico" type="button" id="btnVerPasos">Ver pasos</button></div>` : '';
+  $('#hoyBloques').innerHTML = `
+    <div class="hoy-bloque"><h3>Te toca a ti<small>Escribieron y esperan tu respuesta</small></h3>
+      ${h.prioridades.length ? h.prioridades.map(c => `
+        <div class="fila-hoy nivel-${esc(c.prioridad.nivel)}" data-abrir="${c.id}">
+          <div><b>${esc(nombreDe(c))}</b><small>${esc(canalNombre(c.canal))} · ${esc(hace(c.ultimo_entrante))}</small></div>
+          <span class="chip prio-${esc(c.prioridad.nivel)}">${esc(c.prioridad.motivo)} · ${esc(c.prioridad.detalle)}</span>
+        </div>`).join('') : '<div class="vacio">Nadie espera tu respuesta. Bien.</div>'}
+    </div>
+    <div class="hoy-bloque"><h3>Visitas de hoy y mañana</h3>
+      ${h.citas.length ? h.citas.map(k => `
+        <div class="fila-hoy" data-abrir="${k.contacto_id}">
+          <div><b>${esc(nombreDe(k))}</b><small>${esc(new Date(k.cuando).toLocaleString('es', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))}${k.nota ? ' · ' + esc(k.nota) : ''}</small></div>
+        </div>`).join('') : '<div class="vacio">Sin visitas en estos dos días.</div>'}
+    </div>
+    <div class="hoy-bloque"><h3>Seguimientos vencidos o por enviar</h3>
+      ${h.seguimientos.length ? h.seguimientos.map(s => `
+        <div class="fila-hoy ${new Date(s.cuando) < new Date() ? 'nivel-rojo' : 'nivel-ambar'}" data-abrir="${s.contacto_id}">
+          <div><b>${esc(nombreDe(s))}</b><small>${esc(s.mensaje || 'La IA redacta el mensaje')}</small></div>
+          <span class="chip">${new Date(s.cuando) < new Date() ? 'Vencido' : 'Hoy'}</span>
+        </div>`).join('') : '<div class="vacio">No hay seguimientos pendientes para hoy.</div>'}
+    </div>`;
+}
+
 async function cargarTablero() {
   const r = await api('/api/crm/tablero?' + queryFiltros());
   if (!r.ok) return aviso(r.data.error || 'No se pudo cargar el tablero.', 6000);
   TABLERO = r.data;
   const total = TABLERO.total;
-  $('#resumen').innerHTML = `<span class="pill">Personas<b>${total}</b></span>` + TABLERO.columnas.filter(c => c.activa).map(c => `<span class="pill">${esc(c.nombre)}<b>${c.total}</b></span>`).join('');
-  $('#tablero').innerHTML = TABLERO.columnas.filter(c => c.activa || c.total).map(c => `
-    <div class="col" data-etapa="${esc(c.clave)}">
-      <div class="col-cab"><span>${esc(c.nombre)}</span><small>${c.total}</small></div>
-      ${c.contactos.length ? c.contactos.map(tarjeta).join('') : '<div class="vacio" style="padding:14px">Arrastra aquí</div>'}
-    </div>`).join('') || '<div class="vacio">No hay personas con ese filtro.</div>';
+  document.querySelectorAll('#segModo button').forEach(b => b.classList.toggle('on', b.dataset.modo === MODO_TABLERO));
+  if (MODO_TABLERO === 'estado') {
+    $('#resumen').innerHTML = `<span class="pill">Personas<b>${total}</b></span>` + TABLERO.porEstado.map(g => `<span class="pill">${esc(ESTADO_NOMBRE[g.clave])}<b>${g.total}</b></span>`).join('');
+    $('#tablero').innerHTML = TABLERO.porEstado.map(g => `
+      <div class="col">
+        <div class="col-cab"><span>${esc(ESTADO_NOMBRE[g.clave])}</span><small>${g.total}</small></div>
+        ${g.contactos.length ? g.contactos.map(c => tarjeta(c, true)).join('') : '<div class="vacio" style="padding:14px">Nadie por ahora</div>'}
+      </div>`).join('');
+  } else {
+    $('#resumen').innerHTML = `<span class="pill">Personas<b>${total}</b></span>` + TABLERO.columnas.filter(c => c.activa).map(c => `<span class="pill">${esc(c.nombre)}<b>${c.total}</b></span>`).join('');
+    $('#tablero').innerHTML = TABLERO.columnas.filter(c => c.activa || c.total).map(c => `
+      <div class="col" data-etapa="${esc(c.clave)}">
+        <div class="col-cab"><span>${esc(c.nombre)}</span><small>${c.total}</small></div>
+        ${c.contactos.length ? c.contactos.map(x => tarjeta(x, false)).join('') : '<div class="vacio" style="padding:14px">Arrastra aquí</div>'}
+      </div>`).join('') || '<div class="vacio">No hay personas con ese filtro.</div>';
+  }
   $('#nSeg').textContent = '';
   $('#nTablero').textContent = total;
 }
@@ -359,14 +453,15 @@ function colorEdad(iso) {
   const h = (Date.now() - new Date(iso).getTime()) / 3600e3;
   return h < 24 ? 'var(--verde)' : h < 72 ? 'var(--ambar)' : 'var(--rojo)';
 }
-function tarjeta(c) {
+function tarjeta(c, sinMover) {
   const alerta = c.ultimo_entrante && (Date.now() - new Date(c.ultimo_entrante).getTime()) > 24 * 3600e3 && c.ultimo_saliente && new Date(c.ultimo_saliente) > new Date(c.ultimo_entrante);
+  const prio = c.prioridad ? `<span class="chip prio-${esc(c.prioridad.nivel)}">${esc(c.prioridad.motivo)} · ${esc(c.prioridad.detalle)}</span>` : '';
   return `
   <div class="tarjeta" draggable="true" data-id="${c.id}" style="border-left-color:${c.seguimientos ? 'var(--ambar)' : colorEdad(c.ultimo_entrante)}">
     <div class="nom">${esc(nombreDe(c))}</div>
     <div class="meta"><span class="edad"><i style="background:${colorEdad(c.ultimo_entrante)}"></i>${esc(hace(c.ultimo_entrante))}</span>${c.seguimientos ? `<span class="chip seg">${c.seguimientos} seguimiento(s)</span>` : ''}</div>
-    <div class="chips">${chipCanal(c)}${alerta ? '<span class="chip alerta">Sin respuesta nuestra</span>' : ''}${chipsEtiquetas(c)}</div>
-    <select class="mover" data-mover="${c.id}" aria-label="Mover a otra etapa">${etapasActivas().map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
+    <div class="chips">${prio}${chipCanal(c)}${alerta ? '<span class="chip alerta">Sin respuesta nuestra</span>' : ''}${chipsEtiquetas(c)}</div>
+    ${sinMover ? '' : `<select class="mover" data-mover="${c.id}" aria-label="Mover a otra etapa">${etapasActivas().map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`}
   </div>`;
 }
 
@@ -411,10 +506,17 @@ function cerrarFicha() { FICHA = null; $('#ficha').hidden = true; $('#velo').hid
 function pintarFicha() {
   const c = FICHA.contacto;
   const pendientes = FICHA.seguimientos.filter(s => ['pendiente', 'requiere_plantilla'].includes(s.estado));
-  const tabs = [['conv', 'Conversación'], ['hist', 'Historial'], ['seg', 'Seguimientos' + (pendientes.length ? ` (${pendientes.length})` : '')], ['datos', 'Datos']];
+  const citasProgramadas = FICHA.citas.filter(k => k.estado === 'programada').length;
+  const tabs = [['conv', 'Conversación'], ['visitas', 'Visitas' + (citasProgramadas ? ` (${citasProgramadas})` : '')], ['hist', 'Historial'], ['seg', 'Seguimientos' + (pendientes.length ? ` (${pendientes.length})` : '')], ['datos', 'Datos']];
   let cuerpo = '';
   if (FICHA_TAB === 'conv') {
     cuerpo = `
+      <div class="fila-btn acciones-ficha">
+        <button class="btn chico" type="button" data-accion="lo_llevo_yo">Lo llevo yo</button>
+        <button class="btn chico" type="button" data-accion="devolver_asistente">Devolver a asistente</button>
+        <button class="btn chico" type="button" data-accion="es_publicidad">Es publicidad</button>
+        ${FICHA.ventana_abierta ? '' : `<button class="btn chico principal" type="button" data-retomar="${c.id}">Retomar conversación</button>`}
+      </div>
       <p class="sub">${FICHA.ventana_abierta ? '<b style="color:var(--verde)">Ventana de 24 h abierta: se puede escribir libremente.</b>' : '<b style="color:var(--ambar)">Fuera de la ventana de 24 h: solo plantillas aprobadas por Meta.</b>'}</p>
       <form id="fNota" class="fila-btn" style="align-items:flex-start">
         <select name="direccion" aria-label="Tipo"><option value="nota">Nota interna</option><option value="entrante">Cliente escribió</option><option value="saliente">Respondimos</option></select>
@@ -422,6 +524,20 @@ function pintarFicha() {
         <button class="btn" type="submit">Agregar</button>
       </form>
       ${FICHA.mensajes.length ? FICHA.mensajes.map(m => `<div class="msg m-${esc(m.direccion)}"><small>${esc(DIRECCION[m.direccion] || m.direccion)} · ${new Date(m.creado).toLocaleString('es')}</small><p>${esc(m.texto)}</p></div>`).join('') : '<p class="sub">Sin mensajes todavía.</p>'}`;
+  } else if (FICHA_TAB === 'visitas') {
+    cuerpo = `
+      <form id="fCita" class="fila-btn" style="align-items:flex-end">
+        <label class="campo" style="flex:1;min-width:180px">Fecha y hora<input type="datetime-local" name="cuando" required></label>
+        <label class="campo" style="flex:2;min-width:200px">Nota<input name="nota" maxlength="300" placeholder="Por ejemplo: llevar cotización"></label>
+        <button class="btn principal" type="submit">Agendar visita</button>
+      </form>
+      <h3 style="margin-top:14px">Visitas</h3>
+      ${FICHA.citas.length ? FICHA.citas.map(k => `
+        <div class="evento">
+          <small>${esc(new Date(k.cuando).toLocaleString('es'))} · ${k.estado === 'programada' ? 'Programada' : 'Cancelada'}</small>
+          <b>${esc(k.nota || 'Visita')}</b>
+          ${k.estado === 'programada' ? `<button class="btn chico" type="button" data-cancelar-cita="${k.id}">Cancelar visita</button>` : ''}
+        </div>`).join('') : '<p class="sub">Todavía no hay visitas con esta persona.</p>'}`;
   } else if (FICHA_TAB === 'hist') {
     cuerpo = FICHA.historial.length ? FICHA.historial.map(h => `<div class="evento"><small>${new Date(h.creado).toLocaleString('es')} · ${esc(h.quien)}</small><b>${esc(h.detalle)}</b></div>`).join('') : '<p class="sub">Sin historial todavía.</p>';
   } else if (FICHA_TAB === 'seg') {
@@ -563,6 +679,115 @@ async function guardarEtapas() {
 }
 function moverEtapaLocal(i, d) { const cur = leerEtapas(); [cur[i], cur[i + d]] = [cur[i + d], cur[i]]; ETAPAS_EDIT = cur; pintarEtapas(); }
 
+async function hacerAccion(accion) {
+  const r = await api('/api/crm/accion', { id: FICHA.contacto.id, accion });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo aplicar la acción.', 5000);
+  aviso(ACCION_OK[accion] || 'Listo.');
+  await abrirFicha(FICHA.contacto.id);
+  await pintarVista();
+}
+async function retomar(id) {
+  const r = await api('/api/crm/retomar', { id: Number(id) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo retomar la conversación.', 7000);
+  aviso('Conversación retomada.');
+  await abrirFicha(id);
+}
+async function agendarCita(form) {
+  const f = Object.fromEntries(new FormData(form));
+  if (!f.cuando) return aviso('Elige la fecha y la hora de la visita.');
+  const r = await api('/api/crm/citas/guardar', { contacto_id: FICHA.contacto.id, cuando: new Date(f.cuando).toISOString(), nota: f.nota });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo agendar la visita.', 5000);
+  aviso('Visita agendada.');
+  await abrirFicha(FICHA.contacto.id, 'visitas');
+  await pintarVista();
+}
+async function cancelarCita(id) {
+  if (!confirm('¿Cancelar esta visita?')) return;
+  const r = await api('/api/crm/citas/cancelar', { id: Number(id) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cancelar la visita.', 5000);
+  aviso('Visita cancelada.');
+  await abrirFicha(FICHA.contacto.id, 'visitas');
+  await pintarVista();
+}
+
+// ---------- Ajustes en una sola página (CRM-6) ----------
+async function abrirAjustes() {
+  const [a, e] = await Promise.all([api('/api/crm/ajustes'), api('/api/crm/estado')]);
+  if (!a.ok) return aviso(a.data.error || 'No se pudieron leer los ajustes.', 6000);
+  if (e.ok) ESTADO = e.data;
+  AJUSTES = a.data;
+  $('#ajSonido').checked = !!AJUSTES.sonido;
+  $('#ajPrueba').checked = !!AJUSTES.modo_prueba.activo;
+  $('#ajNumeros').value = (AJUSTES.modo_prueba.numeros || []).map(n => '+' + n).join('\n');
+  $('#ajPlantilla').checked = !!AJUSTES.plantilla_retomar_aprobada;
+  const puede = Boolean(ESTADO.editarEtapas);
+  ['#ajPrueba', '#ajNumeros', '#ajPlantilla'].forEach(id => { $(id).disabled = !puede; });
+  $('#ajPruebaErr').textContent = puede ? '' : 'Solo el Programador o quien tenga «Configurar empresa» puede cambiar el modo prueba.';
+  pintarConexiones();
+  pintarPasos();
+  $('#ajGuardado').textContent = '';
+  $('#modalAjustes').hidden = false;
+}
+function pintarConexiones() {
+  $('#ajConexiones').innerHTML = `
+    <div class="conexion"><span>Mensajes de clientes (Chatwoot)</span>${ESTADO.chatwoot
+      ? '<span class="chip prio-verde">Conectado</span>'
+      : '<span><span class="chip prio-ambar">Sin conectar</span> <button class="btn chico" type="button" data-arreglar="chatwoot">Arreglar</button></span>'}</div>
+    <div class="conexion"><span>Respuestas con inteligencia artificial</span>${ESTADO.ia
+      ? '<span class="chip prio-verde">Lista</span>'
+      : '<span><span class="chip prio-ambar">Sin clave</span> <button class="btn chico" type="button" data-arreglar="ia">Arreglar</button></span>'}</div>`;
+}
+function pintarPasos() {
+  $('#ajPasos').innerHTML = (ESTADO.pasos || []).map(p => `
+    <div class="paso ${p.hecho ? 'hecho' : ''}"><i>${p.hecho ? '✓' : '○'}</i><span><b>${esc(p.titulo)}</b><br><small class="sub">${esc(p.ayuda)}</small></span></div>`).join('');
+}
+const numerosDe = t => String(t || '').split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+async function guardarAjuste(cambios) {
+  $('#ajGuardado').textContent = 'Guardando…';
+  const r = await api('/api/crm/ajustes', cambios);
+  if (!r.ok) { $('#ajGuardado').textContent = ''; $('#ajPruebaErr').textContent = r.data.error || 'No se pudo guardar.'; return; }
+  AJUSTES = r.data;
+  $('#ajPruebaErr').textContent = '';
+  $('#ajGuardado').textContent = 'Guardado';
+  setTimeout(() => { $('#ajGuardado').textContent = ''; }, 1800);
+}
+function guardarModoPrueba() {
+  return guardarAjuste({ modo_prueba: { activo: $('#ajPrueba').checked, numeros: numerosDe($('#ajNumeros').value) } });
+}
+function arreglar(que) {
+  aviso(que === 'chatwoot'
+    ? 'Los mensajes se conectan en Operaciones, sección WhatsApp. Lo hace el Programador.'
+    : 'La clave de IA se pone en la configuración de la empresa. Lo hace el Programador.', 7000);
+}
+
+// ---------- Aviso de personas nuevas: contador en la pestaña y sonido (CRM-9) ----------
+let NOVEDADES_ULTIMO = null, NO_VISTOS = 0, SONIDO_ON = true;
+function pintarTitulo() { document.title = NO_VISTOS ? `(${NO_VISTOS}) ${TITULO}` : TITULO; }
+function sonarNuevo() {
+  if (!SONIDO_ON) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.06;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.22);
+  } catch (e) { /* el navegador bloquea el sonido hasta que se toque la página */ }
+}
+async function sondearNovedades() {
+  const r = await api('/api/crm/novedades?desde=' + (NOVEDADES_ULTIMO ?? 0));
+  if (!r.ok) return;
+  const primera = NOVEDADES_ULTIMO === null;
+  NOVEDADES_ULTIMO = r.data.ultimo;
+  SONIDO_ON = Boolean(r.data.sonido);
+  if (primera) return;
+  if (r.data.nuevos > 0) {
+    NO_VISTOS += r.data.nuevos;
+    pintarTitulo();
+    sonarNuevo();
+    if (VISTA === 'hoy' || VISTA === 'tablero' || VISTA === 'lista') pintarVista();
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { NO_VISTOS = 0; pintarTitulo(); } });
+
 // ---------- Eventos ----------
 document.addEventListener('click', ev => {
   const t = ev.target;
@@ -574,6 +799,12 @@ document.addEventListener('click', ev => {
   if (tarjetaEl && !t.closest('select')) return abrirFicha(Number(tarjetaEl.dataset.id), 'conv');
   const abrir = t.closest('[data-abrir]'); if (abrir) return abrirFicha(Number(abrir.dataset.abrir), 'conv');
   const tabBtn = t.closest('[data-tab]'); if (tabBtn) { FICHA_TAB = tabBtn.dataset.tab; return pintarFicha(); }
+  const accionEl = t.closest('[data-accion]'); if (accionEl) return hacerAccion(accionEl.dataset.accion);
+  const retomarEl = t.closest('[data-retomar]'); if (retomarEl) return retomar(retomarEl.dataset.retomar);
+  const cancCita = t.closest('[data-cancelar-cita]'); if (cancCita) return cancelarCita(cancCita.dataset.cancelarCita);
+  const modoEl = t.closest('#segModo [data-modo]'); if (modoEl) { MODO_TABLERO = modoEl.dataset.modo; return pintarVista(); }
+  const arr = t.closest('[data-arreglar]'); if (arr) return arreglar(arr.dataset.arreglar);
+  if (t.id === 'btnVerPasos' || t.id === 'btnAjustes') return abrirAjustes();
   const prog = t.closest('[data-programar]'); if (prog) return programar(prog.dataset.programar);
   const canc = t.closest('[data-cancelar-seg]'); if (canc) return cancelarSeg(canc.dataset.cancelarSeg);
   const et = t.closest('[data-etiquetar]'); if (et) return etiquetarIA(et.dataset.etiquetar);
@@ -600,6 +831,7 @@ document.addEventListener('submit', ev => {
   if (f.id === 'fDatos') guardarDatos(f);
   if (f.id === 'fNota') agregarNota(f);
   if (f.id === 'formNueva') guardarNueva(f);
+  if (f.id === 'fCita') agendarCita(f);
 });
 
 // Arrastrar y soltar en el tablero.
@@ -625,7 +857,8 @@ document.addEventListener('drop', ev => {
   if (!c) return;
   ev.preventDefault();
   const id = ev.dataTransfer.getData('text/plain') || arrastrado;
-  if (id) moverEtapa(id, c.dataset.etapa);
+  if (c.dataset.etapa && id) moverEtapa(id, c.dataset.etapa);
+  else if (id) aviso('Para cambiar de etapa, usa la vista «Por etapa».');
   arrastrado = null;
 });
 
@@ -637,6 +870,10 @@ $('#fCanal').addEventListener('change', e => { FILTRO.canal = e.target.value; pi
 $('#fSin').addEventListener('change', e => { FILTRO.sinRespuesta = e.target.value; pintarVista(); });
 $('#fEtiqueta').addEventListener('change', e => { FILTRO.etiqueta = e.target.value; pintarVista(); });
 $('#fSeg').addEventListener('change', e => { FILTRO.seguimiento = e.target.checked; pintarVista(); });
+$('#ajSonido').addEventListener('change', e => guardarAjuste({ sonido: e.target.checked }));
+$('#ajPrueba').addEventListener('change', guardarModoPrueba);
+$('#ajNumeros').addEventListener('change', guardarModoPrueba);
+$('#ajPlantilla').addEventListener('change', e => guardarAjuste({ plantilla_retomar_aprobada: e.target.checked }));
 for (const [id, texto] of [['fHoraDesde', 'Desde la hora'], ['fHoraHasta', 'Hasta la hora']]) {
   $('#' + id).innerHTML = `<option value="">${texto}</option>` + Array.from({ length: 24 }, (_, h) => `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`).join('');
   $('#' + id).addEventListener('change', e => { FILTRO[id === 'fHoraDesde' ? 'horaDesde' : 'horaHasta'] = e.target.value; pintarVista(); });
@@ -650,7 +887,7 @@ $('#fTel').addEventListener('input', e => {
   temporizadorTel = setTimeout(() => { FILTRO.telefono = e.target.value.replace(/\D/g, ''); pintarVista(); }, 250);
 });
 
-iniciar();
+iniciar().then(() => { sondearNovedades(); setInterval(sondearNovedades, 20000); });
 </script>
 </body>
 </html>
