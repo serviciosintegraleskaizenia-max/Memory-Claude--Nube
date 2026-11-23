@@ -375,5 +375,16 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     return { encontradas: filas.length, leidas };
   }
 
-  return { preparar, iniciar, ciclo, comparar, estado, recuperar, leerFacturasPendientes };
+  // Lee una factura concreta (botón «Leer con IA ahora» en el correo). Devuelve la propuesta o el error.
+  async function leerUnaFactura(clasificacionId) {
+    if (!claveIA().apiKey) throw new Error('Falta la clave de OpenRouter (en Oficina → Clientes y cobros → Editar, o en config.js).');
+    const x = (await client.query(`SELECT id, message_id, remitente, asunto, cuerpo, fecha, categoria FROM clasificacion WHERE id = $1`, [Number(clasificacionId) || 0])).rows[0];
+    if (!x) return { ok: false, error: 'Ese correo ya no existe.' };
+    if (x.categoria !== 'FACTURA') return { ok: false, error: 'Ese correo no está clasificado como factura.' };
+    if (!x.message_id) return { ok: false, error: 'Este correo no tiene identificador; no se puede leer.' };
+    const correo = { id: x.message_id, from: x.remitente || '', subject: x.asunto || '', date: x.fecha || '', textPlain: x.cuerpo || '' };
+    return fact.leerFactura({ client, ia, claveIA: claveIA(), modelo: ajustes().modelo, clasificacionId: x.id, correo });
+  }
+
+  return { preparar, iniciar, ciclo, comparar, estado, recuperar, leerFacturasPendientes, leerUnaFactura };
 };

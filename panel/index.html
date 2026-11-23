@@ -844,7 +844,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
       </div>
     </div>
     <div class="modal-cuerpo">
-      <div class="titulo-seccion seccion-datos"><span>Datos que leyó la IA</span><span id="mBotonesEdicion"></span></div>
+      <div class="titulo-seccion seccion-datos"><span id="mTituloDatos">Datos que leyó la IA</span><span id="mBotonesEdicion"></span></div>
       <table class="datos" id="mDatos"></table>
       <div class="titulo-seccion" style="margin-top:18px">Correo</div>
       <div id="mCompleto" style="display:none;">
@@ -2624,6 +2624,9 @@ async function abrirModal(id) {
 /* ---------- Datos que leyó la IA (y su edición con el permiso "editar_ia") ---------- */
 let editandoIA = false;
 function pintarDatosModal(r) {
+  // Un correo de factura muestra la propuesta de pago, no datos de reserva.
+  if (r.categoria === 'FACTURA') return pintarDatosFactura(r);
+  document.getElementById('mTituloDatos').textContent = 'Datos que leyó la IA';
   const g = serviciosDe(r);
   const botones = document.getElementById('mBotonesEdicion');
   botones.innerHTML = !puede('editar_ia') ? ''
@@ -2648,6 +2651,65 @@ function pintarDatosModal(r) {
         <td>${dudoso(s, 'aeropuerto', falta(s.aeropuerto))}</td><td>${dudoso(s, 'hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td><td>${dudoso(s, 'pax', falta(paxDe(s)))}</td></tr>`; }).join('')}
       </tbody></table></td></tr>${(r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a) ? '<tr><td>Asignada a</td><td id="mAsignacion"></td></tr>' : ''}${r.error_ia ? `<tr><td>${porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA'}</td><td>${porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'La IA no respondió') + '. Se analiza de nuevo en la próxima ejecución del flujo.'}</td></tr>` : ''}${r.categoria === 'MODIFICACION' ? `<tr><td>Reserva original</td><td>${r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada'}</td></tr>` : ''}${r.cancelada_por ? `<tr><td>⛔ Cancelada</td><td><b style="color:#b91c1c">El correo #${r.cancelada_por} cancela esta reserva.</b> Cancélala también en el sistema de reservas y márcala como corresponde.</td></tr>` : r.cambio_id ? `<tr><td>Cambio recibido</td><td>Correo #${r.cambio_id}: revisa los datos nuevos antes de seguir</td></tr>` : ''}`;
   pintarAsignacion(r);
+}
+
+/* ---------- Correo de factura: propuesta de pago (la misma que en la pantalla Facturas) ---------- */
+const ESTADO_FACTURA_TXT = { pendiente: 'Por revisar en Facturas', registrada: 'Pago registrado', rechazada: 'Rechazada', error: 'La IA no pudo leerla' };
+async function pintarDatosFactura(r) {
+  editandoIA = false;
+  document.getElementById('mBotonesEdicion').innerHTML = '';
+  document.getElementById('mTituloDatos').textContent = 'Factura de pago';
+  const id = r.id;
+  document.getElementById('mDatos').innerHTML = '<tr><td colspan="2" class="sub2">Cargando la factura…</td></tr>';
+  const res = await api('/api/facturas/por-correo?clasificacion_id=' + id);
+  if (!seleccionado || seleccionado.id !== id) return; // ya se abrió otro correo
+  if (!res.ok) { document.getElementById('mDatos').innerHTML = `<tr><td colspan="2">${esc(res.data.error || 'No se pudo cargar la factura.')}</td></tr>`; return; }
+  pintarFacturaLeida(id, res.data);
+}
+function pintarFacturaLeida(id, d) {
+  const caja = document.getElementById('mDatos');
+  const f = d.factura;
+  const dt = (f && f.datos) || {};
+  const monto = dt.monto ? `${esc(dt.moneda || 'USD')} ${Number(dt.monto).toFixed(2)}` : '';
+  const reservas = (dt.reservas || []).length ? dt.reservas.map(x => `<span class="tag">#${esc(x)}</span>`).join(' ') : '';
+  const problemas = (f && Array.isArray(f.problemas) ? f.problemas : []);
+  const estadoTxt = f ? (ESTADO_FACTURA_TXT[f.estado] || f.estado) : 'Todavía no se ha leído con IA';
+  let cabecera = `<tr><td>Estado</td><td><b>${esc(estadoTxt)}</b>${f && f.estado === 'registrada' ? ` · pago #${esc(f.op_pago_id || '')} en Operaciones (${esc(f.metodo_pago || '')})` : ''}${f && f.estado === 'rechazada' && f.error ? `<br><small>Motivo: ${esc(f.error)}</small>` : ''}${f && f.estado === 'error' && f.error ? `<br><small style="color:#b91c1c">${esc(f.error)}</small>` : ''}</td></tr>`;
+  let cuerpo = '';
+  if (f && f.datos && Object.keys(dt).length && f.estado !== 'rechazada') {
+    cuerpo = `
+      <tr><td>Agencia que paga</td><td>${falta(dt.agencia)}</td></tr>
+      <tr><td>Monto</td><td>${monto ? `<b>${monto}</b>` : falta('')}</td></tr>
+      <tr><td>Reservas</td><td>${reservas || falta('')}</td></tr>
+      <tr><td>Paquete</td><td>${falta(dt.paquete)}</td></tr>
+      <tr><td>Tipo de reserva</td><td>${falta(dt.tipo_reserva)}</td></tr>
+      <tr><td>Sede</td><td>${falta(dt.sede)}</td></tr>
+      <tr><td>Referencia</td><td>${falta(dt.referencia)}</td></tr>
+      <tr><td>Fecha de pago</td><td>${falta(dt.fecha_pago)}</td></tr>
+      ${dt.notas ? `<tr><td>Notas</td><td>${esc(dt.notas)}</td></tr>` : ''}
+      ${dt.confianza ? `<tr><td>Seguridad de la lectura</td><td>${esc(dt.confianza)}</td></tr>` : ''}
+      ${problemas.length ? `<tr><td>Avisos</td><td>${problemas.map(p => `<div>⚠️ ${esc(p)}</div>`).join('')}</td></tr>` : ''}`;
+  }
+  const puedeLeer = !f || f.estado === 'error' || f.estado === 'pendiente';
+  const acciones = `<tr><td colspan="2" style="padding-top:10px">
+      ${puedeLeer && puede('ver_pagos') ? `<button class="btn-mini" id="btnLeerFactura">${f ? '🔄 Leer otra vez con IA' : '🤖 Leer con IA ahora'}</button> ` : ''}
+      ${puede('ver_pagos') && f && f.estado !== 'rechazada' ? '<a class="btn-mini" href="/facturas" target="_blank" rel="noopener">Abrir en Facturas</a>' : ''}
+      ${!puede('ver_pagos') ? '<small class="sub2">Para leer y registrar facturas necesitas el permiso «Ver pagos».</small>' : ''}
+    </td></tr>`;
+  caja.innerHTML = cabecera + cuerpo + acciones;
+  const b = document.getElementById('btnLeerFactura');
+  if (b) b.onclick = () => leerFacturaAhora(id);
+}
+async function leerFacturaAhora(id) {
+  const mensaje = document.getElementById('mMensaje');
+  mensaje.style.color = '';
+  mensaje.textContent = 'La IA está leyendo la factura… puede tardar unos segundos.';
+  const r = await api('/api/facturas/leer', { clasificacion_id: id });
+  if (!seleccionado || seleccionado.id !== id) return;
+  if (!r.ok) { mensaje.style.color = '#dc2626'; mensaje.textContent = r.data.error || 'No se pudo leer la factura.'; return; }
+  mensaje.style.color = '#16a34a';
+  mensaje.textContent = r.data.lista ? 'Factura leída. Revísala y regístrala en Facturas.' : 'Factura leída con avisos. Revísala en Facturas.';
+  pintarDatosFactura(seleccionado);
 }
 
 // Formulario para corregir lo que leyó la IA: datos generales y cada servicio.

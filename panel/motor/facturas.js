@@ -178,6 +178,33 @@ async function manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, clie
     return json(res, 200, { ok: true, ...r });
   }
 
+  // Para la ventana del correo: si es factura, su propuesta (o que aún no se ha leído).
+  if (req.method === 'GET' && url === '/api/facturas/por-correo') {
+    const id = Number(p.get('clasificacion_id')) || 0;
+    const c = (await client.query('SELECT id, categoria FROM clasificacion WHERE id = $1', [id])).rows[0];
+    if (!c) return json(res, 404, { error: 'Ese correo ya no existe.' });
+    const f = (await client.query(`SELECT id, estado, lista, problemas, datos, error, metodo_pago, op_pago_id, revisado_por, revisado_en
+      FROM facturas_pago WHERE clasificacion_id = $1`, [id])).rows[0];
+    return json(res, 200, { categoria: c.categoria, factura: f || null, metodos: METODOS_PAGO, monedas: MONEDAS, sedes: SEDES });
+  }
+
+  // Lee con la IA una factura concreta (botón «Leer con IA ahora» en la ventana del correo).
+  if (req.method === 'POST' && url === '/api/facturas/leer') {
+    if (!motor) return json(res, 500, { error: 'El motor de correo no está disponible.' });
+    const f = await leerCuerpo(req);
+    const id = Number(f.clasificacion_id) || 0;
+    const ya = (await client.query('SELECT estado FROM facturas_pago WHERE clasificacion_id = $1', [id])).rows[0];
+    if (ya && ya.estado === 'registrada') return json(res, 400, { error: 'Esta factura ya está registrada.' });
+    let r;
+    try { r = await motor.leerUnaFactura(id); }
+    catch (e) { return json(res, 500, { error: e.message }); }
+    if (!r.ok) {
+      const guardada = (await client.query('SELECT error FROM facturas_pago WHERE clasificacion_id = $1', [id])).rows[0];
+      return json(res, 422, { error: r.error || (guardada && guardada.error) || 'La IA no pudo leer esta factura. Intenta de nuevo.' });
+    }
+    return json(res, 200, { ok: true, lista: !!r.lista, problemas: r.problemas || [] });
+  }
+
   if (req.method === 'POST' && url === '/api/facturas/rechazar') {
     const f = await leerCuerpo(req);
     const motivo = txt(f.motivo, 300);

@@ -75,3 +75,66 @@ test('confianza baja avisa, pero no bloquea si los datos están', () => {
   assert.ok(v.problemas.some(p => /poca seguridad/.test(p)));
   assert.equal(v.listaParaRegistrar, true);
 });
+
+// ---------- Rutas nuevas: ver la factura de un correo y leerla con la IA ----------
+const { manejarFacturas } = require('./facturas.js');
+function fakeRes() { return { code: 0, body: null }; }
+function jsonFalso(res, code, obj) { res.code = code; res.body = obj; }
+function cliente(filas) {
+  return { async query(sql, params) {
+    for (const [trozo, respuesta] of filas) if (sql.includes(trozo)) return { rows: typeof respuesta === 'function' ? respuesta(params) : respuesta, rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  } };
+}
+const usuario = { usuario: 'ana', grupo: 'Programador' };
+const todo = () => true;
+
+test('ver la factura de un correo: sin leer todavía', async () => {
+  const res = fakeRes();
+  const client = cliente([['FROM clasificacion WHERE id', [{ id: 7, categoria: 'FACTURA' }]], ['FROM facturas_pago WHERE clasificacion_id', []]]);
+  await manejarFacturas({ method: 'GET', url: '/api/facturas/por-correo?clasificacion_id=7' }, res, '/api/facturas/por-correo', usuario,
+    { json: jsonFalso, leerCuerpo: null, puede: todo, client, operaciones: null, motor: null });
+  assert.equal(res.code, 200);
+  assert.equal(res.body.categoria, 'FACTURA');
+  assert.equal(res.body.factura, null);
+});
+
+test('ver la factura de un correo: devuelve la propuesta guardada', async () => {
+  const res = fakeRes();
+  const fila = { id: 3, estado: 'pendiente', lista: true, problemas: [], datos: { agencia: 'Viator', monto: 500, moneda: 'USD', reservas: ['14872'] } };
+  const client = cliente([['FROM clasificacion WHERE id', [{ id: 7, categoria: 'FACTURA' }]], ['FROM facturas_pago WHERE clasificacion_id', [fila]]]);
+  await manejarFacturas({ method: 'GET', url: '/api/facturas/por-correo?clasificacion_id=7' }, res, '/api/facturas/por-correo', usuario,
+    { json: jsonFalso, leerCuerpo: null, puede: todo, client, operaciones: null, motor: null });
+  assert.equal(res.body.factura.datos.agencia, 'Viator');
+});
+
+test('leer con IA: si la IA falla, muestra el motivo y no inventa datos', async () => {
+  const res = fakeRes();
+  const motor = { leerUnaFactura: async () => ({ ok: false }) };
+  const client = cliente([['SELECT estado FROM facturas_pago', []], ['SELECT error FROM facturas_pago', [{ error: 'La IA no pudo leer la factura: sin respuesta' }]]]);
+  await manejarFacturas({ method: 'POST', url: '/api/facturas/leer' }, res, '/api/facturas/leer', usuario,
+    { json: jsonFalso, leerCuerpo: async () => ({ clasificacion_id: 7 }), puede: todo, client, operaciones: null, motor });
+  assert.equal(res.code, 422);
+  assert.match(res.body.error, /sin respuesta/);
+});
+
+test('leer con IA: si todo sale bien, responde con la propuesta', async () => {
+  const res = fakeRes();
+  const motor = { leerUnaFactura: async () => ({ ok: true, lista: true, problemas: [] }) };
+  const client = cliente([]);
+  await manejarFacturas({ method: 'POST', url: '/api/facturas/leer' }, res, '/api/facturas/leer', usuario,
+    { json: jsonFalso, leerCuerpo: async () => ({ clasificacion_id: 7 }), puede: todo, client, operaciones: null, motor });
+  assert.equal(res.code, 200);
+  assert.equal(res.body.lista, true);
+});
+
+test('una factura ya registrada no se vuelve a leer', async () => {
+  const res = fakeRes();
+  let llamado = false;
+  const motor = { leerUnaFactura: async () => { llamado = true; return { ok: true }; } };
+  const client = cliente([['SELECT estado FROM facturas_pago', [{ estado: 'registrada' }]]]);
+  await manejarFacturas({ method: 'POST', url: '/api/facturas/leer' }, res, '/api/facturas/leer', usuario,
+    { json: jsonFalso, leerCuerpo: async () => ({ clasificacion_id: 7 }), puede: todo, client, operaciones: null, motor });
+  assert.equal(res.code, 400);
+  assert.equal(llamado, false);
+});
