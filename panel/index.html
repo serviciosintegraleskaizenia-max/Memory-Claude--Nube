@@ -4617,14 +4617,17 @@ function bloquePlantillasWa() {
       <textarea id="pl-c-${pl.id}" rows="3" style="width:100%;margin-top:6px">${esc(pl.cuerpo)}</textarea>
       <ul style="font-size:12.5px;margin:6px 0">${pl.checks.map(c => `<li style="color:${c.ok ? '#7ef0bf' : '#ffb4b4'}">${c.ok ? '✔' : '✖'} ${esc(c.texto)}</li>`).join('')}</ul>
       ${pl.motivo ? `<p class="etiqueta-sec">Motivo: ${esc(pl.motivo)}</p>` : ''}
+      <p class="etiqueta-sec">En Meta: <b>${esc(ETIQUETA_META[pl.meta_estado || ''] || pl.meta_estado)}</b>${pl.meta_motivo ? ' · ' + esc(pl.meta_motivo) : ''}</p>
       <div class="pie-acciones" style="margin-top:4px">
         <button class="btn-sec" data-accion="emp-wa-pl-guardar" data-id="${pl.id}">Guardar texto</button>
         <button class="btn" data-accion="emp-wa-pl-buena" data-id="${pl.id}">Marcar buena</button>
         <button class="btn-sec" data-accion="emp-wa-pl-mala" data-id="${pl.id}">Marcar mala</button>
+        <button class="btn-sec" data-accion="emp-wa-pl-meta" data-id="${pl.id}">Enviar a Meta</button>
       </div>
     </div>`).join('');
   return `<div class="titulo-seccion">Plantillas de WhatsApp</div>
     <p class="etiqueta-sec">Las reglas de la lista las escribimos nosotros. Una plantilla solo se marca buena si pasa todas. La decisión final es tuya; el sistema no decide por sí solo.</p>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-pl-sync">Actualizar estado desde Meta</button></div>
     ${filas || '<p class="etiqueta-sec">No hay plantillas.</p>'}
     <div class="titulo-seccion" style="margin-top:12px">Nueva plantilla</div>
     <div class="form-fila">
@@ -4633,6 +4636,28 @@ function bloquePlantillasWa() {
     </div>
     <label>Texto (usa {{1}}, {{2}}… para las variables)<textarea id="plNuevaCuerpo" rows="3" style="width:100%"></textarea></label>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-pl-nueva">Crear plantilla</button></div>`;
+}
+const ETIQUETA_META = { APPROVED: 'Aprobada por Meta', PENDING: 'En revisión en Meta', REJECTED: 'Rechazada por Meta', PAUSED: 'Pausada por Meta', DISABLED: 'Desactivada por Meta', '': 'Sin enviar a Meta' };
+async function crearPlantillaMetaUI(id) {
+  if (!confirm('¿Enviar esta plantilla a Meta para revisión? Meta puede tardar desde minutos hasta días en responder.')) return;
+  const r = await api('/api/central/whatsapp/plantillas/meta/crear', { id: Number(id) });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo enviar a Meta.', false);
+  mostrarAviso('Enviada a Meta. Estado: ' + (ETIQUETA_META[r.data.estado] || r.data.estado) + '. Usa «Actualizar estado desde Meta» cuando responda.', true);
+  await cargarAutomatizacion();
+}
+async function sincronizarPlantillasMetaUI() {
+  const r = await api('/api/central/whatsapp/plantillas/meta/sincronizar', {});
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo actualizar desde Meta.', false);
+  let txt = 'Estado actualizado: ' + r.data.actualizadas + ' plantillas.';
+  if (r.data.sin_en_meta.length) txt += ' No están en Meta: ' + r.data.sin_en_meta.join(', ') + '.';
+  mostrarAviso(txt, true);
+  await cargarAutomatizacion();
+}
+async function guardarWabaUI() {
+  const r = await api('/api/central/whatsapp/waba/guardar', { waba_id: document.getElementById('waWaba').value.trim() });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar el ID.', false);
+  mostrarAviso('ID de la cuenta de WhatsApp Business guardado.', true);
+  await cargarAutomatizacion();
 }
 async function guardarPlantillaWaUI(id) {
   const r = await api('/api/central/whatsapp/plantillas/guardar', { id: Number(id), nombre: AUTO_PLANTILLAS.find(x => String(x.id) === String(id)).nombre, categoria: AUTO_PLANTILLAS.find(x => String(x.id) === String(id)).categoria, cuerpo: document.getElementById('pl-c-' + id).value });
@@ -4707,7 +4732,12 @@ function bloqueMeta() {
     <div class="form-fila">
       <label>Clave secreta de la app de Meta<input id="waSecreto" type="password" autocomplete="new-password" placeholder="${AUTO_WA.app_secret_configurada ? 'Ya está guardada. Escribe una nueva solo si la cambias' : '32 caracteres de Meta'}"><small class="etiqueta-sec">Se guarda cifrada. Nunca se vuelve a mostrar.</small></label>
     </div>
-    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>`;
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>
+    <div class="form-fila" style="margin-top:12px">
+      <label>ID de la cuenta de WhatsApp Business (WABA)<input id="waWaba" inputmode="numeric" value="${esc(AUTO_WA.waba_id || '')}" placeholder="Solo números">
+        <small class="etiqueta-sec">Business Manager → Configuración → Cuentas de WhatsApp. Es distinto del ID del número.</small></label>
+    </div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-waba-guardar">Guardar ID de la cuenta</button></div>`;
 }
 async function verTokenWaUI() {
   const r = await api('/api/central/whatsapp/config');
@@ -5097,6 +5127,9 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-wa-pl-nueva') return crearPlantillaWaUI();
   if (a === 'emp-wa-token-guardar') return guardarTokenWaUI();
   if (a === 'emp-wa-enviar') return enviarPlantillaWaUI();
+  if (a === 'emp-wa-pl-meta') return crearPlantillaMetaUI(b.dataset.id);
+  if (a === 'emp-wa-pl-sync') return sincronizarPlantillasMetaUI();
+  if (a === 'emp-wa-waba-guardar') return guardarWabaUI();
   if (a === 'emp-auto-prompt') return guardarPromptUI(b.dataset.clave);
   if (a === 'emp-auto-prompt-nueva') return crearPromptUI();
   if (a === 'emp-auto-clave-ia') return guardarClaveIAUI();

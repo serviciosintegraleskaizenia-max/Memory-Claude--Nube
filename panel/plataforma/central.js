@@ -95,7 +95,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     ];
   }
   async function plantillasWa() {
-    const filas = (await client.query('SELECT id, nombre, categoria, cuerpo, estado, motivo FROM plantillas_wa ORDER BY id')).rows;
+    const filas = (await client.query('SELECT id, nombre, categoria, cuerpo, estado, motivo, meta_id, meta_estado, meta_motivo FROM plantillas_wa ORDER BY id')).rows;
     return filas.map(p => ({ ...p, checks: revisarPlantilla(p) }));
   }
   async function guardarPlantillaWa(u, f) {
@@ -172,6 +172,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       }
     }
     // Registro de cada envío de plantilla que sale desde Oficina.
+    // Estado de la plantilla en Meta (Video 2): id, estado (APPROVED, PENDING, REJECTED…) y motivo que da Meta.
+    for (const c of ["meta_id TEXT NOT NULL DEFAULT ''", "meta_estado TEXT NOT NULL DEFAULT ''", "meta_motivo TEXT NOT NULL DEFAULT ''"]) {
+      await client.query(`ALTER TABLE plantillas_wa ADD COLUMN IF NOT EXISTS ${c}`);
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS whatsapp_envios (
       id SERIAL PRIMARY KEY, numero_id TEXT NOT NULL, destino TEXT NOT NULL, plantilla TEXT NOT NULL,
       idioma TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL, respuesta TEXT NOT NULL DEFAULT '',
@@ -637,9 +641,106 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     return { ok: true, respuesta: texto_r };
   }
 
+  // ---------- Plantillas en Meta (Video 2): crear y consultar el estado con la API de WhatsApp ----------
+  const CATEGORIA_META = { utilidad: 'UTILITY', marketing: 'MARKETING' };
+  // Mayor número de variable usado: {{1}}, {{2}}… (Meta exige que vayan en orden desde 1).
+  function variablesDe(cuerpo) {
+    const nums = [...String(cuerpo || '').matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
+    return nums.length ? Math.max(...nums) : 0;
+  }
+  // Cuerpo de la plantilla en el formato de la API de Meta. Con variables, Meta pide ejemplos.
+  function payloadPlantillaMeta(p, idioma = 'es_PE') {
+    const n = variablesDe(p.cuerpo);
+    const cuerpo = { type: 'BODY', text: String(p.cuerpo || '') };
+    if (n) cuerpo.example = { body_text: [Array.from({ length: n }, (_, i) => 'ejemplo' + (i + 1))] };
+    return { name: p.nombre, language: idioma, category: CATEGORIA_META[p.categoria] || 'UTILITY', components: [cuerpo] };
+  }
+  async function wabaId() {
+    return String(await leerConfigAuto('waba_id_whatsapp') || '').trim();
+  }
+  // Número que usamos para hablar con Meta: el indicado, o el primero que tenga token guardado.
+  async function numeroParaMeta(preferido) {
+    if (preferido) return preferido;
+    const fila = (await client.query("SELECT clave FROM automatizacion_config WHERE clave LIKE 'token_wa_%' ORDER BY clave LIMIT 1")).rows[0];
+    return fila ? fila.clave.replace(/^token_wa_/, '') : '';
+  }
+  async function credencialesMeta(numeroPreferido) {
+    const waba = await wabaId();
+    if (!waba) throw Object.assign(new Error('Falta el ID de la cuenta de WhatsApp Business. Guárdalo en Conexión con WhatsApp (Meta).'), { codigo: 400 });
+    const numero = await numeroParaMeta(numeroPreferido);
+    const token = numero ? await tokenNumero(numero) : '';
+    if (!token) throw Object.assign(new Error('Guarda primero el token de acceso de un número de WhatsApp.'), { codigo: 400 });
+    return { waba, token };
+  }
+  function mensajeErrorMeta(d, status) {
+    return (d && d.error && (d.error.error_user_msg || d.error.message)) || ('Meta respondió ' + status);
+  }
+  async function llamarMeta(url, opciones) {
+    try {
+      return await fetch(url, { ...opciones, signal: AbortSignal.timeout(20000) });
+    } catch (e) {
+      throw Object.assign(new Error('No hay conexión con Meta: ' + texto(e.message, 150)), { codigo: 502 });
+    }
+  }
+  async function guardarWabaId(u, f) {
+    const id = String(f.waba_id || '').replace(/\s/g, '');
+    if (!/^\d{6,25}$/.test(id)) throw Object.assign(new Error('El ID de la cuenta de WhatsApp Business solo lleva números.'), { codigo: 400 });
+    await client.query(`INSERT INTO automatizacion_config (clave, valor) VALUES ('waba_id_whatsapp', $1)
+      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [id]);
+    await registrar(u, 'configurar_whatsapp_meta', 'whatsapp', 'waba', '', '', 'ID de la cuenta de WhatsApp Business guardado');
+    return { ok: true };
+  }
+  // Manda la plantilla local a Meta para revisión. Antes pasa las reglas locales.
+  async function crearPlantillaEnMeta(u, f) {
+    const id = Number(f.id) || 0;
+    const p = (await client.query('SELECT id, nombre, categoria, cuerpo, meta_id FROM plantillas_wa WHERE id = $1', [id])).rows[0];
+    if (!p) throw Object.assign(new Error('Esa plantilla ya no existe.'), { codigo: 404 });
+    const fallos = revisarPlantilla(p).filter(c => !c.ok);
+    if (fallos.length) throw Object.assign(new Error('Corrige la plantilla antes de enviarla a Meta: ' + fallos.map(c => c.texto).join('; ') + '.'), { codigo: 400 });
+    const idioma = String(f.idioma || 'es_PE').trim();
+    if (!/^[a-z]{2}(_[A-Z]{2})?$/.test(idioma)) throw Object.assign(new Error('Idioma no válido. Ejemplo: es_PE.'), { codigo: 400 });
+    const { waba, token } = await credencialesMeta(String(f.numero_id || '').trim());
+    const r = await llamarMeta(`https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(waba)}/message_templates`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadPlantillaMeta(p, idioma))
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error('Meta no aceptó la plantilla: ' + mensajeErrorMeta(d, r.status)), { codigo: 502 });
+    const estado = String(d.status || 'PENDING');
+    await client.query(`UPDATE plantillas_wa SET meta_id = $2, meta_estado = $3, meta_motivo = '', actualizada = NOW() WHERE id = $1`, [id, String(d.id || ''), estado]);
+    await registrar(u, 'enviar_plantilla_meta', 'plantilla', p.nombre, '', '', estado);
+    return { ok: true, estado };
+  }
+  // Pide a Meta el estado de todas las plantillas de la cuenta y lo guarda junto a cada plantilla local.
+  async function sincronizarPlantillasMeta(u, f) {
+    const { waba, token } = await credencialesMeta(String(f.numero_id || '').trim());
+    let url = `https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(waba)}/message_templates?fields=id,name,status,rejected_reason&limit=100`;
+    const enMeta = [];
+    for (let pagina = 0; url && pagina < 10; pagina++) {
+      const r = await llamarMeta(url, { headers: { Authorization: 'Bearer ' + token } });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error('Meta no devolvió las plantillas: ' + mensajeErrorMeta(d, r.status)), { codigo: 502 });
+      enMeta.push(...(d.data || []));
+      url = (d.paging && d.paging.next) || '';
+    }
+    const locales = (await client.query('SELECT id, nombre FROM plantillas_wa')).rows;
+    const sinEnMeta = [];
+    let actualizadas = 0;
+    for (const p of locales) {
+      const m = enMeta.find(x => x.name === p.nombre);
+      if (!m) { sinEnMeta.push(p.nombre); continue; }
+      await client.query(`UPDATE plantillas_wa SET meta_id = $2, meta_estado = $3, meta_motivo = $4, actualizada = NOW() WHERE id = $1`,
+        [p.id, String(m.id || ''), String(m.status || ''), texto(m.rejected_reason, 300)]);
+      actualizadas++;
+    }
+    await registrar(u, 'sincronizar_plantillas_meta', 'whatsapp', 'plantillas', '', '', `${actualizadas} actualizadas`);
+    return { ok: true, actualizadas, sin_en_meta: sinEnMeta };
+  }
+
   // Configuración de la conexión con Meta (solo Programador, desde Oficina).
   async function configWhatsapp() {
-    return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))) };
+    return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))), waba_id: await wabaId() };
   }
   async function guardarSecretoWhatsapp(u, f) {
     const secreto = String(f.app_secret || '').trim();
@@ -1048,6 +1149,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'GET' && url === '/api/central/whatsapp/plantillas') return json(res, 200, { plantillas: await plantillasWa() });
       if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/guardar') return json(res, 200, await guardarPlantillaWa(u, await leerCuerpo(req)));
       if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/marcar') return json(res, 200, await marcarPlantillaWa(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/meta/crear') return json(res, 200, await crearPlantillaEnMeta(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/plantillas/meta/sincronizar') return json(res, 200, await sincronizarPlantillasMeta(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/waba/guardar') return json(res, 200, await guardarWabaId(u, await leerCuerpo(req)));
       if (req.method === 'POST' && url === '/api/central/whatsapp/revisar') return json(res, 200, await revisarWhatsapp());
       if (req.method === 'POST' && url === '/api/central/whatsapp/config/guardar') return json(res, 200, await guardarSecretoWhatsapp(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
@@ -1304,5 +1408,5 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
   const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
-  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe, revisarPlantilla } };
+  return { activo, preparar, iniciar, manejar, manejarN8n, manejarWhatsapp, ayudantes, _probar: { alertasDe, revisarPlantilla, variablesDe, payloadPlantillaMeta } };
 };
