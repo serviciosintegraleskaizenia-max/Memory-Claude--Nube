@@ -29,6 +29,7 @@ Saca los datos y responde SOLO con un objeto JSON, sin texto antes ni después, 
   "notas": algo importante que no cupo arriba (texto corto),
   "confianza": "alta", "media" o "baja"
 }
+Importante: si el correo lo envía PayPal, un banco o una pasarela, NO es la agencia. La agencia es quien paga: búscala en el saludo ("Hello, ..."), en "pagó por", en la factura o en el nombre de la empresa del cliente. El método de pago (PayPal, transferencia, etc.) va en "referencia" y en "notas".
 Si un dato no aparece en el correo, pon "" o [] o 0. No inventes números de reserva ni montos.
 
 Asunto: ${asunto}
