@@ -720,7 +720,9 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       // 1. Nuevos: servicios registrados de los últimos 120 días que todavía no están en Operaciones.
       const nuevos = (await client.query(`SELECT c.* FROM clasificacion c LEFT JOIN op_servicios o ON o.servicio_id = c.id
         WHERE o.id IS NULL AND c.estado = 'registrada' AND c.categoria IN ('RESERVA', 'MODIFICACION') AND NOT COALESCE(c.error_ia, FALSE)
-          AND c.creado > NOW() - INTERVAL '120 days' ORDER BY c.id LIMIT 500`)).rows;
+          AND c.creado > NOW() - INTERVAL '120 days'
+          AND c.creado >= COALESCE((SELECT (valor #>> '{}')::timestamptz FROM op_config WHERE clave = 'reinicio_desde'), '-infinity'::timestamptz)
+        ORDER BY c.id LIMIT 500`)).rows;
       // Las cancelaciones no son servicios para hacer: cancelan los de la reserva original.
       const porCorreo = new Map();
       for (const s of nuevos) { const k = s.message_id || 'id:' + s.id; if (!porCorreo.has(k)) porCorreo.set(k, []); porCorreo.get(k).push(s); }
@@ -1708,6 +1710,31 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       if (req.method === 'GET' && url === '/api/op/reserva-detalle') { pide('ver_reservas_op', 'No tienes permiso para ver las reservas.'); return json(res, 200, await detalleReserva(Number(p.get('id')), prog || puede('ver_precios'))); }
       // ---------- Administración (gerencia) ----------
       // ---------- Cobros a agencias (permiso "Ver pagos"): estado de cuenta, abonos y descuentos, cuentas por cobrar ----------
+      // Reinicio de Operaciones (solo Programador): guarda una copia de cada tabla y vacía la operación del día a día.
+      // Catálogos (agencias, choferes, vehículos, tarifarios), usuarios y configuración se quedan.
+      if (req.method === 'POST' && url === '/api/op/reinicio') {
+        if (!prog) throw error('Solo el Programador puede reiniciar Operaciones.', 403);
+        const f = await leerCuerpo(req);
+        if (String(f.escribio || '').trim() !== 'REINICIAR') throw error('Escribe la palabra REINICIAR para confirmar.', 400);
+        const cuenta = (await client.query('SELECT password_hash FROM usuarios WHERE id = $1', [u.id])).rows[0];
+        if (!cuenta || !(await bcrypt.compare(String(f.contrasena || ''), cuenta.password_hash))) throw error('Contraseña incorrecta.', 403);
+        const tablas = ['op_servicios', 'op_servicio_cortesias', 'op_tiempos', 'op_abonos_agencia', 'op_recibos', 'op_pagos', 'op_proformas', 'op_vuelos_verif', 'op_eventos'];
+        const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+        const copias = [];
+        await client.query('BEGIN');
+        try {
+          for (const t of tablas) {
+            const nombre = `${t}_resp_${stamp}`;
+            await client.query(`CREATE TABLE ${nombre} AS SELECT * FROM ${t}`);
+            copias.push(nombre);
+          }
+          await client.query(`TRUNCATE ${tablas.join(', ')} RESTART IDENTITY`);
+          await client.query(`INSERT INTO op_config (clave, valor) VALUES ('reinicio_desde', $1) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [JSON.stringify(new Date().toISOString())]);
+          await client.query('COMMIT');
+        } catch (err) { await client.query('ROLLBACK'); throw err; }
+        await registrar(u, 'op_reinicio', 'operaciones', stamp, '', '', `Reinicio de Operaciones · copia ${stamp} (${copias.length} tablas)`);
+        return json(res, 200, { ok: true, respaldo: stamp, tablas: copias });
+      }
       if (url.startsWith('/api/op/cobros/')) {
         const hoyIso = new Date().toISOString().slice(0, 10);
         const fechaOk = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
@@ -2176,7 +2203,7 @@ ${rec.nota ? `<div style="grid-column:1/-1"><b>Nota</b>${esc2(rec.nota)}</div>` 
             client.query('SELECT * FROM op_vehiculos ORDER BY nombre'), client.query('SELECT * FROM op_proveedores ORDER BY nombre'), client.query('SELECT * FROM op_paquetes ORDER BY orden, id'),
             client.query('SELECT * FROM op_cortesias ORDER BY orden, nombre')]);
           const llaves = await cfg('llaves', {});
-          return json(res, 200, { publico: await cfg('publico', false), modulos: await modulos(), reglas: await cfg('reglas', REGLAS_INICIALES), plantillas: await cfg('plantillas', PLANTILLAS_INICIALES),
+          return json(res, 200, { programador: prog, publico: await cfg('publico', false), modulos: await modulos(), reglas: await cfg('reglas', REGLAS_INICIALES), plantillas: await cfg('plantillas', PLANTILLAS_INICIALES),
             whatsapp: await cfg('whatsapp', WHATSAPP_INICIAL), vuelos: await cfg('vuelos', VUELOS_INICIAL), llaves: Object.fromEntries(Object.keys(llaves).map(k => [k, Boolean(llaves[k])])),
             tarifarios: tarifarios.rows, tarifas: tarifas.rows, agencias: agencias2.rows, hoteles: hoteles2.rows, choferes: choferes.rows, vehiculos: vehiculos.rows, proveedores: proveedores.rows, paquetes: paquetes.rows, cortesias: cortesias.rows.map(c => ({ ...c, precio: Number(c.precio) })),
             tipos_tarifa: TIPOS_TARIFA, tipos_proveedor: TIPOS_PROVEEDOR });

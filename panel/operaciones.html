@@ -1068,6 +1068,21 @@ async function vConfig() {
   if (!r.ok) { $('#vista').innerHTML = `<div class="vacio">${esc(r.data.error)}</div>`; return; }
   CF = r.data;
   pintarConfig();
+  if (CF.programador) $('#vista').insertAdjacentHTML('beforeend', htmlReinicioOp());
+}
+function htmlReinicioOp() {
+  return `<div class="caja" style="margin-top:14px;border:1px solid var(--rojo)"><h3 style="color:var(--rojo)">Reiniciar Operaciones</h3>
+    <div class="sub">Deja la operación como nueva desde este momento: reservas, asignaciones, tiempos, cobros, pagos y recibos. Antes se guarda una copia. Se quedan usuarios, empresa, agencias, choferes, vehículos y tarifarios. Solo lo puedes hacer tú.</div>
+    <div class="cb-form"><label>Tu contraseña<input id="rsContrasena" type="password" autocomplete="new-password"></label>
+    <label>Escribe REINICIAR<input id="rsPalabra" autocomplete="off"></label></div>
+    <div class="acciones"><button class="btn" data-reinicio-op style="background:var(--rojo);color:#fff">Reiniciar Operaciones</button></div></div>`;
+}
+async function reiniciarOperaciones() {
+  if (!confirm('¿Reiniciar Operaciones? Borra la operación desde ahora. Se guarda una copia antes.')) return;
+  const r = await api('/api/op/reinicio', { contrasena: $('#rsContrasena').value, escribio: $('#rsPalabra').value });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo reiniciar.', 7000);
+  aviso('Operaciones reiniciada. Copia guardada: ' + r.data.respaldo, 9000);
+  return vConfig();
 }
 const TABS_CF = [['general', 'General y módulos'], ['choferes', 'Choferes'], ['vehiculos', 'Vehículos'], ['proveedores', 'Transportistas y proveedores'], ['agencias', 'Agencias'], ['hoteles', 'Hoteles y zonas'], ['tarifarios', 'Tarifarios'], ['cortesias', 'Cortesías'], ['paquetes', 'Paquetes'], ['plantillas', 'Plantillas de impresión'], ['reglas', 'Reglas'], ['vuelos', 'Vuelos en vivo'], ['whatsapp', 'WhatsApp']];
 const CAMPOS = {
@@ -1743,6 +1758,7 @@ document.addEventListener('click', async ev => {
   const gb = t.closest('.g-b'); if (gb) return abrirDetalle(Number(gb.dataset.id));
   const fila = t.closest('tr.fila[data-id]'); if (fila && !t.closest('input,button,[data-asig],select,textarea')) return abrirDetalle(Number(fila.dataset.id));
   if (t.closest('#btnWaOp')) return copiarOperativoWa();
+  if (t.closest('[data-reinicio-op]')) return reiniciarOperaciones();
   if (t.closest('#btnImprimir')) { const w = window.open('', '_blank'); w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Operativo</title><style>body{font-family:'Segoe UI',Arial,sans-serif;margin:18px;color:#0f1b2d}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;text-align:left}.sub2{color:#64748b;font-size:12px}@page{size:landscape}</style></head><body>${$('#hojaOp').innerHTML.replace(/src="\/empresa\/logo"/g, `src="${location.origin}/empresa/logo"`)}<script>setTimeout(()=>print(),400)<\/script></body></html>`); w.document.close(); return; }
   // reserva manual
   if (t.closest('#nAgregar')) { const u = nuevos[nuevos.length - 1] || {}; nuevos.push({ tipo: 'OUT', fecha: u.fecha || S.fecha, hora: '', vuelo: '', aeropuerto: u.aeropuerto || 'PUJ', actividad: '' }); return pintarNuevos(); }
