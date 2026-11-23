@@ -735,7 +735,8 @@ function pintarConexiones() {
       : '<span><span class="chip prio-ambar">Sin conectar</span> <button class="btn chico" type="button" data-arreglar="chatwoot">Arreglar</button></span>'}</div>
     <div class="conexion"><span>Respuestas con inteligencia artificial</span>${ESTADO.ia
       ? '<span class="chip prio-verde">Lista</span>'
-      : '<span><span class="chip prio-ambar">Sin clave</span> <button class="btn chico" type="button" data-arreglar="ia">Arreglar</button></span>'}</div>`;
+      : '<span><span class="chip prio-ambar">Sin clave</span> <button class="btn chico" type="button" data-arreglar="ia">Arreglar</button></span>'}</div>
+    <div id="ajDiagCw"></div>`;
 }
 function pintarPasos() {
   $('#ajPasos').innerHTML = (ESTADO.pasos || []).map(p => `
@@ -754,12 +755,29 @@ async function guardarAjuste(cambios) {
 function guardarModoPrueba() {
   return guardarAjuste({ modo_prueba: { activo: $('#ajPrueba').checked, numeros: numerosDe($('#ajNumeros').value) } });
 }
+// Qué hacer según el resultado de la prueba de Chatwoot (lo que devuelve el servidor en "codigo").
+const GUIA_CHATWOOT = {
+  sin_config: 'Chatwoot todavía no está conectado. Lo conecta el Programador en Operaciones → WhatsApp.',
+  token: 'El token ya no sirve. En Chatwoot entra a tu perfil (Configuración del perfil → Token de acceso), copia el token nuevo y pégalo en Operaciones → WhatsApp.',
+  cuenta: 'El número de cuenta de Chatwoot no existe. Es el número que aparece en la dirección de Chatwoot después de /accounts/. Corrígelo en Operaciones → WhatsApp.',
+  red: 'No hay conexión con Chatwoot. Revisa que el servidor de Chatwoot esté encendido y que la dirección sea la correcta, y vuelve a intentar.',
+  otro: 'Chatwoot respondió con un error. Vuelve a intentar en un momento; si sigue, avisa al Programador.'
+};
 async function arreglar(que) {
   if (que !== 'chatwoot') return aviso('La clave de IA se pone en la configuración de la empresa. Lo hace el Programador.', 7000);
+  const caja = $('#ajDiagCw');
+  if (!caja) return;
+  caja.innerHTML = '<p class="sub" style="margin-top:10px">Probando la conexión con Chatwoot…</p>';
   const r = await api('/api/crm/conexion/probar', {});
-  const mensaje = (r.data && r.data.mensaje) || 'No se pudo probar la conexión.';
-  aviso(mensaje, 8000);
-  $('#ajConexiones').insertAdjacentHTML('beforeend', `<p class="sub" style="color:${r.data && r.data.ok ? 'var(--verde)' : 'var(--rojo)'}">${esc(mensaje)}</p>`);
+  const d = r.data || {};
+  const ok = Boolean(d.ok);
+  const guia = ok ? '' : (GUIA_CHATWOOT[d.codigo] || GUIA_CHATWOOT.otro);
+  caja.innerHTML = `<div style="margin-top:12px;padding:10px;border:1px solid var(--borde);border-radius:8px">
+    <p style="margin:0 0 6px;font-weight:600;color:${ok ? 'var(--verde)' : 'var(--rojo)'}">${ok ? '✓ Conectado' : '✗ No conecta'}</p>
+    <p class="sub" style="margin:0 0 6px">${esc(d.mensaje || 'No se pudo probar la conexión.')}</p>
+    ${guia ? `<p class="sub" style="margin:0 0 6px">${esc(guia)}</p>` : ''}
+    <button class="btn chico" type="button" data-arreglar="chatwoot">Reintentar prueba</button>
+  </div>`;
 }
 
 // ---------- Aviso de personas nuevas: contador en la pestaña y sonido (CRM-9) ----------

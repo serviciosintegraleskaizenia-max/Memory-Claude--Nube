@@ -440,17 +440,17 @@ module.exports = function crearCrm({ client, cuenta, registrar, chatwoot, claveI
   // Prueba real de la conexión con Chatwoot (botón «Arreglar» en Ajustes).
   async function probarConexion() {
     const cw = chatwoot ? await chatwoot().catch(() => null) : null;
-    if (!cw || !cw.url || !cw.cuenta || !cw.token) return { ok: false, mensaje: 'Chatwoot no está configurado. El Programador lo conecta en Operaciones (WhatsApp).' };
+    if (!cw || !cw.url || !cw.cuenta || !cw.token) return { ok: false, codigo: 'sin_config', mensaje: 'Chatwoot no está configurado. El Programador lo conecta en Operaciones (WhatsApp).' };
     try {
       const r = await fetch(`${String(cw.url).replace(/\/$/, '')}/api/v1/accounts/${encodeURIComponent(cw.cuenta)}/conversations?page=1`, {
         headers: { api_access_token: cw.token }, signal: AbortSignal.timeout(10000)
       });
-      if (r.status === 401 || r.status === 403) return { ok: false, mensaje: 'El token de Chatwoot no es válido. Hay que cambiarlo en Operaciones (WhatsApp).' };
-      if (r.status === 404) return { ok: false, mensaje: 'La cuenta de Chatwoot no existe. Revisa el número de cuenta.' };
-      if (!r.ok) return { ok: false, mensaje: `Chatwoot respondió ${r.status}. Intenta de nuevo en un momento.` };
-      return { ok: true, mensaje: 'Chatwoot responde bien y la cuenta es correcta.' };
+      if (r.status === 401 || r.status === 403) return { ok: false, codigo: 'token', mensaje: 'El token de Chatwoot no es válido. Hay que cambiarlo en Operaciones (WhatsApp).' };
+      if (r.status === 404) return { ok: false, codigo: 'cuenta', mensaje: 'La cuenta de Chatwoot no existe. Revisa el número de cuenta.' };
+      if (!r.ok) return { ok: false, codigo: 'otro', mensaje: `Chatwoot respondió ${r.status}. Intenta de nuevo en un momento.` };
+      return { ok: true, codigo: 'ok', mensaje: 'Chatwoot responde bien y la cuenta es correcta.' };
     } catch (e) {
-      return { ok: false, mensaje: 'No hay conexión con Chatwoot. Revisa la dirección del servidor.' };
+      return { ok: false, codigo: 'red', mensaje: 'No hay conexión con Chatwoot. Revisa la dirección del servidor.' };
     }
   }
   async function procesarSeguimientos() {
