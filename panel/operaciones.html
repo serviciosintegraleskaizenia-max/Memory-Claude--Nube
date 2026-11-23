@@ -151,6 +151,16 @@ body.oscuro .t-az{color:#6ea8f5}body.oscuro .t-vi{color:#a993ff}body.oscuro .t-v
 .pill.a{background:var(--oro);border-color:var(--oro);color:#1b1405}.pill.a b{color:#1b1405}.pill.aviso{border-color:rgba(217,45,75,.4);color:var(--rojo)}
 .buscar{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:2px 12px;color:var(--suave);width:290px}.buscar input{border:0;flex:1;padding:6px 0;background:transparent;box-shadow:none}
 .card{background:var(--card);border-radius:18px;box-shadow:var(--sombra);border:1px solid var(--borde);overflow:hidden}
+.barra-pag{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;width:100%;margin:12px 0 24px;background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:10px 14px}
+.pb-info{font-size:13.5px;color:var(--suave)}.pb-info b{color:var(--txt)}
+.pb-btns{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pb-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:9px;border:1px solid var(--borde);background:var(--bg);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer}
+.pb-btn:hover:not(:disabled){border-color:var(--azul)}
+.pb-btn:disabled{opacity:.35;cursor:default}
+.pb-btn svg{width:18px;height:18px}
+.pb-num{min-width:36px;height:36px;padding:0 8px;border-radius:9px;border:1px solid var(--borde);background:var(--bg);color:var(--txt);font-size:14px;font-weight:600;cursor:pointer}
+.pb-num.a{background:var(--azul);border-color:var(--azul);color:#fff}
+.pb-puntos{color:var(--suave);padding:0 4px}
 .caja{background:var(--card);border-radius:18px;box-shadow:var(--sombra);border:1px solid var(--borde);padding:16px 18px;margin-bottom:16px}
 .caja h3{margin:0 0 10px;font-size:14px;display:flex;align-items:center;gap:8px}
 table{width:100%;border-collapse:collapse}th{text-align:left;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--suave);font-weight:700;padding:12px 14px;border-bottom:1px solid var(--borde);white-space:nowrap}
@@ -1381,7 +1391,7 @@ document.addEventListener('click', async ev => {
 });
 
 /* ================= Reservas: lo registrado (correo) y lo manual, con buscador y ficha ================= */
-const RV = { q: '', tipo: [], estado: [], desde: '', hasta: '', alta_desde: '', alta_hasta: '', agencia: '', asesor: '', aerolinea: '', vuelo: '', grupo: '', origen: '', mas: false, datos: null };
+const RV = { q: '', tipo: [], estado: [], desde: '', hasta: '', alta_desde: '', alta_hasta: '', agencia: '', asesor: '', aerolinea: '', vuelo: '', grupo: '', origen: '', mas: false, datos: null, pag: 1, claveVista: '' };
 const ESTADO_RV = { activa: ['Activa', 'e-asignado'], completada: ['Completada', 'e-completado'], cancelada: ['Cancelada', 'e-cancelado'], parcial: ['Parcial', 'e-por_asignar'] };
 const TIPO_CORTO = { IN: ['plane-landing', 'Llegada'], OUT: ['plane-takeoff', 'Salida'], INTERHOTEL: ['route', 'Inter-hotel'], ACTIVIDAD: ['ticket', 'Tour'], OTRO: ['circle-dot', 'Servicio'] };
 const ASIG_ICONO = { chofer: 'car', proveedor: 'bus' };
@@ -1405,8 +1415,40 @@ async function cargarReservas() {
   pintarReservas();
 }
 function filtrosActivosRV() { return ['desde', 'hasta', 'alta_desde', 'alta_hasta', 'agencia', 'asesor', 'aerolinea', 'vuelo', 'grupo', 'origen'].filter(k => RV[k]).length; }
+// Reservas de 25 en 25, con la misma barra de páginas del panel de correo.
+const PAGINA_RV = 25;
+function rebanadaRV(total, pagina) {
+  const paginas = Math.max(1, Math.ceil(total / PAGINA_RV));
+  const p = Math.min(Math.max(1, pagina), paginas);
+  const inicio = (p - 1) * PAGINA_RV;
+  return { pagina: p, paginas, inicio, fin: Math.min(total, inicio + PAGINA_RV), total };
+}
+// Números con puntos suspensivos: 1 2 3 … 9
+function numerosPaginaRV(actual, total) {
+  const salida = [];
+  for (let p = 1; p <= total; p++) {
+    if (p === 1 || p === total || Math.abs(p - actual) <= 1) salida.push(p);
+    else if (salida[salida.length - 1] !== '…') salida.push('…');
+  }
+  return salida;
+}
+function barraPaginasRV(r) {
+  if (r.paginas <= 1) return '';
+  return `<div class="barra-pag"><span class="pb-info">Mostrando <b>${r.inicio + 1}–${r.fin}</b> de <b>${r.total}</b> reservas</span>
+    <div class="pb-btns">
+      <button class="pb-btn" data-rv-pag="-1" title="Página anterior" ${r.pagina <= 1 ? 'disabled' : ''}>${ic('chevron-left')}<span>Anterior</span></button>
+      ${numerosPaginaRV(r.pagina, r.paginas).map(p => p === '…' ? '<span class="pb-puntos">…</span>' : `<button class="pb-num ${p === r.pagina ? 'a' : ''}" data-rv-pag-ir="${p}" title="Página ${p}">${p}</button>`).join('')}
+      <button class="pb-btn" data-rv-pag="1" title="Página siguiente" ${r.pagina >= r.paginas ? 'disabled' : ''}><span>Siguiente</span>${ic('chevron-right')}</button>
+    </div></div>`;
+}
 function pintarReservas() {
   const d = RV.datos, precios = I.permisos.ver_precios && I.modulos.precios;
+  // Al cambiar un filtro o la búsqueda se vuelve a la página 1.
+  const clave = consultaRV();
+  if (clave !== RV.claveVista) { RV.pag = 1; RV.claveVista = clave; }
+  const rb = rebanadaRV(d.reservas.length, RV.pag);
+  RV.pag = rb.pagina;
+  const visibles = d.reservas.slice(rb.inicio, rb.fin);
   const ICONO_CHIP = { IN: 'plane-landing', OUT: 'plane-takeoff', INTERHOTEL: 'route', ACTIVIDAD: 'ticket', activa: 'circle-dot', completada: 'circle-check', cancelada: 'ban' };
   const chip = (grupo, k, n) => `<button class="pill ${RV[grupo].includes(k) ? 'a' : ''}" data-rv-chip="${grupo}" data-k="${k}">${ICONO_CHIP[k] ? `<span class="chip-ic">${ic(ICONO_CHIP[k])}</span>` : ''}${n}</button>`;
   const fila = r => {
@@ -1438,7 +1480,7 @@ function pintarReservas() {
       </div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn s mini" id="rvLimpiar">Limpiar</button><button class="btn p mini" id="rvAplicar">Aplicar</button></div></div>` : ''}
     <div class="rv-res">${d.resumen.reservas} reserva(s) · ${d.resumen.pax} pax · ${d.resumen.servicios} servicio(s)${precios && d.resumen.venta !== undefined ? ` · <b>${dinero(d.resumen.venta)}</b> en ventas` : ''}${precios && d.resumen.sin_precio ? ` · <b style="color:var(--suave)">${d.resumen.sin_precio} servicio(s) sin precio</b> (por confirmar)` : ''}${d.total > d.reservas.length ? ` · se muestran las ${d.reservas.length} más recientes` : ''}</div>
     <div class="card"><table><thead><tr><th>Reserva</th><th>Cliente y agencia</th><th>Servicios</th><th>Pax</th><th>Asesor</th><th>Estado</th>${precios ? '<th style="text-align:right">Venta</th>' : ''}</tr></thead>
-      <tbody>${d.reservas.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>`;
+      <tbody>${visibles.map(fila).join('') || `<tr><td colspan="7" class="vacio">No hay reservas con esta búsqueda.</td></tr>`}</tbody></table></div>${barraPaginasRV(rb)}`;
 }
 // Ficha de una reserva: los servicios, la agencia, los documentos y el acceso al correo (sin mostrar el correo aquí).
 // Reloj de Operaciones: mientras la ficha de la reserva está abierta aquí, sigue contando el mismo número
@@ -1696,6 +1738,15 @@ document.addEventListener('click', async ev => {
   const ab = t.closest('[data-abrir]'); if (ab && S.vista === 'hoy') { ev.preventDefault(); return abrirDetalle(Number(ab.dataset.abrir)); }
   const irf = t.closest('[data-ir-filtro]'); if (irf) { ev.preventDefault(); S.filtro = irf.dataset.irFiltro; return ir('operaciones'); }
   const rv = t.closest('tr[data-rv]'); if (rv) return abrirReserva(Number(rv.dataset.rv));
+  const pg = t.closest('[data-rv-pag],[data-rv-pag-ir]');
+  if (pg) {
+    if (pg.disabled) return;
+    ev.preventDefault();
+    RV.pag = pg.dataset.rvPagIr ? Number(pg.dataset.rvPagIr) : RV.pag + Number(pg.dataset.rvPag);
+    pintarReservas();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
   const ch = t.closest('[data-rv-chip]'); if (ch) { const g = ch.dataset.rvChip, k = ch.dataset.k; RV[g] = RV[g].includes(k) ? RV[g].filter(x => x !== k) : [...RV[g], k]; return cargarReservas(); }
   if (t.closest('#rvMas')) { RV.mas = !RV.mas; return pintarReservas(); }
   if (t.closest('#rvAplicar')) { document.querySelectorAll('[data-rvf]').forEach(el => { RV[el.dataset.rvf] = el.value.trim(); }); return cargarReservas(); }
