@@ -96,19 +96,72 @@ label.campo input,label.campo select,label.campo textarea{display:block;width:10
   .ficha{width:100%}
   .barra select{flex:1}
 }
+
+  /* ---- Actualización CRM-1: barra lateral con contadores, tarjetas con estado, buscador ⌘K ---- */
+  body{display:flex;min-height:100vh}
+  .top{position:sticky;top:0;height:100vh;width:232px;flex:none;flex-direction:column;align-items:stretch;gap:6px;padding:18px 14px;overflow-y:auto}
+  .top .marca{font-size:17px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .top .marca::before{content:"Z";display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--oro),#e4c77f);color:var(--nav);font-weight:800}
+  .tabs{flex-direction:column;gap:4px}
+  .tab{display:flex;justify-content:space-between;align-items:center;border:0;border-radius:10px;padding:10px 12px;font-size:14px;color:#cdd6e4;background:transparent;text-align:left}
+  .tab:hover{background:rgba(255,255,255,.08);color:#fff}
+  .tab.on{background:rgba(201,162,74,.18);color:#fff;font-weight:700;box-shadow:inset 3px 0 0 var(--oro)}
+  .tab .n{font-size:12px;background:var(--oro);color:var(--nav);border-radius:999px;padding:1px 8px;font-weight:800}
+  .tab .n:empty{display:none}
+  .buscar-k{display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#cdd6e4;border-radius:10px;padding:9px 11px;cursor:pointer;margin:8px 0 10px}
+  .buscar-k kbd{font:inherit;font-size:11.5px;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:1px 6px}
+  .estado-linea{margin-top:auto;font-size:12.5px;color:#cdd6e4;display:flex;gap:8px;align-items:center;padding:8px 2px}
+  .estado-linea i{width:8px;height:8px;border-radius:50%;background:var(--verde)}
+  .estado-linea.aviso i{background:var(--ambar)}
+  .top .volver{color:#cdd6e4;font-size:13px;text-decoration:none;opacity:1;padding:6px 2px}
+  main{flex:1;min-width:0;padding:18px 22px 40px}
+  .tarjeta{border-radius:13px;border-left-width:4px;box-shadow:var(--sombra);transition:transform .15s ease,box-shadow .15s ease}
+  .tarjeta:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(15,27,45,.06),0 12px 28px rgba(15,27,45,.09)}
+  .tarjeta .edad{display:inline-flex;align-items:center;gap:6px}
+  .tarjeta .edad i{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .col{border-radius:16px;background:#e8edf5}
+  .cmdk{position:fixed;inset:0;background:rgba(12,26,46,.45);display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;z-index:50}
+  .cmdk[hidden]{display:none}
+  .cmdk-caja{background:#fff;border-radius:16px;width:min(560px,100%);box-shadow:0 24px 60px rgba(12,26,46,.35);overflow:hidden}
+  .cmdk-caja input{width:100%;border:0;border-bottom:1px solid var(--borde);padding:16px 18px;font-size:16px;outline:none}
+  .cmdk-res{max-height:52vh;overflow:auto}
+  .cmdk-item{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;border:0;background:#fff;padding:12px 18px;text-align:left;cursor:pointer;border-bottom:1px solid #f1f4f8}
+  .cmdk-item:hover{background:#f4f7fc}
+  .cmdk-item small{color:var(--suave)}
+  .cmdk-pie{font-size:11.5px;color:var(--suave);padding:9px 18px;background:#f8fafc}
+  @media (max-width:860px){
+    body{display:block}
+    .top{position:static;height:auto;width:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px 16px;gap:8px}
+    .top .marca{margin:0 10px 0 0}
+    .tabs{flex-direction:row;flex-wrap:wrap;gap:6px}
+    .tab{border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 12px;color:#fff}
+    .tab.on{background:#fff;color:var(--nav);box-shadow:none;font-weight:700}
+    .tab .n{background:var(--oro)}
+    .buscar-k,.estado-linea{display:none}
+    main{padding:12px 14px 40px}
+  }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="marca">Zentralia <span>· CRM</span></div>
   <nav class="tabs" aria-label="Vistas">
-    <button class="tab on" data-vista="tablero">Tablero</button>
+    <button class="tab on" data-vista="tablero">Tablero <span class="n" id="nTablero"></span></button>
     <button class="tab" data-vista="lista">Lista</button>
-    <button class="tab" data-vista="seguimientos">Seguimientos <span id="nSeg"></span></button>
+    <button class="tab" data-vista="seguimientos">Seguimientos <span class="n" id="nSeg"></span></button>
   </nav>
-  <a href="/">← Volver al panel</a>
+  <button type="button" class="buscar-k" id="btnCmdk" aria-label="Buscar personas (Ctrl o ⌘ + K)"><span>Buscar persona</span><kbd>⌘K</kbd></button>
+  <div id="estadoLinea" class="estado-linea"><i></i><span>Todo funciona</span></div>
+  <a href="/" class="volver">← Volver al panel</a>
 </header>
 <main>
+  <div id="cmdk" class="cmdk" hidden role="dialog" aria-modal="true" aria-label="Buscar personas">
+  <div class="cmdk-caja">
+    <input id="cmdkTexto" type="search" placeholder="Nombre, teléfono o correo…" autocomplete="off" aria-label="Buscar persona">
+    <div id="cmdkRes" class="cmdk-res"></div>
+    <div class="cmdk-pie">Clic en una persona para filtrarla · Esc cierra</div>
+  </div>
+</div>
   <div id="bannerServicio" class="banner" hidden></div>
   <div id="bannerChatwoot" class="banner suave" hidden>Chatwoot no está conectado. Puedes cargar personas a mano. Para traer conversaciones, el Programador lo conecta en Operaciones (WhatsApp).</div>
 
@@ -237,6 +290,8 @@ async function iniciar() {
   $('#bannerServicio').hidden = ESTADO.servicio;
   $('#bannerServicio').textContent = 'El servicio CRM no está contratado para esta empresa. Tú lo ves para revisarlo; los demás usuarios no entran hasta que Kaizen IA lo active desde Empresas en Oficina.';
   $('#bannerChatwoot').hidden = ESTADO.chatwoot;
+  $('#estadoLinea').className = 'estado-linea' + (ESTADO.chatwoot ? '' : ' aviso');
+  $('#estadoLinea span').textContent = ESTADO.chatwoot ? 'Todo funciona' : 'Chatwoot sin conectar';
   $('#btnSync').disabled = !ESTADO.chatwoot;
   $('#btnEtapas').hidden = !ESTADO.editarEtapas;
   const s = ESTADO.sincronizado;
@@ -258,6 +313,33 @@ async function pintarVista() {
   return cargarSeguimientos();
 }
 
+// Buscador rápido (Ctrl/⌘ + K): busca en todas las personas y, al elegir una, la filtra en la vista.
+let cmdkT = null;
+function abrirCmdk() { $('#cmdk').hidden = false; $('#cmdkTexto').value = ''; $('#cmdkRes').innerHTML = ''; $('#cmdkTexto').focus(); }
+function cerrarCmdk() { $('#cmdk').hidden = true; }
+$('#btnCmdk').addEventListener('click', abrirCmdk);
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); abrirCmdk(); }
+  else if (e.key === 'Escape' && !$('#cmdk').hidden) cerrarCmdk();
+});
+$('#cmdk').addEventListener('click', e => { if (e.target.id === 'cmdk') cerrarCmdk(); });
+$('#cmdkTexto').addEventListener('input', e => {
+  clearTimeout(cmdkT);
+  const q = e.target.value.trim();
+  if (!q) { $('#cmdkRes').innerHTML = ''; return; }
+  cmdkT = setTimeout(async () => {
+    const r = await api('/api/crm/contactos?q=' + encodeURIComponent(q.toLowerCase()));
+    if (!r.ok) return;
+    $('#cmdkRes').innerHTML = r.data.contactos.slice(0, 8).map(c => `<button type="button" class="cmdk-item" data-nombre="${esc(nombreDe(c))}"><b>${esc(nombreDe(c))}</b><small>${esc(c.telefono || c.correo || '')}</small></button>`).join('') || '<div class="vacio">Nadie con ese texto.</div>';
+  }, 160);
+});
+$('#cmdkRes').addEventListener('click', e => {
+  const b = e.target.closest('.cmdk-item'); if (!b) return;
+  $('#buscar').value = b.dataset.nombre;
+  cerrarCmdk();
+  cargar();
+});
+
 async function cargarTablero() {
   const r = await api('/api/crm/tablero?' + queryFiltros());
   if (!r.ok) return aviso(r.data.error || 'No se pudo cargar el tablero.', 6000);
@@ -270,13 +352,19 @@ async function cargarTablero() {
       ${c.contactos.length ? c.contactos.map(tarjeta).join('') : '<div class="vacio" style="padding:14px">Arrastra aquí</div>'}
     </div>`).join('') || '<div class="vacio">No hay personas con ese filtro.</div>';
   $('#nSeg').textContent = '';
+  $('#nTablero').textContent = total;
+}
+function colorEdad(iso) {
+  if (!iso) return '#cbd5e1';
+  const h = (Date.now() - new Date(iso).getTime()) / 3600e3;
+  return h < 24 ? 'var(--verde)' : h < 72 ? 'var(--ambar)' : 'var(--rojo)';
 }
 function tarjeta(c) {
   const alerta = c.ultimo_entrante && (Date.now() - new Date(c.ultimo_entrante).getTime()) > 24 * 3600e3 && c.ultimo_saliente && new Date(c.ultimo_saliente) > new Date(c.ultimo_entrante);
   return `
-  <div class="tarjeta" draggable="true" data-id="${c.id}" style="border-left-color:${c.seguimientos ? '#c98a12' : '#cbd5e1'}">
+  <div class="tarjeta" draggable="true" data-id="${c.id}" style="border-left-color:${c.seguimientos ? 'var(--ambar)' : colorEdad(c.ultimo_entrante)}">
     <div class="nom">${esc(nombreDe(c))}</div>
-    <div class="meta"><span>${esc(hace(c.ultimo_entrante))}</span>${c.seguimientos ? `<span class="chip seg">${c.seguimientos} seguimiento(s)</span>` : ''}</div>
+    <div class="meta"><span class="edad"><i style="background:${colorEdad(c.ultimo_entrante)}"></i>${esc(hace(c.ultimo_entrante))}</span>${c.seguimientos ? `<span class="chip seg">${c.seguimientos} seguimiento(s)</span>` : ''}</div>
     <div class="chips">${chipCanal(c)}${alerta ? '<span class="chip alerta">Sin respuesta nuestra</span>' : ''}${chipsEtiquetas(c)}</div>
     <select class="mover" data-mover="${c.id}" aria-label="Mover a otra etapa">${etapasActivas().map(e => `<option value="${esc(e.clave)}" ${e.clave === c.etapa ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
   </div>`;
