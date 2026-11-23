@@ -331,6 +331,11 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
       tipo TEXT NOT NULL DEFAULT 'abono', monto NUMERIC NOT NULL, metodo TEXT NOT NULL DEFAULT 'Transferencia', referencia TEXT NOT NULL DEFAULT '',
       fecha DATE NOT NULL DEFAULT CURRENT_DATE, nota TEXT NOT NULL DEFAULT '', anulado BOOLEAN NOT NULL DEFAULT FALSE,
       registrado_por TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    // Recibos de pago: un recibo agrupa los abonos de varias reservas que pagó la agencia en una sola vez.
+    await q(`CREATE TABLE IF NOT EXISTS op_recibos (id SERIAL PRIMARY KEY, numero INTEGER NOT NULL UNIQUE, agencia TEXT NOT NULL,
+      fecha DATE NOT NULL DEFAULT CURRENT_DATE, total NUMERIC NOT NULL, metodo TEXT NOT NULL DEFAULT 'Transferencia', referencia TEXT NOT NULL DEFAULT '',
+      nota TEXT NOT NULL DEFAULT '', anulado BOOLEAN NOT NULL DEFAULT FALSE, registrado_por TEXT NOT NULL DEFAULT '', creado TIMESTAMP NOT NULL DEFAULT NOW())`);
+    await q('ALTER TABLE op_abonos_agencia ADD COLUMN IF NOT EXISTS recibo_id INTEGER');
     // Reloj de Operaciones: usa el mismo número de reserva que el panel de correo (clasificacion.id).
     // El tiempo del correo sigue en tiempo_reserva; este guarda el trabajo hecho aquí, para sumarlo después.
     await q(`CREATE TABLE IF NOT EXISTS op_tiempos (id SERIAL PRIMARY KEY, reserva_id INTEGER NOT NULL, usuario VARCHAR(50) NOT NULL,
@@ -1689,7 +1694,7 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
             FROM op_servicios o LEFT JOIN clasificacion c ON c.id = o.servicio_id
             WHERE lower(o.agencia) = lower($1) AND o.estado <> 'cancelado' AND o.precio IS NOT NULL AND o.fecha <> '' AND o.fecha <= $2
             ORDER BY o.fecha, o.id`, [agencia, corte])).rows;
-          const movs = (await client.query(`SELECT id, reserva, tipo, monto, metodo, referencia, to_char(fecha, 'YYYY-MM-DD') AS fecha, nota
+          const movs = (await client.query(`SELECT id, reserva, tipo, monto, metodo, referencia, to_char(fecha, 'YYYY-MM-DD') AS fecha, nota, recibo_id, (SELECT numero FROM op_recibos r WHERE r.id = op_abonos_agencia.recibo_id) AS recibo_num
             FROM op_abonos_agencia WHERE lower(agencia) = lower($1) AND NOT anulado ORDER BY fecha, id`, [agencia])).rows
             .map(m => ({ ...m, monto: Number(m.monto) }));
           const grupos = new Map();
@@ -1752,6 +1757,114 @@ module.exports = function crearOperaciones({ client, config, registrar, fechaSer
             [agencia, reserva, tipo, monto, txt(f.metodo, 40) || 'Transferencia', txt(f.referencia, 80), fechaOk(f.fecha) || hoyIso, txt(f.nota, 200), u.usuario]);
           await registrar(u, 'op_cobro', 'agencias', ins.rows[0].id, '', '', `${tipo} US$ ${monto} · ${agencia} · reserva ${reserva}`);
           return json(res, 200, { ok: true, id: ins.rows[0].id });
+        }
+        // Saldo pendiente por reserva, la más vieja primero (vence antes, luego número de reserva).
+        const pagosPorReserva = async agencia => {
+          const e = await estadoCuenta(agencia, '9999-12-31');
+          return e.reservas.filter(r => r.saldo > 0.009).sort((a, b) => (a.vence < b.vence ? -1 : a.vence > b.vence ? 1 : Number(a.reserva) - Number(b.reserva)));
+        };
+        // Reparto sugerido de un pago: llena primero la reserva que vence antes. Solo calcula; no guarda nada.
+        if (req.method === 'POST' && url === '/api/op/cobros/repartir') {
+          const f = await leerCuerpo(req);
+          const agencia = txt(f.agencia, 120);
+          const monto = redondo(f.monto);
+          if (!agencia) throw error('Elige la agencia.', 400);
+          if (!(monto > 0)) throw error('Escribe cuánto pagó.', 400);
+          let restante = monto;
+          const asignaciones = [];
+          for (const r of await pagosPorReserva(agencia)) {
+            if (restante <= 0.009) break;
+            const m = redondo(Math.min(restante, r.saldo));
+            asignaciones.push({ reserva: String(r.reserva), cliente: r.cliente, vence: r.vence, saldo: redondo(r.saldo), monto: m });
+            restante = redondo(restante - m);
+          }
+          return json(res, 200, { asignaciones, sobra: restante > 0.009 ? restante : 0 });
+        }
+        // Un pago para varias reservas: crea el recibo y los abonos de cada reserva, todo junto o nada.
+        if (req.method === 'POST' && url === '/api/op/cobros/pago') {
+          const f = await leerCuerpo(req);
+          const agencia = txt(f.agencia, 120);
+          const pagos = (Array.isArray(f.pagos) ? f.pagos : []).map(x => ({ reserva: String(Number(x.reserva) || 0), monto: redondo(x.monto) }));
+          if (!agencia) throw error('Elige la agencia.', 400);
+          if (!pagos.length) throw error('Elige al menos una reserva y el monto que paga.', 400);
+          if (pagos.length > 30) throw error('Como máximo 30 reservas por recibo.', 400);
+          if (pagos.some(x => x.reserva === '0' || !(x.monto > 0))) throw error('Cada reserva elegida necesita un monto mayor que cero.', 400);
+          if (new Set(pagos.map(x => x.reserva)).size !== pagos.length) throw error('Una reserva aparece dos veces. Junta los montos en una sola línea.', 400);
+          const saldos = new Map((await pagosPorReserva(agencia)).map(r => [String(r.reserva), r]));
+          for (const x of pagos) {
+            const r = saldos.get(x.reserva);
+            if (!r) throw error(`La reserva ${x.reserva} no es de ${agencia} o ya está pagada.`, 400);
+            if (x.monto > r.saldo + 0.009) throw error(`A la reserva ${x.reserva} solo le falta US$ ${r.saldo.toFixed(2)}.`, 400);
+          }
+          const total = redondo(pagos.reduce((a, x) => a + x.monto, 0));
+          const metodo = txt(f.metodo, 40) || 'Transferencia';
+          const referencia = txt(f.referencia, 80);
+          const fecha = fechaOk(f.fecha) || hoyIso;
+          const nota = txt(f.nota, 200);
+          await client.query('BEGIN');
+          try {
+            await client.query('LOCK TABLE op_recibos IN EXCLUSIVE MODE');
+            const num = (await client.query('SELECT COALESCE(MAX(numero), 0) + 1 AS n FROM op_recibos')).rows[0].n;
+            const rec = (await client.query(`INSERT INTO op_recibos (numero, agencia, fecha, total, metodo, referencia, nota, registrado_por)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [num, agencia, fecha, total, metodo, referencia, nota, u.usuario])).rows[0];
+            for (const x of pagos) {
+              await client.query(`INSERT INTO op_abonos_agencia (agencia, reserva, tipo, monto, metodo, referencia, fecha, nota, registrado_por, recibo_id)
+                VALUES ($1,$2,'abono',$3,$4,$5,$6,$7,$8,$9)`, [agencia, x.reserva, x.monto, metodo, referencia, fecha, nota, u.usuario, rec.id]);
+            }
+            await client.query('COMMIT');
+            await registrar(u, 'op_recibo', 'agencias', rec.id, '', '', `Recibo ${String(num).padStart(4, '0')} · ${agencia} · US$ ${total} · ${pagos.length} reserva(s)`);
+            return json(res, 200, { ok: true, id: rec.id, numero: num });
+          } catch (err) { await client.query('ROLLBACK'); throw err; }
+        }
+        // Recibo imprimible: qué reservas pagó, cuánto, y cuánto le queda a la agencia.
+        if (req.method === 'GET' && url === '/api/op/cobros/recibo') {
+          const rec = (await client.query('SELECT * FROM op_recibos WHERE id = $1', [Number(p.get('id')) || 0])).rows[0];
+          if (!rec) throw error('Ese recibo no existe.', 404);
+          const movs = (await client.query(`SELECT a.reserva, a.monto, c.nombre_cliente FROM op_abonos_agencia a
+            LEFT JOIN clasificacion c ON c.id::text = a.reserva WHERE a.recibo_id = $1 AND NOT a.anulado ORDER BY a.reserva`, [rec.id])).rows;
+          const e = await estadoCuenta(rec.agencia, '9999-12-31');
+          const saldoDe = new Map(e.reservas.map(r => [String(r.reserva), Math.max(0, r.saldo)]));
+          const emp = (await client.query('SELECT nombre, marca_nombre, rnc, direccion, logo IS NOT NULL AS logo FROM empresa_datos WHERE id = 1')).rows[0] || {};
+          const esc2 = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+          const d = v => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const fmtF = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || '').slice(0, 10)); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+          const num = String(rec.numero).padStart(4, '0');
+          const filas = movs.map(m => `<tr><td><b>#${esc2(m.reserva)}</b></td><td>${esc2(m.nombre_cliente || '')}</td><td class="n">${d(m.monto)}</td><td class="n">${d(saldoDe.get(String(m.reserva)) || 0)}</td></tr>`).join('');
+          const anulado = rec.anulado ? '<p style="color:#b91c1c;font-weight:800">RECIBO ANULADO</p>' : '';
+          const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Recibo ${num} · ${esc2(rec.agencia)}</title>
+<style>
+ @page { size: letter; margin: 14mm; } *{box-sizing:border-box} body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;font-size:12px}
+ .cab{background:linear-gradient(120deg,#0b1f3a,#134e8a 60%,#1679c2);color:#fff;border-radius:14px;padding:18px 22px;display:flex;justify-content:space-between;align-items:center}
+ .pas{background:#fff;border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:12px} .pas img{height:56px;max-width:170px;object-fit:contain} .emp{color:#0b1f3a;font-size:11.5px;line-height:1.5}
+ .tit{text-align:right} .tit h1{margin:0;font-size:22px} .tit div{opacity:.9;line-height:1.6}
+ .datos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 22px;margin:16px 0;font-size:12.5px} .datos b{color:#475569;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;display:block}
+ table{width:100%;border-collapse:collapse} th{background:#0b1f3a;color:#e2e8f0;text-align:left;padding:7px 8px;font-size:11px} td{padding:7px 8px;border-bottom:1px solid #eef2f7}
+ .n{text-align:right;font-variant-numeric:tabular-nums}
+ .total{margin-left:auto;width:300px;background:#0b1f3a;color:#fff;border-radius:12px;padding:12px 14px;margin-top:14px}
+ .total p{display:flex;justify-content:space-between;margin:3px 0} .total .g{font-size:18px;font-weight:800;border-top:1px solid #334155;padding-top:6px;margin-top:6px}
+ .pie{margin-top:18px;color:#64748b;font-size:10.5px}
+</style></head><body>
+<div class="cab"><div class="pas">${emp.logo ? '<img src="/empresa/logo">' : ''}<div class="emp"><b>${esc2(emp.marca_nombre || emp.nombre || '')}</b><br>${emp.rnc ? 'RNC ' + esc2(emp.rnc) : ''}${emp.direccion ? '<br>' + esc2(emp.direccion) : ''}</div></div>
+<div class="tit"><h1>Recibo de pago</h1><div>Número <b>${num}</b><br>Fecha ${fmtF(rec.fecha)}</div></div></div>
+${anulado}
+<div class="datos"><div><b>Agencia</b>${esc2(rec.agencia)}</div><div><b>Método</b>${esc2(rec.metodo)}${rec.referencia ? ' · Ref. ' + esc2(rec.referencia) : ''}</div>
+${rec.nota ? `<div style="grid-column:1/-1"><b>Nota</b>${esc2(rec.nota)}</div>` : ''}</div>
+<table><tr><th>Reserva</th><th>Cliente</th><th class="n">Pagado</th><th class="n">Saldo que queda</th></tr>${filas || '<tr><td colspan="4">Sin reservas en este recibo.</td></tr>'}</table>
+<div class="total"><p><span>Total recibido</span><span>US$ ${d(rec.total)}</span></p><p class="g"><span>Saldo pendiente de la agencia</span><span>US$ ${d(e.saldo)}</span></p></div>
+<div class="pie">Recibo de pago interno. No es una factura fiscal.</div>
+<script>window.onload = () => setTimeout(() => window.print(), 300);</script></body></html>`;
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          return res.end(html);
+        }
+        // Anular un recibo entero: anula todos sus abonos (quedan en el historial como anulados).
+        if (req.method === 'POST' && url === '/api/op/cobros/recibo/anular') {
+          const f = await leerCuerpo(req);
+          const id = Number(f.id) || 0;
+          const r = await client.query('UPDATE op_recibos SET anulado = TRUE WHERE id = $1 AND NOT anulado RETURNING numero, agencia, total', [id]);
+          if (!r.rowCount) throw error('Ese recibo no existe o ya está anulado.', 404);
+          await client.query('UPDATE op_abonos_agencia SET anulado = TRUE WHERE recibo_id = $1', [id]);
+          await registrar(u, 'op_recibo_anulado', 'agencias', id, '', '', `Recibo ${String(r.rows[0].numero).padStart(4, '0')} anulado · ${r.rows[0].agencia} · US$ ${r.rows[0].total}`);
+          return json(res, 200, { ok: true });
         }
         if (req.method === 'POST' && url === '/api/op/cobros/anular') {
           const f = await leerCuerpo(req);

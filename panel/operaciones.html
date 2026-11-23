@@ -2058,8 +2058,8 @@ async function cargarDetalleCobros() {
     <td class="n">${dinero(x.total)}</td><td class="n">${dinero(x.abonos)}</td><td class="n">${dinero(x.descuento)}</td>
     <td class="n"><b>${dinero(Math.max(0, x.saldo))}</b></td><td>${x.vence}</td>
     <td><span class="est est-${x.estado}">${ETQ_ESTADO[x.estado] || x.estado}</span></td></tr>`).join('');
-  const movs = e.movimientos.length ? e.movimientos.map(m => `<tr><td>${m.fecha}</td><td>#${m.reserva}</td><td>${m.tipo === 'descuento' ? 'Descuento' : 'Abono'}</td><td>${esc(m.metodo)}</td><td>${esc(m.referencia)}</td><td class="n">${dinero(m.monto)}</td>
-    <td><button class="btn-mini" data-cb-anular="${m.id}">Anular</button></td></tr>`).join('') : '<tr><td colspan="7" class="vacio">Sin abonos ni descuentos todavía.</td></tr>';
+  const movs = e.movimientos.length ? e.movimientos.map(m => `<tr><td>${m.fecha}</td><td>#${m.reserva}</td><td>${m.tipo === 'descuento' ? 'Descuento' : 'Abono'}</td><td>${esc(m.metodo)}</td><td>${esc(m.referencia)}${m.recibo_id ? ` · <a href="/api/op/cobros/recibo?id=${m.recibo_id}" target="_blank">Recibo ${String(m.recibo_num).padStart(4, '0')}</a>` : ''}</td><td class="n">${dinero(m.monto)}</td>
+    <td>${m.recibo_id ? `<button class="btn-mini" data-cb-anular-recibo="${m.recibo_id}">Anular recibo</button>` : `<button class="btn-mini" data-cb-anular="${m.id}">Anular</button>`}</td></tr>`).join('') : '<tr><td colspan="7" class="vacio">Sin abonos ni descuentos todavía.</td></tr>';
   const pendientes = e.reservas.filter(x => x.saldo > 0);
   box.innerHTML = `<div class="caja">
       <div class="cb-head"><h3>${esc(e.agencia)} <small>· corte ${e.corte}</small></h3>
@@ -2068,16 +2068,31 @@ async function cargarDetalleCobros() {
         ${filas || '<tr><td colspan="8" class="vacio">Sin servicios hasta esta fecha.</td></tr>'}
         <tr class="cb-tot"><td colspan="2">Totales</td><td class="n">${dinero(e.subtotal)}</td><td class="n">${dinero(e.abonos)}</td><td class="n">${dinero(e.descuentos)}</td><td class="n"><b>${dinero(e.saldo)}</b></td><td colspan="2"></td></tr></table>
     </div>
-    <div class="caja"><h3>Registrar pago o descuento</h3>
+    <div class="caja" id="cbPagoCaja"><h3>Registrar pago de una o varias reservas</h3>
       ${pendientes.length ? `<div class="cb-form">
-        <label>Reserva<select id="cbReserva">${pendientes.map(x => `<option value="${x.reserva}" data-saldo="${Math.max(0, x.saldo)}">#${x.reserva} · ${esc(x.cliente)} · falta ${dinero(x.saldo)}</option>`).join('')}</select></label>
-        <label>Tipo<select id="cbTipo"><option value="abono">Abono (pago)</option><option value="descuento">Descuento</option></select></label>
-        <label>Monto (US$)<input id="cbMonto" type="number" step="0.01" min="0"></label>
+        <label>Cuánto pagó (US$)<input id="cbTotal" type="number" step="0.01" min="0" placeholder="Ej.: 500"></label>
         <label>Método<select id="cbMetodo">${METODOS_COBRO.map(m => `<option>${m}</option>`).join('')}</select></label>
         <label>Referencia<input id="cbRef" maxlength="80" placeholder="# de comprobante"></label>
         <label>Fecha<input id="cbFecha" type="date" value="${CB.corte}"></label>
         <label class="ancho">Nota<input id="cbNota" maxlength="200"></label>
-        <div class="acciones"><button class="btn" data-cb-guardar>Guardar</button></div></div>` : '<div class="vacio">Todas las reservas de esta agencia están pagadas.</div>'}
+      </div>
+      <table class="cb-tabla cb-elegir"><tr><th></th><th>Reserva</th><th>Cliente</th><th>Vence</th><th class="n">Falta</th><th class="n">Pagar a esta reserva (US$)</th></tr>
+        ${pendientes.map(x => `<tr><td><input type="checkbox" data-cb-sel="${x.reserva}"></td><td><b>#${x.reserva}</b></td><td>${esc(x.cliente)}</td><td>${x.vence}</td>
+          <td class="n">${dinero(Math.max(0, x.saldo))}</td>
+          <td class="n"><input type="number" step="0.01" min="0" max="${Math.max(0, x.saldo)}" data-cb-monto="${x.reserva}" style="width:120px" disabled></td></tr>`).join('')}
+      </table>
+      <div class="acciones">
+        <button class="btn-sec" data-cb-repartir>Repartir el monto automáticamente</button>
+        <span id="cbSuma" class="sub2"></span>
+        <button class="btn" data-cb-guardar>Guardar pago y recibo</button>
+      </div>` : '<div class="vacio">Todas las reservas de esta agencia están pagadas.</div>'}
+    </div>
+    <div class="caja"><h3>Registrar un descuento</h3>
+      ${pendientes.length ? `<div class="cb-form">
+        <label>Reserva<select id="cbReserva">${pendientes.map(x => `<option value="${x.reserva}">#${x.reserva} · ${esc(x.cliente)} · falta ${dinero(x.saldo)}</option>`).join('')}</select></label>
+        <label>Monto (US$)<input id="cbMonto" type="number" step="0.01" min="0"></label>
+        <label class="ancho">Motivo<input id="cbNota2" maxlength="200" placeholder="Cortesía, error de precio…"></label>
+        <div class="acciones"><button class="btn-sec" data-cb-descuento>Guardar descuento</button></div></div>` : ''}
     </div>
     <div class="caja"><h3>Movimientos</h3><table class="cb-tabla"><tr><th>Fecha</th><th>Reserva</th><th>Tipo</th><th>Método</th><th>Referencia</th><th class="n">Monto</th><th></th></tr>${movs}</table></div>`;
 }
@@ -2088,14 +2103,66 @@ document.addEventListener('click', async ev => {
   if (t.closest('[data-cb-imprimir]')) return window.open(`/api/op/cobros/imprimir?agencia=${encodeURIComponent(CB.agencia)}&corte=${CB.corte}`, '_blank');
   const an = t.closest('[data-cb-anular]');
   if (an) { if (!confirm('¿Anular este movimiento? Queda en el historial como anulado.')) return; const r = await api('/api/op/cobros/anular', { id: Number(an.dataset.cbAnular) }); aviso(r.ok ? 'Movimiento anulado.' : (r.data.error || 'No se pudo anular.')); return vCobros(); }
+  if (t.closest('[data-cb-repartir]')) {
+    const total = Number($('#cbTotal').value);
+    if (!(total > 0)) return aviso('Escribe primero cuánto pagó.');
+    const r = await api('/api/op/cobros/repartir', { agencia: CB.agencia, monto: total });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo repartir.');
+    document.querySelectorAll('[data-cb-sel]').forEach(c => { c.checked = false; });
+    document.querySelectorAll('[data-cb-monto]').forEach(i => { i.value = ''; i.disabled = true; });
+    for (const a of r.data.asignaciones) {
+      const c = document.querySelector(`[data-cb-sel="${a.reserva}"]`), i = document.querySelector(`[data-cb-monto="${a.reserva}"]`);
+      if (c) c.checked = true;
+      if (i) { i.disabled = false; i.value = a.monto.toFixed(2); }
+    }
+    cbActualizarSuma();
+    if (r.data.sobra > 0) aviso('Sobran US$ ' + r.data.sobra.toFixed(2) + ': esta agencia ya no debe más.', 6000);
+    return;
+  }
   if (t.closest('[data-cb-guardar]')) {
-    const sel = $('#cbReserva'), monto = Number($('#cbMonto').value);
-    const r = await api('/api/op/cobros/movimiento', { agencia: CB.agencia, reserva: sel.value, tipo: $('#cbTipo').value, monto, metodo: $('#cbMetodo').value, referencia: $('#cbRef').value.trim(), fecha: $('#cbFecha').value, nota: $('#cbNota').value.trim() });
-    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar.');
-    aviso('Movimiento guardado.'); return vCobros();
+    const filas = [...document.querySelectorAll('[data-cb-sel]:checked')].map(c => ({ reserva: c.dataset.cbSel, monto: Number(document.querySelector(`[data-cb-monto="${c.dataset.cbSel}"]`).value) }));
+    if (!filas.length) return aviso('Marca al menos una reserva y escribe lo que paga.');
+    if (filas.some(x => !(x.monto > 0))) return aviso('Cada reserva marcada necesita un monto mayor que cero.');
+    const total = Number($('#cbTotal').value);
+    const suma = filas.reduce((a, x) => a + x.monto, 0);
+    if (total > 0 && Math.abs(total - suma) > 0.009) return aviso(`Lo que pagó es US$ ${total.toFixed(2)} y repartiste US$ ${suma.toFixed(2)}. Tienen que ser iguales.`, 7000);
+    const r = await api('/api/op/cobros/pago', { agencia: CB.agencia, pagos: filas, metodo: $('#cbMetodo').value, referencia: $('#cbRef').value.trim(), fecha: $('#cbFecha').value, nota: $('#cbNota').value.trim() });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar el pago.', 7000);
+    aviso('Pago guardado. Se abre el recibo para imprimir.');
+    window.open(`/api/op/cobros/recibo?id=${r.data.id}`, '_blank');
+    return vCobros();
+  }
+  if (t.closest('[data-cb-descuento]')) {
+    const r = await api('/api/op/cobros/movimiento', { agencia: CB.agencia, reserva: $('#cbReserva').value, tipo: 'descuento', monto: Number($('#cbMonto').value), nota: $('#cbNota2').value.trim() });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo guardar el descuento.');
+    aviso('Descuento guardado.'); return vCobros();
+  }
+  const anr = t.closest('[data-cb-anular-recibo]');
+  if (anr) {
+    if (!confirm('¿Anular este recibo completo? Se anulan todos sus pagos y las reservas vuelven a deber. Queda en el historial.')) return;
+    const r = await api('/api/op/cobros/recibo/anular', { id: Number(anr.dataset.cbAnularRecibo) });
+    aviso(r.ok ? 'Recibo anulado.' : (r.data.error || 'No se pudo anular.'));
+    return vCobros();
   }
 });
-document.addEventListener('change', e => { if (e.target.id === 'cbCorte') { CB.corte = e.target.value; vCobros(); } });
+function cbActualizarSuma() {
+  const suma = [...document.querySelectorAll('[data-cb-sel]:checked')].reduce((a, c) => a + (Number(document.querySelector(`[data-cb-monto="${c.dataset.cbSel}"]`).value) || 0), 0);
+  const total = Number(($('#cbTotal') || {}).value) || 0;
+  const el = $('#cbSuma');
+  if (el) el.textContent = `Repartido: US$ ${suma.toFixed(2)}${total ? ` de US$ ${total.toFixed(2)}` : ''}`;
+}
+document.addEventListener('change', e => {
+  if (e.target.id === 'cbCorte') { CB.corte = e.target.value; vCobros(); return; }
+  if (e.target.matches && e.target.matches('[data-cb-sel]')) {
+    const i = document.querySelector(`[data-cb-monto="${e.target.dataset.cbSel}"]`);
+    i.disabled = !e.target.checked;
+    if (!e.target.checked) i.value = '';
+    cbActualizarSuma();
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.matches && (e.target.matches('[data-cb-monto]') || e.target.id === 'cbTotal')) cbActualizarSuma();
+});
 </script>
 </body>
 </html>
