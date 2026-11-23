@@ -2622,7 +2622,7 @@ function pintar(desde, hasta) {
           <button class="btn-sec ${periodoSerie === 30 ? 'activo' : ''}" data-periodo="30">Mes</button>
         </div>
       </div>
-      <div class="leyenda"><span><i class="muestra" style="background:var(--serie-1)"></i>Entraron</span><span><i class="muestra" style="background:var(--serie-2)"></i>Registradas</span></div>
+      <div class="leyenda"><span><i class="muestra" style="background:var(--c-serie-1)"></i>Entraron</span><span><i class="muestra" style="background:var(--c-serie-2)"></i>Registradas</span></div>
       <div class="grafica" id="gReservas"></div>
       ${tablaSerie(d, 'reservas')}
     </div>
@@ -2663,12 +2663,12 @@ function pintar(desde, hasta) {
 
   const serie = d.serie.slice(-periodoSerie);
   columnasAgrupadas('gReservas', serie, [
-    { clave: 'reservas', nombre: 'Entraron', color: 'var(--serie-1)' },
-    { clave: 'registradas', nombre: 'Registradas', color: 'var(--serie-2)' }
+    { clave: 'reservas', nombre: 'Entraron', color: 'var(--c-serie-1)' },
+    { clave: 'registradas', nombre: 'Registradas', color: 'var(--c-serie-2)' }
   ]);
-  columnasAgrupadas('gCorreos', serie, [{ clave: 'correos', nombre: 'Correos', color: 'var(--serie-1)' }]);
+  columnasAgrupadas('gCorreos', serie, [{ clave: 'correos', nombre: 'Correos', color: 'var(--c-serie-1)' }]);
   columnasAgrupadas('gHoras', serie.map(x => ({ ...x, horas: Math.round(x.segundos / 360) / 10 })),
-    [{ clave: 'horas', nombre: 'Horas', color: 'var(--serie-1)', formato: v => v.toLocaleString('es-DO') + ' h' }]);
+    [{ clave: 'horas', nombre: 'Horas', color: 'var(--c-serie-1)', formato: v => v.toLocaleString('es-DO') + ' h' }]);
   barrasHorizontales('gPromedio', d.usuarios.filter(u => u.promedio !== null)
     .map(u => ({ nombre: u.nombre, valor: u.promedio / 60, tarde: u.promedio > d.limite })), {
     formato: v => v.toLocaleString('es-DO', { maximumFractionDigits: 1 }) + ' min', referencia: limiteMin,
@@ -2764,7 +2764,7 @@ function tablaCupos(d) {
     <tbody>${d.cuposHoy.map(c => {
       const pct = c.cupo ? Math.min(100, Math.round(100 * c.hoy / c.cupo)) : 0;
       return `<tr><td>${esc(c.nombre)}</td><td class="num">${c.hoy}</td><td class="num">${c.cupo || '—'}</td>
-        <td>${c.cupo ? `<div style="background:var(--borde);border-radius:6px;height:10px;width:160px;overflow:hidden"><div style="height:10px;width:${pct}%;background:${c.hoy >= c.cupo ? '#16a34a' : '#2563eb'}"></div></div> ${c.hoy} / ${c.cupo}` : 'Sin cupo (recibe cuando todos llegaron)'}</td></tr>`;
+        <td>${c.cupo ? `<div style="background:var(--c-borde);border-radius:6px;height:10px;width:160px;overflow:hidden"><div style="height:10px;width:${pct}%;background:${c.hoy >= c.cupo ? '#16a34a' : '#2563eb'}"></div></div> ${c.hoy} / ${c.cupo}` : 'Sin cupo (recibe cuando todos llegaron)'}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -2833,7 +2833,7 @@ function columnasAgrupadas(id, serie, series) {
   const formato = series[0].formato || (v => v.toLocaleString('es-DO'));
   let svg = '';
   for (let v = 0; v <= tope + 1e-9; v += paso) {
-    svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(v)}" y2="${yDe(v)}" stroke="var(--rejilla)" stroke-width="1"/>`;
+    svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(v)}" y2="${yDe(v)}" stroke="var(--c-rejilla)" stroke-width="1"/>`;
     svg += `<text x="${izq - 6}" y="${yDe(v) + 4}" text-anchor="end">${Number(v.toFixed(2)).toLocaleString('es-DO')}</text>`;
   }
   const cadaCuanto = serie.length > 14 ? Math.ceil(serie.length / 10) : 1;
@@ -2859,7 +2859,7 @@ function columnasAgrupadas(id, serie, series) {
     const total = series.length * grosor + (series.length - 1) * 2;
     svg += `<text class="valor" x="${centro - total / 2 + grosor / 2}" y="${yDe(vMax) - 5}" text-anchor="middle">${esc(formato(vMax))}</text>`;
   }
-  svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(0)}" y2="${yDe(0)}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  svg += `<line x1="${izq}" x2="${W - der}" y1="${yDe(0)}" y2="${yDe(0)}" stroke="var(--c-texto-suave)" stroke-width="1"/>`;
   caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.nombre).join(' y '))} por día">${svg}</svg>`;
 }
 
@@ -2879,7 +2879,7 @@ function barrasHorizontales(id, filas, op) {
     const y = arriba + i * alto + (alto - 18) / 2;
     const largo = Math.max(0, xDe(f.valor) - izq);
     const r = Math.min(4, largo / 2);
-    const color = f.tarde ? 'var(--tarde)' : 'var(--serie-1)';
+    const color = f.tarde ? 'var(--c-tarde)' : 'var(--c-serie-1)';
     if (largo > 0) svg += `<path d="M${izq},${y} H${izq + largo - r} Q${izq + largo},${y} ${izq + largo},${y + r} V${y + 18 - r} Q${izq + largo},${y + 18} ${izq + largo - r},${y + 18} H${izq} Z" fill="${color}"/>`;
     const nombre = f.nombre.length > 18 ? f.nombre.slice(0, 17) + '…' : f.nombre;
     svg += `<text x="${izq - 8}" y="${y + 13}" text-anchor="end">${esc(nombre)}</text>`;
@@ -2888,10 +2888,10 @@ function barrasHorizontales(id, filas, op) {
   });
   if (op.referencia) {
     const x = xDe(op.referencia);
-    svg += `<line x1="${x}" x2="${x}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--tarde)" stroke-width="1"/>`;
+    svg += `<line x1="${x}" x2="${x}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--c-tarde)" stroke-width="1"/>`;
     svg += `<text x="${x}" y="${H - 4}" text-anchor="middle">máx. ${op.referencia} min</text>`;
   }
-  svg += `<line x1="${izq}" x2="${izq}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--texto-suave)" stroke-width="1"/>`;
+  svg += `<line x1="${izq}" x2="${izq}" y1="${arriba - 4}" y2="${H - 18}" stroke="var(--c-texto-suave)" stroke-width="1"/>`;
   caja.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${svg}</svg>`;
 }
 
@@ -3071,7 +3071,7 @@ function pintarPersonas() {
         <div class="datos" title="${esc([a.agencia, a.servicio, a.fecha_servicio, a.buzon].filter(Boolean).join(' · '))}">${esc([a.agencia && 'Agencia: ' + a.agencia, a.servicio, a.fecha_servicio, a.buzon && 'Llegó a: ' + a.buzon].filter(Boolean).join(' · ') || corto(a.asunto, 80))}</div>
         <div class="reloj">⏱ <b data-seg="${a.segundos}">${reloj(a.segundos)}</b>
           <span class="barrita"><i data-barra="${a.segundos}" style="width:${Math.min(100, 100 * a.segundos / v.limite)}%"></i></span>
-          <span style="color:var(--texto-suave)">de ${Math.round(v.limite / 60)} min</span></div>
+          <span style="color:var(--c-texto-suave)">de ${Math.round(v.limite / 60)} min</span></div>
         <div class="datos" style="margin-top:3px">Abierta desde las ${esc(horaDe(a.desde))}</div>
         ${v.puedeChat && p.usuario !== v.yo ? `<button class="btn-avisar" data-avisar="${esc(p.usuario)}" data-reserva="${a.id}" style="display:${a.segundos > v.limite ? 'block' : 'none'}">⏰ Avisar que se apure</button>` : ''}
       </div>`).join('')
@@ -3109,7 +3109,7 @@ function pintarReparto() {
       <td><span class="estado ${claseEstado(x.estado)}">${textoEstado(x.estado)}</span></td>
       <td class="num">${x.pendientes}</td>
       <td class="num">${x.hoy}</td>
-      ${r.modo === 'cupos' ? `<td>${x.cupo ? `<div style="display:flex;align-items:center;gap:8px"><span class="barrita" style="width:120px;flex:none"><i class="${x.hoy >= x.cupo ? 'lleno' : ''}" style="width:${pct}%"></i></span>${x.hoy} / ${x.cupo}${x.hoy >= x.cupo ? ' ✔' : ''}</div>` : '<span style="color:var(--texto-suave)">Sin cupo</span>'}</td>` : ''}
+      ${r.modo === 'cupos' ? `<td>${x.cupo ? `<div style="display:flex;align-items:center;gap:8px"><span class="barrita" style="width:120px;flex:none"><i class="${x.hoy >= x.cupo ? 'lleno' : ''}" style="width:${pct}%"></i></span>${x.hoy} / ${x.cupo}${x.hoy >= x.cupo ? ' ✔' : ''}</div>` : '<span style="color:var(--c-texto-suave)">Sin cupo</span>'}</td>` : ''}
     </tr>`;
   }).join('');
   caja.innerHTML = `
