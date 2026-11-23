@@ -44,6 +44,7 @@
 </header>
 <main>
   <section class="caja">
+    <div class="acciones" style="margin:0 0 10px"><button class="btn p" id="btnLeer">Leer facturas nuevas con IA</button></div>
     <div class="pestanas" id="pestanas"></div>
     <div id="lista"><div class="vacio">Cargando…</div></div>
   </section>
@@ -208,7 +209,16 @@ async function rechazar() {
   ESTADO = 'rechazada'; cargar(); $('#detalle').innerHTML = '<div class="vacio">Factura rechazada.</div>';
 }
 
+async function leerNuevas() {
+  const b = $('#btnLeer'); b.disabled = true; b.textContent = 'Leyendo…';
+  const r = await api('/api/facturas/leer-pendientes', {});
+  b.disabled = false; b.textContent = 'Leer facturas nuevas con IA';
+  if (!r.ok) return aviso(r.data.error || 'No se pudo leer.', 7000);
+  aviso(r.data.encontradas ? `Leí ${r.data.leidas} de ${r.data.encontradas} facturas.` : 'No hay facturas nuevas por leer.', 6000);
+  ESTADO = 'pendiente'; cargar();
+}
 document.addEventListener('click', ev => {
+  if (ev.target.closest('#btnLeer')) return leerNuevas();
   const e = ev.target.closest('[data-estado]'); if (e) { ESTADO = e.dataset.estado; ACTUAL = null; return cargar(); }
   const it = ev.target.closest('.item[data-id]'); if (it) return abrir(it.dataset.id);
 });

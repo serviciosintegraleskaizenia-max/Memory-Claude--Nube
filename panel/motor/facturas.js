@@ -149,7 +149,7 @@ async function llamarOperaciones(operaciones, u, puede, ruta, cuerpo) {
   return salida || { code: 500, obj: { error: 'Operaciones no respondió.' } };
 }
 
-async function manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones }) {
+async function manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones, motor }) {
   if (!u) return json(res, 401, { error: 'Entra al panel para ver las facturas.' });
   const puedeVer = u.grupo === 'Programador' || puede('ver_pagos');
   if (!puedeVer) return json(res, 403, { error: 'Necesitas el permiso «Ver pagos» para ver las facturas.' });
@@ -170,6 +170,12 @@ async function manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, clie
     const f = (await client.query(`SELECT f.*, c.remitente, c.asunto, c.fecha FROM facturas_pago f JOIN clasificacion c ON c.id = f.clasificacion_id WHERE f.id = $1`, [Number(p.get('id')) || 0])).rows[0];
     if (!f) return json(res, 404, { error: 'Esa factura ya no existe.' });
     return json(res, 200, f);
+  }
+
+  if (req.method === 'POST' && url === '/api/facturas/leer-pendientes') {
+    if (!motor) return json(res, 500, { error: 'El motor de correo no está disponible.' });
+    const r = await motor.leerFacturasPendientes(20);
+    return json(res, 200, { ok: true, ...r });
   }
 
   if (req.method === 'POST' && url === '/api/facturas/rechazar') {

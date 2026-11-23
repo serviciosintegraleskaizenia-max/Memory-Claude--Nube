@@ -358,5 +358,22 @@ module.exports = function crearMotor({ client, config, registrar, SISTEMA, habil
     return recuperacion;
   }
 
-  return { preparar, iniciar, ciclo, comparar, estado, recuperar };
+  // Lee con la IA las facturas ya clasificadas que todavía no tienen propuesta (o cuya lectura falló).
+  async function leerFacturasPendientes(limite = 20) {
+    await cargarClaveBase();
+    const filas = (await client.query(`SELECT c.id, c.message_id, c.remitente, c.asunto, c.cuerpo, c.fecha FROM clasificacion c
+      WHERE c.categoria = 'FACTURA' AND NOT COALESCE(c.error_ia, FALSE) AND COALESCE(c.message_id, '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM facturas_pago f WHERE f.clasificacion_id = c.id AND f.estado IN ('pendiente', 'registrada', 'rechazada'))
+      ORDER BY c.id DESC LIMIT $1`, [limite])).rows;
+    const modelo = ajustes().modelo;
+    let leidas = 0;
+    for (const x of filas) {
+      const correo = { id: x.message_id, from: x.remitente || '', subject: x.asunto || '', date: x.fecha || '', textPlain: x.cuerpo || '' };
+      const r = await fact.leerFactura({ client, ia, claveIA: claveIA(), modelo, clasificacionId: x.id, correo }).catch(() => ({ ok: false }));
+      if (r.ok) leidas++;
+    }
+    return { encontradas: filas.length, leidas };
+  }
+
+  return { preparar, iniciar, ciclo, comparar, estado, recuperar, leerFacturasPendientes };
 };

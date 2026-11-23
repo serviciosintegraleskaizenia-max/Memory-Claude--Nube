@@ -2057,7 +2057,7 @@ http.createServer(async (req, res) => {
     const puede = p => Boolean(permisos[p]);
 
     if (url.startsWith('/api/crm/')) return crm.manejar(req, res, url, u, { json, leerCuerpo });
-    if (url.startsWith('/api/facturas')) return facturas.manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones });
+    if (url.startsWith('/api/facturas')) return facturas.manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones, motor: motorCorreo });
     if (url.startsWith('/api/op/')) return operaciones.manejar(req, res, url, u, { json, leerCuerpo, puede });
 
     // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
