@@ -203,7 +203,7 @@ test('sincronizar: recorre todas las páginas y guarda el estado de cada plantil
   assert.deepEqual(r.body.sin_en_meta, ['solo_local']);
   assert.equal(plantillas[0].meta_estado, 'APPROVED');
   assert.equal(plantillas[1].meta_estado, 'REJECTED');
-  assert.equal(plantillas[1].meta_motivo, 'NONE');
+  assert.equal(plantillas[1].meta_motivo, '', 'NONE de Meta significa sin motivo');
 });
 
 test('sincronizar: sin ID de la cuenta no llama a Meta', async () => {

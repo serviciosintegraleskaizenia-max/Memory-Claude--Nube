@@ -731,7 +731,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       const m = enMeta.find(x => x.name === p.nombre);
       if (!m) { sinEnMeta.push(p.nombre); continue; }
       await client.query(`UPDATE plantillas_wa SET meta_id = $2, meta_estado = $3, meta_motivo = $4, actualizada = NOW() WHERE id = $1`,
-        [p.id, String(m.id || ''), String(m.status || ''), texto(m.rejected_reason, 300)]);
+        [p.id, String(m.id || ''), String(m.status || ''), m.rejected_reason && m.rejected_reason !== 'NONE' ? texto(m.rejected_reason, 300) : '']);
       actualizadas++;
     }
     await registrar(u, 'sincronizar_plantillas_meta', 'whatsapp', 'plantillas', '', '', `${actualizadas} actualizadas`);
