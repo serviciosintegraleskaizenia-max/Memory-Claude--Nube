@@ -39,6 +39,8 @@ const CATEGORIAS = {
   hosting: 'Hosting y página web', software: 'Programas y suscripciones', publicidad: 'Publicidad (Meta, Google…)', otro: 'Otro'
 };
 const FRECUENCIAS = { mensual: 'Cada mes', anual: 'Cada año', unico: 'Una sola vez' };
+// Dos administraciones: Kaizen IA (sus clientes, sin reparto) y Centralia (reparto 60/40 con el socio).
+const ADMINISTRACIONES = ['kaizen', 'centralia'];
 const TIPOS_EVENTO = { tarea: 'Tarea', demo: 'Demo', cita: 'Cita / llamada', cobro: 'Cobro', otro: 'Otro' };
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -118,6 +120,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       moneda VARCHAR(5) NOT NULL DEFAULT 'US$', frecuencia VARCHAR(10) NOT NULL DEFAULT 'mensual', dia INTEGER, fecha DATE,
       empresa_id INTEGER, url TEXT NOT NULL DEFAULT '', nota TEXT NOT NULL DEFAULT '', activo BOOLEAN NOT NULL DEFAULT TRUE,
       creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_administraciones (
+      clave VARCHAR(20) PRIMARY KEY, nombre TEXT NOT NULL DEFAULT '', legal TEXT NOT NULL DEFAULT '', documento TEXT NOT NULL DEFAULT '',
+      direccion TEXT NOT NULL DEFAULT '', correo TEXT NOT NULL DEFAULT '', telefono TEXT NOT NULL DEFAULT '', web TEXT NOT NULL DEFAULT '',
+      logo TEXT NOT NULL DEFAULT '', actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await client.query("INSERT INTO oficina_administraciones (clave, nombre) VALUES ('kaizen', 'Kaizen IA'), ('centralia', 'Centralia') ON CONFLICT (clave) DO NOTHING");
+    await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_eventos (
       id SERIAL PRIMARY KEY, titulo TEXT NOT NULL, fecha DATE NOT NULL, hora VARCHAR(5) NOT NULL DEFAULT '',
       tipo VARCHAR(10) NOT NULL DEFAULT 'tarea', empresa_id INTEGER, nota TEXT NOT NULL DEFAULT '', hecho BOOLEAN NOT NULL DEFAULT FALSE,
@@ -298,6 +307,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       WHERE ev.fecha BETWEEN $1 AND $2 OR (ev.hecho = FALSE AND ev.fecha < $3) ORDER BY ev.fecha, ev.hora`,
       [mesMas(mes, -1) + '-01', mesMas(mes, 2) + '-01', hoy])).rows;
     const enlaces = (await client.query('SELECT * FROM oficina_enlaces ORDER BY grupo, orden, nombre')).rows;
+    const administraciones = (await client.query('SELECT * FROM oficina_administraciones ORDER BY clave')).rows;
     const automatizaciones = (await client.query("SELECT * FROM oficina_automatizaciones ORDER BY (estado = 'pausado'), orden, lower(nombre)")).rows;
 
     // Totales del mes elegido, por moneda.
@@ -335,14 +345,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const e = porId.get(d.id);
         return {
           id: d.id, nombre: d.nombre, slug: d.slug, url: d.url, estado: d.estado, vivo: d.vivo, es_demo: d.es_demo, externa: d.externa,
-          plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
+          administracion: e.administracion || 'kaizen', plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
           tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave), correo_lectura: e.correo_lectura || '', correo_host: e.correo_host || '', tieneCorreo: Boolean(e.correo_clave),
           pago: d.pagoCentral || {}, pagado: (d.cuenta || {}).pagado || '', etapaPago: d.etapaPago,
           usuarios: (d.numeros || {}).usuarios ?? null, correosHoy: (d.numeros || {}).correos_hoy ?? null, error: d.error || '',
           ia: ia.get(d.id) || { tiene: false }
         };
       }),
-      pagos, gastos, eventos, enlaces, automatizaciones, totales: t, serie
+      pagos, gastos, eventos, enlaces, automatizaciones, administraciones, totales: t, serie
     };
   }
 
@@ -462,12 +472,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       const v = [texto(f.nombre, 120), CATEGORIAS[f.categoria] ? f.categoria : 'otro', monto(f.monto), moneda(f.moneda), frecuencia,
         frecuencia === 'mensual' ? Math.min(28, Math.max(1, Number(f.dia) || 1)) : null,
         frecuencia === 'mensual' ? null : (fechaValida(f.fecha) ? f.fecha : null),
-        empresaId, texto(f.url, 300), texto(f.nota, 500), f.activo !== false];
+        empresaId, texto(f.url, 300), texto(f.nota, 500), f.activo !== false,
+        ADMINISTRACIONES.includes(f.administracion) ? f.administracion : 'kaizen'];
       if (!v[0]) throw Object.assign(new Error('Escribe el nombre del gasto (ej.: Servidor Hostinger).'), { codigo: 400 });
       if (frecuencia !== 'mensual' && !v[6]) throw Object.assign(new Error('Elige la fecha del pago (o de la próxima renovación).'), { codigo: 400 });
       if (v[8] && !/^https?:\/\//i.test(v[8])) throw Object.assign(new Error('El enlace debe empezar con http:// o https://'), { codigo: 400 });
-      if (id) await client.query('UPDATE oficina_gastos SET nombre=$1, categoria=$2, monto=$3, moneda=$4, frecuencia=$5, dia=$6, fecha=$7, empresa_id=$8, url=$9, nota=$10, activo=$11 WHERE id=$12', [...v, id]);
-      else await client.query('INSERT INTO oficina_gastos (nombre, categoria, monto, moneda, frecuencia, dia, fecha, empresa_id, url, nota, activo) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', v);
+      if (id) await client.query('UPDATE oficina_gastos SET nombre=$1, categoria=$2, monto=$3, moneda=$4, frecuencia=$5, dia=$6, fecha=$7, empresa_id=$8, url=$9, nota=$10, activo=$11, administracion=$12 WHERE id=$13', [...v, id]);
+      else await client.query('INSERT INTO oficina_gastos (nombre, categoria, monto, moneda, frecuencia, dia, fecha, empresa_id, url, nota, activo, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', v);
       return;
     }
     if (tipo === 'eventos') {
@@ -512,6 +523,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url.startsWith('/api/oficina/integraciones')) return ['apis_programador'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
+    if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
     if (url === '/api/oficina/evento-hecho') return ['calendario', 'inicio'];
     if (url.startsWith('/api/oficina/chat')) return ['chat'];
@@ -706,6 +718,28 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       if (req.method === 'GET' && url === '/api/oficina/servicios') {
         const lista = (await client.query('SELECT * FROM oficina_enlaces WHERE vigilar = TRUE')).rows;
         return json(res, 200, { servicios: await Promise.all(lista.map(revisarEnlace)) });
+      }
+
+      if (req.method === 'POST' && url === '/api/oficina/administracion/guardar') {
+        if (u.grupo !== 'Programador' && !(permisos || {}).oficina_gastos_editar) return json(res, 403, { error: 'Puedes ver los datos, pero no cambiarlos.' });
+        const f = await leerCuerpo(req);
+        if (!ADMINISTRACIONES.includes(f.clave)) return json(res, 400, { error: 'Administración no válida.' });
+        const logo = f.logo == null ? null : String(f.logo);
+        if (logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(logo)) return json(res, 400, { error: 'El logo debe ser una imagen PNG, JPG o WEBP.' });
+        if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
+        await client.query('UPDATE oficina_administraciones SET nombre=$2, legal=$3, documento=$4, direccion=$5, correo=$6, telefono=$7, web=$8, logo=COALESCE($9, logo), actualizado=NOW() WHERE clave=$1',
+          [f.clave, texto(f.nombre, 120), texto(f.legal, 160), texto(f.documento, 60), texto(f.direccion, 300), texto(f.correo, 120), texto(f.telefono, 40), texto(f.web, 160), logo]);
+        await registrar(u, 'administracion_guardar', 'administracion', f.clave, '', '', texto(f.nombre, 120));
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/administracion/empresa') {
+        if (u.grupo !== 'Programador' && !(permisos || {}).oficina_gastos_editar) return json(res, 403, { error: 'No puedes cambiar esto.' });
+        const f = await leerCuerpo(req);
+        if (!ADMINISTRACIONES.includes(f.administracion)) return json(res, 400, { error: 'Administración no válida.' });
+        const r = await client.query('UPDATE empresas SET administracion = $1 WHERE id = $2', [f.administracion, Number(f.empresa_id)]);
+        if (!r.rowCount) return json(res, 404, { error: 'Empresa no encontrada.' });
+        await registrar(u, 'administracion_empresa', 'empresa', Number(f.empresa_id), '', f.administracion, '');
+        return json(res, 200, { ok: true });
       }
 
       const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);

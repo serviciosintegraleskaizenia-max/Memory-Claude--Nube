@@ -374,6 +374,7 @@ let R = null;                 // conector con Chatwoot: estado
 let rProbe = null;            // bandejas y equipos leídos de Chatwoot
 let P = null;                 // gastos de creación de cada sistema, reparto entre socios y recargas de OpenRouter
 let gastosTab = 'negocio';    // Gastos: 'negocio' (lo de siempre) o 'creacion' (Christian y socio)
+let adminVista = 'kaizen';    // Administración que se ve en Gastos: 'kaizen' (Kaizen IA) o 'centralia' (Centralia)
 let pSel = null;              // sistema elegido en Creación del sistema
 const timers = {};
 
@@ -882,29 +883,54 @@ function estimadoMes() {
   const diasMes = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
   return Math.round((fijos + (esteMes ? ia / dia * diasMes : ia)) * 100) / 100;
 }
+function administracionDe(g) { return g.administracion || 'kaizen'; }
+function admin(clave) { return (D.administraciones || []).find(a => a.clave === clave) || { clave, nombre: clave === 'centralia' ? 'Centralia' : 'Kaizen IA' }; }
+function barraAdmin() {
+  return `<div class="pestanas">${['kaizen', 'centralia'].map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('')}</div>`;
+}
 function vGastos() {
   if (gastosTab === 'creacion') return vCreacion();
-  const porCat = {};
-  for (const g of D.gastos) { const v = gastoDelMes(g, mes); if (v && g.moneda === 'US$') porCat[g.categoria] = (porCat[g.categoria] || 0) + v; }
-  if (D.totales.ia['US$']) porCat.ia = (porCat.ia || 0) + D.totales.ia['US$'];
+  const gastosAdmin = D.gastos.filter(g => administracionDe(g) === adminVista);
+  const ia = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === adminVista);
+  const mesAdmin = {}, porCat = {};
+  for (const g of gastosAdmin) { const v = gastoDelMes(g, mes); if (v) { mesAdmin[g.moneda] = (mesAdmin[g.moneda] || 0) + v; if (g.moneda === 'US$') porCat[g.categoria] = (porCat[g.categoria] || 0) + v; } }
+  const iaMes = ia.reduce((t, e) => t + (e.ia && e.ia.delMes && !e.ia.repetida ? e.ia.delMes : 0), 0);
+  if (iaMes) { mesAdmin['US$'] = (mesAdmin['US$'] || 0) + iaMes; porCat.ia = (porCat.ia || 0) + iaMes; }
+  const fijos = gastosAdmin.reduce((s, g) => s + (g.activo && g.frecuencia === 'mensual' ? g.monto : g.activo && g.frecuencia === 'anual' ? g.monto / 12 : 0), 0);
   const maxCat = Math.max(1, ...Object.values(porCat));
-  const ia = D.empresas.filter(e => !e.es_demo);
-  return cabecera('💸 Gastos', 'Servidor, dominio, IA, redes sociales, automatizaciones y todo lo que pagas', selectorMes() + `<button class="btn" data-nuevo-gasto>+ Gasto</button>`) + barraGastos() + `
+  const a = admin(adminVista), otra = adminVista === 'kaizen' ? 'centralia' : 'kaizen';
+  const empresas = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === adminVista);
+  return cabecera('💸 Gastos', 'Cada administración tiene sus propios gastos, datos y empresas', selectorMes() + `<button class="btn" data-nuevo-gasto>+ Gasto</button>`) + barraGastos() + barraAdmin() + `
   <div class="kpis">
-    <div class="kpi" style="border-color:var(--rojo)"><div class="e">Gastos de ${esc(D.nombreMes)}</div><div class="n">${totalTexto(D.totales.gastos)}</div><div class="d">lo que toca pagar este mes</div></div>
-    <div class="kpi"><div class="e">Fijos por mes</div><div class="n">${totalTexto(D.totales.gastosFijos)}</div><div class="d">mensuales + anuales ÷ 12</div></div>
-    <div class="kpi" style="border-color:var(--ambar)"><div class="e">IA del mes</div><div class="n">${totalTexto(D.totales.ia)}</div><div class="d">suma de las claves de cada cliente</div></div>
-    <div class="kpi" style="border-color:var(--verde)"><div class="e">Estimado al mes</div><div class="n">${dinero(estimadoMes())}</div><div class="d">fijos + IA llevada al mes completo · ${D.gastos.filter(g => g.activo).length} gastos activos</div></div>
+    <div class="kpi" style="border-color:var(--rojo)"><div class="e">Gastos de ${esc(a.nombre)} · ${esc(D.nombreMes)}</div><div class="n">${totalTexto(mesAdmin)}</div><div class="d">lo que toca pagar este mes</div></div>
+    <div class="kpi"><div class="e">Fijos por mes</div><div class="n">${dinero(Math.round(fijos * 100) / 100)}</div><div class="d">mensuales + anuales ÷ 12</div></div>
+    <div class="kpi" style="border-color:var(--verde)"><div class="e">Gastos activos</div><div class="n">${gastosAdmin.filter(g => g.activo).length}</div><div class="d">de ${esc(a.nombre)}</div></div>
+  </div>
+  <div class="rej r21">
+    <div class="caja">
+      <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Datos de ${esc(a.nombre)}<button class="btn-mini" data-editar-admin="${adminVista}">Editar</button></h2>
+      <div style="display:flex;gap:14px;align-items:center;margin:6px 0 10px">${a.logo ? `<img src="${a.logo}" alt="Logo de ${esc(a.nombre)}" style="max-width:150px;max-height:60px;object-fit:contain">` : '<div style="width:150px;height:56px;border:1px dashed var(--suave);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--suave)">Sin logo</div>'}<small style="color:var(--suave)">Sale en los recibos de ${esc(a.nombre)}.</small></div>
+      <table><tbody>
+        <tr><td>Nombre legal</td><td>${esc(a.legal || '—')}</td></tr>
+        <tr><td>Documento fiscal</td><td>${esc(a.documento || '—')}</td></tr>
+        <tr><td>Dirección</td><td>${esc(a.direccion || '—')}</td></tr>
+        <tr><td>Correo y teléfono</td><td>${esc([a.correo, a.telefono].filter(Boolean).join(' · ') || '—')}</td></tr>
+        <tr><td>Web</td><td>${esc(a.web || '—')}</td></tr>
+      </tbody></table>
+    </div>
+    <div class="caja"><h2>Empresas de ${esc(a.nombre)}</h2><p class="sub">Cada empresa pertenece a una sola administración.</p>
+      ${empresas.length ? empresas.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb"><b>${esc(x.nombre)}</b><button class="btn-mini" data-mover-empresa="${x.id}:${otra}">Pasar a ${esc(admin(otra).nombre)}</button></div>`).join('') : '<div class="vacio">Todavía no hay empresas en esta administración.</div>'}
+    </div>
   </div>
   <div class="rej r21">
     <div class="caja"><h2>Lista de gastos</h2><p class="sub">Toca Editar para cambiar el monto o pausar un gasto que ya no pagas</p>
-      ${D.gastos.length ? `<table><thead><tr><th>Gasto</th><th>Categoría</th><th class="n">Monto</th><th>Cada</th><th>Cuándo</th><th class="n">En ${esc(D.nombreMes.split(' ')[0])}</th><th></th></tr></thead><tbody>
-      ${D.gastos.map(g => `<tr class="${g.activo ? '' : 'apagado'}"><td class="envolver"><b>${g.url ? `<a href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.nombre)}</a>` : esc(g.nombre)}</b>${g.empresa || g.nota ? `<br><small style="color:var(--suave)">${esc([g.empresa && 'Cliente: ' + g.empresa, g.nota].filter(Boolean).join(' · '))}</small>` : ''}</td>
+      ${gastosAdmin.length ? `<table><thead><tr><th>Gasto</th><th>Categoría</th><th class="n">Monto</th><th>Cada</th><th>Cuándo</th><th class="n">En ${esc(D.nombreMes.split(' ')[0])}</th><th></th></tr></thead><tbody>
+      ${gastosAdmin.map(g => `<tr class="${g.activo ? '' : 'apagado'}"><td class="envolver"><b>${g.url ? `<a href="${esc(g.url)}" target="_blank" rel="noopener">${esc(g.nombre)}</a>` : esc(g.nombre)}</b>${g.empresa || g.nota ? `<br><small style="color:var(--suave)">${esc([g.empresa && 'Cliente: ' + g.empresa, g.nota].filter(Boolean).join(' · '))}</small>` : ''}</td>
         <td><span class="chip az">${esc(D.categorias[g.categoria] || g.categoria)}</span></td><td class="n">${dinero(g.monto, g.moneda)}</td>
         <td>${esc(D.frecuencias[g.frecuencia])}</td><td>${g.frecuencia === 'mensual' ? 'día ' + (g.dia || 1) : fechaCorta(g.fecha)}</td>
         <td class="n">${gastoDelMes(g, mes) ? dinero(gastoDelMes(g, mes), g.moneda) : '—'}</td>
         <td><button class="btn-mini" data-editar-gasto="${g.id}">Editar</button></td></tr>`).join('')}
-      </tbody></table>` : `<div class="vacio">Todavía no hay gastos. Toca <b>+ Gasto</b> y agrega cada gasto del mes, por ejemplo:<br>servidor · hosting de la página web · publicidad en Meta · dominio (cada año) · Chatwoot · n8n…<br>Se suman solos en "Fijos por mes" y "Estimado al mes".</div>`}
+      </tbody></table>` : `<div class="vacio">Todavía no hay gastos. Toca <b>+ Gasto</b> y agrega cada gasto del mes, por ejemplo:<br>servidor · hosting de la página web · publicidad en Meta · dominio (cada año) · Chatwoot · n8n…<br>Se suman solos en "Fijos por mes".</div>`}
     </div>
     <div class="caja"><h2>Por categoría</h2><p class="sub">${esc(D.nombreMes)} · US$</p>
       ${Object.keys(porCat).length ? Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${esc(D.categorias[c] || c)}</span><b>${dinero(Math.round(v * 100) / 100)}</b></div><div class="barra"><i style="width:${Math.round(100 * v / maxCat)}%"></i></div></div>`).join('') : '<div class="vacio">Sin gastos este mes.</div>'}
@@ -1128,11 +1154,14 @@ function imprimirCreacion() {
   w.document.close();
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-gastos-tab],[data-nuevo-proyecto],[data-editar-proyecto],[data-nuevo-cgasto],[data-editar-cgasto],[data-nuevo-mensual],[data-editar-mensual],[data-nueva-recarga],[data-editar-recarga],[data-imprimir-creacion]');
+  const t = ev.target.closest('[data-gastos-tab],[data-admin],[data-editar-admin],[data-mover-empresa],[data-nuevo-proyecto],[data-editar-proyecto],[data-nuevo-cgasto],[data-editar-cgasto],[data-nuevo-mensual],[data-editar-mensual],[data-nueva-recarga],[data-editar-recarga],[data-imprimir-creacion]');
   if (!t) return;
   ev.preventDefault();
   const d = t.dataset, p = pActual();
   if (d.gastosTab) { gastosTab = d.gastosTab; try { localStorage.setItem('gastosTab', gastosTab); } catch (e) {} return pintar(); }
+  if (d.admin) { adminVista = d.admin; try { localStorage.setItem('adminVista', adminVista); } catch (e) {} return pintar(); }
+  if (d.editarAdmin) return formAdmin((D.administraciones || []).find(a => a.clave === d.editarAdmin) || { clave: d.editarAdmin });
+  if (d.moverEmpresa) { const [id, a] = d.moverEmpresa.split(':'); return moverEmpresa(Number(id), a); }
   if ('nuevoProyecto' in d) return formProyecto();
   if (d.editarProyecto) return p && formProyecto(p);
   if ('nuevoCgasto' in d) return formCGasto();
@@ -1145,6 +1174,7 @@ document.addEventListener('click', ev => {
 });
 document.addEventListener('change', e => { if (e.target.id === 'selProyecto') { pSel = Number(e.target.value); pintar(); } });
 try { if (localStorage.getItem('gastosTab') === 'creacion') gastosTab = 'creacion'; } catch (e) {}
+try { adminVista = localStorage.getItem('adminVista') === 'centralia' ? 'centralia' : 'kaizen'; } catch (e) {}
 
 /* ---------- Calendario ---------- */
 const ICONOS_EVENTO = { tarea: '🛠️', demo: '🎯', cita: '📞', cobro: '💳', otro: '📌' };
@@ -2614,6 +2644,7 @@ function formGasto(g = {}) {
     <div class="fila2">${campo('fCat', 'Categoría', `<select id="fCat">${opciones(D.categorias, g.categoria || 'servidor')}</select>`)}${campo('fFrec', '¿Cada cuánto?', `<select id="fFrec">${opciones(D.frecuencias, frec)}</select>`)}</div>
     <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}" placeholder="41.29">`)}${campo('fMone', 'Moneda', `<select id="fMone">${['US$', 'RD$', '€'].map(m => `<option ${m === (g.moneda || 'US$') ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}</div>
     <div id="fCuando">${campo('fDia', 'Día del mes en que se paga', `<input id="fDia" type="number" min="1" max="28" value="${g.dia || 1}">`)}${campo('fFec', 'Fecha del pago (o de la próxima renovación)', `<input id="fFec" type="date" value="${esc(g.fecha || hoy())}">`)}</div>
+    ${campo('fAdmin', 'Administración a la que pertenece', `<select id="fAdmin">${opciones({ kaizen: 'Kaizen IA', centralia: 'Centralia' }, g.administracion || adminVista)}</select>`)}
     ${campo('fEmp', '¿Es de un cliente en particular? (opcional)', `<select id="fEmp">${opcionesEmpresa(g.empresa_id, 'No, es general')}</select>`)}
     ${campo('fUrl', 'Enlace (opcional)', `<input id="fUrl" value="${esc(g.url || '')}" placeholder="https://hpanel.hostinger.com">`, 'Donde lo pagas o lo administras.')}
     ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(g.nota || '')}">`)}
@@ -2621,8 +2652,34 @@ function formGasto(g = {}) {
     ${pieModal(g.id)}`);
   const cambia = () => { const f = v('fFrec'); document.getElementById('fDia').closest('.campo').style.display = f === 'mensual' ? '' : 'none'; document.getElementById('fFec').closest('.campo').style.display = f === 'mensual' ? 'none' : ''; };
   document.getElementById('fFrec').onchange = cambia; cambia();
-  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/gastos', { id: g.id, nombre: v('fNom'), categoria: v('fCat'), frecuencia: v('fFrec'), monto: v('fMon'), moneda: v('fMone'), dia: v('fDia'), fecha: v('fFec'), empresa_id: v('fEmp'), url: v('fUrl'), nota: v('fNota'), activo: document.getElementById('fAct').checked }, 'Gasto guardado.');
+  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/gastos', { id: g.id, nombre: v('fNom'), categoria: v('fCat'), frecuencia: v('fFrec'), monto: v('fMon'), moneda: v('fMone'), dia: v('fDia'), fecha: v('fFec'), empresa_id: v('fEmp'), url: v('fUrl'), nota: v('fNota'), activo: document.getElementById('fAct').checked, administracion: v('fAdmin') }, 'Gasto guardado.');
   conBorrar('gastos', g.id, '¿Borrar este gasto? Si solo dejaste de pagarlo, mejor desmarca "Lo sigo pagando".');
+}
+function formAdmin(a) {
+  const c = a.clave, nombre = admin(c).nombre;
+  abrirModal(`<h2>Datos de ${esc(nombre)}</h2>
+    <div class="campo"><label for="fLogo">Logo (PNG, JPG o WEBP, menos de 150 KB)</label><input type="file" id="fLogo" accept="image/png,image/jpeg,image/webp"><div class="ay">${a.logo ? 'Ya tiene logo. Elige otro para cambiarlo.' : 'Todavía no tiene logo.'}</div></div>
+    ${campo('fNombre', 'Nombre comercial', `<input id="fNombre" value="${esc(a.nombre || '')}">`)}
+    ${campo('fLegal', 'Nombre legal', `<input id="fLegal" value="${esc(a.legal || '')}">`)}
+    <div class="fila2">${campo('fDoc', 'Documento fiscal (RUC u otro)', `<input id="fDoc" value="${esc(a.documento || '')}">`)}${campo('fTel', 'Teléfono', `<input id="fTel" value="${esc(a.telefono || '')}">`)}</div>
+    ${campo('fDir', 'Dirección fiscal', `<input id="fDir" value="${esc(a.direccion || '')}">`)}
+    <div class="fila2">${campo('fCorreo', 'Correo', `<input id="fCorreo" value="${esc(a.correo || '')}">`)}${campo('fWeb', 'Página web', `<input id="fWeb" value="${esc(a.web || '')}">`)}</div>
+    <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const archivo = document.getElementById('fLogo').files[0];
+    let logo = null;
+    if (archivo) {
+      if (archivo.size > 150 * 1024) { document.getElementById('errForm').textContent = 'El logo pesa más de 150 KB. Usa una imagen más pequeña.'; return; }
+      logo = await leerComoDataURL(archivo);
+    }
+    await enviarForm('/api/oficina/administracion/guardar', { clave: c, nombre: v('fNombre'), legal: v('fLegal'), documento: v('fDoc'), telefono: v('fTel'), direccion: v('fDir'), correo: v('fCorreo'), web: v('fWeb'), logo }, 'Datos guardados.');
+  };
+}
+function leerComoDataURL(f) { return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = mal; r.readAsDataURL(f); }); }
+async function moverEmpresa(id, administracion) {
+  const r = await api('/api/oficina/administracion/empresa', { empresa_id: id, administracion });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar la administración.');
+  aviso('Empresa cambiada de administración.'); await ir(vista);
 }
 function formEvento(ev = {}, fecha) {
   abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
