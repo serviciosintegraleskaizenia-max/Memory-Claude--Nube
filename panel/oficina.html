@@ -896,6 +896,19 @@ function vGastos() {
   for (const g of gastosAdmin) { const v = gastoDelMes(g, mes); if (v) { mesAdmin[g.moneda] = (mesAdmin[g.moneda] || 0) + v; if (g.moneda === 'US$') porCat[g.categoria] = (porCat[g.categoria] || 0) + v; } }
   const iaMes = ia.reduce((t, e) => t + (e.ia && e.ia.delMes && !e.ia.repetida ? e.ia.delMes : 0), 0);
   if (iaMes) { mesAdmin['US$'] = (mesAdmin['US$'] || 0) + iaMes; porCat.ia = (porCat.ia || 0) + iaMes; }
+  // Ingresos cobrados del mes de las empresas de esta administración (pagos marcados como pagados ese mes).
+  const empresaDe = id => D.empresas.find(e => e.id === id);
+  const ingresos = (D.pagos || []).reduce((t, p) => {
+    const e = empresaDe(p.empresa_id);
+    if (!e || (e.administracion || 'kaizen') !== adminVista || !p.pagado_el || p.pagado_el.slice(0, 7) !== mes || p.moneda !== 'US$') return t;
+    return t + (Number(p.monto) || 0);
+  }, 0);
+  const gastoMesUS = mesAdmin['US$'] || 0;
+  const utilidad = Math.round((ingresos - gastoMesUS) * 100) / 100;
+  // Centralia reparte 60/40 con su socio. Kaizen IA no reparte: todo es tuyo.
+  const reparto = adminVista === 'centralia'
+    ? `<div class="kpi" style="border-color:var(--verde)"><div class="e">Reparto 60 / 40 · ${esc(D.nombreMes)}</div><div class="n">Tú ${dinero(Math.round(utilidad * 0.6 * 100) / 100)}</div><div class="d">Socio ${dinero(Math.round(utilidad * 0.4 * 100) / 100)} · utilidad ${dinero(utilidad)} (cobrado − gastos)</div></div>`
+    : `<div class="kpi" style="border-color:var(--verde)"><div class="e">Utilidad 100% tuya · ${esc(D.nombreMes)}</div><div class="n">${dinero(utilidad)}</div><div class="d">cobrado − gastos · sin reparto</div></div>`;
   const fijos = gastosAdmin.reduce((s, g) => s + (g.activo && g.frecuencia === 'mensual' ? g.monto : g.activo && g.frecuencia === 'anual' ? g.monto / 12 : 0), 0);
   const maxCat = Math.max(1, ...Object.values(porCat));
   const a = admin(adminVista), otra = adminVista === 'kaizen' ? 'centralia' : 'kaizen';
@@ -904,6 +917,8 @@ function vGastos() {
   <div class="kpis">
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Gastos de ${esc(a.nombre)} · ${esc(D.nombreMes)}</div><div class="n">${totalTexto(mesAdmin)}</div><div class="d">lo que toca pagar este mes</div></div>
     <div class="kpi"><div class="e">Fijos por mes</div><div class="n">${dinero(Math.round(fijos * 100) / 100)}</div><div class="d">mensuales + anuales ÷ 12</div></div>
+    <div class="kpi"><div class="e">Cobrado · ${esc(D.nombreMes)}</div><div class="n">${dinero(Math.round(ingresos * 100) / 100)}</div><div class="d">pagos recibidos de ${esc(a.nombre)}</div></div>
+    ${reparto}
     <div class="kpi" style="border-color:var(--verde)"><div class="e">Gastos activos</div><div class="n">${gastosAdmin.filter(g => g.activo).length}</div><div class="d">de ${esc(a.nombre)}</div></div>
   </div>
   <div class="rej r21">
