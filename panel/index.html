@@ -4835,6 +4835,11 @@ function bloqueMeta() {
     </div>
     <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-guardar">Guardar clave</button></div>
     <div class="form-fila" style="margin-top:12px">
+      <label>Token del sistema (uno para todas las cuentas)<input id="waTokenSistema" type="password" autocomplete="new-password" placeholder="${AUTO_WA.token_sistema_configurado ? 'Ya está guardado. Escribe uno nuevo solo si lo cambias' : 'Pégalo aquí. No se vuelve a mostrar'}">
+        <small class="etiqueta-sec">Business Manager de Kaizen → Configuración del negocio → Usuarios del sistema → Generar token. Vencimiento: Nunca.</small></label>
+    </div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="emp-wa-token-sistema">Guardar token del sistema</button></div>
+    <div class="form-fila" style="margin-top:12px">
       <label>ID de la cuenta de WhatsApp Business (WABA)<input id="waWaba" inputmode="numeric" value="${esc(AUTO_WA.waba_id || '')}" placeholder="Solo números">
         <small class="etiqueta-sec">Business Manager → Configuración → Cuentas de WhatsApp. Es distinto del ID del número.</small></label>
     </div>
@@ -4845,6 +4850,14 @@ async function verTokenWaUI() {
   const caja = document.getElementById('waToken');
   caja.textContent = r.ok ? 'Token de verificación (pégalo en Meta junto con la ruta):\n' + r.data.verify_token : (r.data.error || 'No se pudo leer el token.');
   caja.style.display = 'block';
+}
+async function guardarTokenSistemaUI() {
+  const campo = document.getElementById('waTokenSistema');
+  const r = await api('/api/central/whatsapp/token-sistema/guardar', { token: campo.value.trim() });
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo guardar el token.', false);
+  campo.value = '';
+  await cargarAutomatizacion();
+  mostrarAviso('Token del sistema guardado (cifrado).', true);
 }
 async function guardarSecretoWaUI() {
   const r = await api('/api/central/whatsapp/config/guardar', { app_secret: document.getElementById('waSecreto').value.trim() });
@@ -5221,6 +5234,7 @@ async function accionEmpresas(a, b) {
   if (a === 'emp-auto-clave-n8n') return verClaveN8nUI();
   if (a === 'emp-wa-token') return verTokenWaUI();
   if (a === 'emp-wa-guardar') return guardarSecretoWaUI();
+  if (a === 'emp-wa-token-sistema') return guardarTokenSistemaUI();
   if (a === 'emp-wa-revisar') return revisarWaUI();
   if (a === 'emp-wa-pl-guardar') return guardarPlantillaWaUI(b.dataset.id);
   if (a === 'emp-wa-pl-buena') return decidirPlantillaWaUI(b.dataset.id, 'buena');

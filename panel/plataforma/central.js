@@ -541,8 +541,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   // ---------- Revisión programada de los números de la API ----------
   // Versión de la API de Meta que usamos. Confirmar en la documentación vigente antes de activar.
   const VERSION_META = 'v21.0';
+  // Token de cada número: el propio si lo tiene; si no, el token del sistema (uno para todas las cuentas).
   async function tokenNumero(numeroId) {
-    return descifrarAuto(await leerConfigAuto('token_wa_' + numeroId));
+    const propio = descifrarAuto(await leerConfigAuto('token_wa_' + numeroId));
+    return propio || descifrarAuto(await leerConfigAuto('token_sistema_meta'));
   }
   async function consultarNumeroMeta(numeroId, token) {
     const r = await fetch(`https://graph.facebook.com/${VERSION_META}/${encodeURIComponent(numeroId)}?fields=verified_name,code_verification_status,quality_rating`,
@@ -747,7 +749,16 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Configuración de la conexión con Meta (solo Programador, desde Oficina).
   async function configWhatsapp() {
-    return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))), waba_id: await wabaId() };
+    return { verify_token: await leerConfigAuto('verify_token_whatsapp'), app_secret_configurada: Boolean(descifrarAuto(await leerConfigAuto('app_secret_whatsapp_enc'))), token_sistema_configurado: Boolean(descifrarAuto(await leerConfigAuto('token_sistema_meta'))), waba_id: await wabaId() };
+  }
+  // Un solo token para todas las cuentas (usuario del sistema de Kaizen). Va cifrado y no se vuelve a mostrar.
+  async function guardarTokenSistema(u, f) {
+    const token = String(f.token || '').trim();
+    if (token.length < 20 || /\s/.test(token)) throw Object.assign(new Error('El token no parece válido. Pega el token completo que genera Meta.'), { codigo: 400 });
+    await client.query(`INSERT INTO automatizacion_config (clave, valor) VALUES ('token_sistema_meta', $1)
+      ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor`, [cifrarAuto(token)]);
+    await registrar(u, 'guardar_token_sistema_meta', 'whatsapp', 'sistema', '', '', 'token del sistema guardado (cifrado)');
+    return { ok: true };
   }
   async function guardarSecretoWhatsapp(u, f) {
     const secreto = String(f.app_secret || '').trim();
@@ -1161,6 +1172,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'POST' && url === '/api/central/whatsapp/waba/guardar') return json(res, 200, await guardarWabaId(u, await leerCuerpo(req)));
       if (req.method === 'POST' && url === '/api/central/whatsapp/revisar') return json(res, 200, await revisarWhatsapp());
       if (req.method === 'POST' && url === '/api/central/whatsapp/config/guardar') return json(res, 200, await guardarSecretoWhatsapp(u, await leerCuerpo(req)));
+      if (req.method === 'POST' && url === '/api/central/whatsapp/token-sistema/guardar') return json(res, 200, await guardarTokenSistema(u, await leerCuerpo(req)));
       if (req.method === 'GET' && url === '/api/central/automatizacion/clave-n8n') {
         return json(res, 200, { clave: await claveN8n() });
       }
