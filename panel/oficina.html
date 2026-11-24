@@ -845,7 +845,7 @@ function vClientes() {
         <td class="n"><b>${cuota ? dinero(Math.round((cuota - gasto) * 100) / 100, e.pago.moneda || 'US$') : '—'}</b></td>
         <td>${e.usuarios ?? '—'}</td>
         <td class="envolver">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ') || '—')}</td>
-        <td><button class="btn-mini" data-editar-cliente="${e.id}">Editar</button> <button class="btn-mini" data-usuarios-cliente="${e.id}">Usuarios</button></td></tr>`; }).join('')}
+        <td><button class="btn-mini" data-datos-cliente="${e.id}">Datos y plan</button> <button class="btn-mini" data-estado-cliente="${e.id}">Estado de cuenta</button> <button class="btn-mini" data-editar-cliente="${e.id}">Editar</button> <button class="btn-mini" data-usuarios-cliente="${e.id}">Usuarios</button></td></tr>`; }).join('')}
     </tbody></table>` : '<div class="vacio">Todavía no hay clientes. Créalos en <b>Empresas y demo</b>.</div>'}
   </div>
   <div class="caja"><div class="cab"><div><h2>🧾 Cobros</h2><p class="sub">Las mensualidades se crean solas cada mes · al marcar Pagado ✔ se quita el aviso en el panel del cliente</p></div>
@@ -873,7 +873,7 @@ function barraGastos() {
     const p = YO.permisos || {};
     if (!p.oficina_gastos || !p.oficina_creacion) return '';
   }
-  return `<div class="pestanas"><button class="pestana ${gastosTab === 'negocio' ? 'activa' : ''}" data-gastos-tab="negocio">💸 Gastos del negocio</button><button class="pestana ${gastosTab === 'creacion' ? 'activa' : ''}" data-gastos-tab="creacion">🏗️ Creación del sistema · socios</button></div>`;
+  return `<div class="pestanas"><button class="pestana ${gastosTab === 'negocio' ? 'activa' : ''}" data-gastos-tab="negocio">💸 Gastos del negocio</button><button class="pestana ${gastosTab === 'creacion' ? 'activa' : ''}" data-gastos-tab="creacion">🏗️ Creación del sistema · socios</button><button class="pestana ${gastosTab === 'resumen' ? 'activa' : ''}" data-gastos-tab="resumen">📊 Resumen del mes</button></div>`;
 }
 // Gasto mensual estimado: fijos por mes (mensuales + anuales ÷ 12) + IA del mes llevada a 30 días si el mes no ha terminado.
 function estimadoMes() {
@@ -886,10 +886,12 @@ function estimadoMes() {
 function administracionDe(g) { return g.administracion || 'kaizen'; }
 function admin(clave) { return (D.administraciones || []).find(a => a.clave === clave) || { clave, nombre: clave === 'centralia' ? 'Centralia' : 'Kaizen IA' }; }
 function barraAdmin() {
-  return `<div class="pestanas">${['kaizen', 'centralia'].map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('')}</div>`;
+  return `<div class="pestanas">${permitidasAdmin().map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('')}</div>`;
 }
 function vGastos() {
   if (gastosTab === 'creacion') return vCreacion();
+  if (gastosTab === 'resumen') return vResumen();
+  if (!permitidasAdmin().includes(adminVista)) adminVista = permitidasAdmin()[0] || 'kaizen';
   const gastosAdmin = D.gastos.filter(g => administracionDe(g) === adminVista);
   const ia = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === adminVista);
   const mesAdmin = {}, porCat = {};
@@ -923,7 +925,7 @@ function vGastos() {
   </div>
   <div class="rej r21">
     <div class="caja">
-      <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Datos de ${esc(a.nombre)}<button class="btn-mini" data-editar-admin="${adminVista}">Editar</button></h2>
+      <h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Datos de ${esc(a.nombre)}<span style="display:flex;gap:6px">${a.socio_porcentaje > 0 ? '<button class="btn-mini" data-retiro-socio>Retiro del socio</button>' : ''}<button class="btn-mini" data-editar-admin="${adminVista}">Editar</button></span></h2>
       <div style="display:flex;gap:14px;align-items:center;margin:6px 0 10px">${a.logo ? `<img src="${a.logo}" alt="Logo de ${esc(a.nombre)}" style="max-width:150px;max-height:60px;object-fit:contain">` : '<div style="width:150px;height:56px;border:1px dashed var(--suave);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--suave)">Sin logo</div>'}<small style="color:var(--suave)">Sale en los recibos de ${esc(a.nombre)}.</small></div>
       <table><tbody>
         <tr><td>Nombre legal</td><td>${esc(a.legal || '—')}</td></tr>
@@ -931,11 +933,17 @@ function vGastos() {
         <tr><td>Dirección</td><td>${esc(a.direccion || '—')}</td></tr>
         <tr><td>Correo y teléfono</td><td>${esc([a.correo, a.telefono].filter(Boolean).join(' · ') || '—')}</td></tr>
         <tr><td>Web</td><td>${esc(a.web || '—')}</td></tr>
+        <tr><td>Socio</td><td>${esc(a.socio_nombre || '—')} · ${Number(a.socio_porcentaje) || 0}% de la utilidad</td></tr>
       </tbody></table>
     </div>
     <div class="caja"><h2>Empresas de ${esc(a.nombre)}</h2><p class="sub">Cada empresa pertenece a una sola administración.</p>
       ${empresas.length ? empresas.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb"><b>${esc(x.nombre)}</b><button class="btn-mini" data-mover-empresa="${x.id}:${otra}">Pasar a ${esc(admin(otra).nombre)}</button></div>`).join('') : '<div class="vacio">Todavía no hay empresas en esta administración.</div>'}
     </div>
+  </div>
+  <div class="caja"><h2>Recibos de ${esc(a.nombre)}</h2><p class="sub">Cada administración numera sus recibos por separado.</p>
+    ${(D.recibos || []).some(r => r.administracion === adminVista) ? `<table><thead><tr><th>Nº</th><th>Fecha</th><th>Tipo</th><th>Quién</th><th class="n">Monto</th><th></th></tr></thead><tbody>
+      ${(D.recibos || []).filter(r => r.administracion === adminVista).slice(0, 50).map(r => `<tr><td>${String(r.numero).padStart(4, '0')}</td><td>${fechaCorta(r.fecha)}</td><td>${r.tipo === 'socio' ? 'Retiro de socio' : 'Pago de cliente'}</td><td>${esc(r.tipo === 'socio' ? (r.socio || 'Socio') : (r.empresa || '—'))}</td><td class="n">${dinero(r.monto, r.moneda)}</td><td><button class="btn-mini" data-recibo="${r.id}">Ver / imprimir</button></td></tr>`).join('')}
+    </tbody></table>` : '<div class="vacio">Todavía no hay recibos en esta administración.</div>'}
   </div>
   <div class="rej r21">
     <div class="caja"><h2>Lista de gastos</h2><p class="sub">Toca Editar para cambiar el monto o pausar un gasto que ya no pagas</p>
@@ -2679,6 +2687,8 @@ function formAdmin(a) {
     <div class="fila2">${campo('fDoc', 'Documento fiscal (RUC u otro)', `<input id="fDoc" value="${esc(a.documento || '')}">`)}${campo('fTel', 'Teléfono', `<input id="fTel" value="${esc(a.telefono || '')}">`)}</div>
     ${campo('fDir', 'Dirección fiscal', `<input id="fDir" value="${esc(a.direccion || '')}">`)}
     <div class="fila2">${campo('fCorreo', 'Correo', `<input id="fCorreo" value="${esc(a.correo || '')}">`)}${campo('fWeb', 'Página web', `<input id="fWeb" value="${esc(a.web || '')}">`)}</div>
+    <div class="fila2">${campo('fSocioNom', 'Nombre del socio', `<input id="fSocioNom" value="${esc(a.socio_nombre || '')}">`)}${campo('fSocioPct', 'Porcentaje del socio (%)', `<input id="fSocioPct" type="number" min="0" max="100" step="1" value="${Number(a.socio_porcentaje) || 0}">`, 'Ej.: 40. Lo que queda es tuyo. Pon 0 si no hay reparto.')}</div>
+    ${campo('fSocioDoc', 'Documento del socio', `<input id="fSocioDoc" value="${esc(a.socio_documento || '')}">`)}
     <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar</button></div>`);
   document.getElementById('fGuardar').onclick = async () => {
     const archivo = document.getElementById('fLogo').files[0];
@@ -2687,7 +2697,7 @@ function formAdmin(a) {
       if (archivo.size > 150 * 1024) { document.getElementById('errForm').textContent = 'El logo pesa más de 150 KB. Usa una imagen más pequeña.'; return; }
       logo = await leerComoDataURL(archivo);
     }
-    await enviarForm('/api/oficina/administracion/guardar', { clave: c, nombre: v('fNombre'), legal: v('fLegal'), documento: v('fDoc'), telefono: v('fTel'), direccion: v('fDir'), correo: v('fCorreo'), web: v('fWeb'), logo }, 'Datos guardados.');
+    await enviarForm('/api/oficina/administracion/guardar', { clave: c, nombre: v('fNombre'), legal: v('fLegal'), documento: v('fDoc'), telefono: v('fTel'), direccion: v('fDir'), correo: v('fCorreo'), web: v('fWeb'), logo, socio_nombre: v('fSocioNom'), socio_documento: v('fSocioDoc'), socio_porcentaje: v('fSocioPct') }, 'Datos guardados.');
   };
 }
 function leerComoDataURL(f) { return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = mal; r.readAsDataURL(f); }); }
@@ -2695,6 +2705,207 @@ async function moverEmpresa(id, administracion) {
   const r = await api('/api/oficina/administracion/empresa', { empresa_id: id, administracion });
   if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar la administración.');
   aviso('Empresa cambiada de administración.'); await ir(vista);
+}
+const METODOS_BASE = ['Transferencia', 'PayPal', 'Western Union'];
+const PAISES = { 'Perú': 'RUC', 'Costa Rica': 'Cédula jurídica o física', 'República Dominicana': 'RNC o cédula', 'Argentina': 'CUIT', 'México': 'RFC', 'Colombia': 'NIT', 'Chile': 'RUT', 'Otro': 'Documento fiscal' };
+function permitidasAdmin() { return D.permitidas || ['kaizen', 'centralia']; }
+function metodosDe(e) { try { const m = JSON.parse(e.metodos_pago || '[]'); return m.length ? m : METODOS_BASE.slice(); } catch (x) { return METODOS_BASE.slice(); } }
+// Datos del cliente: país, documento obligatorio, dirección, web, redes, métodos de pago y plan de cobro.
+function formDatosCliente(e) {
+  const paisActual = PAISES[e.pais] ? e.pais : (e.pais ? 'Otro' : 'Perú');
+  let metodos = metodosDe(e);
+  const pintarMetodos = (lista) => { document.getElementById('fMetodos').innerHTML = lista.map(m => `<label class="chip-check" style="display:inline-flex;gap:4px;margin:0 8px 6px 0"><input type="checkbox" value="${esc(m)}" ${metodos.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join(''); };
+  abrirModal(`<h2>Datos y plan de ${esc(e.nombre)}</h2>
+    <div class="fila2">${campo('fPais', 'País', `<select id="fPais">${Object.keys(PAISES).map(x => `<option ${x === paisActual ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`)}${campo('fDoc', 'Documento fiscal (obligatorio)', `<input id="fDoc" value="${esc(e.documento || '')}" placeholder="${esc(PAISES[paisActual])}">`, 'Según el país: RUC, RNC, cédula, CUIT, RFC, NIT o RUT.')}</div>
+    ${campo('fAdminC', 'Administración a la que pertenece', `<select id="fAdminC">${permitidasAdmin().map(c => `<option value="${c}" ${c === (e.administracion || 'kaizen') ? 'selected' : ''}>${esc(admin(c).nombre)}</option>`).join('')}</select>`)}
+    ${campo('fDir', 'Dirección', `<input id="fDir" value="${esc(e.direccion || '')}">`)}
+    <div class="fila2">${campo('fWeb', 'Página web', `<input id="fWeb" value="${esc(e.web || '')}">`)}${campo('fRedes', 'Redes sociales', `<input id="fRedes" value="${esc(e.redes || '')}" placeholder="Instagram, Facebook, TikTok…">`)}</div>
+    <div class="campo"><label>Métodos de pago que usa</label><div id="fMetodos"></div>
+      <div class="fila2" style="margin-top:6px"><input id="fNuevoMetodo" placeholder="Agregar otro método (ej.: Zelle, Yappy)"><button class="btn-sec" id="fAddMetodo" type="button">+ Agregar</button></div></div>
+    ${e.plan_cobro ? `<div class="campo"><label>Plan de cobro</label><div class="ay">Ya creado: ${esc({ unico: 'pago único', abono: 'setup con abono y saldo', mensual: 'solo mensualidad' }[e.plan_cobro] || e.plan_cobro)}. Sus cobros están en el estado de cuenta.</div></div>` : `
+    <div class="campo"><label>Plan de cobro</label>
+      <div>${[['unico', 'Pago único (se paga completo al entregar)'], ['abono', 'Setup con abono y saldo'], ['mensual', 'Solo mensualidad (la cuota se configura en Editar)']].map(([k, t]) => `<label style="display:block;margin:4px 0"><input type="radio" name="fPlan" value="${k}"> ${t}</label>`).join('')}</div></div>
+    <div id="fPlanCampos"></div>`}
+    <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar</button></div>`);
+  pintarMetodos(metodos);
+  document.getElementById('fAddMetodo').onclick = () => {
+    const nuevo = v('fNuevoMetodo').trim(); if (!nuevo) return;
+    metodos = [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value);
+    if (!metodos.includes(nuevo)) metodos.push(nuevo);
+    pintarMetodos([...new Set([...METODOS_BASE, ...metodos])]);
+    document.getElementById('fNuevoMetodo').value = '';
+  };
+  const pintarPlan = () => {
+    const el = document.getElementById('fPlanCampos'); if (!el) return;
+    const tipo = (document.querySelector('input[name="fPlan"]:checked') || {}).value;
+    const moneda = `${campo('fMoneP', 'Moneda', `<select id="fMoneP">${['US$', 'RD$', '€'].map(m => `<option>${m}</option>`).join('')}</select>`)}`;
+    if (tipo === 'unico') el.innerHTML = `<div class="fila2">${campo('fTotal', 'Monto total', `<input id="fTotal" type="number" step="0.01" min="0">`)}${moneda}</div><div class="fila2">${campo('fFechaC', 'Fecha de cobro', `<input id="fFechaC" type="date" value="${hoy()}">`)}</div>`;
+    else if (tipo === 'abono') el.innerHTML = `<div class="fila2">${campo('fTotal', 'Monto total del setup', `<input id="fTotal" type="number" step="0.01" min="0">`)}${campo('fAbonoPct', '% de abono', `<input id="fAbonoPct" type="number" min="1" max="99" value="60">`)}${moneda}</div><div class="fila2">${campo('fFechaC', 'Fecha del abono', `<input id="fFechaC" type="date" value="${hoy()}">`)}${campo('fFechaS', 'Fecha del saldo (al entregar)', `<input id="fFechaS" type="date" value="${hoy()}">`)}</div>`;
+    else el.innerHTML = '';
+  };
+  document.querySelectorAll('input[name="fPlan"]').forEach(r => r.onchange = pintarPlan);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/cliente/datos', { empresa_id: e.id, documento: v('fDoc'), pais: v('fPais'), administracion: v('fAdminC'), direccion: v('fDir'), web: v('fWeb'), redes: v('fRedes'), metodos_pago: [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value) });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    const tipo = (document.querySelector('input[name="fPlan"]:checked') || {}).value;
+    if (!e.plan_cobro && tipo) {
+      const r2 = await api('/api/oficina/cobro/plan', { empresa_id: e.id, plan: tipo, monto: v('fTotal'), abono_pct: v('fAbonoPct'), fecha: v('fFechaC'), fecha_saldo: v('fFechaS'), moneda: v('fMoneP') });
+      if (!r2.ok) { document.getElementById('errForm').textContent = r2.data.error || 'No se pudo crear el plan de cobro.'; return; }
+    }
+    cerrarModal(); aviso('Datos guardados.'); await ir(vista);
+  };
+}
+// Estado de cuenta: cobros del cliente, lo cobrado, el saldo y los recibos.
+function formEstado(e) {
+  const cobros = (D.pagos || []).filter(p => p.empresa_id === e.id);
+  const total = cobros.reduce((t, p) => t + (Number(p.monto) || 0), 0);
+  const pagado = cobros.filter(p => p.pagado_el).reduce((t, p) => t + (Number(p.monto) || 0), 0);
+  abrirModal(`<h2>Estado de cuenta · ${esc(e.nombre)}</h2>
+    <p class="sub">${esc(admin(e.administracion || 'kaizen').nombre)} · ${esc(e.pais || 'país sin elegir')} · ${esc(e.documento ? 'Documento ' + e.documento : 'Falta el documento fiscal')}</p>
+    <div class="kpis">
+      <div class="kpi"><div class="e">Cobrado</div><div class="n">${dinero(pagado)}</div></div>
+      <div class="kpi" style="border-color:var(--ambar)"><div class="e">Saldo pendiente</div><div class="n">${dinero(total - pagado)}</div></div>
+      <div class="kpi"><div class="e">Total de cobros</div><div class="n">${dinero(total)}</div></div>
+    </div>
+    ${cobros.length ? `<table><thead><tr><th>Concepto</th><th>Vence</th><th class="n">Monto</th><th>Pagado</th><th>Forma</th><th>Recibo y comprobante</th><th></th></tr></thead><tbody>
+      ${cobros.map(p => `<tr><td>${esc(p.concepto)}</td><td>${fechaCorta(p.vence)}</td><td class="n">${dinero(p.monto, p.moneda)}</td><td>${p.pagado_el ? fechaCorta(p.pagado_el) : '<span class="chip ambar">pendiente</span>'}</td><td>${esc(p.forma || '—')}</td>
+        <td>${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">${esc(p.comprobante_nombre)}</button>` : ''}</td>
+        <td>${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Registrar pago</button>`}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="vacio">Este cliente todavía no tiene cobros. Crea su plan de cobro en «Datos y plan».</div>'}
+    <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
+}
+// Pago recibido: se sube el comprobante (PDF o imagen) y se genera el recibo de esa administración.
+function formPagar(id) {
+  const p = (D.pagos || []).find(x => String(x.id) === String(id));
+  if (!p) return;
+  const e = buscar(D.empresas, p.empresa_id) || {};
+  const metodos = metodosDe(e);
+  abrirModal(`<h2>Registrar pago</h2>
+    <p class="sub">${esc(p.concepto)} · ${dinero(p.monto, p.moneda)} · ${esc(e.nombre || '')}</p>
+    <div class="fila2">${campo('fFechaP', 'Fecha del pago', `<input id="fFechaP" type="date" value="${hoy()}">`)}${campo('fMetodoP', 'Método', `<select id="fMetodoP">${metodos.map(m => `<option>${esc(m)}</option>`).join('')}</select>`)}</div>
+    ${campo('fRefP', 'Referencia o número de transacción', `<input id="fRefP" placeholder="Ej.: 0045 8871">`)}
+    ${campo('fArch', 'Comprobante (PDF, PNG, JPG o WEBP, menos de 2 MB)', `<input id="fArch" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">`, 'Se guarda con el cobro.')}
+    <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Confirmar y generar recibo</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const arch = document.getElementById('fArch').files[0];
+    let comprobante = null, nombre = '';
+    if (arch) {
+      if (arch.size > 2 * 1024 * 1024) { document.getElementById('errForm').textContent = 'El comprobante pesa más de 2 MB.'; return; }
+      comprobante = await leerComoDataURL(arch); nombre = arch.name;
+    }
+    const r = await api('/api/oficina/cobro/pagar', { pago_id: p.id, fecha: v('fFechaP'), metodo: v('fMetodoP'), referencia: v('fRefP'), comprobante, comprobante_nombre: nombre });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo registrar el pago.'; return; }
+    cerrarModal(); aviso('Pago registrado. Se generó el recibo.'); await ir(vista); abrirRecibo(r.data.recibo_id);
+  };
+}
+async function verComprobante(id) {
+  const r = await api(`/api/oficina/cobro/comprobante?id=${encodeURIComponent(id)}`);
+  if (!r.ok || !r.data.comprobante) return aviso(r.data.error || 'No hay comprobante.');
+  const a = document.createElement('a'); a.href = r.data.comprobante; a.download = r.data.nombre || 'comprobante'; document.body.appendChild(a); a.click(); a.remove();
+}
+// Recibo imprimible con el logo y los datos de la administración que cobra.
+async function abrirRecibo(id) {
+  const r = await api(`/api/oficina/recibo/${id}`);
+  if (!r.ok) return aviso(r.data.error || 'No se pudo abrir el recibo.');
+  const w = window.open('', '_blank');
+  if (!w) return aviso('El navegador bloqueó la ventana del recibo. Permite ventanas emergentes.');
+  w.document.write(htmlRecibo(r.data.recibo, r.data.administracion || {}, r.data.empresa || {}));
+  w.document.close(); setTimeout(() => w.print(), 400);
+}
+function htmlRecibo(rc, a, em) {
+  const color = rc.administracion === 'centralia' ? '#0f7b6c' : '#0b5cad';
+  const logo = a.logo ? `<img src="${a.logo}" alt="Logo" style="max-width:190px;max-height:70px;object-fit:contain">` : `<div style="width:170px;height:60px;border:1px dashed #9aa6b8;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#5b6676;font-size:12px">Sin logo</div>`;
+  const filas = (lista) => lista.map(([k, val]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eef1f5;font-size:14px"><span>${k}</span><span style="font-variant-numeric:tabular-nums">${val}</span></div>`).join('');
+  const numero = String(rc.numero).padStart(4, '0');
+  const fecha = fechaCorta(rc.fecha);
+  const adm = `<b>${esc(a.legal || a.nombre || '')}</b><br>${esc(a.documento ? 'Documento: ' + a.documento : '')}<br>${esc(a.direccion || '')}<br>${esc([a.correo, a.telefono, a.web].filter(Boolean).join(' · '))}`;
+  let cuerpo, quien;
+  if (rc.tipo === 'socio') {
+    const d = rc.detalle || {};
+    quien = `<b>${esc(rc.socio || 'Socio')}</b><br>Participación: ${Number(d.pct) || 0}% de la utilidad`;
+    cuerpo = filas([
+      ['Utilidad a repartir', dinero(d.utilidad)],
+      ['Participación del socio', dinero(d.participacion)],
+      ['Ya retirado antes de este', dinero(d.retirado_antes)],
+      ['<b>Este retiro</b>', `<b>${dinero(rc.monto)}</b>`],
+      ['Disponible después', dinero((Number(d.disponible_antes) || 0) - (Number(rc.monto) || 0))]
+    ]);
+  } else {
+    quien = `<b>${esc(em.nombre || rc.empresa || '')}</b><br>${esc(em.documento ? 'Documento: ' + em.documento : '')}<br>${esc([em.pais, em.direccion].filter(Boolean).join(' · '))}`;
+    cuerpo = filas([
+      [esc(rc.concepto), dinero(rc.monto, rc.moneda)],
+      ['Método', esc(rc.metodo || '—')],
+      ['Referencia', esc(rc.referencia || '—')]
+    ]);
+  }
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Recibo ${numero}</title>
+  <style>body{margin:0;font-family:Inter,system-ui,sans-serif;color:#1d2433;background:#fff}.hoja{width:760px;margin:0 auto;padding:40px 48px;box-sizing:border-box;min-height:1000px;display:flex;flex-direction:column}.lb{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#5b6676}@media print{body{background:#fff}.hoja{margin:0;width:auto;padding:24px}}</style></head>
+  <body><div class="hoja">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid ${color};padding-bottom:16px">
+      <div>${logo}<div style="margin-top:10px;font-size:13px;color:#5b6676;line-height:1.5">${adm}</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:700;color:${color}">${rc.tipo === 'socio' ? 'RECIBO DE RETIRO' : 'RECIBO DE PAGO'}</div><div style="font-size:14px;margin-top:6px">Nº <b style="font-variant-numeric:tabular-nums">${numero}</b></div><div style="font-size:13px;color:#5b6676">Fecha: ${esc(fecha)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px"><div><div class="lb">${rc.tipo === 'socio' ? 'Socio' : 'Recibido de'}</div><div style="font-size:14px;margin-top:6px;line-height:1.5">${quien}</div></div><div><div class="lb">Datos del ${rc.tipo === 'socio' ? 'retiro' : 'pago'}</div><div style="font-size:13px;margin-top:6px;line-height:1.7">${esc(rc.tipo === 'socio' ? 'Adelanto de utilidades · ' + rc.periodo : 'Pago recibido')}</div></div></div>
+    <div style="margin-top:26px">${cuerpo}</div>
+    <div style="margin-top:16px;margin-left:auto;width:320px;font-size:15px;font-weight:700;display:flex;justify-content:space-between"><span>Total</span><span style="font-variant-numeric:tabular-nums">${dinero(rc.monto, rc.moneda)}</span></div>
+    ${rc.tipo === 'socio' && (rc.detalle || {}).nota ? `<div style="margin-top:14px;font-size:13px;color:#5b6676">Nota: ${esc(rc.detalle.nota)}</div>` : ''}
+    <div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding-top:30px">
+      <div style="font-size:12px;color:#5b6676;max-width:400px;line-height:1.5">${rc.tipo === 'socio' ? 'Este recibo confirma el retiro de utilidades. Si queda en negativo, se descuenta en el siguiente período.' : 'Este recibo confirma el pago recibido. El saldo pendiente, si existe, aparece en el estado de cuenta.'}</div>
+      <div style="display:flex;gap:28px;font-size:12px;color:#5b6676;text-align:center">${rc.tipo === 'socio' ? '<div style="width:160px;border-top:1px solid #1d2433;padding-top:6px">Firma del socio</div>' : ''}<div style="width:160px;border-top:1px solid #1d2433;padding-top:6px">Firma y sello · ${esc(a.nombre || '')}</div></div>
+    </div>
+  </div></body></html>`;
+}
+// Retiro de utilidades del socio: muestra lo que le toca, lo ya retirado y lo disponible.
+async function formRetiro() {
+  const clave = adminVista, mesR = mes;
+  if (!permitidasAdmin().includes(clave)) return aviso('No tienes acceso a esta administración.');
+  const d0 = await api(`/api/oficina/socio/disponible?administracion=${encodeURIComponent(clave)}&mes=${encodeURIComponent(mesR)}`);
+  if (!d0.ok) return aviso(d0.data.error || 'No se pudo calcular el retiro.');
+  const x = d0.data, a = admin(clave);
+  abrirModal(`<h2>Retiro de utilidades · ${esc(x.socio || 'Socio')}</h2>
+    <p class="sub">${esc(a.nombre)} · ${esc(D.nombreMes)} · le corresponde el ${x.pct}% de la utilidad del mes</p>
+    <table><tbody>
+      <tr><td>Cobrado del mes</td><td class="n">${dinero(x.cobrado)}</td></tr>
+      <tr><td>Menos gastos de empresa</td><td class="n">${dinero(x.gastos)}</td></tr>
+      <tr><td>Utilidad a repartir</td><td class="n">${dinero(x.utilidad)}</td></tr>
+      <tr><td>Participación del socio (${x.pct}%)</td><td class="n">${dinero(x.participacion)}</td></tr>
+      <tr><td>Ya retirado este mes</td><td class="n">${dinero(x.retirado)}</td></tr>
+      <tr><td><b>Disponible para retirar</b></td><td class="n"><b>${dinero(x.disponible)}</b></td></tr>
+    </tbody></table>
+    <div class="fila2" style="margin-top:12px">${campo('fMontoR', 'Monto del retiro', `<input id="fMontoR" type="number" step="0.01" value="${x.disponible}">`, 'Si es más que lo disponible, queda en negativo y se descuenta después.')}${campo('fFechaR', 'Fecha', `<input id="fFechaR" type="date" value="${hoy()}">`)}</div>
+    <div class="fila2">${campo('fMetR', 'Método', `<select id="fMetR">${METODOS_BASE.concat(['Efectivo', 'Otro']).map(m => `<option>${m}</option>`).join('')}</select>`)}${campo('fRefR', 'Referencia', `<input id="fRefR">`)}</div>
+    ${campo('fNotaR', 'Nota (opcional)', `<input id="fNotaR">`)}
+    <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar y generar recibo</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/recibo/socio', { administracion: clave, mes: mesR, monto: v('fMontoR'), fecha: v('fFechaR'), metodo: v('fMetR'), referencia: v('fRefR'), nota: v('fNotaR') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar el retiro.'; return; }
+    cerrarModal();
+    aviso(r.data.queda_negativo ? `Retiro guardado. Queda en negativo ${dinero(r.data.queda_negativo)}.` : 'Retiro guardado.');
+    await ir(vista); abrirRecibo(r.data.recibo_id);
+  };
+}
+// Resumen del mes: cobrado, gastos, utilidad y reparto de cada administración, con gráfica de 6 meses.
+function vResumen() {
+  const cs = permitidasAdmin();
+  const bloque = c => {
+    const serie = (D.resumen || {})[c] || [];
+    const actual = serie[serie.length - 1] || { cobrado: 0, gastos: 0, utilidad: 0, socio: 0, tuyo: 0, pct: 0 };
+    const max = Math.max(1, ...serie.map(s => Math.max(s.cobrado, s.gastos)));
+    const barras = serie.map(s => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="display:flex;align-items:flex-end;gap:3px;height:150px"><i title="Cobrado ${dinero(s.cobrado)}" style="display:block;width:14px;height:${Math.round(150 * s.cobrado / max)}px;background:#2563eb;border-radius:4px 4px 0 0"></i><i title="Gastos ${dinero(s.gastos)}" style="display:block;width:14px;height:${Math.round(150 * s.gastos / max)}px;background:#eb6834;border-radius:4px 4px 0 0"></i></div>
+        <small style="color:var(--suave)">${esc(s.mes.slice(5))}</small></div>`).join('');
+    return `<div class="caja"><h2>${esc(admin(c).nombre)}</h2>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+        <div class="kpi"><div class="e">Cobrado · ${esc(D.nombreMes)}</div><div class="n">${dinero(actual.cobrado)}</div></div>
+        <div class="kpi"><div class="e">Gastos</div><div class="n">${dinero(actual.gastos)}</div></div>
+        <div class="kpi"><div class="e">Utilidad</div><div class="n">${dinero(actual.utilidad)}</div></div>
+        ${actual.pct > 0 ? `<div class="kpi" style="border-color:var(--verde)"><div class="e">Tuyo (${100 - actual.pct}%)</div><div class="n">${dinero(actual.tuyo)}</div></div><div class="kpi"><div class="e">Socio (${actual.pct}%)</div><div class="n">${dinero(actual.socio)}</div></div>` : '<div class="kpi" style="border-color:var(--verde)"><div class="e">Sin reparto</div><div class="n">100% tuyo</div></div>'}
+      </div>
+      <p class="sub">Azul = cobrado · naranja = gastos · últimos 6 meses</p>
+      <div style="display:flex;gap:6px;align-items:flex-end;padding:8px 4px;border-bottom:1px solid #e5e7eb">${barras}</div></div>`;
+  };
+  return cabecera('📊 Resumen del mes', 'Lo cobrado, lo gastado y lo que le toca a cada quien', selectorMes()) + barraGastos() +
+    (cs.length ? `<div class="rej r21">${cs.map(bloque).join('')}</div>` : '<div class="vacio">No tienes administraciones asignadas.</div>');
 }
 function formEvento(ev = {}, fecha) {
   abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
@@ -2789,7 +3000,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-recargar]');
+  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
@@ -2815,6 +3026,12 @@ document.addEventListener('click', async ev => {
   if ('nuevaSeccion' in d) { const n = (prompt('Nombre de la sección nueva (ej.: Mis redes, Proveedores, Bancos):') || '').trim(); if (n) formEnlace({ grupo: n.slice(0, 60) }); return; }
   if (d.editarEnlace) { const x = buscar(D.enlaces, d.editarEnlace); return x && formEnlace(x); }
   if (d.editarCliente) { const e = buscar(D.empresas, d.editarCliente); return e && formCliente(e); }
+  if (d.datosCliente) { const e = buscar(D.empresas, d.datosCliente); return e && formDatosCliente(e); }
+  if (d.estadoCliente) { const e = buscar(D.empresas, d.estadoCliente); return e && formEstado(e); }
+  if (d.pagarCobro) return formPagar(d.pagarCobro);
+  if (d.recibo) return abrirRecibo(d.recibo);
+  if ('retiroSocio' in d) return formRetiro();
+  if (d.verComprobante) return verComprobante(d.verComprobante);
   if (d.filtroPagos) { filtroPagos = d.filtroPagos; return pintar(); }
   if (d.cal) { mesCal = d.cal === '0' ? hoy().slice(0, 7) : mesMas(mesCal, Number(d.cal)); return pintar(); }
   if (d.dia) return formEvento({}, d.dia);

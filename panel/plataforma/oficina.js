@@ -127,6 +127,24 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("INSERT INTO oficina_administraciones (clave, nombre) VALUES ('kaizen', 'Kaizen IA'), ('centralia', 'Centralia') ON CONFLICT (clave) DO NOTHING");
     await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
+    for (const col of ['documento TEXT', 'pais TEXT', 'direccion TEXT', 'web TEXT', 'redes TEXT']) {
+      await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} NOT NULL DEFAULT ''`);
+    }
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS metodos_pago TEXT NOT NULL DEFAULT '[]'");
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS plan_cobro TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_administraciones ADD COLUMN IF NOT EXISTS socio_nombre TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_administraciones ADD COLUMN IF NOT EXISTS socio_documento TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_administraciones ADD COLUMN IF NOT EXISTS socio_porcentaje NUMERIC");
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS comprobante TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS comprobante_nombre TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibo_id INTEGER");
+    // Recibos numerados por administración: de cliente (pago recibido) y de socio (retiro de utilidades).
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_recibos (
+      id SERIAL PRIMARY KEY, administracion VARCHAR(20) NOT NULL, numero INTEGER NOT NULL, tipo VARCHAR(10) NOT NULL,
+      pago_id INTEGER, empresa_id INTEGER, socio TEXT NOT NULL DEFAULT '', monto NUMERIC(12,2) NOT NULL DEFAULT 0,
+      moneda VARCHAR(5) NOT NULL DEFAULT 'US$', concepto TEXT NOT NULL DEFAULT '', metodo TEXT NOT NULL DEFAULT '',
+      referencia TEXT NOT NULL DEFAULT '', fecha DATE NOT NULL, periodo VARCHAR(7) NOT NULL DEFAULT '',
+      detalle JSONB NOT NULL DEFAULT '{}'::jsonb, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE (administracion, numero))`);
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_eventos (
       id SERIAL PRIMARY KEY, titulo TEXT NOT NULL, fecha DATE NOT NULL, hora VARCHAR(5) NOT NULL DEFAULT '',
       tipo VARCHAR(10) NOT NULL DEFAULT 'tarea', empresa_id INTEGER, nota TEXT NOT NULL DEFAULT '', hecho BOOLEAN NOT NULL DEFAULT FALSE,
@@ -279,6 +297,73 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     return f.slice(0, 7) === mes ? valor : 0;
   }
 
+  // Administraciones que puede ver un usuario: las que tenga marcadas. Si no tiene ninguna marcada pero sí gastos, ve las dos.
+  function adminsDe(permisos) {
+    const marcadas = ADMINISTRACIONES.filter(c => Boolean(permisos && permisos['oficina_admin_' + c]));
+    if (marcadas.length) return marcadas;
+    return permisos && permisos.oficina_gastos ? ADMINISTRACIONES.slice() : [];
+  }
+  function puedeAdmin(u, permisos, clave) { return u.grupo === 'Programador' || adminsDe(permisos).includes(clave); }
+  // Resultado de un mes de una administración en US$: lo cobrado (pagos recibidos) menos los gastos.
+  async function resultadoMes(clave, mes) {
+    const ing = (await client.query(`SELECT COALESCE(SUM(p.monto), 0) AS t FROM oficina_pagos p JOIN empresas e ON e.id = p.empresa_id
+      WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.moneda = 'US$' AND p.pagado_el IS NOT NULL AND TO_CHAR(p.pagado_el, 'YYYY-MM') = $2`, [clave, mes])).rows[0].t;
+    const gs = (await client.query("SELECT * FROM oficina_gastos WHERE COALESCE(administracion, 'kaizen') = $1 AND moneda = 'US$'", [clave])).rows;
+    const cobrado = Math.round(Number(ing) * 100) / 100;
+    const gastos = Math.round(gs.reduce((t, g) => t + gastoDelMes(g, mes), 0) * 100) / 100;
+    return { cobrado, gastos, utilidad: Math.round((cobrado - gastos) * 100) / 100 };
+  }
+  // Porcentaje del socio: Centralia 40% por defecto (tú 60%); Kaizen IA 0% (todo es tuyo).
+  async function porcentajeSocio(clave) {
+    const f = (await client.query('SELECT socio_porcentaje FROM oficina_administraciones WHERE clave = $1', [clave])).rows[0];
+    if (!f) return 0;
+    return f.socio_porcentaje == null ? (clave === 'centralia' ? 40 : 0) : Number(f.socio_porcentaje);
+  }
+  // Lo que le toca al socio en un mes y lo que ya retiró ese mes.
+  async function disponibleSocio(clave, mes) {
+    const r = await resultadoMes(clave, mes);
+    const pct = await porcentajeSocio(clave);
+    const participacion = Math.round(r.utilidad * pct) / 100;
+    const retirado = Math.round(Number((await client.query("SELECT COALESCE(SUM(monto), 0) AS t FROM oficina_recibos WHERE administracion = $1 AND tipo = 'socio' AND periodo = $2", [clave, mes])).rows[0].t) * 100) / 100;
+    const socio = (await client.query('SELECT socio_nombre FROM oficina_administraciones WHERE clave = $1', [clave])).rows[0] || {};
+    return { mes, pct, utilidad: r.utilidad, cobrado: r.cobrado, gastos: r.gastos, participacion, retirado, disponible: Math.round((participacion - retirado) * 100) / 100, socio: socio.socio_nombre || '' };
+  }
+  // Seis meses por administración para el resumen y las gráficas.
+  async function resumenDe(mes) {
+    const salida = {};
+    for (const clave of ADMINISTRACIONES) {
+      const pct = await porcentajeSocio(clave);
+      const serie = [];
+      for (const n of [-5, -4, -3, -2, -1, 0]) {
+        const m = mesMas(mes, n), r = await resultadoMes(clave, m);
+        const socio = Math.round(r.utilidad * pct) / 100;
+        serie.push({ mes: m, ...r, pct, socio, tuyo: Math.round((r.utilidad - socio) * 100) / 100 });
+      }
+      salida[clave] = serie;
+    }
+    return salida;
+  }
+  // Siguiente número de recibo de cada administración (cada una numera por separado).
+  async function siguienteNumero(clave) {
+    return Number((await client.query('SELECT COALESCE(MAX(numero), 0) + 1 AS n FROM oficina_recibos WHERE administracion = $1', [clave])).rows[0].n);
+  }
+  // Quita de los datos todo lo que no es de las administraciones que puede ver el usuario.
+  function recortar(d, permitidas) {
+    const ok = new Set(permitidas);
+    const empresasOk = new Set(d.empresas.filter(e => ok.has(e.administracion || 'kaizen')).map(e => e.id));
+    const vacio = { cobrado: {}, porCobrar: {}, vencido: {}, gastos: {}, gastosFijos: {}, ia: {}, ingresoFijo: {} };
+    return {
+      ...d, permitidas,
+      empresas: d.empresas.filter(e => empresasOk.has(e.id)),
+      administraciones: (d.administraciones || []).filter(a => ok.has(a.clave)),
+      pagos: d.pagos.filter(p => empresasOk.has(p.empresa_id)),
+      gastos: d.gastos.filter(g => ok.has(g.administracion || 'kaizen')),
+      recibos: (d.recibos || []).filter(r => ok.has(r.administracion)),
+      resumen: Object.fromEntries(Object.entries(d.resumen || {}).filter(([c]) => ok.has(c))),
+      totales: vacio, serie: []
+    };
+  }
+
   async function datos(mes) {
     const hoy = hoyLocal();
     const filas = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
@@ -295,7 +380,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       lista.forEach((e, i) => { const x = ia.get(e.id); if (x) { x.compartida = lista.filter(o => o.id !== e.id).map(o => o.nombre); x.repetida = i > 0; } });
     }
 
-    const pagos = (await client.query(`SELECT p.*, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
+    const pagos = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto, p.moneda, p.forma, p.nota, p.auto_mes, p.recibo_id, p.comprobante_nombre, p.creado, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
       FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id
       WHERE p.vence >= $1 OR p.pagado_el IS NULL ORDER BY p.vence DESC, p.id DESC`, [mesMas(mes, -12) + '-01'])).rows
       .map(p => ({ ...p, monto: Number(p.monto), estado: p.pagado_el ? 'pagado' : p.vence < hoy ? 'vencido' : p.vence === hoy ? 'hoy' : 'pendiente' }));
@@ -307,7 +392,11 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       WHERE ev.fecha BETWEEN $1 AND $2 OR (ev.hecho = FALSE AND ev.fecha < $3) ORDER BY ev.fecha, ev.hora`,
       [mesMas(mes, -1) + '-01', mesMas(mes, 2) + '-01', hoy])).rows;
     const enlaces = (await client.query('SELECT * FROM oficina_enlaces ORDER BY grupo, orden, nombre')).rows;
-    const administraciones = (await client.query('SELECT * FROM oficina_administraciones ORDER BY clave')).rows;
+    const administraciones = (await client.query('SELECT * FROM oficina_administraciones ORDER BY clave')).rows
+      .map(a => ({ ...a, socio_porcentaje: a.socio_porcentaje == null ? (a.clave === 'centralia' ? 40 : 0) : Number(a.socio_porcentaje) }));
+    const recibos = (await client.query(`SELECT r.id, r.administracion, r.numero, r.tipo, r.pago_id, r.empresa_id, r.socio, r.monto, r.moneda, r.concepto, r.metodo,
+      r.referencia, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha, r.periodo, r.detalle, e.nombre AS empresa
+      FROM oficina_recibos r LEFT JOIN empresas e ON e.id = r.empresa_id ORDER BY r.creado DESC LIMIT 400`)).rows;
     const automatizaciones = (await client.query("SELECT * FROM oficina_automatizaciones ORDER BY (estado = 'pausado'), orden, lower(nombre)")).rows;
 
     // Totales del mes elegido, por moneda.
@@ -345,14 +434,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const e = porId.get(d.id);
         return {
           id: d.id, nombre: d.nombre, slug: d.slug, url: d.url, estado: d.estado, vivo: d.vivo, es_demo: d.es_demo, externa: d.externa,
-          administracion: e.administracion || 'kaizen', plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
+          administracion: e.administracion || 'kaizen', documento: e.documento || '', pais: e.pais || '', direccion: e.direccion || '', web: e.web || '', redes: e.redes || '', metodos_pago: e.metodos_pago || '[]', plan_cobro: e.plan_cobro || '', plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
           tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave), correo_lectura: e.correo_lectura || '', correo_host: e.correo_host || '', tieneCorreo: Boolean(e.correo_clave),
           pago: d.pagoCentral || {}, pagado: (d.cuenta || {}).pagado || '', etapaPago: d.etapaPago,
           usuarios: (d.numeros || {}).usuarios ?? null, correosHoy: (d.numeros || {}).correos_hoy ?? null, error: d.error || '',
           ia: ia.get(d.id) || { tiene: false }
         };
       }),
-      pagos, gastos, eventos, enlaces, automatizaciones, administraciones, totales: t, serie
+      pagos, gastos, eventos, enlaces, automatizaciones, administraciones, recibos, resumen: await resumenDe(mes), totales: t, serie
     };
   }
 
@@ -524,6 +613,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
+    if (url.startsWith('/api/oficina/recibo/socio') || url.startsWith('/api/oficina/socio/')) return ['gastos'];
+    if (url.startsWith('/api/oficina/recibo/') || url.startsWith('/api/oficina/cobro/') || url.startsWith('/api/oficina/cliente/datos')) return ['clientes', 'gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
     if (url === '/api/oficina/evento-hecho') return ['calendario', 'inicio'];
     if (url.startsWith('/api/oficina/chat')) return ['chat'];
@@ -583,7 +674,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
         // "Actualizar ahora": se vuelve a preguntar a OpenRouter sin esperar.
         if (p.get('fresco') === '1') cacheClaves.clear();
-        return json(res, 200, { ...(await datos(mes)), alarmas: await alarmasGastos(), leido: new Date().toISOString() });
+        let d = await datos(mes);
+        d = u.grupo === 'Programador' ? { ...d, permitidas: ADMINISTRACIONES.slice() } : recortar(d, adminsDe(permisos));
+        return json(res, 200, { ...d, alarmas: await alarmasGastos(), leido: new Date().toISOString() });
       }
       if (req.method === 'GET' && url === '/api/oficina/alarmas') return json(res, 200, { alarmas: await alarmasGastos() });
       if (req.method === 'POST' && url === '/api/oficina/gastos/pagado') {
@@ -720,6 +813,114 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return json(res, 200, { servicios: await Promise.all(lista.map(revisarEnlace)) });
       }
 
+      // Cliente: datos de la empresa. El documento fiscal es obligatorio (RUC, DNI, cédula... según el país).
+      if (req.method === 'POST' && url === '/api/oficina/cliente/datos') {
+        const f = await leerCuerpo(req);
+        const e = (await client.query("SELECT id, COALESCE(administracion, 'kaizen') AS administracion FROM empresas WHERE id = $1", [Number(f.empresa_id)])).rows[0];
+        if (!e) return json(res, 404, { error: 'Cliente no encontrado.' });
+        const admin = ADMINISTRACIONES.includes(f.administracion) ? f.administracion : e.administracion;
+        if (!puedeAdmin(u, permisos, e.administracion) || !puedeAdmin(u, permisos, admin)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const doc = texto(f.documento, 60);
+        if (!doc) return json(res, 400, { error: 'El documento fiscal es obligatorio (RUC, DNI, cédula u otro según el país).' });
+        const metodos = Array.isArray(f.metodos_pago) ? f.metodos_pago.map(m => texto(m, 40)).filter(Boolean).slice(0, 20) : [];
+        await client.query('UPDATE empresas SET documento=$2, pais=$3, direccion=$4, web=$5, redes=$6, metodos_pago=$7, administracion=$8 WHERE id=$1',
+          [e.id, doc, texto(f.pais, 60), texto(f.direccion, 300), texto(f.web, 200), texto(f.redes, 400), JSON.stringify(metodos), admin]);
+        await registrar(u, 'cliente_datos', 'empresa', e.id, '', '', doc);
+        return json(res, 200, { ok: true });
+      }
+      // Plan de cobro: pago único, o setup con abono y saldo. La mensualidad se configura con la cuota del cliente.
+      if (req.method === 'POST' && url === '/api/oficina/cobro/plan') {
+        const f = await leerCuerpo(req);
+        const e = (await client.query("SELECT id, COALESCE(administracion, 'kaizen') AS administracion, plan_cobro FROM empresas WHERE id = $1", [Number(f.empresa_id)])).rows[0];
+        if (!e) return json(res, 404, { error: 'Cliente no encontrado.' });
+        if (!puedeAdmin(u, permisos, e.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        if (e.plan_cobro) return json(res, 400, { error: 'Este cliente ya tiene su plan de cobro creado.' });
+        const tipo = ['unico', 'abono', 'mensual'].includes(f.plan) ? f.plan : null;
+        if (!tipo) return json(res, 400, { error: 'Elige el plan: pago único, setup con abono o solo mensualidad.' });
+        const moneda = ['US$', 'RD$', '€'].includes(f.moneda) ? f.moneda : 'US$';
+        const fechaCobro = fechaValida(f.fecha) ? f.fecha : hoyLocal();
+        if (tipo !== 'mensual') {
+          const total = monto(f.monto);
+          if (!(total > 0)) return json(res, 400, { error: 'Escribe el monto total del setup.' });
+          if (tipo === 'unico') {
+            await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence) VALUES ($1,$2,$3,$4,$5)', [e.id, texto(f.concepto, 200) || 'Pago único', total, moneda, fechaCobro]);
+          } else {
+            const pct = Math.min(99, Math.max(1, Number(f.abono_pct) || 60));
+            const abono = Math.round(total * pct) / 100, saldo = Math.round((total - abono) * 100) / 100;
+            const fechaSaldo = fechaValida(f.fecha_saldo) ? f.fecha_saldo : fechaCobro;
+            await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence) VALUES ($1,$2,$3,$4,$5)', [e.id, `Abono inicial (${pct}%)`, abono, moneda, fechaCobro]);
+            await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence) VALUES ($1,$2,$3,$4,$5)', [e.id, `Saldo (${100 - pct}%) al entregar`, saldo, moneda, fechaSaldo]);
+          }
+        }
+        await client.query('UPDATE empresas SET plan_cobro = $2 WHERE id = $1', [e.id, tipo]);
+        await registrar(u, 'cobro_plan', 'empresa', e.id, '', tipo, '');
+        return json(res, 200, { ok: true });
+      }
+      // Cobro pagado: se sube el comprobante (PDF o imagen) y se genera el recibo numerado de esa administración.
+      if (req.method === 'POST' && url === '/api/oficina/cobro/pagar') {
+        const f = await leerCuerpo(req);
+        const p = (await client.query("SELECT p.*, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, COALESCE(e.administracion, 'kaizen') AS administracion FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = $1", [Number(f.pago_id)])).rows[0];
+        if (!p) return json(res, 404, { error: 'Cobro no encontrado.' });
+        if (!puedeAdmin(u, permisos, p.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        if (p.pagado_el) return json(res, 400, { error: 'Este cobro ya está pagado.' });
+        const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
+        const metodo = texto(f.metodo, 60);
+        let comprobante = '';
+        if (f.comprobante) {
+          comprobante = String(f.comprobante);
+          if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comprobante)) return json(res, 400, { error: 'El comprobante debe ser PDF, PNG, JPG o WEBP.' });
+          if (comprobante.length > 2800000) return json(res, 400, { error: 'El comprobante pesa más de 2 MB.' });
+        }
+        const nombreC = texto(f.comprobante_nombre, 200);
+        const numero = await siguienteNumero(p.administracion);
+        const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
+          VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+          [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC })])).rows[0];
+        await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6 WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id]);
+        await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
+        return json(res, 200, { ok: true, recibo_id: rec.id, numero });
+      }
+      // Comprobante de un cobro (se pide solo al abrirlo, para no cargar todos los archivos en cada consulta).
+      if (req.method === 'GET' && url === '/api/oficina/cobro/comprobante') {
+        const fila = (await client.query("SELECT p.comprobante, p.comprobante_nombre, COALESCE(e.administracion, 'kaizen') AS administracion FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = $1", [Number(p.get('id'))])).rows[0];
+        if (!fila || !puedeAdmin(u, permisos, fila.administracion)) return json(res, 404, { error: 'Comprobante no encontrado.' });
+        return json(res, 200, { comprobante: fila.comprobante, nombre: fila.comprobante_nombre });
+      }
+      // Recibo para imprimir: datos de la administración (logo, RUC), de la empresa y del recibo.
+      if (req.method === 'GET' && url.startsWith('/api/oficina/recibo/')) {
+        const r = (await client.query("SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha FROM oficina_recibos r WHERE r.id = $1", [Number(url.split('/').pop())])).rows[0];
+        if (!r) return json(res, 404, { error: 'Recibo no encontrado.' });
+        if (!puedeAdmin(u, permisos, r.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const adm = (await client.query('SELECT * FROM oficina_administraciones WHERE clave = $1', [r.administracion])).rows[0] || {};
+        const emp = r.empresa_id ? (await client.query('SELECT id, nombre, documento, pais, direccion, web, contacto, telefono, correo_contacto FROM empresas WHERE id = $1', [r.empresa_id])).rows[0] : null;
+        return json(res, 200, { recibo: r, administracion: adm, empresa: emp });
+      }
+      // Retiro de utilidades del socio: lo que le toca en el mes menos lo que ya retiró.
+      if (req.method === 'GET' && url === '/api/oficina/socio/disponible') {
+        const clave = ADMINISTRACIONES.includes(p.get('administracion')) ? p.get('administracion') : null;
+        if (!clave) return json(res, 400, { error: 'Administración no válida.' });
+        if (!puedeAdmin(u, permisos, clave)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const mes = /^\d{4}-\d{2}$/.test(p.get('mes') || '') ? p.get('mes') : hoyLocal().slice(0, 7);
+        return json(res, 200, await disponibleSocio(clave, mes));
+      }
+      if (req.method === 'POST' && url === '/api/oficina/recibo/socio') {
+        const f = await leerCuerpo(req);
+        const clave = ADMINISTRACIONES.includes(f.administracion) ? f.administracion : null;
+        if (!clave) return json(res, 400, { error: 'Administración no válida.' });
+        if (!puedeAdmin(u, permisos, clave)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const mes = /^\d{4}-\d{2}$/.test(f.mes || '') ? f.mes : hoyLocal().slice(0, 7);
+        const d = await disponibleSocio(clave, mes);
+        const cantidad = f.monto === undefined || f.monto === null || f.monto === '' ? d.disponible : monto(f.monto);
+        if (!(cantidad > 0)) return json(res, 400, { error: 'El monto del retiro debe ser mayor que 0.' });
+        const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
+        const numero = await siguienteNumero(clave);
+        const ins = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, socio, monto, moneda, concepto, metodo, referencia, fecha, periodo, detalle)
+          VALUES ($1,$2,'socio',$3,$4,'US$',$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [clave, numero, d.socio || 'Socio', cantidad, `Adelanto de utilidades · ${mes}`, texto(f.metodo, 60), texto(f.referencia, 120), fecha, mes,
+            JSON.stringify({ utilidad: d.utilidad, pct: d.pct, participacion: d.participacion, retirado_antes: d.retirado, disponible_antes: d.disponible, nota: texto(f.nota, 300) })])).rows[0];
+        await registrar(u, 'recibo_socio', 'recibo', ins.id, '', String(cantidad), mes);
+        return json(res, 200, { ok: true, recibo_id: ins.id, numero, queda_negativo: cantidad > d.disponible ? Math.round((cantidad - d.disponible) * 100) / 100 : 0 });
+      }
       if (req.method === 'POST' && url === '/api/oficina/administracion/guardar') {
         if (u.grupo !== 'Programador' && !(permisos || {}).oficina_gastos_editar) return json(res, 403, { error: 'Puedes ver los datos, pero no cambiarlos.' });
         const f = await leerCuerpo(req);
@@ -727,8 +928,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const logo = f.logo == null ? null : String(f.logo);
         if (logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(logo)) return json(res, 400, { error: 'El logo debe ser una imagen PNG, JPG o WEBP.' });
         if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
-        await client.query('UPDATE oficina_administraciones SET nombre=$2, legal=$3, documento=$4, direccion=$5, correo=$6, telefono=$7, web=$8, logo=COALESCE($9, logo), actualizado=NOW() WHERE clave=$1',
-          [f.clave, texto(f.nombre, 120), texto(f.legal, 160), texto(f.documento, 60), texto(f.direccion, 300), texto(f.correo, 120), texto(f.telefono, 40), texto(f.web, 160), logo]);
+        const pct = f.socio_porcentaje === '' || f.socio_porcentaje == null ? null : Math.min(100, Math.max(0, Number(f.socio_porcentaje) || 0));
+        await client.query('UPDATE oficina_administraciones SET nombre=$2, legal=$3, documento=$4, direccion=$5, correo=$6, telefono=$7, web=$8, logo=COALESCE($9, logo), socio_nombre=$10, socio_documento=$11, socio_porcentaje=$12, actualizado=NOW() WHERE clave=$1',
+          [f.clave, texto(f.nombre, 120), texto(f.legal, 160), texto(f.documento, 60), texto(f.direccion, 300), texto(f.correo, 120), texto(f.telefono, 40), texto(f.web, 160), logo,
+           texto(f.socio_nombre, 120), texto(f.socio_documento, 60), pct]);
         await registrar(u, 'administracion_guardar', 'administracion', f.clave, '', '', texto(f.nombre, 120));
         return json(res, 200, { ok: true });
       }
