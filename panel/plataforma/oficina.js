@@ -277,18 +277,19 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // Diseño del panel «Todo» de Administración (por usuario): orden, ancho y campos visibles. Solo acepta lo conocido.
   const BLOQUES_DISENO = ['clientes', 'cobros', 'sistemas', 'resumen'];
   const CAMPOS_DISENO = { clientes: ['cl.kpis', 'cl.resta', 'cl.pct', 'cl.estado'], cobros: ['co.kpis', 'co.cobros', 'co.gastos', 'co.fijos', 'co.reparto'], sistemas: ['si.horas', 'si.costo'], resumen: ['re.kpis', 're.calendario', 're.horas', 're.tipos', 're.debe'] };
+  const POS_DISENO = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 } };
   function limpiarDisenoOficina(d) {
     if (!d || typeof d !== 'object') return null;
-    const orden = [...new Set((Array.isArray(d.orden) ? d.orden : []).filter(x => BLOQUES_DISENO.includes(x)))];
-    for (const b of BLOQUES_DISENO) if (!orden.includes(b)) orden.push(b);
+    const ent = (v, a, z, def) => (Number.isInteger(v) ? Math.min(z, Math.max(a, v)) : def);
     const bloques = {};
     for (const b of BLOQUES_DISENO) {
-      const o = (d.bloques && d.bloques[b]) || {};
+      const o = (d.bloques && d.bloques[b]) || {}, pos = POS_DISENO[b];
       const campos = {};
       for (const c of CAMPOS_DISENO[b]) campos[c] = c === 'cl.kpis' ? (o.campos && o.campos[c]) === true : (o.campos && o.campos[c]) !== false;
-      bloques[b] = { ancho: o.ancho === 'completo' ? 'completo' : 'medio', campos };
+      const x = ent(o.x, 0, 11, pos.x), w = Math.min(ent(o.w, 3, 12, pos.w), 12 - x);
+      bloques[b] = { x, y: ent(o.y, 0, 200, pos.y), w, h: ent(o.h, 4, 80, pos.h), campos };
     }
-    return { orden, bloques };
+    return { bloques };
   }
 
   // ---------- Cobros: cada mes se crea solo el cobro de cada cliente con cuota ----------

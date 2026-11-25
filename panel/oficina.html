@@ -89,6 +89,33 @@
   .adm-barra { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; font-size:13px; color:var(--suave); flex-wrap:wrap; }
   .adm-ctl { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
   [hidden] { display:none !important; }
+  /* Lienzo libre del panel «Todo»: cuadrícula de 12 columnas, cada bloque se mueve y cambia de tamaño. */
+  .adm-lienzo { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); grid-auto-rows:40px; gap:14px; align-items:stretch; }
+  .adm-celda { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .adm-celda > .adm-bloque { flex:1; min-height:0; overflow:auto; }
+  .adm-lienzo.editando .adm-celda { outline:1px dashed var(--suave); outline-offset:4px; border-radius:14px; }
+  .adm-lienzo.editando .adm-bloque > header { cursor:move; }
+  .adm-celda.en-curso { z-index:5; box-shadow:0 10px 30px #0f172a40; }
+  .adm-asa { display:none; position:absolute; width:18px; height:18px; z-index:6; touch-action:none;
+    background:linear-gradient(135deg, transparent 38%, var(--azul) 38%, var(--azul) 46%, transparent 46%), linear-gradient(135deg, transparent 60%, var(--azul) 60%, var(--azul) 68%, transparent 68%); }
+  .adm-lienzo.editando .adm-asa { display:block; }
+  .adm-asa.nw { left:-7px; top:-7px; cursor:nwse-resize; }
+  .adm-asa.se { right:-7px; bottom:-7px; cursor:nwse-resize; }
+  .adm-asa.ne { right:-7px; top:-7px; cursor:nesw-resize; transform:scaleX(-1); }
+  .adm-asa.sw { left:-7px; bottom:-7px; cursor:nesw-resize; transform:scaleX(-1); }
+  @media (max-width:1100px) { .adm-lienzo { grid-template-columns:minmax(0,1fr); grid-auto-rows:auto; } .adm-celda { grid-column:1 / -1 !important; grid-row:auto !important; } }
+  .adm-tarjeta { border:1px solid var(--borde); border-radius:12px; padding:12px 14px; margin-bottom:12px; background:var(--tarjeta); }
+  .adm-tarjeta > h4 { margin:0 0 8px; font-size:13.5px; display:flex; align-items:center; gap:8px; color:var(--texto); }
+  .adm-desp { border:1px solid var(--borde); border-radius:12px; margin-bottom:12px; background:var(--tarjeta); }
+  .adm-desp > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 14px; }
+  .adm-desp > summary::-webkit-details-marker { display:none; }
+  .adm-desp > summary::before { content:'▸'; margin-right:8px; color:var(--suave); }
+  .adm-desp[open] > summary::before { content:'▾'; }
+  .adm-desp > summary small { display:block; color:var(--suave); font-size:11.5px; margin-top:2px; }
+  .adm-desp .adm-total { font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .adm-desp-cuerpo { padding:0 14px 12px; }
+  .adm-acciones-fila { display:flex; gap:6px; justify-content:flex-end; margin-bottom:6px; }
+  .adm-reparto-caja { background:#eff6ff; border-color:#bfdbfe; }
   .adm-vacio { border:1px dashed var(--borde); border-radius:12px; padding:22px; text-align:center; color:var(--suave); font-size:13px; }
   /* Dentro de un bloque, las tarjetas viejas no se duplican: el bloque ya es la tarjeta. */
   .adm-bloque .caja { box-shadow:none; border:0; padding:0; margin:0; background:transparent; overflow:visible; }
@@ -627,7 +654,7 @@ function pintar() {
   if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = `<div class="vacio">${ERR_DATOS ? esc(ERR_DATOS) : 'Cargando…'}</div>`; return; }
   if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
-  if (document.querySelector('.adm-grid')) aplicarCamposAdm();
+  if (document.querySelector('.adm-lienzo')) aplicarCamposAdm();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
 }
@@ -1118,7 +1145,7 @@ function clientesCompactos() {
 }
 // ---------- Administración: cuatro bloques en una sola pantalla ----------
 function bloqueAdm(titulo, sub, cuerpo, ver, acento = '#1679c2', id = '') {
-  const ctl = EDITANDO_ADM && id ? `<div class="adm-ctl"><button class="btn-mini" data-adm-ancho="${id}">${disenoAdm().bloques[id].ancho === 'completo' ? 'Ancho: completo' : 'Ancho: medio'}</button><button class="btn-mini" data-adm-campos="${id}">Campos</button></div>` : '';
+  const ctl = EDITANDO_ADM && id ? `<div class="adm-ctl"><button class="btn-mini" data-adm-campos="${id}">Campos</button></div>` : '';
   return `<section class="adm-bloque" style="--acento:${acento}"><header><div><b class="adm-tit">${titulo}</b>${sub ? `<div class="adm-sub">${sub}</div>` : ''}</div><div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">${ctl}${ver ? `<button class="btn-mini" data-adm-sec="${ver}">Ver completo</button>` : ''}</div></header>${cuerpo}</section>`;
 }
 // Diseño del panel «Todo»: cada usuario acomoda sus bloques (orden, ancho y campos visibles).
@@ -1135,23 +1162,21 @@ const CAMPOS_ADM = {
   resumen: [['re.kpis', 'Cuadros de arriba (cobrado, gastos, utilidad, mi parte, socio)'], ['re.calendario', 'Calendario de cobros'], ['re.horas', 'Horas de trabajo'], ['re.tipos', 'Tiempo y tipos de sistema'], ['re.debe', 'Quién debe']],
 };
 let DISENO_ADM = null, EDITANDO_ADM = false, guardarDisenoT = null, ARRASTRANDO_ADM = null;
+const POS_ADM = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 } };
 function baseAdm() {
   const bloques = {};
-  for (const b of Object.keys(CAMPOS_ADM)) bloques[b] = { ancho: 'medio', campos: Object.fromEntries(CAMPOS_ADM[b].map(([k]) => [k, k !== 'cl.kpis'])) };
-  return { orden: Object.keys(BLOQUES_ADM), bloques };
+  for (const b of Object.keys(CAMPOS_ADM)) bloques[b] = { ...POS_ADM[b], campos: Object.fromEntries(CAMPOS_ADM[b].map(([k]) => [k, k !== 'cl.kpis'])) };
+  return { bloques };
 }
 function disenoAdm() { if (!DISENO_ADM) DISENO_ADM = baseAdm(); return DISENO_ADM; }
 function mezclarDiseno(guardado) {
   const base = baseAdm();
   if (!guardado || typeof guardado !== 'object') return base;
-  const orden = (guardado.orden || []).filter(x => base.bloques[x]);
-  for (const x of base.orden) if (!orden.includes(x)) orden.push(x);
   for (const b of Object.keys(base.bloques)) {
-    const g = (guardado.bloques || {})[b] || {};
-    base.bloques[b].ancho = g.ancho === 'completo' ? 'completo' : 'medio';
-    for (const k of Object.keys(base.bloques[b].campos)) if (g.campos && typeof g.campos[k] === 'boolean') base.bloques[b].campos[k] = g.campos[k];
+    const g = (guardado.bloques || {})[b] || {}, B = base.bloques[b];
+    if (Number.isInteger(g.x) && Number.isInteger(g.y) && Number.isInteger(g.w) && Number.isInteger(g.h)) { B.x = g.x; B.y = g.y; B.w = g.w; B.h = g.h; }
+    for (const k of Object.keys(B.campos)) if (g.campos && typeof g.campos[k] === 'boolean') B.campos[k] = g.campos[k];
   }
-  base.orden = orden;
   return base;
 }
 async function cargarDisenoAdm() { const r = await api('/api/oficina/diseno'); if (r.ok) DISENO_ADM = mezclarDiseno(r.data.diseno); }
@@ -1178,16 +1203,17 @@ function abrirCamposAdm(id) {
 }
 function vAdmTodo() {
   const d = disenoAdm();
-  const piezas = d.orden.map(id => {
+  const piezas = Object.keys(BLOQUES_ADM).map(id => {
     const m = BLOQUES_ADM[id], b = d.bloques[id];
     const cuerpo = id === 'clientes' ? clientesCompactos() : id === 'cobros' ? bloqueCobros() : id === 'sistemas' ? bloqueSistemas() : vResumen();
     const sub = id === 'resumen' ? esc(admin(adminVista).nombre) + ' · ' + esc(D.nombreMes) : m.sub;
-    return `<div class="adm-celda${b.ancho === 'completo' ? ' completo' : ''}" data-bloque-id="${id}"${EDITANDO_ADM ? ' draggable="true"' : ''}>${bloqueAdm(m.titulo, sub, cuerpo, m.ver, m.color, id)}</div>`;
+    const asas = EDITANDO_ADM ? ['nw', 'ne', 'sw', 'se'].map(a => `<i class="adm-asa ${a}" data-asa="${a}" title="Arrastra para cambiar el tamaño"></i>`).join('') : '';
+    return `<div class="adm-celda" data-bloque-id="${id}" style="grid-column:${b.x + 1} / span ${b.w};grid-row:${b.y + 1} / span ${b.h}">${bloqueAdm(m.titulo, sub, cuerpo, m.ver, m.color, id)}${asas}</div>`;
   }).join('');
   const barra = EDITANDO_ADM
-    ? `<div class="adm-barra"><span>Arrastra un bloque sobre otro para cambiarlo de lugar. En cada bloque: «Ancho» y «Campos».</span><span style="display:flex;gap:6px"><button class="btn-mini" data-adm-restablecer>Restablecer</button><button class="btn" data-adm-listo>Listo</button></span></div>`
+    ? `<div class="adm-barra"><span>Arrastra el título de un bloque para moverlo. Arrastra una esquina para cambiar su tamaño.</span><span style="display:flex;gap:6px"><button class="btn-mini" data-adm-restablecer>Restablecer</button><button class="btn" data-adm-listo>Listo</button></span></div>`
     : `<div class="adm-barra"><span></span><button class="btn-mini" data-adm-personalizar>✎ Personalizar panel</button></div>`;
-  return barra + `<div class="adm-grid">${piezas}</div>`;
+  return barra + `<div class="adm-lienzo${EDITANDO_ADM ? ' editando' : ''}">${piezas}</div>`;
 }
 // Cobro, gastos y reparto: etiquetado por cliente y por sistema; muestra solo los gastos y cobros de ese sistema.
 function bloqueCobros() {
@@ -1214,6 +1240,7 @@ function bloqueCobros() {
   const CAT = P.categorias || {}, FREC = P.frecuencias || {};
   const gastosSistema = p.gastos.filter(g => g.categoria !== 'adelanto');
   const fijos = p.mensuales.filter(m => m.activo);
+  const totalFijo = redondo(fijos.reduce((t, m) => t + (m.frecuencia === 'mensual' ? Number(m.monto) || 0 : m.frecuencia === 'anual' ? (Number(m.monto) || 0) / 12 : 0), 0));
   return `
     <div class="adm-etiqueta">Cliente: <b>${esc(nombreCliente(e))}</b> · Sistema: <b>${esc(p.nombre)}</b></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${selector}</div>
@@ -1223,39 +1250,42 @@ function bloqueCobros() {
       <div><small>Plataforma que le toca</small><b>${dinero(plataforma)}</b></div>
       <div><small>Utilidad a repartir</small><b style="color:var(--verde)">${dinero(utilidad)}</b></div>
     </div>
-    <div class="adm-cols">
-      <div>
-        <div data-campo="co.cobros"><b>Cobros del cliente</b> <span class="chip ambar" style="font-size:11px">editable · borrable</span>
-        <table><thead><tr><th>Concepto</th><th class="n">Monto</th><th></th></tr></thead><tbody>
+    <div class="adm-tarjeta" data-campo="co.cobros">
+      <h4>Cobros del cliente <span class="chip ambar" style="font-size:11px">editable · borrable</span></h4>
+      <table><thead><tr><th>Concepto</th><th class="n">Monto</th><th></th></tr></thead><tbody>
         ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b><br><small style="color:var(--suave)">${x.pagado_el ? 'Pagado ' + fechaCorta(x.pagado_el) : 'Vence ' + fechaCorta(x.vence)}${x.forma ? ' · ' + esc(x.forma) : ''}</small></td><td class="n">${dinero(x.monto, x.moneda)}</td>
-          <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin cobros todavía.</td></tr>'}
-        </tbody></table>
-
-        </div>
-        <div data-campo="co.gastos"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos del sistema</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-cgasto>+ Gasto</button><button class="btn-mini" data-editar-proyecto="${p.id}">Editar sistema</button></span></div>
+          <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="3" class="vacio">Sin cobros todavía.</td></tr>'}
+      </tbody></table>
+    </div>
+    <details class="adm-desp" data-campo="co.gastos">
+      <summary><span><b>Gastos del sistema</b><small>${gastosSistema.length} gasto(s) de creación · toca para ver la lista</small></span><span class="adm-total">${dinero(c.gastos)}</span></summary>
+      <div class="adm-desp-cuerpo">
+        <div class="adm-acciones-fila"><button class="btn-mini" data-nuevo-cgasto>+ Gasto</button><button class="btn-mini" data-editar-proyecto="${p.id}">Editar sistema</button></div>
         <table><thead><tr><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th></th></tr></thead><tbody>
-        ${gastosSistema.map(g => `<tr><td><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos de creación.</td></tr>'}
+          ${gastosSistema.map(g => `<tr><td><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos de creación.</td></tr>'}
         </tbody></table>
-
-        </div>
-        <div data-campo="co.fijos"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos fijos mensuales</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-mensual>+ Gasto fijo</button><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></span></div>
+      </div>
+    </details>
+    <details class="adm-desp" data-campo="co.fijos">
+      <summary><span><b>Gastos fijos mensuales</b><small>${fijos.length} gasto(s) · se cobran en la mensualidad · toca para ver la lista</small></span><span class="adm-total">${dinero(totalFijo)} / mes</span></summary>
+      <div class="adm-desp-cuerpo">
+        <div class="adm-acciones-fila"><button class="btn-mini" data-nuevo-mensual>+ Gasto fijo</button><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></div>
         <table><thead><tr><th>Gasto</th><th>Cada</th><th class="n">Monto</th><th></th></tr></thead><tbody>
-        ${fijos.map(m => `<tr><td><b>${esc(m.concepto)}</b></td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td><td class="n">${m.frecuencia === 'variable' ? 'según uso' : dinero(m.monto)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos fijos.</td></tr>'}
+          ${fijos.map(m => `<tr><td><b>${esc(m.concepto)}</b></td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td><td class="n">${m.frecuencia === 'variable' ? 'según uso' : dinero(m.monto)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos fijos.</td></tr>'}
         </tbody></table>
-        </div>
       </div>
-      <div data-campo="co.reparto">
-        <b>Reparto de la utilidad</b>
-        <div class="adm-reparto" style="margin-top:8px">
-          ${pct > 0 ? `
-          <div><span>${esc(a.etiqueta_mia || 'Mi parte')}<br><small>${100 - pct} %</small></span><b>${dinero(miParte)}</b></div>
-          <div><span>${esc(a.etiqueta_socio || 'Parte del socio')} · ${esc(a.socio_nombre || 'Socio')}<br><small>${pct} %</small></span><b>${dinero(parteSocio)}</b></div>
-          <div><span>Retirado hasta hoy</span><b>${dinero(retirado)}</b></div>
-          <div class="verde"><span>Queda por retirar</span><b>${dinero(quedaSocio)}</b></div>` : `
-          <div><span>Sin reparto<br><small>Esta administración no reparte utilidades</small></span><b>${dinero(utilidad)}</b></div>`}
-        </div>
-        <p style="font-size:12px;color:var(--suave);margin-top:10px">Utilidad = cobrado − gastos del sistema − plataforma que le toca. Los nombres, porcentajes y etiquetas se cambian en Datos de la administración.</p>
+    </details>
+    <div class="adm-tarjeta adm-reparto-caja" data-campo="co.reparto">
+      <h4>Reparto de la utilidad</h4>
+      <div class="adm-reparto">
+        ${pct > 0 ? `
+        <div><span>${esc(a.etiqueta_mia || 'Mi parte')}<br><small>${100 - pct} %</small></span><b>${dinero(miParte)}</b></div>
+        <div><span>${esc(a.etiqueta_socio || 'Parte del socio')} · ${esc(a.socio_nombre || 'Socio')}<br><small>${pct} %</small></span><b>${dinero(parteSocio)}</b></div>
+        <div><span>Retirado hasta hoy</span><b>${dinero(retirado)}</b></div>
+        <div class="verde"><span>Queda por retirar</span><b>${dinero(quedaSocio)}</b></div>` : `
+        <div><span>Sin reparto<br><small>Esta administración no reparte utilidades</small></span><b>${dinero(utilidad)}</b></div>`}
       </div>
+      <p style="font-size:12px;color:var(--suave);margin:10px 0 0">Utilidad = cobrado − gastos del sistema − plataforma que le toca. Los nombres, porcentajes y etiquetas se cambian en Datos de la administración.</p>
     </div>`;
 }
 // Creación de sistema: programas de esta administración con su tipo, horas y costo de creación.
@@ -3594,35 +3624,67 @@ document.addEventListener('click', ev => {
   if (d.admAncho) { const b = disenoAdm().bloques[d.admAncho]; b.ancho = b.ancho === 'completo' ? 'medio' : 'completo'; guardarDisenoAdm(); return pintar(); }
   if (d.admCampos) return abrirCamposAdm(d.admCampos);
 });
-document.addEventListener('dragstart', e => {
-  const c = e.target.closest && e.target.closest('[data-bloque-id]');
-  if (!c || !EDITANDO_ADM) return;
-  ARRASTRANDO_ADM = c.dataset.bloqueId;
-  e.dataTransfer.effectAllowed = 'move';
-  try { e.dataTransfer.setData('text/plain', ARRASTRANDO_ADM); } catch (x) {}
-  c.classList.add('arrastrando');
-});
-document.addEventListener('dragover', e => {
-  if (!EDITANDO_ADM || !ARRASTRANDO_ADM) return;
-  const c = e.target.closest && e.target.closest('[data-bloque-id]');
-  if (!c) return;
-  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-  document.querySelectorAll('.adm-celda.sobre').forEach(x => x.classList.remove('sobre'));
-  c.classList.add('sobre');
-});
-document.addEventListener('drop', e => {
-  if (!EDITANDO_ADM || !ARRASTRANDO_ADM) return;
-  const c = e.target.closest && e.target.closest('[data-bloque-id]');
+let OP_ADM = null;
+const acotaAdm = (v, a, z) => Math.min(z, Math.max(a, v));
+document.addEventListener('pointerdown', e => {
+  if (!EDITANDO_ADM || e.button !== 0) return;
+  const asa = e.target.closest && e.target.closest('.adm-asa');
+  const cel = e.target.closest && e.target.closest('.adm-celda');
+  if (!cel) return;
+  const id = cel.dataset.bloqueId, b = disenoAdm().bloques[id], lienzo = cel.parentElement, r = cel.getBoundingClientRect();
+  if (asa) OP_ADM = { tipo: 'tamano', asa: asa.dataset.asa, x0: e.clientX, y0: e.clientY };
+  else if (e.target.closest('.adm-bloque > header') && !e.target.closest('button,a,input,select')) OP_ADM = { tipo: 'mover', dx: e.clientX - r.left, dy: e.clientY - r.top };
+  else return;
   e.preventDefault();
-  const origen = ARRASTRANDO_ADM; ARRASTRANDO_ADM = null;
-  if (!c || c.dataset.bloqueId === origen) return pintar();
-  const destino = c.dataset.bloqueId, dis = disenoAdm();
-  const o = dis.orden.filter(x => x !== origen);
-  o.splice(o.indexOf(destino), 0, origen);
-  dis.orden = o;
-  guardarDisenoAdm(); pintar();
+  Object.assign(OP_ADM, { id, cel, lienzo, b0: { x: b.x, y: b.y, w: b.w, h: b.h } });
+  cel.classList.add('en-curso');
 });
-document.addEventListener('dragend', () => { ARRASTRANDO_ADM = null; document.querySelectorAll('.adm-celda.arrastrando,.adm-celda.sobre').forEach(x => x.classList.remove('arrastrando', 'sobre')); });
+document.addEventListener('pointermove', e => {
+  if (!OP_ADM) return;
+  const L = OP_ADM.lienzo.getBoundingClientRect(), cs = getComputedStyle(OP_ADM.lienzo);
+  const gap = parseFloat(cs.columnGap) || 14, filaAlto = parseFloat(cs.gridAutoRows) || 40;
+  const colPaso = (L.width - gap * 11) / 12 + gap, filaPaso = filaAlto + gap;
+  const nb = { ...OP_ADM.b0 }, o = OP_ADM.b0;
+  if (OP_ADM.tipo === 'mover') {
+    nb.x = acotaAdm(Math.round((e.clientX - OP_ADM.dx - L.left) / colPaso), 0, 12 - o.w);
+    nb.y = Math.max(0, Math.round((e.clientY - OP_ADM.dy - L.top) / filaPaso));
+  } else {
+    const dc = Math.round((e.clientX - OP_ADM.x0) / colPaso), dr = Math.round((e.clientY - OP_ADM.y0) / filaPaso), a = OP_ADM.asa;
+    if (a.includes('e')) nb.w = acotaAdm(o.w + dc, 3, 12 - o.x);
+    if (a.includes('w')) { const x = acotaAdm(o.x + dc, 0, o.x + o.w - 3); nb.w = o.x + o.w - x; nb.x = x; }
+    if (a.includes('s')) nb.h = acotaAdm(o.h + dr, 4, 80);
+    if (a.includes('n')) { const y = acotaAdm(o.y + dr, 0, o.y + o.h - 4); nb.h = o.h + o.y - y; nb.y = y; }
+  }
+  OP_ADM.nb = nb;
+  OP_ADM.cel.style.gridColumn = `${nb.x + 1} / span ${nb.w}`;
+  OP_ADM.cel.style.gridRow = `${nb.y + 1} / span ${nb.h}`;
+});
+// Si un bloque cae encima de otro, el otro baja para hacer lugar. El que se movió conserva su lugar.
+function compactarAdm(primero) {
+  const d = disenoAdm();
+  const ids = Object.keys(d.bloques).sort((a, b) => (a === primero ? -1 : b === primero ? 1 : 0) || d.bloques[a].y - d.bloques[b].y || d.bloques[a].x - d.bloques[b].x);
+  const puestos = [];
+  for (const id of ids) {
+    const b = d.bloques[id];
+    while (puestos.some(q => b.x < q.x + q.w && q.x < b.x + b.w && b.y < q.y + q.h && q.y < b.y + b.h)) b.y++;
+    puestos.push(b);
+  }
+}
+function terminarOperacionAdm() {
+  const op = OP_ADM; OP_ADM = null;
+  if (!op) return;
+  op.cel.classList.remove('en-curso');
+  if (!op.nb) return;
+  const b = disenoAdm().bloques[op.id], nb = op.nb;
+  if (['x', 'y', 'w', 'h'].every(k => b[k] === nb[k])) return;
+  Object.assign(b, { x: nb.x, y: nb.y, w: nb.w, h: nb.h });
+  compactarAdm(op.id);
+  guardarDisenoAdm();
+  pintar();
+}
+document.addEventListener('pointerup', terminarOperacionAdm);
+document.addEventListener('pointercancel', terminarOperacionAdm);
+document.addEventListener('dragover', e => { if (EDITANDO_ADM && e.target.closest && e.target.closest('.adm-celda')) e.preventDefault(); });
 
 /* ---------- Arranque ---------- */
 (async () => {
