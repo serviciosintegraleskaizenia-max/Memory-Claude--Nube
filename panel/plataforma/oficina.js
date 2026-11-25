@@ -127,6 +127,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_cobros_borrados (
       empresa_id INTEGER NOT NULL, auto_mes VARCHAR(7) NOT NULL, borrado TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (empresa_id, auto_mes))`);
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_diseno (usuario TEXT PRIMARY KEY, diseno JSONB NOT NULL, actualizado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_gastos (
       id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, categoria VARCHAR(20) NOT NULL DEFAULT 'otro', monto NUMERIC(12,2) NOT NULL DEFAULT 0,
       moneda VARCHAR(5) NOT NULL DEFAULT 'US$', frecuencia VARCHAR(10) NOT NULL DEFAULT 'mensual', dia INTEGER, fecha DATE,
@@ -271,6 +272,23 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       cuenta: d.cuenta && !d.cuenta.error ? { recargado: Math.round(d.cuenta.recargado * 100) / 100, usado: Math.round(d.cuenta.usado * 100) / 100, saldo: Math.round((d.cuenta.recargado - d.cuenta.usado) * 100) / 100 } : null,
       cuentaError: d.cuenta && d.cuenta.error ? d.cuenta.error : ''
     };
+  }
+
+  // Diseño del panel «Todo» de Administración (por usuario): orden, ancho y campos visibles. Solo acepta lo conocido.
+  const BLOQUES_DISENO = ['clientes', 'cobros', 'sistemas', 'resumen'];
+  const CAMPOS_DISENO = { clientes: ['cl.kpis', 'cl.resta', 'cl.pct', 'cl.estado'], cobros: ['co.kpis', 'co.cobros', 'co.gastos', 'co.fijos', 'co.reparto'], sistemas: ['si.horas', 'si.costo'], resumen: ['re.kpis', 're.calendario', 're.horas', 're.tipos', 're.debe'] };
+  function limpiarDisenoOficina(d) {
+    if (!d || typeof d !== 'object') return null;
+    const orden = [...new Set((Array.isArray(d.orden) ? d.orden : []).filter(x => BLOQUES_DISENO.includes(x)))];
+    for (const b of BLOQUES_DISENO) if (!orden.includes(b)) orden.push(b);
+    const bloques = {};
+    for (const b of BLOQUES_DISENO) {
+      const o = (d.bloques && d.bloques[b]) || {};
+      const campos = {};
+      for (const c of CAMPOS_DISENO[b]) campos[c] = c === 'cl.kpis' ? (o.campos && o.campos[c]) === true : (o.campos && o.campos[c]) !== false;
+      bloques[b] = { ancho: o.ancho === 'completo' ? 'completo' : 'medio', campos };
+    }
+    return { orden, bloques };
   }
 
   // ---------- Cobros: cada mes se crea solo el cobro de cada cliente con cuota ----------
@@ -651,6 +669,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url.startsWith('/api/oficina/recibo/socio') || url.startsWith('/api/oficina/socio/')) return ['gastos'];
     if (url.startsWith('/api/oficina/recibo/') || url.startsWith('/api/oficina/cobro/') || url.startsWith('/api/oficina/cliente/datos')) return ['clientes', 'gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
+    if (url.startsWith('/api/oficina/diseno')) return ['clientes'];
     if (url === '/api/oficina/evento-hecho') return ['calendario', 'inicio'];
     if (url.startsWith('/api/oficina/chat')) return ['chat'];
     if (url.startsWith('/api/oficina/conocimiento')) return ['asistente', 'redes'];
@@ -1045,6 +1064,18 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return json(res, 200, { ok: true });
       }
 
+      if (req.method === 'GET' && url === '/api/oficina/diseno') {
+        const r = (await client.query('SELECT diseno FROM oficina_diseno WHERE usuario = $1', [u.usuario])).rows[0];
+        return json(res, 200, { diseno: r ? r.diseno : null });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/diseno') {
+        const f = await leerCuerpo(req);
+        const limpio = limpiarDisenoOficina(f.diseno);
+        if (!limpio) return json(res, 400, { error: 'El diseño no es válido.' });
+        await client.query(`INSERT INTO oficina_diseno (usuario, diseno, actualizado) VALUES ($1, $2::jsonb, NOW())
+          ON CONFLICT (usuario) DO UPDATE SET diseno = EXCLUDED.diseno, actualizado = NOW()`, [u.usuario, JSON.stringify(limpio)]);
+        return json(res, 200, { ok: true });
+      }
       if (req.method === 'POST' && url === '/api/oficina/evento-hecho') {
         const f = await leerCuerpo(req);
         await client.query('UPDATE oficina_eventos SET hecho = $1 WHERE id = $2', [Boolean(f.hecho), Number(f.id)]);

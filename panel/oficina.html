@@ -80,6 +80,15 @@
   .adm-reparto small { color:var(--suave); font-size:11.5px; }
   .adm-reparto b { font-size:16px; font-variant-numeric:tabular-nums; }
   .adm-reparto .verde { border-color:#bbf7d0; background:#ecfdf3; }
+  .adm-celda { min-width:0; }
+  .adm-celda.completo { grid-column:1 / -1; }
+  .adm-celda[draggable="true"] { cursor:grab; }
+  .adm-celda[draggable="true"] > .adm-bloque { user-select:none; }
+  .adm-celda.arrastrando { opacity:.45; }
+  .adm-celda.sobre > .adm-bloque { outline:2px dashed var(--azul); outline-offset:4px; }
+  .adm-barra { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px; font-size:13px; color:var(--suave); flex-wrap:wrap; }
+  .adm-ctl { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
+  [hidden] { display:none !important; }
   .adm-vacio { border:1px dashed var(--borde); border-radius:12px; padding:22px; text-align:center; color:var(--suave); font-size:13px; }
   /* Dentro de un bloque, las tarjetas viejas no se duplican: el bloque ya es la tarjeta. */
   .adm-bloque .caja { box-shadow:none; border:0; padding:0; margin:0; background:transparent; overflow:visible; }
@@ -600,6 +609,7 @@ async function cargarSeccion(v) {
   if (['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(v)) tareas.push(cargarDatos());
   if (v === 'inicio' || v === 'negocios') tareas.push(cargarNegocios());
   if (v === 'gastos' || v === 'administracion') tareas.push(cargarProyectos());
+  if (v === 'administracion') tareas.push(cargarDisenoAdm());
   if (v === 'inicio' || v === 'enlaces') tareas.push(cargarServicios());
   if (v === 'apis') tareas.push(cargarApis());
   if (v === 'apps') tareas.push(cargarApps());
@@ -617,6 +627,7 @@ function pintar() {
   if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = `<div class="vacio">${ERR_DATOS ? esc(ERR_DATOS) : 'Cargando…'}</div>`; return; }
   if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
+  if (document.querySelector('.adm-grid')) aplicarCamposAdm();
   if (vista === 'calendario') pintarCalendario();
   if (vista === 'chat') { pintarListaChat(); if (chatSel) cargarConversacion(true); }
 }
@@ -1101,20 +1112,82 @@ function clientesCompactos() {
   const porCobrar = redondo(filas.reduce((t, f) => t + f.resta, 0));
   const abiertas = filas.filter(f => f.estado[0] === 'Por cerrar').length;
   const k = (t, n, c) => `<div style="border-left:3px solid ${c}"><small>${t}</small><b>${n}</b></div>`;
-  return (filas.length ? `<table><thead><tr><th>Cliente</th><th class="n">Resta</th><th>% pagado</th><th>Estado</th></tr></thead><tbody>${filas.map(f => `<tr><td><b>${esc(nombreCliente(f.e))}</b></td><td class="n">${dinero(f.resta)}</td><td>${f.pct} %</td><td><span class="${f.estado[1]}">${f.estado[0]}</span></td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay clientes</b>Crea uno con «Datos y plan» desde Empresas.</div>') +
+  const kpis = `<div class="adm-kpis" data-campo="cl.kpis">${k('Cobrado este mes', dinero(cobradoMes), '#16a34a')}${k('Por cobrar', dinero(porCobrar), '#d97706')}${k('Clientes', empresas.length, '#1679c2')}${k('Por cerrar', abiertas, '#dc2626')}</div>`;
+  return kpis + (filas.length ? `<table><thead><tr><th>Cliente</th><th class="n" data-campo="cl.resta">Resta</th><th data-campo="cl.pct">% pagado</th><th data-campo="cl.estado">Estado</th></tr></thead><tbody>${filas.map(f => `<tr><td><b>${esc(nombreCliente(f.e))}</b></td><td class="n" data-campo="cl.resta">${dinero(f.resta)}</td><td data-campo="cl.pct">${f.pct} %</td><td data-campo="cl.estado"><span class="${f.estado[1]}">${f.estado[0]}</span></td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay clientes</b>Crea uno con «Datos y plan» desde Empresas.</div>') +
     `<div style="font-size:12px;color:var(--suave);margin-top:10px">«Ver completo» abre la ficha, el estado de cuenta y el cobro conjunto.</div>`;
 }
 // ---------- Administración: cuatro bloques en una sola pantalla ----------
-function bloqueAdm(titulo, sub, cuerpo, ver, acento = '#1679c2') {
-  return `<section class="adm-bloque" style="--acento:${acento}"><header><div><b class="adm-tit">${titulo}</b>${sub ? `<div class="adm-sub">${sub}</div>` : ''}</div>${ver ? `<button class="btn-mini" data-adm-sec="${ver}">Ver completo</button>` : ''}</header>${cuerpo}</section>`;
+function bloqueAdm(titulo, sub, cuerpo, ver, acento = '#1679c2', id = '') {
+  const ctl = EDITANDO_ADM && id ? `<div class="adm-ctl"><button class="btn-mini" data-adm-ancho="${id}">${disenoAdm().bloques[id].ancho === 'completo' ? 'Ancho: completo' : 'Ancho: medio'}</button><button class="btn-mini" data-adm-campos="${id}">Campos</button></div>` : '';
+  return `<section class="adm-bloque" style="--acento:${acento}"><header><div><b class="adm-tit">${titulo}</b>${sub ? `<div class="adm-sub">${sub}</div>` : ''}</div><div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">${ctl}${ver ? `<button class="btn-mini" data-adm-sec="${ver}">Ver completo</button>` : ''}</div></header>${cuerpo}</section>`;
+}
+// Diseño del panel «Todo»: cada usuario acomoda sus bloques (orden, ancho y campos visibles).
+const BLOQUES_ADM = {
+  clientes: { titulo: '👥 Clientes', sub: 'Listado y estado de cobro', ver: 'clientes', color: '#1679c2' },
+  cobros: { titulo: '💰 Cobro, gastos y reparto', sub: 'Por sistema y por cliente', ver: 'cobros', color: '#16a34a' },
+  sistemas: { titulo: '🏗️ Creación de sistema', sub: 'Sistemas, tipo, horas y costo de creación', ver: 'creacion', color: '#d97706' },
+  resumen: { titulo: '📊 Resumen del mes', sub: '', ver: 'resumen', color: '#7c3aed' },
+};
+const CAMPOS_ADM = {
+  clientes: [['cl.kpis', 'Cuadros de arriba (cobrado este mes, por cobrar, clientes, por cerrar)'], ['cl.resta', 'Columna «Resta»'], ['cl.pct', 'Columna «% pagado»'], ['cl.estado', 'Columna «Estado»']],
+  cobros: [['co.kpis', 'Cuadros de arriba (cobrado, gastos, plataforma, utilidad)'], ['co.cobros', 'Cobros del cliente'], ['co.gastos', 'Gastos del sistema'], ['co.fijos', 'Gastos fijos mensuales'], ['co.reparto', 'Reparto de la utilidad']],
+  sistemas: [['si.horas', 'Columna «Horas»'], ['si.costo', 'Columna «Costo»']],
+  resumen: [['re.kpis', 'Cuadros de arriba (cobrado, gastos, utilidad, mi parte, socio)'], ['re.calendario', 'Calendario de cobros'], ['re.horas', 'Horas de trabajo'], ['re.tipos', 'Tiempo y tipos de sistema'], ['re.debe', 'Quién debe']],
+};
+let DISENO_ADM = null, EDITANDO_ADM = false, guardarDisenoT = null, ARRASTRANDO_ADM = null;
+function baseAdm() {
+  const bloques = {};
+  for (const b of Object.keys(CAMPOS_ADM)) bloques[b] = { ancho: 'medio', campos: Object.fromEntries(CAMPOS_ADM[b].map(([k]) => [k, k !== 'cl.kpis'])) };
+  return { orden: Object.keys(BLOQUES_ADM), bloques };
+}
+function disenoAdm() { if (!DISENO_ADM) DISENO_ADM = baseAdm(); return DISENO_ADM; }
+function mezclarDiseno(guardado) {
+  const base = baseAdm();
+  if (!guardado || typeof guardado !== 'object') return base;
+  const orden = (guardado.orden || []).filter(x => base.bloques[x]);
+  for (const x of base.orden) if (!orden.includes(x)) orden.push(x);
+  for (const b of Object.keys(base.bloques)) {
+    const g = (guardado.bloques || {})[b] || {};
+    base.bloques[b].ancho = g.ancho === 'completo' ? 'completo' : 'medio';
+    for (const k of Object.keys(base.bloques[b].campos)) if (g.campos && typeof g.campos[k] === 'boolean') base.bloques[b].campos[k] = g.campos[k];
+  }
+  base.orden = orden;
+  return base;
+}
+async function cargarDisenoAdm() { const r = await api('/api/oficina/diseno'); if (r.ok) DISENO_ADM = mezclarDiseno(r.data.diseno); }
+function guardarDisenoAdm() {
+  clearTimeout(guardarDisenoT);
+  guardarDisenoT = setTimeout(async () => { const r = await api('/api/oficina/diseno', { diseno: disenoAdm() }); if (!r.ok) aviso(r.data.error || 'No se pudo guardar el diseño.'); }, 300);
+}
+function aplicarCamposAdm() {
+  const d = disenoAdm();
+  document.querySelectorAll('[data-bloque-id]').forEach(celda => {
+    const c = (d.bloques[celda.dataset.bloqueId] || {}).campos || {};
+    celda.querySelectorAll('[data-campo]').forEach(el => { el.hidden = c[el.dataset.campo] === false; });
+  });
+}
+function abrirCamposAdm(id) {
+  const c = disenoAdm().bloques[id].campos;
+  abrirModal(`<h2>Campos de «${esc(BLOQUES_ADM[id].titulo)}»</h2><p class="sub">Marca lo que quieres ver. Lo que no marques se oculta.</p>
+    ${CAMPOS_ADM[id].map(([k, t]) => `<label style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--borde)"><input type="checkbox" data-cfg="${k}" ${c[k] ? 'checked' : ''}> ${esc(t)}</label>`).join('')}
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = () => {
+    document.querySelectorAll('[data-cfg]').forEach(i => { c[i.dataset.cfg] = i.checked; });
+    guardarDisenoAdm(); cerrarModal(); pintar();
+  };
 }
 function vAdmTodo() {
-  return `<div class="adm-grid">
-    ${bloqueAdm('👥 Clientes', 'Listado y estado de cobro', clientesCompactos(), 'clientes', '#1679c2')}
-    ${bloqueAdm('💰 Cobro, gastos y reparto', 'Por sistema y por cliente', bloqueCobros(), 'cobros', '#16a34a')}
-    ${bloqueAdm('🏗️ Creación de sistema', 'Sistemas, tipo, horas y costo de creación', bloqueSistemas(), 'creacion', '#d97706')}
-    ${bloqueAdm('📊 Resumen del mes', esc(admin(adminVista).nombre) + ' · ' + esc(D.nombreMes), vResumen(), 'resumen', '#7c3aed')}
-  </div>`;
+  const d = disenoAdm();
+  const piezas = d.orden.map(id => {
+    const m = BLOQUES_ADM[id], b = d.bloques[id];
+    const cuerpo = id === 'clientes' ? clientesCompactos() : id === 'cobros' ? bloqueCobros() : id === 'sistemas' ? bloqueSistemas() : vResumen();
+    const sub = id === 'resumen' ? esc(admin(adminVista).nombre) + ' · ' + esc(D.nombreMes) : m.sub;
+    return `<div class="adm-celda${b.ancho === 'completo' ? ' completo' : ''}" data-bloque-id="${id}"${EDITANDO_ADM ? ' draggable="true"' : ''}>${bloqueAdm(m.titulo, sub, cuerpo, m.ver, m.color, id)}</div>`;
+  }).join('');
+  const barra = EDITANDO_ADM
+    ? `<div class="adm-barra"><span>Arrastra un bloque sobre otro para cambiarlo de lugar. En cada bloque: «Ancho» y «Campos».</span><span style="display:flex;gap:6px"><button class="btn-mini" data-adm-restablecer>Restablecer</button><button class="btn" data-adm-listo>Listo</button></span></div>`
+    : `<div class="adm-barra"><span></span><button class="btn-mini" data-adm-personalizar>✎ Personalizar panel</button></div>`;
+  return barra + `<div class="adm-grid">${piezas}</div>`;
 }
 // Cobro, gastos y reparto: etiquetado por cliente y por sistema; muestra solo los gastos y cobros de ese sistema.
 function bloqueCobros() {
@@ -1144,7 +1217,7 @@ function bloqueCobros() {
   return `
     <div class="adm-etiqueta">Cliente: <b>${esc(nombreCliente(e))}</b> · Sistema: <b>${esc(p.nombre)}</b></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${selector}</div>
-    <div class="adm-kpis">
+    <div class="adm-kpis" data-campo="co.kpis">
       <div><small>Cobrado al cliente</small><b>${dinero(cobrado)}</b></div>
       <div><small>Gastos del sistema</small><b>${dinero(c.gastos)}</b></div>
       <div><small>Plataforma que le toca</small><b>${dinero(plataforma)}</b></div>
@@ -1152,23 +1225,26 @@ function bloqueCobros() {
     </div>
     <div class="adm-cols">
       <div>
-        <b>Cobros del cliente</b> <span class="chip ambar" style="font-size:11px">editable · borrable</span>
+        <div data-campo="co.cobros"><b>Cobros del cliente</b> <span class="chip ambar" style="font-size:11px">editable · borrable</span>
         <table><thead><tr><th>Concepto</th><th class="n">Monto</th><th></th></tr></thead><tbody>
         ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b><br><small style="color:var(--suave)">${x.pagado_el ? 'Pagado ' + fechaCorta(x.pagado_el) : 'Vence ' + fechaCorta(x.vence)}${x.forma ? ' · ' + esc(x.forma) : ''}</small></td><td class="n">${dinero(x.monto, x.moneda)}</td>
           <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin cobros todavía.</td></tr>'}
         </tbody></table>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos del sistema</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-cgasto>+ Gasto</button><button class="btn-mini" data-editar-proyecto="${p.id}">Editar sistema</button></span></div>
+        </div>
+        <div data-campo="co.gastos"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos del sistema</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-cgasto>+ Gasto</button><button class="btn-mini" data-editar-proyecto="${p.id}">Editar sistema</button></span></div>
         <table><thead><tr><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th></th></tr></thead><tbody>
         ${gastosSistema.map(g => `<tr><td><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos de creación.</td></tr>'}
         </tbody></table>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos fijos mensuales</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-mensual>+ Gasto fijo</button><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></span></div>
+        </div>
+        <div data-campo="co.fijos"><div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos fijos mensuales</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-mensual>+ Gasto fijo</button><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></span></div>
         <table><thead><tr><th>Gasto</th><th>Cada</th><th class="n">Monto</th><th></th></tr></thead><tbody>
         ${fijos.map(m => `<tr><td><b>${esc(m.concepto)}</b></td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td><td class="n">${m.frecuencia === 'variable' ? 'según uso' : dinero(m.monto)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos fijos.</td></tr>'}
         </tbody></table>
+        </div>
       </div>
-      <div>
+      <div data-campo="co.reparto">
         <b>Reparto de la utilidad</b>
         <div class="adm-reparto" style="margin-top:8px">
           ${pct > 0 ? `
@@ -1188,8 +1264,8 @@ function bloqueSistemas() {
   const lista = P.proyectos.filter(x => (x.administracion || 'centralia') === adminVista);
   const cobradoDe = p => redondo((D.pagos || []).filter(x => x.proyecto_id === p.id && x.pagado_el).reduce((t, x) => t + (Number(x.monto) || 0), 0));
   return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn-mini" data-nuevo-proyecto>+ Sistema</button></div>` +
-    (lista.length ? `<table><thead><tr><th>Sistema</th><th class="n">Horas</th><th class="n">Costo</th><th></th></tr></thead><tbody>
-      ${lista.map(p => { const emp = D.empresas.find(e => e.id === p.empresa_id); return `<tr><td><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)"><span class="chip az" style="font-size:10.5px">${esc(p.tipo || 'Sin tipo')}</span> · ${esc(emp ? nombreCliente(emp) : (p.cliente || '—'))}</small></td><td class="n">${Number(p.horas) ? Number(p.horas) + ' h' : '—'}</td><td class="n">${dinero(cuentasCreacion(p).gastos)}</td><td><button class="btn-mini" data-editar-proyecto="${p.id}">Editar</button></td></tr>`; }).join('')}
+    (lista.length ? `<table><thead><tr><th>Sistema</th><th class="n" data-campo="si.horas">Horas</th><th class="n" data-campo="si.costo">Costo</th><th></th></tr></thead><tbody>
+      ${lista.map(p => { const emp = D.empresas.find(e => e.id === p.empresa_id); return `<tr><td><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)"><span class="chip az" style="font-size:10.5px">${esc(p.tipo || 'Sin tipo')}</span> · ${esc(emp ? nombreCliente(emp) : (p.cliente || '—'))}</small></td><td class="n" data-campo="si.horas">${Number(p.horas) ? Number(p.horas) + ' h' : '—'}</td><td class="n" data-campo="si.costo">${dinero(cuentasCreacion(p).gastos)}</td><td><button class="btn-mini" data-editar-proyecto="${p.id}">Editar</button></td></tr>`; }).join('')}
       </tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay sistemas</b>Toca «+ Sistema», elige su tipo y escribe sus horas.</div>');
 }
 function vCreacion() {
@@ -3114,7 +3190,7 @@ function vResumen() {
   for (const x of horas) { const t = x.tipo || 'Sin tipo'; tipos[t] = tipos[t] || { sistemas: 0, clientes: new Set() }; tipos[t].sistemas++; if (x.empresa_id) tipos[t].clientes.add(x.empresa_id); }
   const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:10px;padding:7px 9px;border-left:3px solid ${c}"><small style="display:block;color:var(--suave);font-size:10px;text-transform:uppercase;letter-spacing:.03em">${t}</small><b style="display:block;font-size:14px;font-variant-numeric:tabular-nums;margin-top:2px">${n}</b><i style="font-style:normal;font-size:11px;color:var(--suave)">${d}</i></div>`;
   return `
-  <div class="caja" style="margin-bottom:12px">
+  <div class="caja" data-campo="re.kpis" style="margin-bottom:12px">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px">
       ${k('Cobrado', dinero(cobrado), 'pagos recibidos este mes', '#13c08a')}
       ${k('Gastos', dinero(gastos), 'sistemas + plataforma', '#eb6834')}
@@ -3124,17 +3200,17 @@ function vResumen() {
     </div>
   </div>
   <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">
-    <div class="caja"><h2>Calendario de cobros</h2>
+    <div class="caja" data-campo="re.calendario"><h2>Calendario de cobros</h2>
       <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:11px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:44px;border:1px solid #e3e9f2;border-radius:8px;padding:3px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
       <div style="display:flex;gap:10px;font-size:12px;margin-top:10px"><span class="chip verde">Pagado</span><span class="chip ambar">Pendiente</span><span class="chip rj">Vencido</span></div>
     </div>
     <div>
-      <div class="caja" style="margin-bottom:12px"><h2>Horas de trabajo</h2>${horas.length ? horas.map(x => `<div style="margin-bottom:8px"><b>${esc(x.nombre)}</b> · ${Number(x.horas) || 0} h<div class="bar" style="margin-top:4px"><i style="width:${Math.min(100, (Number(x.horas) || 0) * 1)}%"></i></div></div>`).join('') : '<div class="vacio">Sin programas. Las horas se escriben en cada programa.</div>'}</div>
-      <div class="caja" style="margin-bottom:12px"><h2>Tiempo y tipos de sistema</h2>
+      <div class="caja" data-campo="re.horas" style="margin-bottom:12px"><h2>Horas de trabajo</h2>${horas.length ? horas.map(x => `<div style="margin-bottom:8px"><b>${esc(x.nombre)}</b> · ${Number(x.horas) || 0} h<div class="bar" style="margin-top:4px"><i style="width:${Math.min(100, (Number(x.horas) || 0) * 1)}%"></i></div></div>`).join('') : '<div class="vacio">Sin programas. Las horas se escriben en cada programa.</div>'}</div>
+      <div class="caja" data-campo="re.tipos" style="margin-bottom:12px"><h2>Tiempo y tipos de sistema</h2>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div><small style="color:var(--suave)">Horas usadas</small><br><b>${totalHoras} h</b></div><div><small style="color:var(--suave)">Días promedio de creación</small><br><b>${diasProm || '—'}</b></div></div>
         ${Object.keys(tipos).length ? Object.entries(tipos).map(([t, v]) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--borde)"><span class="chip az">${esc(t)}</span><span>${v.sistemas} sistema(s) · ${v.clientes.size} cliente(s)</span></div>`).join('') : '<div class="vacio">Sin sistemas todavía.</div>'}
       </div>
-      <div class="caja"><h2>Quién debe</h2>${quienDebe.length ? quienDebe.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--borde)"><span>${esc(nombreCliente(empresas.find(e => e.id === p.empresa_id) || {}))} · vence ${fechaCorta(p.vence)}</span><b>${dinero(p.monto)}</b></div>`).join('') : '<div class="vacio">Nadie debe nada este mes.</div>'}</div>
+      <div class="caja" data-campo="re.debe"><h2>Quién debe</h2>${quienDebe.length ? quienDebe.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--borde)"><span>${esc(nombreCliente(empresas.find(e => e.id === p.empresa_id) || {}))} · vence ${fechaCorta(p.vence)}</span><b>${dinero(p.monto)}</b></div>`).join('') : '<div class="vacio">Nadie debe nada este mes.</div>'}</div>
     </div>
   </div>`;
 }
@@ -3506,6 +3582,47 @@ document.addEventListener('click', e => {
   }
 });
 
+
+/* ---------- Panel «Todo»: personalizar, ancho, campos y arrastrar ---------- */
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-adm-personalizar],[data-adm-listo],[data-adm-restablecer],[data-adm-ancho],[data-adm-campos]'); if (!t) return;
+  ev.preventDefault();
+  const d = t.dataset;
+  if ('admPersonalizar' in d) { EDITANDO_ADM = true; return pintar(); }
+  if ('admListo' in d) { EDITANDO_ADM = false; return pintar(); }
+  if ('admRestablecer' in d) { DISENO_ADM = baseAdm(); guardarDisenoAdm(); return pintar(); }
+  if (d.admAncho) { const b = disenoAdm().bloques[d.admAncho]; b.ancho = b.ancho === 'completo' ? 'medio' : 'completo'; guardarDisenoAdm(); return pintar(); }
+  if (d.admCampos) return abrirCamposAdm(d.admCampos);
+});
+document.addEventListener('dragstart', e => {
+  const c = e.target.closest && e.target.closest('[data-bloque-id]');
+  if (!c || !EDITANDO_ADM) return;
+  ARRASTRANDO_ADM = c.dataset.bloqueId;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', ARRASTRANDO_ADM); } catch (x) {}
+  c.classList.add('arrastrando');
+});
+document.addEventListener('dragover', e => {
+  if (!EDITANDO_ADM || !ARRASTRANDO_ADM) return;
+  const c = e.target.closest && e.target.closest('[data-bloque-id]');
+  if (!c) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.adm-celda.sobre').forEach(x => x.classList.remove('sobre'));
+  c.classList.add('sobre');
+});
+document.addEventListener('drop', e => {
+  if (!EDITANDO_ADM || !ARRASTRANDO_ADM) return;
+  const c = e.target.closest && e.target.closest('[data-bloque-id]');
+  e.preventDefault();
+  const origen = ARRASTRANDO_ADM; ARRASTRANDO_ADM = null;
+  if (!c || c.dataset.bloqueId === origen) return pintar();
+  const destino = c.dataset.bloqueId, dis = disenoAdm();
+  const o = dis.orden.filter(x => x !== origen);
+  o.splice(o.indexOf(destino), 0, origen);
+  dis.orden = o;
+  guardarDisenoAdm(); pintar();
+});
+document.addEventListener('dragend', () => { ARRASTRANDO_ADM = null; document.querySelectorAll('.adm-celda.arrastrando,.adm-celda.sobre').forEach(x => x.classList.remove('arrastrando', 'sobre')); });
 
 /* ---------- Arranque ---------- */
 (async () => {
