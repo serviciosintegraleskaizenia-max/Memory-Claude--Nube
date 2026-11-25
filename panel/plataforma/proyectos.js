@@ -45,6 +45,9 @@ module.exports = function crearProyectos({ client }) {
     await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS cuota_mensual NUMERIC(12,2) NOT NULL DEFAULT 0');
     await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS dia_cobro INTEGER NOT NULL DEFAULT 5');
     await client.query("ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '[]'::jsonb");
+    // Tipo de programa (Operaciones, Panel de correos, CRM, Automatización, Meta, otro) y horas de trabajo.
+    await client.query("ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT ''");
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS horas NUMERIC(10,2) NOT NULL DEFAULT 0');
     // Notas viejas de n8n y Chatwoot: quedan como gasto que se paga cada mes.
     await client.query("UPDATE oficina_proyecto_mensuales SET nota = 'Se paga cada mes.' WHERE nota LIKE 'Ya no hace falta:%'");
     await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'n8n Pro' WHERE concepto = 'n8n Pro (en la nube)'");
@@ -95,10 +98,11 @@ module.exports = function crearProyectos({ client }) {
     const extras = (Array.isArray(f.extras) ? f.extras : []).map(x => ({ nombre: texto(x.nombre, 80), monto: monto(x.monto) })).filter(x => x.nombre && x.monto > 0).slice(0, 10);
     const cuota = monto(f.cuota_mensual);
     const dia = Math.min(28, Math.max(1, Number(f.dia_cobro) || 5));
-    const v = [nombre, cliente, empresaId, precio, fecha(f.fecha_inicio), fecha(f.fecha_entrega), cuota, dia, JSON.stringify(extras), JSON.stringify(socios), texto(f.nota, 1000), metodo, adm];
+    const tipo = texto(f.tipo, 60), horas = Math.max(0, monto(f.horas));
+    const v = [nombre, cliente, empresaId, precio, fecha(f.fecha_inicio), fecha(f.fecha_entrega), cuota, dia, JSON.stringify(extras), JSON.stringify(socios), texto(f.nota, 1000), metodo, adm, tipo, horas];
     let id = Number(f.id) || 0;
-    if (id) await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, empresa_id=$3, precio_total=$4, fecha_inicio=$5, fecha_entrega=$6, cuota_mensual=$7, dia_cobro=$8, extras=$9, socios=$10, nota=$11, comision_nota=$12, administracion=$13 WHERE id=$14', [...v, id]);
-    else id = (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, empresa_id, precio_total, fecha_inicio, fecha_entrega, cuota_mensual, dia_cobro, extras, socios, nota, comision_nota, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id', v)).rows[0].id;
+    if (id) await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, empresa_id=$3, precio_total=$4, fecha_inicio=$5, fecha_entrega=$6, cuota_mensual=$7, dia_cobro=$8, extras=$9, socios=$10, nota=$11, comision_nota=$12, administracion=$13, tipo=$14, horas=$15 WHERE id=$16', [...v, id]);
+    else id = (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, empresa_id, precio_total, fecha_inicio, fecha_entrega, cuota_mensual, dia_cobro, extras, socios, nota, comision_nota, administracion, tipo, horas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id', v)).rows[0].id;
     // El cobro del setup se crea una sola vez: el abono (si ya lo recibiste) y el saldo que falta.
     const hoyF = new Date().toLocaleDateString('sv-SE');
     if (precio > 0 && empresaId && !(await client.query('SELECT 1 FROM oficina_pagos WHERE proyecto_id = $1 LIMIT 1', [id])).rowCount) {
