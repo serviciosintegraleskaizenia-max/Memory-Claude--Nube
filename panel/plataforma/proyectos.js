@@ -37,6 +37,14 @@ module.exports = function crearProyectos({ client }) {
     await client.query('ALTER TABLE oficina_proyecto_gastos ADD COLUMN IF NOT EXISTS para_socio INTEGER');
     // A qué administración pertenece cada sistema. Los que ya existían son de Somos Viajes (Zentralia App).
     await client.query("ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'centralia'");
+    // Cliente, precio del programa, fechas de inicio y entrega, mensualidad y extras (API, software).
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS empresa_id INTEGER');
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS precio_total NUMERIC(12,2) NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS fecha_inicio DATE');
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS fecha_entrega DATE');
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS cuota_mensual NUMERIC(12,2) NOT NULL DEFAULT 0');
+    await client.query('ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS dia_cobro INTEGER NOT NULL DEFAULT 5');
+    await client.query("ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '[]'::jsonb");
     // Notas viejas de n8n y Chatwoot: quedan como gasto que se paga cada mes.
     await client.query("UPDATE oficina_proyecto_mensuales SET nota = 'Se paga cada mes.' WHERE nota LIKE 'Ya no hace falta:%'");
     await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'n8n Pro' WHERE concepto = 'n8n Pro (en la nube)'");
@@ -71,10 +79,33 @@ module.exports = function crearProyectos({ client }) {
     const suma = socios.reduce((a, s) => a + s.pct, 0);
     if (socios.length && Math.abs(suma - 100) > 0.01) throw error(`Los porcentajes de los socios suman ${suma} %: deben sumar 100 %.`);
     const adm = ['kaizen', 'centralia'].includes(f.administracion) ? f.administracion : 'centralia';
-    const v = [texto(f.nombre, 120), texto(f.cliente, 120), monto(f.cobrado), fecha(f.fecha_cobro), Math.min(100, monto(f.comision_pct)), texto(f.comision_nota, 200), JSON.stringify(socios), texto(f.nota, 1000), adm];
-    if (!v[0]) throw error('Escribe el nombre del sistema (ej.: Panel de correos · Somos Viajes).');
-    if (Number(f.id)) { await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, cobrado=$3, fecha_cobro=$4, comision_pct=$5, comision_nota=$6, socios=$7, nota=$8, administracion=$9 WHERE id=$10', [...v, Number(f.id)]); return Number(f.id); }
-    return (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, cobrado, fecha_cobro, comision_pct, comision_nota, socios, nota, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id', v)).rows[0].id;
+    const nombre = texto(f.nombre, 120);
+    if (!nombre) throw error('Escribe el nombre del programa (ej.: Panel de reservas · Somos Viajes).');
+    const empresaId = Number(f.empresa_id) || null;
+    let cliente = texto(f.cliente, 120);
+    if (empresaId) {
+      const e = (await client.query('SELECT nombre FROM empresas WHERE id = $1', [empresaId])).rows[0];
+      if (!e) throw error('Ese cliente no existe. Créalo en Empresas y vuelve aquí.');
+      cliente = e.nombre;
+    }
+    const precio = monto(f.precio_total);
+    const abono = Math.min(precio, monto(f.abono_monto));
+    const abonoFecha = fecha(f.abono_fecha), saldoFecha = fecha(f.saldo_fecha);
+    const metodo = texto(f.metodo, 60);
+    const extras = (Array.isArray(f.extras) ? f.extras : []).map(x => ({ nombre: texto(x.nombre, 80), monto: monto(x.monto) })).filter(x => x.nombre && x.monto > 0).slice(0, 10);
+    const cuota = monto(f.cuota_mensual);
+    const dia = Math.min(28, Math.max(1, Number(f.dia_cobro) || 5));
+    const v = [nombre, cliente, empresaId, precio, fecha(f.fecha_inicio), fecha(f.fecha_entrega), cuota, dia, JSON.stringify(extras), JSON.stringify(socios), texto(f.nota, 1000), metodo, adm];
+    let id = Number(f.id) || 0;
+    if (id) await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, empresa_id=$3, precio_total=$4, fecha_inicio=$5, fecha_entrega=$6, cuota_mensual=$7, dia_cobro=$8, extras=$9, socios=$10, nota=$11, comision_nota=$12, administracion=$13 WHERE id=$14', [...v, id]);
+    else id = (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, empresa_id, precio_total, fecha_inicio, fecha_entrega, cuota_mensual, dia_cobro, extras, socios, nota, comision_nota, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id', v)).rows[0].id;
+    // El cobro del setup se crea una sola vez: el abono (si ya lo recibiste) y el saldo que falta.
+    const hoyF = new Date().toLocaleDateString('sv-SE');
+    if (precio > 0 && empresaId && !(await client.query('SELECT 1 FROM oficina_pagos WHERE proyecto_id = $1 LIMIT 1', [id])).rowCount) {
+      if (abono > 0) await client.query('INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, pagado_el, forma, nota) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [empresaId, id, 'Setup · abono', abono, 'US$', abonoFecha || hoyF, abonoFecha || hoyF, metodo, '']);
+      if (precio - abono > 0) await client.query('INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, nota) VALUES ($1,$2,$3,$4,$5,$6,$7)', [empresaId, id, 'Setup · saldo al entregar', Math.round((precio - abono) * 100) / 100, 'US$', saldoFecha || hoyF, '']);
+    }
+    return id;
   }
   async function guardarGasto(f) {
     const proy = (await client.query('SELECT socios FROM oficina_proyectos WHERE id = $1', [Number(f.proyecto_id) || 0])).rows[0];
@@ -108,17 +139,24 @@ module.exports = function crearProyectos({ client }) {
   }
 
   async function listar() {
-    const [p, g, m, rc] = await Promise.all([
-      client.query("SELECT p.*, TO_CHAR(p.fecha_cobro, 'YYYY-MM-DD') AS fecha_cobro FROM oficina_proyectos p ORDER BY p.id"),
+    const [p, g, m, rc, pg] = await Promise.all([
+      client.query("SELECT p.*, TO_CHAR(p.fecha_cobro, 'YYYY-MM-DD') AS fecha_cobro, TO_CHAR(p.fecha_inicio, 'YYYY-MM-DD') AS fecha_inicio, TO_CHAR(p.fecha_entrega, 'YYYY-MM-DD') AS fecha_entrega FROM oficina_proyectos p ORDER BY p.id"),
       client.query("SELECT g.*, TO_CHAR(g.fecha, 'YYYY-MM-DD') AS fecha FROM oficina_proyecto_gastos g ORDER BY g.fecha NULLS FIRST, g.id"),
       client.query("SELECT m.*, TO_CHAR(m.desde, 'YYYY-MM-DD') AS desde FROM oficina_proyecto_mensuales m ORDER BY m.orden, m.id"),
-      client.query("SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha FROM oficina_recargas_ia r ORDER BY r.fecha DESC, r.id DESC")]);
+      client.query("SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha FROM oficina_recargas_ia r ORDER BY r.fecha DESC, r.id DESC"),
+      client.query("SELECT q.id, q.proyecto_id, q.concepto, q.monto, q.moneda, q.forma, q.referencia, q.comprobante_nombre, q.recibo_id, q.nota, TO_CHAR(q.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(q.pagado_el, 'YYYY-MM-DD') AS pagado_el FROM oficina_pagos q WHERE q.proyecto_id IS NOT NULL ORDER BY q.vence, q.id")]);
     const n = x => Number(x) || 0;
     return {
       categorias: CATEGORIAS, frecuencias: FRECUENCIAS,
-      proyectos: p.rows.map(x => ({ ...x, cobrado: n(x.cobrado), comision_pct: n(x.comision_pct),
-        gastos: g.rows.filter(y => y.proyecto_id === x.id).map(y => ({ ...y, monto: n(y.monto) })),
-        mensuales: m.rows.filter(y => y.proyecto_id === x.id).map(y => ({ ...y, monto: n(y.monto) })) })),
+      proyectos: p.rows.map(x => {
+        const pagos = pg.rows.filter(y => y.proyecto_id === x.id).map(y => ({ ...y, monto: n(y.monto) }));
+        // Lo cobrado es lo que se registró en Cobros del sistema. Los sistemas viejos sin cobros conservan su monto.
+        const cobrado = pagos.length ? Math.round(pagos.filter(y => y.pagado_el).reduce((t, y) => t + y.monto, 0) * 100) / 100 : n(x.cobrado);
+        return { ...x, cobrado, comision_pct: n(x.comision_pct), precio_total: n(x.precio_total), cuota_mensual: n(x.cuota_mensual),
+          dia_cobro: Number(x.dia_cobro) || 5, extras: Array.isArray(x.extras) ? x.extras : [], pagos,
+          gastos: g.rows.filter(y => y.proyecto_id === x.id).map(y => ({ ...y, monto: n(y.monto) })),
+          mensuales: m.rows.filter(y => y.proyecto_id === x.id).map(y => ({ ...y, monto: n(y.monto) })) };
+      }),
       recargas: rc.rows.map(y => ({ ...y, monto: n(y.monto) }))
     };
   }
@@ -136,6 +174,23 @@ module.exports = function crearProyectos({ client }) {
       else if (f.tipo === 'recarga') await guardarRecarga(f);
       else await guardarMensual(f);
       await registrar(u, 'oficina_' + r[1], 'creacion_' + f.tipo, f.id || 'nuevo', '', '', texto(f.concepto || f.nombre, 120));
+      return json(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && url === '/api/oficina/proyectos/mensualidad') {
+      const f = await leerCuerpo(req);
+      const pr = (await client.query('SELECT p.*, TO_CHAR(p.fecha_entrega, \'YYYY-MM-DD\') AS fecha_entrega FROM oficina_proyectos p WHERE p.id = $1', [Number(f.proyecto_id) || 0])).rows[0];
+      if (!pr) throw error('Sistema no encontrado.', 404);
+      const mes = /^\d{4}-\d{2}$/.test(f.mes || '') ? f.mes : new Date().toLocaleDateString('sv-SE').slice(0, 7);
+      const concepto = `Mensualidad ${mes} · ${pr.nombre}`;
+      if ((await client.query('SELECT 1 FROM oficina_pagos WHERE proyecto_id = $1 AND concepto = $2', [pr.id, concepto])).rowCount) throw error('Esa mensualidad ya está registrada.');
+      const extras = (Array.isArray(pr.extras) ? pr.extras : []).reduce((t, x) => t + (Number(x.monto) || 0), 0);
+      const total = Math.round((Number(pr.cuota_mensual) + extras) * 100) / 100;
+      if (!(total > 0)) throw error('El sistema no tiene cuota mensual. Ponla en Editar.');
+      const dia = Math.min(28, Math.max(1, Number(pr.dia_cobro) || 5));
+      const vence = `${mes}-${String(dia).padStart(2, '0')}`;
+      await client.query('INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, nota) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [pr.empresa_id || null, pr.id, concepto, total, 'US$', vence, 'Cuota mensual por adelantado, con extras (API o software)']);
+      await registrar(u, 'mensualidad_creada', 'proyecto', pr.id, '', mes, concepto);
       return json(res, 200, { ok: true });
     }
     return json(res, 404, { error: 'Ruta no encontrada' });

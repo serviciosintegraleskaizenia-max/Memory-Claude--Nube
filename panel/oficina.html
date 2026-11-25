@@ -946,7 +946,7 @@ function vGastos() {
     </div>
   </div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Gastos de plataforma<span style="font-size:12px;font-weight:500;color:var(--suave)">los usan todos los sistemas · no son de una sola administración</span></h2>
-    ${plataforma.length ? `<table><thead><tr><th>Gasto</th><th class="n">Monto</th><th>Cada</th><th></th></tr></thead><tbody>${plataforma.map(g => `<tr class="${g.activo ? '' : 'apagado'}"><td><b>${esc(g.nombre)}</b></td><td class="n">${dinero(g.monto, g.moneda)}</td><td>${esc(D.frecuencias[g.frecuencia] || g.frecuencia)}</td><td><button class="btn-mini" data-editar-gasto="${g.id}">Editar</button></td></tr>`).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay gastos de plataforma. Agrégalos con «+ Gasto» y elige «Plataforma (compartido)».</div>'}
+    ${plataforma.length ? `<table><thead><tr><th>Gasto</th><th class="n">Monto</th><th>Cada</th><th>Lo paga</th><th></th></tr></thead><tbody>${plataforma.map(g => `<tr class="${g.activo ? '' : 'apagado'}"><td><b>${esc(g.nombre)}</b></td><td class="n">${dinero(g.monto, g.moneda)}</td><td>${esc(D.frecuencias[g.frecuencia] || g.frecuencia)}</td><td style="font-size:12.5px">${(g.pagadores || []).length ? g.pagadores.map(x => `${esc((D.empresas.find(e => e.id === x.empresa_id) || {}).nombre || '—')} ${x.pct}%`).join(' · ') : '<span style="color:var(--suave)">Sin pagador: se descuenta de la utilidad</span>'}</td><td><button class="btn-mini" data-editar-gasto="${g.id}">Editar</button></td></tr>`).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay gastos de plataforma. Agrégalos con «+ Gasto» y elige «Plataforma (compartido)».</div>'}
   </div>
   <div class="caja"><h2>Recibos de ${esc(a.nombre)}</h2><p class="sub">Cada administración numera sus recibos por separado.</p>
     ${(D.recibos || []).some(r => r.administracion === adminVista) ? `<table><thead><tr><th>Nº</th><th>Fecha</th><th>Tipo</th><th>Quién</th><th class="n">Monto</th><th></th></tr></thead><tbody>
@@ -1056,7 +1056,7 @@ function vCreacion() {
   return cab + `
   <div class="kpis">
     <div class="kpi"><div class="e">Cobrado al cliente</div><div class="n">${dinero(p.cobrado)}</div><div class="d">${esc(p.cliente || '')}${p.fecha_cobro ? ' · ' + fechaCorta(p.fecha_cobro) : ''} · <a href="#" data-editar-proyecto="${p.id}">editar</a></div></div>
-    <div class="kpi" style="border-color:var(--ambar)"><div class="e">Banco −${p.comision_pct} %</div><div class="n">−${dinero(c.comision)}</div><div class="d">llegaron <b>${dinero(c.neto)}</b>${p.comision_nota ? ' · ' + esc(p.comision_nota) : ''}</div></div>
+    ${p.comision_pct > 0 ? `<div class="kpi" style="border-color:var(--ambar)"><div class="e">Banco −${p.comision_pct} %</div><div class="n">−${dinero(c.comision)}</div><div class="d">llegaron <b>${dinero(c.neto)}</b>${p.comision_nota ? ' · ' + esc(p.comision_nota) : ''}</div></div>` : ''}
     <div class="kpi" style="border-color:var(--rojo)"><div class="e">Lo que costó crearlo</div><div class="n">${dinero(c.gastos)}</div><div class="d">${p.gastos.length} gastos</div></div>
     <div class="kpi" style="border-color:var(--verde)"><div class="e">Quedan para repartir</div><div class="n">${dinero(c.quedaTotal)}</div><div class="d">${dinero(c.neto)} − ${dinero(c.gastos)} gastos − ${dinero(c.adelantos)} adelantos</div></div>
   </div>
@@ -1072,6 +1072,7 @@ function vCreacion() {
       <div style="display:flex;justify-content:space-between;padding:10px 0 6px;border-top:1px solid var(--borde);margin-top:4px;font-size:16px"><span>Total aproximado al mes</span><b>${dinero(c.total)}</b></div>
       ${c.socios.length ? `<div style="font-size:13px;color:var(--suave)">Si lo pagan entre los dos: ${c.socios.map(s => `${esc(s.nombre)} ${dinero(redondo(c.total * s.pct / 100))}`).join(' · ')}</div>` : ''}</div>
   </div>
+  <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">📋 Programa, cobros y tiempo de creación<span style="display:flex;gap:6px"><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></span></h2>${programaCaja(p)}</div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🏗️ Lo que costó crear el sistema<button class="btn-mini" data-nuevo-cgasto>+ Gasto</button></h2>
     <table><thead><tr><th>Fecha</th><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th>Pagó</th><th>Para</th><th>Nota</th><th></th></tr></thead><tbody>
     ${p.gastos.map(g => `<tr class="${g.monto ? '' : 'apagado'}"><td>${fechaCorta(g.fecha)}</td><td class="envolver"><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td>${esc(g.pagado_por)}</td><td>${g.para_socio == null ? 'Todos' : esc((p.socios[g.para_socio] || {}).nombre || '—')}</td><td class="envolver" style="color:var(--suave);font-size:12.5px">${esc(g.nota)}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="7" class="vacio">Sin gastos todavía.</td></tr>'}
@@ -1095,18 +1096,27 @@ function borrarCreacion(tipo, id, texto) {
   if (b) b.onclick = async () => { if (!confirm(texto)) return; const r = await api('/api/oficina/proyectos/borrar', { tipo, id }); if (!r.ok) return alert(r.data.error || 'No se pudo borrar.'); cerrarModal(); aviso('Borrado.'); await cargarProyectos(); pintar(); };
 }
 function formProyecto(p = {}) {
+  const adm = p.administracion || adminVista;
   const socios = (p.socios && p.socios.length ? p.socios : [{ nombre: 'Cristian Mundaray', pct: 60 }, { nombre: 'José Betancourt', pct: 40 }]).concat([{ nombre: '', pct: '' }]);
+  const clientes = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === adm);
+  const extras = (p.extras && p.extras.length ? p.extras : []).concat([{ nombre: '', monto: '' }]);
   abrirModal(`<h2>${p.id ? 'Editar sistema' : 'Nuevo sistema'}</h2>
-    ${campo('fNom', 'Nombre del sistema', `<input id="fNom" value="${esc(p.nombre || '')}" placeholder="Ej.: Panel de correos · Somos Viajes">`)}
-    <div class="fila2">${campo('fCli', 'Cliente', `<input id="fCli" value="${esc(p.cliente || '')}" placeholder="Somos Viajes">`, 'Para leer su gasto de IA del mes.')}${campo('fFec', 'Fecha del cobro', `<input id="fFec" type="date" value="${esc(p.fecha_cobro || hoy())}">`)}</div>
-    <div class="fila2">${campo('fCob', 'Cobrado (US$)', `<input id="fCob" type="number" step="0.01" min="0" value="${p.cobrado ?? ''}">`)}${campo('fPct', 'Comisión del método de pago (%)', `<input id="fPct" type="number" step="0.01" min="0" max="100" value="${p.comision_pct ?? 0}">`)}</div>
-    ${campo('fCnota', 'Método de pago', `<select id="fCnota">${['', ...METODOS_BASE, 'Efectivo', 'Otro'].map(m => `<option value="${esc(m)}" ${m === (p.comision_nota || '') ? 'selected' : ''}>${esc(m || 'Elige…')}</option>`).join('')}</select>`)}
+    ${campo('fCli', 'Cliente (de la base de datos)', `<select id="fCli"><option value="">Elige el cliente…</option>${clientes.map(e => `<option value="${e.id}" ${Number(p.empresa_id) === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`, clientes.length ? 'Si no aparece, créalo en Empresas.' : 'Esta administración no tiene clientes todavía. Créalo en Empresas.')}
+    ${campo('fNom', 'Nombre del programa', `<input id="fNom" value="${esc(p.nombre || '')}" placeholder="Ej.: Panel de reservas · Somos Viajes">`)}
+    <div class="fila2">${campo('fPrecio', 'Precio total del programa (US$)', `<input id="fPrecio" type="number" step="0.01" min="0" value="${p.precio_total || ''}">`)}${campo('fMetodo', 'Método de pago', `<select id="fMetodo">${['', ...METODOS_BASE, 'Efectivo', 'Otro'].map(m => `<option value="${esc(m)}" ${m === (p.comision_nota || '') ? 'selected' : ''}>${esc(m || 'Elige…')}</option>`).join('')}</select>`)}</div>
+    <div class="fila2">${campo('fAbono', 'Abono recibido (US$)', `<input id="fAbono" type="number" step="0.01" min="0" value="">`, 'Si el abono ya llegó, ponlo aquí y su fecha.')}${campo('fAbonoF', 'Fecha del abono', `<input id="fAbonoF" type="date" value="">`)}</div>
+    <div class="fila2">${campo('fSaldoF', 'Fecha en que paga el saldo', `<input id="fSaldoF" type="date" value="">`, 'Normalmente al entregar el programa.')}${campo('fEnt', 'Entrega del programa', `<input id="fEnt" type="date" value="${esc(p.fecha_entrega || '')}">`)}</div>
+    <div class="fila2">${campo('fIni', 'Inicio de la creación', `<input id="fIni" type="date" value="${esc(p.fecha_inicio || '')}">`)}${campo('fCuota', 'Cuota mensual (US$)', `<input id="fCuota" type="number" step="0.01" min="0" value="${p.cuota_mensual || ''}">`)}</div>
+    ${campo('fDia', 'Día del mes en que cobra la mensualidad (por adelantado)', `<input id="fDia" type="number" min="1" max="28" value="${p.dia_cobro || 5}">`)}
+    <div class="campo"><label>Extras mensuales (API, software): se suman a la mensualidad del cliente y al costo del sistema</label>${extras.map((x, i) => `<div class="fila2" style="margin-bottom:6px"><input data-ext-n="${i}" value="${esc(x.nombre)}" placeholder="Ej.: API OpenRouter"><input data-ext-m="${i}" type="number" step="0.01" min="0" value="${x.monto}" placeholder="US$"></div>`).join('')}</div>
     <div class="campo"><label>Socios y porcentaje (deben sumar 100 %)</label>${socios.map((s, i) => `<div class="fila2" style="margin-bottom:6px"><input data-socio-n="${i}" value="${esc(s.nombre)}" placeholder="Nombre"><input data-socio-p="${i}" type="number" step="0.01" min="0" max="100" value="${s.pct}" placeholder="%"></div>`).join('')}</div>
     ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(p.nota || '')}">`)}
     ${pieModal(p.id)}`);
   document.getElementById('fGuardar').onclick = () => {
-    const ss = socios.map((_, i) => ({ nombre: document.querySelector(`[data-socio-n="${i}"]`).value.trim(), pct: document.querySelector(`[data-socio-p="${i}"]`).value })).filter(s => s.nombre);
-    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: p.administracion || adminVista, nombre: v('fNom'), cliente: v('fCli'), fecha_cobro: v('fFec'), cobrado: v('fCob'), comision_pct: v('fPct'), comision_nota: v('fCnota'), socios: ss, nota: v('fNota') }, 'Sistema guardado.');
+    const ss = socios.map((_, i) => ({ nombre: document.querySelector(`[data-socio-n="${i}"]`).value.trim(), pct: document.querySelector(`[data-socio-p="${i}"]`).value })).filter(x => x.nombre);
+    const ex = extras.map((_, i) => ({ nombre: document.querySelector(`[data-ext-n="${i}"]`).value.trim(), monto: document.querySelector(`[data-ext-m="${i}"]`).value })).filter(x => x.nombre);
+    const emp = clientes.find(e => String(e.id) === v('fCli'));
+    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: adm, empresa_id: v('fCli'), cliente: emp ? emp.nombre : '', nombre: v('fNom'), precio_total: v('fPrecio'), metodo: v('fMetodo'), abono_monto: v('fAbono'), abono_fecha: v('fAbonoF'), saldo_fecha: v('fSaldoF'), fecha_entrega: v('fEnt'), fecha_inicio: v('fIni'), cuota_mensual: v('fCuota'), dia_cobro: v('fDia'), extras: ex, socios: ss, nota: v('fNota') }, 'Sistema guardado.');
   };
   borrarCreacion('proyecto', p.id, '¿Borrar este sistema con todos sus gastos? No se puede deshacer.');
 }
@@ -2676,6 +2686,7 @@ function formGasto(g = {}) {
     <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}" placeholder="41.29">`)}${campo('fMone', 'Moneda', `<select id="fMone">${['US$', 'RD$', '€'].map(m => `<option ${m === (g.moneda || 'US$') ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}</div>
     <div id="fCuando">${campo('fDia', 'Día del mes en que se paga', `<input id="fDia" type="number" min="1" max="28" value="${g.dia || 1}">`)}${campo('fFec', 'Fecha del pago (o de la próxima renovación)', `<input id="fFec" type="date" value="${esc(g.fecha || hoy())}">`)}</div>
     ${campo('fAdmin', 'Administración a la que pertenece', `<select id="fAdmin">${opciones({ kaizen: admin('kaizen').nombre, centralia: admin('centralia').nombre, plataforma: 'Plataforma (compartido)' }, g.administracion || adminVista)}</select>`)}
+    <div id="fPagBox"></div>
     ${campo('fEmp', '¿Es de un cliente en particular? (opcional)', `<select id="fEmp">${opcionesEmpresa(g.empresa_id, 'No, es general')}</select>`)}
     ${campo('fUrl', 'Enlace (opcional)', `<input id="fUrl" value="${esc(g.url || '')}" placeholder="https://hpanel.hostinger.com">`, 'Donde lo pagas o lo administras.')}
     ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(g.nota || '')}">`)}
@@ -2683,7 +2694,20 @@ function formGasto(g = {}) {
     ${pieModal(g.id)}`);
   const cambia = () => { const f = v('fFrec'); document.getElementById('fDia').closest('.campo').style.display = f === 'mensual' ? '' : 'none'; document.getElementById('fFec').closest('.campo').style.display = f === 'mensual' ? 'none' : ''; };
   document.getElementById('fFrec').onchange = cambia; cambia();
-  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/gastos', { id: g.id, nombre: v('fNom'), categoria: v('fCat'), frecuencia: v('fFrec'), monto: v('fMon'), moneda: v('fMone'), dia: v('fDia'), fecha: v('fFec'), empresa_id: v('fEmp'), url: v('fUrl'), nota: v('fNota'), activo: document.getElementById('fAct').checked, administracion: v('fAdmin') }, 'Gasto guardado.');
+  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/gastos', { id: g.id, nombre: v('fNom'), categoria: v('fCat'), frecuencia: v('fFrec'), monto: v('fMon'), moneda: v('fMone'), dia: v('fDia'), fecha: v('fFec'), empresa_id: v('fEmp'), url: v('fUrl'), nota: v('fNota'), activo: document.getElementById('fAct').checked, administracion: v('fAdmin'), pagadores: leerPagadores() }, 'Gasto guardado.');
+  let pags = (g.pagadores && g.pagadores.length ? g.pagadores : [{ empresa_id: '', pct: '' }]).map(x => ({ empresa_id: x.empresa_id || '', pct: x.pct ?? '' }));
+  const clientesTodos = D.empresas.filter(e => !e.es_demo);
+  const leerPagadores = () => [...document.querySelectorAll('[data-pag-e]')].map(sel => ({ empresa_id: sel.value, pct: (document.querySelector(`[data-pag-p="${sel.dataset.pagE}"]`) || {}).value || '' }));
+  const pintarPagadores = () => {
+    const box = document.getElementById('fPagBox'); if (!box) return;
+    if (v('fAdmin') !== 'plataforma') { box.innerHTML = ''; return; }
+    const leidos = leerPagadores(); if (leidos.length) pags = leidos;
+    box.innerHTML = `<div class="campo"><label>¿Quién lo paga? (porcentaje de cada cliente)</label>${pags.map((x, i) => `<div class="fila2" style="margin-bottom:6px"><select data-pag-e="${i}"><option value="">Nadie todavía</option>${clientesTodos.map(e => `<option value="${e.id}" ${String(x.empresa_id) === String(e.id) ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select><input data-pag-p="${i}" type="number" step="0.01" min="0" max="100" value="${esc(String(x.pct))}" placeholder="%"></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="btn-sec" type="button" id="fPagMas">+ Otro cliente</button><small style="color:var(--suave)">Lo que no quede asignado se descuenta de la utilidad.</small></div></div>`;
+    document.getElementById('fPagMas').onclick = () => { pags = leerPagadores(); pags.push({ empresa_id: '', pct: '' }); pintarPagadores(); };
+  };
+  document.getElementById('fAdmin').onchange = pintarPagadores;
+  pintarPagadores();
   conBorrar('gastos', g.id, '¿Borrar este gasto? Si solo dejaste de pagarlo, mejor desmarca "Lo sigo pagando".');
 }
 function formAdmin(a) {
@@ -2984,6 +3008,7 @@ function vClientesAdm() {
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed #d6dce5"><span>Vendido</span><span>${dinero(total)}</span></div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed #d6dce5"><span>Cobrado</span><span style="color:#0f7b6c">${dinero(pagado)}</span></div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0"><span><b>Saldo</b></span><span><b style="color:${saldo > 0 ? '#8a5a00' : '#0f7b6c'}">${dinero(saldo)}</b></span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-top:1px dashed #d6dce5;margin-top:6px"><span>Gastos de plataforma que le tocan</span><span>${dinero(gastosPlataformaDe(sel.id))}</span></div>
           <div style="font-size:12px;color:var(--suave);margin-top:8px">Cuando el saldo llega a cero, la cuenta se cierra y el monto entra al reporte del mes.</div>
           <button class="btn-mini" data-adm-sec="creacion" style="margin-top:10px">Ver gastos de creación de sus sistemas →</button>
         </div>
@@ -3022,12 +3047,13 @@ function formPagarVarios() {
   };
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios]'); if (!t) return;
+  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios],[data-registrar-mensualidad]'); if (!t) return;
   ev.preventDefault();
   const d = t.dataset;
   if (d.admSec) { admSec = d.admSec; return pintar(); }
   if (d.ficha) { fichaSel = Number(d.ficha); return pintar(); }
   if ('pagarVarios' in d) return formPagarVarios();
+  if (d.registrarMensualidad) return registrarMensualidad(Number(d.registrarMensualidad));
 });
 document.addEventListener('change', ev => {
   const c = ev.target; if (!c.dataset || !c.dataset.selCobro) return;
@@ -3035,6 +3061,39 @@ document.addEventListener('change', ev => {
   if (c.checked) selCobros.add(id); else selCobros.delete(id);
   pintar();
 });
+// Programa de un sistema: precio, cobrado, saldo, mensualidad, tiempo de creación y sus cobros.
+function programaCaja(p) {
+  const precio = Number(p.precio_total) || 0, pagado = Number(p.cobrado) || 0, saldo = Math.round((precio - pagado) * 100) / 100;
+  const pct = precio ? Math.min(100, Math.round(100 * pagado / precio)) : 0;
+  const extras = (p.extras || []).reduce((t, x) => t + (Number(x.monto) || 0), 0);
+  const mensual = Math.round(((Number(p.cuota_mensual) || 0) + extras) * 100) / 100;
+  const dia = Number(p.dia_cobro) || 5, hoyF = hoy();
+  let prox = hoyF.slice(0, 8) + String(dia).padStart(2, '0');
+  if (Number(hoyF.slice(8, 10)) > dia) { const d = new Date(hoyF + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(dia); prox = d.toISOString().slice(0, 10); }
+  const dias = p.fecha_inicio && p.fecha_entrega ? Math.round((Date.parse(p.fecha_entrega) - Date.parse(p.fecha_inicio)) / 86400000) : null;
+  const tiempo = dias !== null ? `${dias} días de creación` : p.fecha_inicio ? `En curso desde ${fechaCorta(p.fecha_inicio)}` : 'Sin fecha de inicio';
+  const pagos = p.pagos || [];
+  return `<div class="kpis">
+    <div class="kpi"><div class="e">Precio del programa</div><div class="n">${dinero(precio)}</div><div class="d">${pct}% cobrado · falta ${dinero(saldo)}</div></div>
+    <div class="kpi"><div class="e">Mensualidad</div><div class="n">${dinero(mensual)}</div><div class="d">${dinero(p.cuota_mensual)} cuota + ${dinero(extras)} extras · día ${dia}</div></div>
+    <div class="kpi"><div class="e">Próximo cobro</div><div class="n">${fechaCorta(prox)}</div><div class="d">por adelantado</div></div>
+    <div class="kpi"><div class="e">Tiempo de creación</div><div class="n" style="font-size:18px">${esc(tiempo)}</div><div class="d">${p.fecha_entrega ? 'Entregado ' + fechaCorta(p.fecha_entrega) : 'Entrega pendiente'}</div></div>
+  </div>
+  <div style="height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:6px 0 10px"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#0b5cad,#13c08a)"></div></div>
+  ${(p.extras || []).length ? `<div style="font-size:13px;margin-bottom:8px">Extras mensuales: ${p.extras.map(x => `${esc(x.nombre)} ${dinero(x.monto)}`).join(' · ')}</div>` : ''}
+  <table><thead><tr><th>Cobro</th><th>Vence</th><th class="n">Monto</th><th>Pagado</th><th>Forma · referencia</th><th></th></tr></thead><tbody>
+    ${pagos.length ? pagos.map(x => `<tr><td>${esc(x.concepto)}</td><td>${fechaCorta(x.vence)}</td><td class="n">${dinero(x.monto, x.moneda)}</td><td>${x.pagado_el ? fechaCorta(x.pagado_el) : '<span class="chip ambar">pendiente</span>'}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td>${x.pagado_el ? (x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : '') : `<button class="btn-mini" data-pagar-cobro="${x.id}">Pagar</button>`}</td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Sin cobros todavía. Guarda el sistema con precio y abono, o registra la mensualidad.</td></tr>'}
+  </tbody></table>`;
+}
+// Cuánto de los gastos de plataforma le toca pagar a un cliente (monto × su porcentaje).
+function gastosPlataformaDe(empresaId) {
+  return Math.round((D.gastos || []).filter(g => administracionDe(g) === 'plataforma').reduce((t, g) => t + (g.pagadores || []).filter(x => x.empresa_id === empresaId).reduce((a, x) => a + (Number(g.monto) || 0) * (Number(x.pct) || 0) / 100, 0), 0) * 100) / 100;
+}
+async function registrarMensualidad(id) {
+  const r = await api('/api/oficina/proyectos/mensualidad', { proyecto_id: id, mes: hoy().slice(0, 7) });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo registrar la mensualidad.');
+  aviso('Mensualidad registrada. Ya aparece para cobrar.'); await ir(vista);
+}
 function formEvento(ev = {}, fecha) {
   abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
     ${campo('fTit', '¿Qué hay que hacer?', `<input id="fTit" value="${esc(ev.titulo || '')}" placeholder="Ej.: Demo con Caribe Tours">`)}

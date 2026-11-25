@@ -41,6 +41,14 @@ const CATEGORIAS = {
 const FRECUENCIAS = { mensual: 'Cada mes', anual: 'Cada año', unico: 'Una sola vez' };
 // Dos administraciones: Kaizen IA (sus clientes, sin reparto) y Centralia (reparto 60/40 con el socio).
 const ADMINISTRACIONES = ['kaizen', 'centralia'];
+// Quién paga un gasto de la plataforma: clientes con su porcentaje (la suma no puede pasar de 100 %).
+function pagadoresDe(f) {
+  if (f.administracion !== 'plataforma') return [];
+  const lista = (Array.isArray(f.pagadores) ? f.pagadores : []).map(x => ({ empresa_id: Number(x.empresa_id) || 0, pct: Math.round((Number(x.pct) || 0) * 100) / 100 })).filter(x => x.empresa_id && x.pct > 0).slice(0, 20);
+  const suma = Math.round(lista.reduce((t, x) => t + x.pct, 0) * 100) / 100;
+  if (suma > 100.01) throw Object.assign(new Error(`Los porcentajes de quien lo paga suman ${suma} %: no pueden pasar de 100 %.`), { codigo: 400 });
+  return lista;
+}
 const TIPOS_EVENTO = { tarea: 'Tarea', demo: 'Demo', cita: 'Cita / llamada', cobro: 'Cobro', otro: 'Otro' };
 const ESTADOS_ABIERTOS = ['pendiente de transcribir', 'revisar', 'actualizada'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -127,6 +135,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("INSERT INTO oficina_administraciones (clave, nombre) VALUES ('kaizen', 'Kaizen IA'), ('centralia', 'Centralia') ON CONFLICT (clave) DO NOTHING");
     await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
+    await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS pagadores JSONB NOT NULL DEFAULT '[]'::jsonb");
     for (const col of ['documento TEXT', 'pais TEXT', 'direccion TEXT', 'web TEXT', 'redes TEXT']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} NOT NULL DEFAULT ''`);
     }
@@ -139,6 +148,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS comprobante_nombre TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibo_id INTEGER");
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS referencia TEXT NOT NULL DEFAULT ''");
+    await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS proyecto_id INTEGER');
     // Los gastos que estaban en Kaizen IA son de la plataforma (los usan todos los sistemas). Se pasan una sola vez.
     await client.query("CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     if (!(await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'gastos_plataforma'")).rowCount) {
@@ -569,12 +579,12 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         frecuencia === 'mensual' ? Math.min(28, Math.max(1, Number(f.dia) || 1)) : null,
         frecuencia === 'mensual' ? null : (fechaValida(f.fecha) ? f.fecha : null),
         empresaId, texto(f.url, 300), texto(f.nota, 500), f.activo !== false,
-        ['kaizen', 'centralia', 'plataforma'].includes(f.administracion) ? f.administracion : 'kaizen'];
+        ['kaizen', 'centralia', 'plataforma'].includes(f.administracion) ? f.administracion : 'kaizen', JSON.stringify(pagadoresDe(f))];
       if (!v[0]) throw Object.assign(new Error('Escribe el nombre del gasto (ej.: Servidor Hostinger).'), { codigo: 400 });
       if (frecuencia !== 'mensual' && !v[6]) throw Object.assign(new Error('Elige la fecha del pago (o de la próxima renovación).'), { codigo: 400 });
       if (v[8] && !/^https?:\/\//i.test(v[8])) throw Object.assign(new Error('El enlace debe empezar con http:// o https://'), { codigo: 400 });
-      if (id) await client.query('UPDATE oficina_gastos SET nombre=$1, categoria=$2, monto=$3, moneda=$4, frecuencia=$5, dia=$6, fecha=$7, empresa_id=$8, url=$9, nota=$10, activo=$11, administracion=$12 WHERE id=$13', [...v, id]);
-      else await client.query('INSERT INTO oficina_gastos (nombre, categoria, monto, moneda, frecuencia, dia, fecha, empresa_id, url, nota, activo, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', v);
+      if (id) await client.query('UPDATE oficina_gastos SET nombre=$1, categoria=$2, monto=$3, moneda=$4, frecuencia=$5, dia=$6, fecha=$7, empresa_id=$8, url=$9, nota=$10, activo=$11, administracion=$12, pagadores=$13 WHERE id=$14', [...v, id]);
+      else await client.query('INSERT INTO oficina_gastos (nombre, categoria, monto, moneda, frecuencia, dia, fecha, empresa_id, url, nota, activo, administracion, pagadores) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)', v);
       return;
     }
     if (tipo === 'eventos') {
