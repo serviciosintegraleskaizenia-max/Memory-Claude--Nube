@@ -215,25 +215,31 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // ---------- IA: gasto de cada empresa con su propia clave de OpenRouter ----------
 
   const cacheClaves = new Map();
+  // Cada petición a OpenRouter tiene su propio límite de tiempo. Si OpenRouter no responde, la Oficina no se queda esperando.
+  async function pedirOpenRouter(ruta, clave) {
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), 5000);
+    try {
+      const r = await fetch(A.OPENROUTER + ruta, { headers: { Authorization: 'Bearer ' + clave }, signal: control.signal });
+      return { ok: r.ok, status: r.status, json: r.ok ? await r.json() : null };
+    } finally { clearTimeout(reloj); }
+  }
   async function consultarClave(clave) {
     const guardado = cacheClaves.get(clave);
     if (guardado && Date.now() - guardado.t < 50 * 1000) return guardado.datos; // en vivo: como mucho 50 segundos de atraso
     let datos = null;
     try {
-      const control = new AbortController();
-      const reloj = setTimeout(() => control.abort(), 8000);
-      const r = await fetch(A.OPENROUTER + '/key', { headers: { Authorization: 'Bearer ' + clave }, signal: control.signal });
-      clearTimeout(reloj);
-      datos = r.ok ? (await r.json()).data || null : { error: 'OpenRouter respondió ' + r.status + (r.status === 401 ? ' (clave no válida)' : '') };
+      const k = await pedirOpenRouter('/key', clave);
+      datos = k.ok ? (k.json || {}).data || null : { error: 'OpenRouter respondió ' + k.status + (k.status === 401 ? ' (clave no válida)' : '') };
       // Créditos de la cuenta en vivo: lo recargado en total y lo gastado (el saldo real de OpenRouter).
       if (datos && !datos.error) {
         try {
-          const rc = await fetch(A.OPENROUTER + '/credits', { headers: { Authorization: 'Bearer ' + clave }, signal: control.signal });
-          const c = rc.ok ? ((await rc.json()) || {}).data || {} : null;
+          const rc = await pedirOpenRouter('/credits', clave);
+          const c = rc.ok ? (rc.json || {}).data || {} : null;
           datos.cuenta = c && typeof c.total_credits === 'number' ? { recargado: c.total_credits, usado: Number(c.total_usage) || 0 } : { error: rc.ok ? 'sin datos' : 'OpenRouter no da el saldo con esta clave (' + rc.status + ')' };
-        } catch (e) { datos.cuenta = { error: 'No se pudo leer el saldo' }; }
+        } catch (e) { datos.cuenta = { error: 'No se pudo leer el saldo (OpenRouter tardó)' }; }
       }
-    } catch (e) { datos = { error: 'No se pudo consultar OpenRouter' }; }
+    } catch (e) { datos = { error: 'OpenRouter tardó o no respondió' }; }
     cacheClaves.set(clave, { t: Date.now(), datos });
     return datos;
   }

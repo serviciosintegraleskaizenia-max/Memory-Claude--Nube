@@ -590,7 +590,8 @@ async function cargarSeccion(v) {
   if (v === 'chat') tareas.push(cargarChatContactos());
   if (v === 'respaldos' || v === 'inicio') tareas.push(cargarRespaldo());
   if (v === 'conocimiento' || v === 'redes') tareas.push(cargarConocimiento());
-  await Promise.all(tareas);
+  // Cada parte se muestra en cuanto llega, sin esperar a las demás (una respuesta lenta no deja la pantalla en blanco).
+  await Promise.all(tareas.map(t => t.then(() => { if (vista === v) pintar(); })));
   if (v === 'redes' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
   if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
 }
