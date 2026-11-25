@@ -138,6 +138,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS comprobante TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS comprobante_nombre TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibo_id INTEGER");
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS referencia TEXT NOT NULL DEFAULT ''");
+    // Los gastos que estaban en Kaizen IA son de la plataforma (los usan todos los sistemas). Se pasan una sola vez.
+    await client.query("CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+    if (!(await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'gastos_plataforma'")).rowCount) {
+      await client.query("UPDATE oficina_gastos SET administracion = 'plataforma' WHERE administracion = 'kaizen'");
+      await client.query("INSERT INTO oficina_migraciones (clave) VALUES ('gastos_plataforma')");
+    }
     // Recibos numerados por administración: de cliente (pago recibido) y de socio (retiro de utilidades).
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_recibos (
       id SERIAL PRIMARY KEY, administracion VARCHAR(20) NOT NULL, numero INTEGER NOT NULL, tipo VARCHAR(10) NOT NULL,
@@ -380,7 +387,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       lista.forEach((e, i) => { const x = ia.get(e.id); if (x) { x.compartida = lista.filter(o => o.id !== e.id).map(o => o.nombre); x.repetida = i > 0; } });
     }
 
-    const pagos = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto, p.moneda, p.forma, p.nota, p.auto_mes, p.recibo_id, p.comprobante_nombre, p.creado, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
+    const pagos = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto, p.moneda, p.forma, p.referencia, p.nota, p.auto_mes, p.recibo_id, p.comprobante_nombre, p.creado, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
       FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id
       WHERE p.vence >= $1 OR p.pagado_el IS NULL ORDER BY p.vence DESC, p.id DESC`, [mesMas(mes, -12) + '-01'])).rows
       .map(p => ({ ...p, monto: Number(p.monto), estado: p.pagado_el ? 'pagado' : p.vence < hoy ? 'vencido' : p.vence === hoy ? 'hoy' : 'pendiente' }));
@@ -562,7 +569,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         frecuencia === 'mensual' ? Math.min(28, Math.max(1, Number(f.dia) || 1)) : null,
         frecuencia === 'mensual' ? null : (fechaValida(f.fecha) ? f.fecha : null),
         empresaId, texto(f.url, 300), texto(f.nota, 500), f.activo !== false,
-        ADMINISTRACIONES.includes(f.administracion) ? f.administracion : 'kaizen'];
+        ['kaizen', 'centralia', 'plataforma'].includes(f.administracion) ? f.administracion : 'kaizen'];
       if (!v[0]) throw Object.assign(new Error('Escribe el nombre del gasto (ej.: Servidor Hostinger).'), { codigo: 400 });
       if (frecuencia !== 'mensual' && !v[6]) throw Object.assign(new Error('Elige la fecha del pago (o de la próxima renovación).'), { codigo: 400 });
       if (v[8] && !/^https?:\/\//i.test(v[8])) throw Object.assign(new Error('El enlace debe empezar con http:// o https://'), { codigo: 400 });
@@ -876,7 +883,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
           VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
           [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC })])).rows[0];
-        await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6 WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id]);
+        await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7 WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id, texto(f.referencia, 120)]);
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
       }
@@ -905,8 +912,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
             VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
             [x.administracion, numero, x.id, x.empresa_id, x.monto, x.moneda, x.concepto, metodo, referencia, fecha,
               JSON.stringify({ comprobante_nombre: nombreC, pago_conjunto: ids.length > 1 ? ids : null })])).rows[0];
-          await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6 WHERE id = $1',
-            [x.id, fecha, metodo, i === 0 ? comprobante : '', nombreC, rec.id]);
+          await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7 WHERE id = $1',
+            [x.id, fecha, metodo, i === 0 ? comprobante : '', nombreC, rec.id, referencia]);
           recibos.push({ id: rec.id, numero, concepto: x.concepto, monto: x.monto });
         }
         await registrar(u, 'cobro_pagado_varios', 'pago', ids.join(','), '', fecha, String(ids.length) + ' cobros');

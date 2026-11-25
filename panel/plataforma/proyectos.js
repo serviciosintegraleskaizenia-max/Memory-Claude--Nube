@@ -35,6 +35,8 @@ module.exports = function crearProyectos({ client }) {
       nota TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     // Para quién es cada gasto: null = todos los socios; número = índice del socio en la lista de socios.
     await client.query('ALTER TABLE oficina_proyecto_gastos ADD COLUMN IF NOT EXISTS para_socio INTEGER');
+    // A qué administración pertenece cada sistema. Los que ya existían son de Somos Viajes (Zentralia App).
+    await client.query("ALTER TABLE oficina_proyectos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'centralia'");
     // Notas viejas de n8n y Chatwoot: quedan como gasto que se paga cada mes.
     await client.query("UPDATE oficina_proyecto_mensuales SET nota = 'Se paga cada mes.' WHERE nota LIKE 'Ya no hace falta:%'");
     await client.query("UPDATE oficina_proyecto_mensuales SET concepto = 'n8n Pro' WHERE concepto = 'n8n Pro (en la nube)'");
@@ -68,10 +70,11 @@ module.exports = function crearProyectos({ client }) {
     const socios = (Array.isArray(f.socios) ? f.socios : []).map(s => ({ nombre: texto(s.nombre, 60), pct: monto(s.pct) })).filter(s => s.nombre).slice(0, 6);
     const suma = socios.reduce((a, s) => a + s.pct, 0);
     if (socios.length && Math.abs(suma - 100) > 0.01) throw error(`Los porcentajes de los socios suman ${suma} %: deben sumar 100 %.`);
-    const v = [texto(f.nombre, 120), texto(f.cliente, 120), monto(f.cobrado), fecha(f.fecha_cobro), Math.min(100, monto(f.comision_pct)), texto(f.comision_nota, 200), JSON.stringify(socios), texto(f.nota, 1000)];
+    const adm = ['kaizen', 'centralia'].includes(f.administracion) ? f.administracion : 'centralia';
+    const v = [texto(f.nombre, 120), texto(f.cliente, 120), monto(f.cobrado), fecha(f.fecha_cobro), Math.min(100, monto(f.comision_pct)), texto(f.comision_nota, 200), JSON.stringify(socios), texto(f.nota, 1000), adm];
     if (!v[0]) throw error('Escribe el nombre del sistema (ej.: Panel de correos · Somos Viajes).');
-    if (Number(f.id)) { await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, cobrado=$3, fecha_cobro=$4, comision_pct=$5, comision_nota=$6, socios=$7, nota=$8 WHERE id=$9', [...v, Number(f.id)]); return Number(f.id); }
-    return (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, cobrado, fecha_cobro, comision_pct, comision_nota, socios, nota) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', v)).rows[0].id;
+    if (Number(f.id)) { await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, cobrado=$3, fecha_cobro=$4, comision_pct=$5, comision_nota=$6, socios=$7, nota=$8, administracion=$9 WHERE id=$10', [...v, Number(f.id)]); return Number(f.id); }
+    return (await client.query('INSERT INTO oficina_proyectos (nombre, cliente, cobrado, fecha_cobro, comision_pct, comision_nota, socios, nota, administracion) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id', v)).rows[0].id;
   }
   async function guardarGasto(f) {
     const proy = (await client.query('SELECT socios FROM oficina_proyectos WHERE id = $1', [Number(f.proyecto_id) || 0])).rows[0];
