@@ -96,13 +96,13 @@
   .adm-lienzo.editando .adm-celda { outline:1px dashed var(--suave); outline-offset:4px; border-radius:14px; }
   .adm-lienzo.editando .adm-bloque > header { cursor:move; }
   .adm-celda.en-curso { z-index:5; box-shadow:0 10px 30px #0f172a40; }
-  .adm-asa { display:none; position:absolute; width:18px; height:18px; z-index:6; touch-action:none;
+  .adm-asa { display:none; position:absolute; width:22px; height:22px; z-index:6; touch-action:none; border-radius:4px; background-color:#ffffff66;
     background:linear-gradient(135deg, transparent 38%, var(--azul) 38%, var(--azul) 46%, transparent 46%), linear-gradient(135deg, transparent 60%, var(--azul) 60%, var(--azul) 68%, transparent 68%); }
   .adm-lienzo.editando .adm-asa { display:block; }
-  .adm-asa.nw { left:-7px; top:-7px; cursor:nwse-resize; }
-  .adm-asa.se { right:-7px; bottom:-7px; cursor:nwse-resize; }
-  .adm-asa.ne { right:-7px; top:-7px; cursor:nesw-resize; transform:scaleX(-1); }
-  .adm-asa.sw { left:-7px; bottom:-7px; cursor:nesw-resize; transform:scaleX(-1); }
+  .adm-asa.nw { left:-9px; top:-9px; cursor:nwse-resize; }
+  .adm-asa.se { right:-9px; bottom:-9px; cursor:nwse-resize; }
+  .adm-asa.ne { right:-9px; top:-9px; cursor:nesw-resize; transform:scaleX(-1); }
+  .adm-asa.sw { left:-9px; bottom:-9px; cursor:nesw-resize; transform:scaleX(-1); }
   @media (max-width:1100px) { .adm-lienzo { grid-template-columns:minmax(0,1fr); grid-auto-rows:auto; } .adm-celda { grid-column:1 / -1 !important; grid-row:auto !important; } }
   .adm-tarjeta { border:1px solid var(--borde); border-radius:12px; padding:12px 14px; margin-bottom:12px; background:var(--tarjeta); }
   .adm-tarjeta > h4 { margin:0 0 8px; font-size:13.5px; display:flex; align-items:center; gap:8px; color:var(--texto); }
@@ -1145,7 +1145,7 @@ function clientesCompactos() {
 }
 // ---------- Administración: cuatro bloques en una sola pantalla ----------
 function bloqueAdm(titulo, sub, cuerpo, ver, acento = '#1679c2', id = '') {
-  const ctl = EDITANDO_ADM && id ? `<div class="adm-ctl"><button class="btn-mini" data-adm-campos="${id}">Campos</button></div>` : '';
+  const ctl = EDITANDO_ADM && id ? `<div class="adm-ctl"><button class="btn-mini" data-adm-ajustar="${id}" title="Achica o agranda el alto para que entre todo el contenido">Ajustar alto</button><button class="btn-mini" data-adm-campos="${id}">Campos</button></div>` : '';
   return `<section class="adm-bloque" style="--acento:${acento}"><header><div><b class="adm-tit">${titulo}</b>${sub ? `<div class="adm-sub">${sub}</div>` : ''}</div><div style="display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">${ctl}${ver ? `<button class="btn-mini" data-adm-sec="${ver}">Ver completo</button>` : ''}</div></header>${cuerpo}</section>`;
 }
 // Diseño del panel «Todo»: cada usuario acomoda sus bloques (orden, ancho y campos visibles).
@@ -1211,7 +1211,7 @@ function vAdmTodo() {
     return `<div class="adm-celda" data-bloque-id="${id}" style="grid-column:${b.x + 1} / span ${b.w};grid-row:${b.y + 1} / span ${b.h}">${bloqueAdm(m.titulo, sub, cuerpo, m.ver, m.color, id)}${asas}</div>`;
   }).join('');
   const barra = EDITANDO_ADM
-    ? `<div class="adm-barra"><span>Arrastra el título de un bloque para moverlo. Arrastra una esquina para cambiar su tamaño.</span><span style="display:flex;gap:6px"><button class="btn-mini" data-adm-restablecer>Restablecer</button><button class="btn" data-adm-listo>Listo</button></span></div>`
+    ? `<div class="adm-barra"><span>Arrastra el título de un bloque para moverlo. Arrastra una esquina para cambiar su tamaño.</span><span style="display:flex;gap:6px"><button class="btn-mini" data-adm-acomodar title="Sube todos los bloques para que no queden huecos">Acomodar todo</button><button class="btn-mini" data-adm-restablecer>Restablecer</button><button class="btn" data-adm-listo>Listo</button></span></div>`
     : `<div class="adm-barra"><span></span><button class="btn-mini" data-adm-personalizar>✎ Personalizar panel</button></div>`;
   return barra + `<div class="adm-lienzo${EDITANDO_ADM ? ' editando' : ''}">${piezas}</div>`;
 }
@@ -3615,7 +3615,7 @@ document.addEventListener('click', e => {
 
 /* ---------- Panel «Todo»: personalizar, ancho, campos y arrastrar ---------- */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-adm-personalizar],[data-adm-listo],[data-adm-restablecer],[data-adm-ancho],[data-adm-campos]'); if (!t) return;
+  const t = ev.target.closest('[data-adm-personalizar],[data-adm-listo],[data-adm-restablecer],[data-adm-ancho],[data-adm-campos],[data-adm-ajustar],[data-adm-acomodar]'); if (!t) return;
   ev.preventDefault();
   const d = t.dataset;
   if ('admPersonalizar' in d) { EDITANDO_ADM = true; return pintar(); }
@@ -3623,6 +3623,13 @@ document.addEventListener('click', ev => {
   if ('admRestablecer' in d) { DISENO_ADM = baseAdm(); guardarDisenoAdm(); return pintar(); }
   if (d.admAncho) { const b = disenoAdm().bloques[d.admAncho]; b.ancho = b.ancho === 'completo' ? 'medio' : 'completo'; guardarDisenoAdm(); return pintar(); }
   if (d.admCampos) return abrirCamposAdm(d.admCampos);
+  if (d.admAjustar) {
+    const cont = document.querySelector(`[data-bloque-id="${d.admAjustar}"] .adm-bloque`);
+    const b = disenoAdm().bloques[d.admAjustar];
+    if (cont) b.h = acotaAdm(Math.ceil((cont.scrollHeight + 14) / 54), 4, 80);
+    compactarAdm(d.admAjustar); guardarDisenoAdm(); return pintar();
+  }
+  if ('admAcomodar' in d) { compactarAdm(null); guardarDisenoAdm(); return pintar(); }
 });
 let OP_ADM = null;
 const acotaAdm = (v, a, z) => Math.min(z, Math.max(a, v));
@@ -3659,14 +3666,16 @@ document.addEventListener('pointermove', e => {
   OP_ADM.cel.style.gridColumn = `${nb.x + 1} / span ${nb.w}`;
   OP_ADM.cel.style.gridRow = `${nb.y + 1} / span ${nb.h}`;
 });
-// Si un bloque cae encima de otro, el otro baja para hacer lugar. El que se movió conserva su lugar.
+// Los bloques suben solos para llenar huecos. El que acabas de mover conserva su lugar; si cae encima de otro, el otro baja.
 function compactarAdm(primero) {
   const d = disenoAdm();
-  const ids = Object.keys(d.bloques).sort((a, b) => (a === primero ? -1 : b === primero ? 1 : 0) || d.bloques[a].y - d.bloques[b].y || d.bloques[a].x - d.bloques[b].x);
-  const puestos = [];
-  for (const id of ids) {
+  const solapan = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const otros = Object.keys(d.bloques).filter(x => x !== primero).sort((a, b) => d.bloques[a].y - d.bloques[b].y || d.bloques[a].x - d.bloques[b].x);
+  const puestos = primero ? [d.bloques[primero]] : [];
+  for (const id of otros) {
     const b = d.bloques[id];
-    while (puestos.some(q => b.x < q.x + q.w && q.x < b.x + b.w && b.y < q.y + q.h && q.y < b.y + b.h)) b.y++;
+    b.y = 0;
+    while (puestos.some(q => solapan(b, q))) b.y++;
     puestos.push(b);
   }
 }
