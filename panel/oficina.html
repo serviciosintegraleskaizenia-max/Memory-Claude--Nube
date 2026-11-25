@@ -1020,9 +1020,6 @@ function vGastos() {
         <tr><td>Socio</td><td>${esc(a.socio_nombre || '—')} · ${Number(a.socio_porcentaje) || 0}% de la utilidad</td></tr>
       </tbody></table>
     </div>
-    <div class="caja"><h2>Empresas de ${esc(a.nombre)}</h2><p class="sub">Cada empresa pertenece a una sola administración.</p>
-      ${empresas.length ? empresas.map(x => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #e5e7eb"><b>${esc(x.nombre)}</b><button class="btn-mini" data-mover-empresa="${x.id}:${otra}">Pasar a ${esc(admin(otra).nombre)}</button></div>`).join('') : '<div class="vacio">Todavía no hay empresas en esta administración.</div>'}
-    </div>
   </div>
   <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Gastos de plataforma<span style="font-size:12px;font-weight:500;color:var(--suave)">los usan todos los sistemas · no son de una sola administración</span></h2>
     ${plataforma.length ? `<table><thead><tr><th>Gasto</th><th class="n">Monto</th><th>Cada</th><th>Lo paga</th><th></th></tr></thead><tbody>${plataforma.map(g => `<tr class="${g.activo ? '' : 'apagado'}"><td><b>${esc(g.nombre)}</b></td><td class="n">${dinero(g.monto, g.moneda)}</td><td>${esc(D.frecuencias[g.frecuencia] || g.frecuencia)}</td><td style="font-size:12.5px">${(g.pagadores || []).length ? g.pagadores.map(x => `${esc((D.empresas.find(e => e.id === x.empresa_id) || {}).nombre || '—')} ${x.pct}%`).join(' · ') : '<span style="color:var(--suave)">Sin pagador: se descuenta de la utilidad</span>'}</td><td><button class="btn-mini" data-editar-gasto="${g.id}">Editar</button></td></tr>`).join('')}</tbody></table>` : '<div class="vacio">Todavía no hay gastos de plataforma. Agrégalos con «+ Gasto» y elige «Plataforma (compartido)».</div>'}
