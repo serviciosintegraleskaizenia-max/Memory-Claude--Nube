@@ -286,7 +286,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       for (; mes <= mesHoy; mes = mesMas(mes, 1)) {
         const vence = `${mes}-${pad(Math.min(28, Math.max(1, Number(p.dia) || 1)))}`;
         await client.query(`INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence, auto_mes)
-          SELECT $1, $2, $3, $4, $5, $6 WHERE NOT EXISTS (SELECT 1 FROM oficina_cobros_borrados b WHERE b.empresa_id = $1 AND b.auto_mes = $6)
+          SELECT $1::int, $2::text, $3::numeric, $4::varchar, $5::date, $6::varchar WHERE NOT EXISTS (SELECT 1 FROM oficina_cobros_borrados b WHERE b.empresa_id = $1::int AND b.auto_mes = $6::varchar)
           ON CONFLICT DO NOTHING`, [e.id, 'Mensualidad ' + nombreMes(mes), valor, moneda(p.moneda), vence, mes]);
       }
       // Si en el panel de la empresa ya se marcó pagado un mes (desde Empresas), aquí también queda pagado.

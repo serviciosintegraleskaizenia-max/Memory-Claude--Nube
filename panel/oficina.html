@@ -379,6 +379,7 @@
 <script>
 const ZONA = 'America/Santo_Domingo';
 let D = null;                 // datos de /api/oficina/datos
+let ERR_DATOS = '';           // último error de /api/oficina/datos (para mostrarlo en vez de «Cargando»)
 let negocios = null;          // estado de cada negocio
 let servicios = new Map();    // enlaces vigilados: id -> estado
 let chatEmpresas = null;      // contactos del chat
@@ -522,7 +523,8 @@ document.addEventListener('click', async e => {
 /* ---------- Carga ---------- */
 async function cargarDatos(fresco) {
   const r = await api('/api/oficina/datos?mes=' + encodeURIComponent(mes) + (fresco ? '&fresco=1' : ''));
-  if (!r.ok) { document.getElementById('vista').innerHTML = `<div class="vacio">${esc(r.data.error || 'No se pudo cargar la Oficina.')}</div>`; return false; }
+  if (!r.ok) { ERR_DATOS = r.data.error || 'No se pudo cargar la Oficina.'; document.getElementById('vista').innerHTML = `<div class="vacio">${esc(ERR_DATOS)}</div>`; return false; }
+  ERR_DATOS = '';
   D = r.data;
   ALARMAS = D.alarmas || [];
   avisarAlarmas();
@@ -597,7 +599,7 @@ async function cargarSeccion(v) {
 }
 function pintar() {
   const f = { inicio: vInicio, negocios: vNegocios, clientes: vAdministracion, gastos: vAdministracion, administracion: vAdministracion, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
-  if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = `<div class="vacio">${ERR_DATOS ? esc(ERR_DATOS) : 'Cargando…'}</div>`; return; }
   if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
   if (vista === 'calendario') pintarCalendario();
