@@ -161,6 +161,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibo_id INTEGER");
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS referencia TEXT NOT NULL DEFAULT ''");
     await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS proyecto_id INTEGER');
+    await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibido NUMERIC(12,2)');
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS descuentos JSONB NOT NULL DEFAULT '[]'::jsonb");
     // Los gastos que estaban en Kaizen IA son de la plataforma (los usan todos los sistemas). Se pasan una sola vez.
     await client.query("CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     if (!(await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'gastos_plataforma'")).rowCount) {
@@ -434,7 +436,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       lista.forEach((e, i) => { const x = ia.get(e.id); if (x) { x.compartida = lista.filter(o => o.id !== e.id).map(o => o.nombre); x.repetida = i > 0; } });
     }
 
-    const pagos = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto, p.moneda, p.forma, p.referencia, p.nota, p.auto_mes, p.recibo_id, p.comprobante_nombre, p.creado, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
+    const pagos = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto, p.moneda, p.forma, p.referencia, p.nota, p.auto_mes, p.recibo_id, p.comprobante_nombre, p.recibido, p.descuentos, p.creado, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado_el, e.nombre AS empresa
       FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id
       WHERE p.vence >= $1 OR p.pagado_el IS NULL ORDER BY p.vence DESC, p.id DESC`, [mesMas(mes, -12) + '-01'])).rows
       .map(p => ({ ...p, monto: Number(p.monto), estado: p.pagado_el ? 'pagado' : p.vence < hoy ? 'vencido' : p.vence === hoy ? 'hoy' : 'pendiente' }));
@@ -935,11 +937,20 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           if (comprobante.length > 2800000) return json(res, 400, { error: 'El comprobante pesa más de 2 MB.' });
         }
         const nombreC = texto(f.comprobante_nombre, 200);
+        // Descuentos opcionales (comisión del banco, PayPal, Payoneer, impuesto). Lo recibido se puede escribir a mano.
+        const descuentos = (Array.isArray(f.descuentos) ? f.descuentos : []).map(x => ({ nombre: texto(x.nombre, 80) || 'Descuento', monto: monto(x.monto) })).filter(x => x.monto > 0).slice(0, 10);
+        const totalDescuentos = Math.round(descuentos.reduce((t, x) => t + x.monto, 0) * 100) / 100;
+        let recibido = f.recibido === undefined || f.recibido === null || f.recibido === '' ? null : monto(f.recibido);
+        if (recibido === null && descuentos.length) recibido = Math.round((Number(p.monto) - totalDescuentos) * 100) / 100;
+        if (recibido !== null) {
+          const diferencia = Math.round((Number(p.monto) - recibido - totalDescuentos) * 100) / 100;
+          if (Math.abs(diferencia) >= 1) return json(res, 400, { error: `No cuadra: el cobro es ${p.monto}, recibiste ${recibido} y los descuentos suman ${totalDescuentos}. Falta explicar ${diferencia}.` });
+        }
         const numero = await siguienteNumero(p.administracion);
         const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
           VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-          [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC })])).rows[0];
-        await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7 WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id, texto(f.referencia, 120)]);
+          [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC, descuentos, recibido })])).rows[0];
+        await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7, recibido = $8, descuentos = $9::jsonb WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id, texto(f.referencia, 120), recibido, JSON.stringify(descuentos)]);
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
       }

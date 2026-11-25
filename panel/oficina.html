@@ -1250,7 +1250,7 @@ function bloqueCobros() {
     <div class="adm-tarjeta" data-campo="co.cobros">
       <h4>Cobros del cliente <span class="chip ambar" style="font-size:11px">editable · borrable</span></h4>
       <table><thead><tr><th>Concepto</th><th class="n">Monto</th><th></th></tr></thead><tbody>
-        ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b><br><small style="color:var(--suave)">${x.pagado_el ? 'Pagado ' + fechaCorta(x.pagado_el) : 'Vence ' + fechaCorta(x.vence)}${x.forma ? ' · ' + esc(x.forma) : ''}</small></td><td class="n">${dinero(x.monto, x.moneda)}</td>
+        ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b><br><small style="color:var(--suave)">${x.pagado_el ? 'Pagado ' + fechaCorta(x.pagado_el) : 'Vence ' + fechaCorta(x.vence)}${x.forma ? ' · ' + esc(x.forma) : ''}${x.recibido != null && Math.abs(Number(x.monto) - Number(x.recibido)) >= 1 ? ' · recibí ' + dinero(x.recibido, x.moneda) : ''}</small></td><td class="n">${dinero(x.monto, x.moneda)}</td>
           <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="3" class="vacio">Sin cobros todavía.</td></tr>'}
       </tbody></table>
     </div>
@@ -3072,13 +3072,45 @@ function formPagar(id) {
   const p = (D.pagos || []).find(x => String(x.id) === String(id));
   if (!p) return;
   const e = buscar(D.empresas, p.empresa_id) || {};
-  const metodos = metodosDe(e);
+  const medios = [...new Set([...metodosDe(e), 'Transferencia', 'PayPal', 'Payoneer', 'Otro'])];
+  const DESC = [];
+  const dineroD = n => dinero(Math.round((Number(n) || 0) * 100) / 100, p.moneda);
+  const pintarDesc = () => {
+    document.getElementById('descLista').innerHTML = DESC.map((x, i) => `<div style="display:grid;grid-template-columns:1fr 120px 30px;gap:6px;margin-bottom:6px"><input data-desc-n="${i}" value="${esc(x.nombre)}" placeholder="Nombre del descuento"><input data-desc-m="${i}" type="number" step="0.01" min="0" value="${x.monto ?? ''}" placeholder="US$"><button type="button" class="btn-mini" data-desc-quitar="${i}" title="Quitar">✕</button></div>`).join('');
+    const total = Math.round(DESC.reduce((t, x) => t + (Number(x.monto) || 0), 0) * 100) / 100;
+    document.getElementById('descTotal').textContent = dineroD(total);
+    const rec = v('fRecibido');
+    const cuadre = document.getElementById('descCuadre');
+    if (rec === '' && !DESC.length) cuadre.textContent = 'Si no escribes lo recibido ni descuentos, se registra el monto completo del cobro.';
+    else {
+      const recibido = rec === '' ? Math.round((Number(p.monto) - total) * 100) / 100 : Number(rec) || 0;
+      const falta = Math.round((Number(p.monto) - recibido - total) * 100) / 100;
+      cuadre.innerHTML = Math.abs(falta) < 1 ? `<span style="color:var(--verde)">✓ Cuadra: ${dineroD(p.monto)} = ${dineroD(recibido)} recibido + ${dineroD(total)} descontado</span>` : `<span style="color:var(--rojo)">Falta explicar ${dineroD(falta)}</span>`;
+    }
+  };
   abrirModal(`<h2>Registrar pago</h2>
     <p class="sub">${esc(p.concepto)} · ${dinero(p.monto, p.moneda)} · ${esc(e.nombre || '')}</p>
-    <div class="fila2">${campo('fFechaP', 'Fecha del pago', `<input id="fFechaP" type="date" value="${hoy()}">`)}${campo('fMetodoP', 'Método', `<select id="fMetodoP">${metodos.map(m => `<option>${esc(m)}</option>`).join('')}</select>`)}</div>
+    <div class="fila2">${campo('fFechaP', 'Fecha del pago', `<input id="fFechaP" type="date" value="${hoy()}">`)}${campo('fMetodoP', 'Medio de pago', `<select id="fMetodoP">${medios.map(m => `<option>${esc(m)}</option>`).join('')}</select>`)}</div>
     ${campo('fRefP', 'Referencia o número de transacción', `<input id="fRefP" placeholder="Ej.: 0045 8871">`)}
+    <div class="adm-tarjeta" style="margin-top:4px"><h4>¿Te descontaron algo? <span style="font-weight:400;color:var(--suave);font-size:12px">opcional · solo si el banco o la plataforma te cobró</span></h4>
+      <div class="fila2">${campo('fRecibido', 'Lo que recibí en mi cuenta (US$)', `<input id="fRecibido" type="number" step="0.01" min="0" placeholder="Déjalo vacío si llegó completo">`)}<div></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px"><button type="button" class="btn-mini" data-desc-add="Impuesto de retención">+ Retención</button><button type="button" class="btn-mini" data-desc-add="Comisión del banco">+ Comisión del banco</button><button type="button" class="btn-mini" data-desc-add="Comisión de PayPal">+ PayPal</button><button type="button" class="btn-mini" data-desc-add="Comisión de Payoneer">+ Payoneer</button><button type="button" class="btn-mini" data-desc-add="Descuento">+ Otro</button></div>
+      <div id="descLista"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px"><span>Total descontado</span><b id="descTotal">US$ 0.00</b></div>
+      <div id="descCuadre" style="font-size:12.5px;margin-top:6px"></div>
+    </div>
     ${campo('fArch', 'Comprobante (PDF, PNG, JPG o WEBP, menos de 2 MB)', `<input id="fArch" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">`, 'Se guarda con el cobro.')}
     <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Confirmar y generar recibo</button></div>`);
+  document.querySelectorAll('[data-desc-add]').forEach(b => b.onclick = () => { DESC.push({ nombre: b.dataset.descAdd, monto: '' }); pintarDesc(); });
+  const lista = document.getElementById('descLista');
+  lista.oninput = ev => {
+    if (ev.target.dataset.descN !== undefined) DESC[Number(ev.target.dataset.descN)].nombre = ev.target.value;
+    if (ev.target.dataset.descM !== undefined) DESC[Number(ev.target.dataset.descM)].monto = ev.target.value;
+    pintarDesc();
+  };
+  lista.onclick = ev => { const b = ev.target.closest('[data-desc-quitar]'); if (!b) return; DESC.splice(Number(b.dataset.descQuitar), 1); pintarDesc(); };
+  document.getElementById('fRecibido').addEventListener('input', pintarDesc);
+  pintarDesc();
   document.getElementById('fGuardar').onclick = async () => {
     const arch = document.getElementById('fArch').files[0];
     let comprobante = null, nombre = '';
@@ -3086,7 +3118,7 @@ function formPagar(id) {
       if (arch.size > 2 * 1024 * 1024) { document.getElementById('errForm').textContent = 'El comprobante pesa más de 2 MB.'; return; }
       comprobante = await leerComoDataURL(arch); nombre = arch.name;
     }
-    const r = await api('/api/oficina/cobro/pagar', { pago_id: p.id, fecha: v('fFechaP'), metodo: v('fMetodoP'), referencia: v('fRefP'), comprobante, comprobante_nombre: nombre });
+    const r = await api('/api/oficina/cobro/pagar', { pago_id: p.id, fecha: v('fFechaP'), metodo: v('fMetodoP'), referencia: v('fRefP'), recibido: v('fRecibido'), descuentos: DESC, comprobante, comprobante_nombre: nombre });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo registrar el pago.'; return; }
     cerrarModal(); aviso('Pago registrado. Se generó el recibo.'); await ir(vista); abrirRecibo(r.data.recibo_id);
   };
