@@ -98,7 +98,7 @@ module.exports = function crearProyectos({ client }) {
     const extras = (Array.isArray(f.extras) ? f.extras : []).map(x => ({ nombre: texto(x.nombre, 80), monto: monto(x.monto) })).filter(x => x.nombre && x.monto > 0).slice(0, 10);
     const cuota = monto(f.cuota_mensual);
     const dia = Math.min(28, Math.max(1, Number(f.dia_cobro) || 5));
-    const tipo = f.tipo === undefined ? null : texto(f.tipo, 60), horas = f.horas === undefined ? null : Math.max(0, monto(f.horas));
+    const tipo = f.tipo_sistema === undefined ? null : texto(f.tipo_sistema, 60), horas = f.horas === undefined ? null : Math.max(0, monto(f.horas));
     const v = [nombre, cliente, empresaId, precio, fecha(f.fecha_inicio), fecha(f.fecha_entrega), cuota, dia, JSON.stringify(extras), JSON.stringify(socios), texto(f.nota, 1000), metodo, adm, tipo, horas];
     let id = Number(f.id) || 0;
     if (id) await client.query('UPDATE oficina_proyectos SET nombre=$1, cliente=$2, empresa_id=$3, precio_total=$4, fecha_inicio=$5, fecha_entrega=$6, cuota_mensual=$7, dia_cobro=$8, extras=$9, socios=$10, nota=$11, comision_nota=$12, administracion=$13, tipo=COALESCE($14, tipo), horas=COALESCE($15, horas) WHERE id=$16', [...v, id]);

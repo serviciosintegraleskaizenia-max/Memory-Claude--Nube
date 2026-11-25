@@ -1369,7 +1369,7 @@ function formProyecto(p = {}) {
     const ss = socios.map((_, i) => ({ nombre: document.querySelector(`[data-socio-n="${i}"]`).value.trim(), pct: document.querySelector(`[data-socio-p="${i}"]`).value })).filter(x => x.nombre);
     const ex = extras.map((_, i) => ({ nombre: document.querySelector(`[data-ext-n="${i}"]`).value.trim(), monto: document.querySelector(`[data-ext-m="${i}"]`).value })).filter(x => x.nombre);
     const emp = clientes.find(e => String(e.id) === v('fCli'));
-    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: adm, empresa_id: v('fCli'), cliente: emp ? emp.nombre : '', nombre: v('fNom'), tipo: v('fTipo'), horas: v('fHoras'), precio_total: v('fPrecio'), metodo: v('fMetodo'), abono_monto: v('fAbono'), abono_fecha: v('fAbonoF'), saldo_fecha: v('fSaldoF'), fecha_entrega: v('fEnt'), fecha_inicio: v('fIni'), cuota_mensual: v('fCuota'), dia_cobro: v('fDia'), extras: ex, socios: ss, nota: v('fNota') }, 'Sistema guardado.');
+    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: adm, empresa_id: v('fCli'), cliente: emp ? emp.nombre : '', nombre: v('fNom'), tipo_sistema: v('fTipo'), horas: v('fHoras'), precio_total: v('fPrecio'), metodo: v('fMetodo'), abono_monto: v('fAbono'), abono_fecha: v('fAbonoF'), saldo_fecha: v('fSaldoF'), fecha_entrega: v('fEnt'), fecha_inicio: v('fIni'), cuota_mensual: v('fCuota'), dia_cobro: v('fDia'), extras: ex, socios: ss, nota: v('fNota') }, 'Sistema guardado.');
   };
   borrarCreacion('proyecto', p.id, '¿Borrar este sistema con todos sus gastos? No se puede deshacer.');
 }
