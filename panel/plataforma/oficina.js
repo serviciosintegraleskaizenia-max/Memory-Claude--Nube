@@ -1007,12 +1007,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const d = await disponibleSocio(clave, mes);
         const cantidad = f.monto === undefined || f.monto === null || f.monto === '' ? d.disponible : monto(f.monto);
         if (!(cantidad > 0)) return json(res, 400, { error: 'El monto del retiro debe ser mayor que 0.' });
+        const descuentos = (Array.isArray(f.descuentos) ? f.descuentos : []).map(x => ({ nombre: texto(x.nombre, 80) || 'Descuento', monto: monto(x.monto) })).filter(x => x.monto > 0).slice(0, 10);
+        const totalDescuentos = Math.round(descuentos.reduce((t, x) => t + x.monto, 0) * 100) / 100;
+        if (totalDescuentos > cantidad) return json(res, 400, { error: 'Los descuentos son más que el monto del retiro.' });
+        const recibe = Math.round((cantidad - totalDescuentos) * 100) / 100;
         const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
         const numero = await siguienteNumero(clave);
         const ins = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, socio, monto, moneda, concepto, metodo, referencia, fecha, periodo, detalle)
           VALUES ($1,$2,'socio',$3,$4,'US$',$5,$6,$7,$8,$9,$10) RETURNING id`,
           [clave, numero, d.socio || 'Socio', cantidad, `Adelanto de utilidades · ${mes}`, texto(f.metodo, 60), texto(f.referencia, 120), fecha, mes,
-            JSON.stringify({ utilidad: d.utilidad, pct: d.pct, participacion: d.participacion, retirado_antes: d.retirado, disponible_antes: d.disponible, nota: texto(f.nota, 300) })])).rows[0];
+            JSON.stringify({ utilidad: d.utilidad, pct: d.pct, participacion: d.participacion, retirado_antes: d.retirado, disponible_antes: d.disponible, nota: texto(f.nota, 300), descuentos, total_descuentos: totalDescuentos, recibe })])).rows[0];
         await registrar(u, 'recibo_socio', 'recibo', ins.id, '', String(cantidad), mes);
         return json(res, 200, { ok: true, recibo_id: ins.id, numero, queda_negativo: cantidad > d.disponible ? Math.round((cantidad - d.disponible) * 100) / 100 : 0 });
       }

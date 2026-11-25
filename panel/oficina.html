@@ -3121,6 +3121,8 @@ function htmlRecibo(rc, a, em) {
       ['Participación del socio', dinero(d.participacion)],
       ['Ya retirado antes de este', dinero(d.retirado_antes)],
       ['<b>Este retiro</b>', `<b>${dinero(rc.monto)}</b>`],
+      ...((d.descuentos || []).map(x => [`− ${esc(x.nombre)}`, `− ${dinero(x.monto)}`])),
+      ...(d.recibe !== undefined ? [['<b>Recibe el socio</b>', `<b>${dinero(d.recibe)}</b>`]] : []),
       ['Disponible después', dinero((Number(d.disponible_antes) || 0) - (Number(rc.monto) || 0))]
     ]);
   } else {
@@ -3168,9 +3170,34 @@ async function formRetiro() {
     <div class="fila2" style="margin-top:12px">${campo('fMontoR', 'Monto del retiro', `<input id="fMontoR" type="number" step="0.01" value="${x.disponible}">`, 'Si es más que lo disponible, queda en negativo y se descuenta después.')}${campo('fFechaR', 'Fecha', `<input id="fFechaR" type="date" value="${hoy()}">`)}</div>
     <div class="fila2">${campo('fMetR', 'Método', `<select id="fMetR">${METODOS_BASE.concat(['Efectivo', 'Otro']).map(m => `<option>${m}</option>`).join('')}</select>`)}${campo('fRefR', 'Referencia', `<input id="fRefR">`)}</div>
     ${campo('fNotaR', 'Nota (opcional)', `<input id="fNotaR">`)}
+    <div class="adm-tarjeta" style="margin-top:12px">
+      <h4>Descuentos del envío <span style="font-weight:400;color:var(--suave);font-size:12px">lo que te quita el banco o la plataforma al enviarle dinero</span></h4>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button type="button" class="btn-mini" data-desc-add="Impuesto de retención">+ Retención</button><button type="button" class="btn-mini" data-desc-add="Impuesto de transferencia">+ Transferencia</button><button type="button" class="btn-mini" data-desc-add="Impuesto o comisión de pago">+ Comisión de pago</button></div>
+      <div id="descLista"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:13px"><span>Total descontado</span><b id="descTotal">US$ 0.00</b></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:15px"><span><b>Recibe el socio</b></span><b id="descRecibe" style="color:var(--verde)">US$ 0.00</b></div>
+    </div>
     <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar y generar recibo</button></div>`);
+  // Descuentos: cada uno con su nombre (editable) y su monto. Se suman y se restan del envío.
+  const DESC = [];
+  const dineroD = n => dinero(Math.round((Number(n) || 0) * 100) / 100);
+  const pintarDesc = () => {
+    document.getElementById('descLista').innerHTML = DESC.map((x, i) => `<div style="display:grid;grid-template-columns:1fr 110px 28px;gap:6px;margin-bottom:6px"><input data-desc-n="${i}" value="${esc(x.nombre)}" placeholder="Nombre del descuento"><input data-desc-m="${i}" type="number" step="0.01" min="0" value="${x.monto || ''}" placeholder="US$"><button type="button" class="btn-mini" data-desc-quitar="${i}" title="Quitar">✕</button></div>`).join('');
+    const total = Math.round(DESC.reduce((t, x) => t + (Number(x.monto) || 0), 0) * 100) / 100;
+    document.getElementById('descTotal').textContent = dineroD(total);
+    document.getElementById('descRecibe').textContent = dineroD((Number(v('fMontoR')) || 0) - total);
+  };
+  document.querySelectorAll('[data-desc-add]').forEach(b => b.onclick = () => { DESC.push({ nombre: b.dataset.descAdd, monto: '' }); pintarDesc(); });
+  document.getElementById('descLista').oninput = e => {
+    const i = Number(e.target.dataset.descN ?? e.target.dataset.descM ?? -1);
+    if (e.target.dataset.descN !== undefined) DESC[i].nombre = e.target.value;
+    if (e.target.dataset.descM !== undefined) DESC[i].monto = e.target.value;
+    pintarDesc();
+  };
+  document.getElementById('descLista').onclick = e => { const b = e.target.closest('[data-desc-quitar]'); if (!b) return; DESC.splice(Number(b.dataset.descQuitar), 1); pintarDesc(); };
+  document.getElementById('fMontoR').addEventListener('input', pintarDesc);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/recibo/socio', { administracion: clave, mes: mesR, monto: v('fMontoR'), fecha: v('fFechaR'), metodo: v('fMetR'), referencia: v('fRefR'), nota: v('fNotaR') });
+    const r = await api('/api/oficina/recibo/socio', { administracion: clave, mes: mesR, monto: v('fMontoR'), fecha: v('fFechaR'), metodo: v('fMetR'), referencia: v('fRefR'), nota: v('fNotaR'), descuentos: DESC });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar el retiro.'; return; }
     cerrarModal();
     aviso(r.data.queda_negativo ? `Retiro guardado. Queda en negativo ${dinero(r.data.queda_negativo)}.` : 'Retiro guardado.');
