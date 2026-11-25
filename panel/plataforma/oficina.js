@@ -880,6 +880,38 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
       }
+      // Varios cobros pagados de una sola vez: un recibo por cada cobro, con su número, y un solo comprobante del pago total.
+      if (req.method === 'POST' && url === '/api/oficina/cobro/pagar-varios') {
+        const f = await leerCuerpo(req);
+        const ids = [...new Set((Array.isArray(f.pago_ids) ? f.pago_ids : []).map(Number).filter(Boolean))].slice(0, 50);
+        if (!ids.length) return json(res, 400, { error: 'Marca los cobros que vas a pagar.' });
+        const filas = (await client.query(`SELECT p.*, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence, COALESCE(e.administracion, 'kaizen') AS administracion
+          FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = ANY($1::int[]) ORDER BY p.vence, p.id`, [ids])).rows;
+        if (filas.length !== ids.length) return json(res, 404, { error: 'Algún cobro no existe.' });
+        if (filas.some(x => x.pagado_el)) return json(res, 400, { error: 'Algún cobro ya está pagado. Quítalo de la selección.' });
+        if (filas.some(x => !puedeAdmin(u, permisos, x.administracion))) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
+        const metodo = texto(f.metodo, 60), referencia = texto(f.referencia, 120), nombreC = texto(f.comprobante_nombre, 200);
+        let comprobante = '';
+        if (f.comprobante) {
+          comprobante = String(f.comprobante);
+          if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comprobante)) return json(res, 400, { error: 'El comprobante debe ser PDF, PNG, JPG o WEBP.' });
+          if (comprobante.length > 2800000) return json(res, 400, { error: 'El comprobante pesa más de 2 MB.' });
+        }
+        const recibos = [];
+        for (const [i, x] of filas.entries()) {
+          const numero = await siguienteNumero(x.administracion);
+          const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
+            VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+            [x.administracion, numero, x.id, x.empresa_id, x.monto, x.moneda, x.concepto, metodo, referencia, fecha,
+              JSON.stringify({ comprobante_nombre: nombreC, pago_conjunto: ids.length > 1 ? ids : null })])).rows[0];
+          await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6 WHERE id = $1',
+            [x.id, fecha, metodo, i === 0 ? comprobante : '', nombreC, rec.id]);
+          recibos.push({ id: rec.id, numero, concepto: x.concepto, monto: x.monto });
+        }
+        await registrar(u, 'cobro_pagado_varios', 'pago', ids.join(','), '', fecha, String(ids.length) + ' cobros');
+        return json(res, 200, { ok: true, recibos });
+      }
       // Comprobante de un cobro (se pide solo al abrirlo, para no cargar todos los archivos en cada consulta).
       if (req.method === 'GET' && url === '/api/oficina/cobro/comprobante') {
         const fila = (await client.query("SELECT p.comprobante, p.comprobante_nombre, COALESCE(e.administracion, 'kaizen') AS administracion FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = $1", [Number(p.get('id'))])).rows[0];

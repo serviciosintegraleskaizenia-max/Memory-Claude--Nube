@@ -327,8 +327,7 @@
   <div class="marca"><div class="logo">Z</div><div><b>Zentralia App</b><small>Oficina · Kaizen IA</small></div></div>
   <button class="nav" data-ir="inicio"><b>🏠 Inicio</b><small>Resumen del día</small></button>
   <button class="nav" data-ir="negocios"><b>🩺 Estado de cada negocio</b><small>Salud de cada negocio</small><span class="num" id="numNegocios" style="display:none"></span></button>
-  <button class="nav" data-ir="clientes"><b>🏢 Clientes y cobros</b><small>Pagos y saldos</small><span class="num" id="numCobros" style="display:none"></span></button>
-  <button class="nav" data-ir="gastos"><b>💸 Gastos</b><small>Registro de gastos</small><span class="num" id="numGastos" style="display:none"></span></button>
+  <button class="nav" data-ir="administracion"><b>🏛️ Administración</b><small>Clientes, cobros, gastos y reparto</small><span class="num" id="numCobros" style="display:none"></span></button>
   <button class="nav" data-ir="calendario"><b>📅 Calendario</b><small>Servicios del mes</small></button>
   <button class="nav" data-ir="chat"><b>💬 Chat con los negocios</b><small>Mensajes de gerentes</small><span class="num" id="numChat" style="display:none"></span></button>
   <button class="nav" data-ir="enlaces"><b>🔗 Enlaces</b><small>Accesos y automatizaciones</small></button>
@@ -374,6 +373,10 @@ let R = null;                 // conector con Chatwoot: estado
 let rProbe = null;            // bandejas y equipos leídos de Chatwoot
 let P = null;                 // gastos de creación de cada sistema, reparto entre socios y recargas de OpenRouter
 let gastosTab = 'negocio';    // Gastos: 'negocio' (lo de siempre) o 'creacion' (Christian y socio)
+let admSec = 'clientes';      // Administración: 'clientes' · 'gastos' · 'creacion' · 'resumen'
+let fichaSel = null;          // cliente abierto en su ficha
+const selCobros = new Set();  // cobros marcados para pagarlos de una vez
+let enAdmin = false;          // true mientras se arma la sección Administración
 let adminVista = 'kaizen';    // Administración que se ve en Gastos: 'kaizen' (Kaizen IA) o 'centralia' (Centralia)
 let pSel = null;              // sistema elegido en Creación del sistema
 const timers = {};
@@ -526,14 +529,14 @@ async function cargarChatContactos() {
 async function cargarProyectos() { const r = await api('/api/oficina/proyectos'); if (r.ok) P = r.data; }
 // Permisos de la Oficina para quien no es Programador (Herramientas → Grupos / Usuarios → "Oficina").
 let YO = null;
-const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
+const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', administracion: ['oficina_clientes', 'oficina_gastos'], clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
   enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos' };
 function puedeSec(v) {
   if (!YO || YO.grupo === 'Programador') return true;
   const p = YO.permisos || {}, k = PERMISO_SEC[v];
   return Boolean(k && [].concat(k).some(x => p[x]));
 }
-function primeraSec() { return ['inicio', 'negocios', 'clientes', 'gastos', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'respaldos'].find(puedeSec) || 'inicio'; }
+function primeraSec() { return ['inicio', 'negocios', 'administracion', 'calendario', 'chat', 'enlaces', 'conocimiento', 'redes', 'respaldos'].find(puedeSec) || 'inicio'; }
 async function ir(v, recargar = true) {
   if (v === 'aprobaciones') { kTab = 'entrenar'; v = 'conocimiento'; try { localStorage.setItem('oficinaTabK', kTab); } catch (e) {} }
   if (!puedeSec(v)) v = primeraSec();
@@ -554,9 +557,9 @@ function barraCarga(on) {
 }
 async function cargarSeccion(v) {
   const tareas = [];
-  if (['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(v)) tareas.push(cargarDatos());
+  if (['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(v)) tareas.push(cargarDatos());
   if (v === 'inicio' || v === 'negocios') tareas.push(cargarNegocios());
-  if (v === 'gastos') tareas.push(cargarProyectos());
+  if (v === 'gastos' || v === 'administracion') tareas.push(cargarProyectos());
   if (v === 'inicio' || v === 'enlaces') tareas.push(cargarServicios());
   if (v === 'apis') tareas.push(cargarApis());
   if (v === 'apps') tareas.push(cargarApps());
@@ -569,8 +572,8 @@ async function cargarSeccion(v) {
   if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vClientes, gastos: vGastos, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
-  if ((['inicio', 'clientes', 'gastos', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
+  const f = { inicio: vInicio, negocios: vNegocios, clientes: vAdministracion, gastos: vAdministracion, administracion: vAdministracion, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
   if (vista === 'calendario') pintarCalendario();
@@ -869,6 +872,7 @@ function gastoDelMes(g, m) {
   return g.fecha.slice(0, 7) === m ? g.monto : 0;
 }
 function barraGastos() {
+  if (enAdmin) return '';
   if (YO && YO.grupo !== 'Programador') {
     const p = YO.permisos || {};
     if (!p.oficina_gastos || !p.oficina_creacion) return '';
@@ -2907,6 +2911,126 @@ function vResumen() {
   return cabecera('📊 Resumen del mes', 'Lo cobrado, lo gastado y lo que le toca a cada quien', selectorMes()) + barraGastos() +
     (cs.length ? `<div class="rej r21">${cs.map(bloque).join('')}</div>` : '<div class="vacio">No tienes administraciones asignadas.</div>');
 }
+// ---------- Administración: clientes en fichas, cobros en línea y pago conjunto ----------
+function vAdministracion() {
+  if (!permitidasAdmin().includes(adminVista)) adminVista = permitidasAdmin()[0] || 'kaizen';
+  const pestanasAdmin = permitidasAdmin().map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('');
+  const secciones = [['clientes', '👥 Clientes y cobros'], ['gastos', '💸 Gastos y reparto'], ['creacion', '🏗️ Creación de sistemas'], ['resumen', '📊 Resumen del mes']]
+    .map(([k, t]) => `<button class="pestana ${admSec === k ? 'activa' : ''}" data-adm-sec="${k}">${t}</button>`).join('');
+  let cuerpo;
+  enAdmin = true;
+  try {
+    if (admSec === 'gastos') { gastosTab = 'negocio'; cuerpo = vGastos(); }
+    else if (admSec === 'creacion') { gastosTab = 'creacion'; cuerpo = vCreacion(); }
+    else if (admSec === 'resumen') { gastosTab = 'resumen'; cuerpo = vResumen(); }
+    else cuerpo = vClientesAdm();
+  } finally { enAdmin = false; }
+  return cabecera('🏛️ Administración', 'Cada administración con sus clientes, cobros, gastos y reparto', selectorMes()) +
+    `<div class="pestanas">${pestanasAdmin}</div><div class="pestanas">${secciones}</div>` + cuerpo;
+}
+function vClientesAdm() {
+  const clave = adminVista, a = admin(clave);
+  const empresas = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === clave);
+  const cobrosDe = e => (D.pagos || []).filter(p => p.empresa_id === e.id);
+  const sumar = lista => lista.reduce((t, p) => t + (Number(p.monto) || 0), 0);
+  const cobradoMes = sumar((D.pagos || []).filter(p => p.pagado_el && String(p.pagado_el).slice(0, 7) === mes && empresas.some(e => e.id === p.empresa_id)));
+  const porCobrar = empresas.reduce((t, e) => t + sumar(cobrosDe(e).filter(p => !p.pagado_el)), 0);
+  const abiertas = empresas.filter(e => cobrosDe(e).some(p => !p.pagado_el)).length;
+  if (!empresas.some(e => e.id === fichaSel)) fichaSel = empresas[0] ? empresas[0].id : null;
+  const sel = empresas.find(e => e.id === fichaSel);
+  const kpi = (t, n, c) => `<div class="kpi" style="border-color:${c}"><div class="e">${t}</div><div class="n">${n}</div></div>`;
+  const fichas = empresas.map(e => {
+    const cs = cobrosDe(e), total = sumar(cs), pagado = sumar(cs.filter(p => p.pagado_el)), abierta = cs.some(p => !p.pagado_el);
+    const color = !cs.length ? '#9aa6b8' : abierta ? '#e0a100' : '#13c08a';
+    return `<button class="ficha-cli ${fichaSel === e.id ? 'activa' : ''}" data-ficha="${e.id}" style="text-align:left;background:#fff;border:1px solid var(--linea,#e5e7eb);border-left:5px solid ${color};border-radius:14px;padding:12px 14px;cursor:pointer;${fichaSel === e.id ? 'box-shadow:0 0 0 2px #0b5cad inset' : ''}">
+      <b style="font-size:15px">${esc(e.nombre)}</b><div style="font-size:12px;color:var(--suave)">${esc(e.pais || 'País sin elegir')} · ${esc(e.documento ? 'Doc. ' + e.documento : 'Falta el documento')}</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-top:8px;font-variant-numeric:tabular-nums"><span>${dinero(pagado)} de ${dinero(total)}</span><span class="chip ${abierta ? 'ambar' : 'verde'}">${!cs.length ? 'Sin cobros' : abierta ? 'Por cerrar' : 'Cerrado'}</span></div></button>`;
+  }).join('');
+  let ficha = '<div class="vacio">Esta administración todavía no tiene clientes. Crea uno con «+ Cobro» o desde Editar.</div>';
+  if (sel) {
+    const cs = cobrosDe(sel), total = sumar(cs), pagado = sumar(cs.filter(p => p.pagado_el)), saldo = Math.round((total - pagado) * 100) / 100;
+    const pct = total ? Math.round(100 * pagado / total) : 0;
+    const marcados = cs.filter(p => selCobros.has(p.id) && !p.pagado_el);
+    const montoMarcados = sumar(marcados);
+    ficha = `<div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid var(--linea,#e5e7eb)">
+      <div style="background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;padding:16px 18px;display:grid;grid-template-columns:110px 1fr auto;gap:14px;align-items:center">
+        <div style="width:110px;height:70px;border-radius:12px;background:#fff;color:#5b6676;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center">Logo del cliente</div>
+        <div><div style="font-size:12px;opacity:.85">Ficha del cliente · ${esc(a.nombre)}</div><div style="font-size:22px;font-weight:700">${esc(sel.nombre)}</div>
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px;font-size:12px;margin-top:6px">
+            <div>Documento<b style="display:block">${esc(sel.documento || '—')}</b></div><div>Dirección<b style="display:block">${esc(sel.direccion || '—')}</b></div>
+            <div>Página web<b style="display:block">${esc(sel.web || '—')}</b></div><div>Contacto<b style="display:block">${esc(sel.contacto || '—')}</b></div></div></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn-mini" data-datos-cliente="${sel.id}">Datos y plan</button><button class="btn-mini" data-editar-cliente="${sel.id}">Editar</button><button class="btn-mini" data-estado-cliente="${sel.id}">Estado de cuenta</button></div>
+      </div>
+      <div style="padding:14px 18px;display:grid;grid-template-columns:1.5fr 1fr;gap:16px">
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:13px"><span><b>Cobros en línea</b></span><span style="font-variant-numeric:tabular-nums">${dinero(pagado)} de ${dinero(total)} · ${pct}%</span></div>
+          <div style="height:12px;background:#e6ebf2;border-radius:999px;overflow:hidden;margin:6px 0 10px"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#0b5cad,#13c08a)"></div></div>
+          ${cs.length ? cs.map(p => `<div style="display:grid;grid-template-columns:24px 1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #eef1f5;font-size:13px">
+            ${p.pagado_el ? '<span style="color:#13c08a;font-weight:700">✓</span>' : `<input type="checkbox" data-sel-cobro="${p.id}" ${selCobros.has(p.id) ? 'checked' : ''}>`}
+            <div><b>${esc(p.concepto)}</b><div style="font-size:12px;color:var(--suave)">${p.pagado_el ? 'Pagado ' + fechaCorta(p.pagado_el) + (p.forma ? ' · ' + esc(p.forma) : '') : 'Vence ' + fechaCorta(p.vence)}</div></div>
+            <div style="font-variant-numeric:tabular-nums;font-weight:600">${dinero(p.monto, p.moneda)}</div>
+            <div style="display:flex;gap:6px">${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button>` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">Comprobante</button>` : ''}${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Pagar</button>`}</div>
+          </div>`).join('') : '<div class="vacio">Sin cobros. Crea su plan de cobro en «Datos y plan».</div>'}
+          ${marcados.length ? `<div style="margin-top:12px;background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div><div style="font-size:12px;opacity:.9">${marcados.length} cobro(s) marcados · se paga todo junto</div><b style="font-size:18px">${dinero(montoMarcados)}</b></div>
+            <button class="btn" data-pagar-varios="1" style="background:#fff;color:#0b5cad;font-weight:700">Registrar pago y generar recibos</button></div>` : ''}
+        </div>
+        <div style="background:#f5f8fc;border-radius:12px;padding:12px 14px">
+          <b>Resumen de la cuenta</b>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed #d6dce5"><span>Vendido</span><span>${dinero(total)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px dashed #d6dce5"><span>Cobrado</span><span style="color:#0f7b6c">${dinero(pagado)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0"><span><b>Saldo</b></span><span><b style="color:${saldo > 0 ? '#8a5a00' : '#0f7b6c'}">${dinero(saldo)}</b></span></div>
+          <div style="font-size:12px;color:var(--suave);margin-top:8px">Cuando el saldo llega a cero, la cuenta se cierra y el monto entra al reporte del mes.</div>
+          <button class="btn-mini" data-adm-sec="creacion" style="margin-top:10px">Ver gastos de creación de sus sistemas →</button>
+        </div>
+      </div></div>`;
+  }
+  return `<div class="kpis">${kpi('Cobrado este mes', dinero(cobradoMes), '#13c08a')}${kpi('Por cobrar', dinero(porCobrar), '#e0a100')}${kpi('Clientes', empresas.length, '#0b5cad')}${kpi('Cuentas por cerrar', abiertas, '#eb6834')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:14px">${fichas || '<div class="vacio">Sin clientes en esta administración.</div>'}</div>
+    ${ficha}`;
+}
+// Pago conjunto: un solo pago que cubre los cobros marcados. Se genera un recibo por cobro.
+function formPagarVarios() {
+  const ids = [...selCobros];
+  const cs = (D.pagos || []).filter(p => ids.includes(p.id) && !p.pagado_el);
+  if (!cs.length) return aviso('Marca al menos un cobro pendiente.');
+  const e = buscar(D.empresas, cs[0].empresa_id) || {};
+  const total = cs.reduce((t, p) => t + (Number(p.monto) || 0), 0);
+  abrirModal(`<h2>Pago de ${esc(e.nombre || '')}</h2>
+    <p class="sub">Se genera un recibo por cada cobro, con su número. El pago total es ${dinero(total)}.</p>
+    <table><tbody>${cs.map(p => `<tr><td>${esc(p.concepto)}</td><td class="n">${dinero(p.monto, p.moneda)}</td></tr>`).join('')}<tr><td><b>Total</b></td><td class="n"><b>${dinero(total)}</b></td></tr></tbody></table>
+    <div class="fila2" style="margin-top:12px">${campo('fFechaV', 'Fecha del pago', `<input id="fFechaV" type="date" value="${hoy()}">`)}${campo('fMetV', 'Método', `<select id="fMetV">${metodosDe(e).map(m => `<option>${esc(m)}</option>`).join('')}</select>`)}</div>
+    ${campo('fRefV', 'Referencia', `<input id="fRefV">`)}
+    ${campo('fArchV', 'Comprobante del pago total (PDF, PNG, JPG o WEBP, menos de 2 MB)', `<input id="fArchV" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">`, 'Se guarda una sola vez, con el primer recibo.')}
+    <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Confirmar y generar recibos</button></div>`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const arch = document.getElementById('fArchV').files[0];
+    let comprobante = null, nombre = '';
+    if (arch) {
+      if (arch.size > 2 * 1024 * 1024) { document.getElementById('errForm').textContent = 'El comprobante pesa más de 2 MB.'; return; }
+      comprobante = await leerComoDataURL(arch); nombre = arch.name;
+    }
+    const r = await api('/api/oficina/cobro/pagar-varios', { pago_ids: ids, fecha: v('fFechaV'), metodo: v('fMetV'), referencia: v('fRefV'), comprobante, comprobante_nombre: nombre });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo registrar el pago.'; return; }
+    selCobros.clear(); cerrarModal();
+    aviso('Pago registrado. Recibos ' + r.data.recibos.map(x => 'Nº ' + String(x.numero).padStart(4, '0')).join(' y ') + '. La cuenta queda al día.');
+    await ir(vista);
+  };
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios]'); if (!t) return;
+  ev.preventDefault();
+  const d = t.dataset;
+  if (d.admSec) { admSec = d.admSec; return pintar(); }
+  if (d.ficha) { fichaSel = Number(d.ficha); return pintar(); }
+  if ('pagarVarios' in d) return formPagarVarios();
+});
+document.addEventListener('change', ev => {
+  const c = ev.target; if (!c.dataset || !c.dataset.selCobro) return;
+  const id = Number(c.dataset.selCobro);
+  if (c.checked) selCobros.add(id); else selCobros.delete(id);
+  pintar();
+});
 function formEvento(ev = {}, fecha) {
   abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
     ${campo('fTit', '¿Qué hay que hacer?', `<input id="fTit" value="${esc(ev.titulo || '')}" placeholder="Ej.: Demo con Caribe Tours">`)}
