@@ -68,7 +68,10 @@
   .adm-bloque td { padding:9px 6px; border-bottom:1px solid var(--borde); vertical-align:middle; }
   .adm-bloque tbody tr:hover td { background:var(--hover); }
   .adm-bloque .n { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
-  .adm-bloque .btn-mini { padding:4px 9px; font-size:11.5px; border-radius:8px; white-space:nowrap; }
+  .adm-bloque .btn-mini { padding:4px 8px; font-size:11.5px; border-radius:8px; white-space:nowrap; }
+  .adm-bloque td { padding:8px 5px; }
+  .adm-bloque td:last-child { white-space:nowrap; text-align:right; }
+  .adm-bloque td small { font-size:11.5px; }
   .adm-bloque .btn-mini.peligro { color:var(--rojo); border-color:#fecaca; }
   .adm-bloque .btn-mini.activo { background:var(--azul); color:#fff; border-color:var(--azul); }
   .adm-bloque .acciones { display:flex; gap:6px; justify-content:flex-end; flex-wrap:nowrap; }
@@ -1098,8 +1101,7 @@ function clientesCompactos() {
   const porCobrar = redondo(filas.reduce((t, f) => t + f.resta, 0));
   const abiertas = filas.filter(f => f.estado[0] === 'Por cerrar').length;
   const k = (t, n, c) => `<div style="border-left:3px solid ${c}"><small>${t}</small><b>${n}</b></div>`;
-  return `<div class="adm-kpis">${k('Cobrado este mes', dinero(cobradoMes), '#16a34a')}${k('Por cobrar', dinero(porCobrar), '#d97706')}${k('Clientes', empresas.length, '#1679c2')}${k('Por cerrar', abiertas, '#dc2626')}</div>` +
-    (filas.length ? `<table><thead><tr><th>Cliente</th><th class="n">Resta</th><th>% pagado</th><th>Estado</th></tr></thead><tbody>${filas.map(f => `<tr><td><b>${esc(nombreCliente(f.e))}</b></td><td class="n">${dinero(f.resta)}</td><td>${f.pct} %</td><td><span class="${f.estado[1]}">${f.estado[0]}</span></td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay clientes</b>Crea uno con «Datos y plan» desde Empresas.</div>') +
+  return (filas.length ? `<table><thead><tr><th>Cliente</th><th class="n">Resta</th><th>% pagado</th><th>Estado</th></tr></thead><tbody>${filas.map(f => `<tr><td><b>${esc(nombreCliente(f.e))}</b></td><td class="n">${dinero(f.resta)}</td><td>${f.pct} %</td><td><span class="${f.estado[1]}">${f.estado[0]}</span></td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay clientes</b>Crea uno con «Datos y plan» desde Empresas.</div>') +
     `<div style="font-size:12px;color:var(--suave);margin-top:10px">«Ver completo» abre la ficha, el estado de cuenta y el cobro conjunto.</div>`;
 }
 // ---------- Administración: cuatro bloques en una sola pantalla ----------
@@ -1187,7 +1189,7 @@ function bloqueSistemas() {
   const cobradoDe = p => redondo((D.pagos || []).filter(x => x.proyecto_id === p.id && x.pagado_el).reduce((t, x) => t + (Number(x.monto) || 0), 0));
   return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn-mini" data-nuevo-proyecto>+ Sistema</button></div>` +
     (lista.length ? `<table><thead><tr><th>Sistema</th><th class="n">Horas</th><th class="n">Costo</th><th></th></tr></thead><tbody>
-      ${lista.map(p => { const emp = D.empresas.find(e => e.id === p.empresa_id); return `<tr><td><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)"><span class="chip az" style="font-size:10.5px">${esc(p.tipo || 'Sin tipo')}</span> · ${esc(emp ? nombreCliente(emp) : (p.cliente || '—'))} · cobrado ${dinero(cobradoDe(p))}</small></td><td class="n">${Number(p.horas) ? Number(p.horas) + ' h' : '—'}</td><td class="n">${dinero(cuentasCreacion(p).gastos)}</td><td><button class="btn-mini" data-editar-proyecto="${p.id}">Editar</button></td></tr>`; }).join('')}
+      ${lista.map(p => { const emp = D.empresas.find(e => e.id === p.empresa_id); return `<tr><td><b>${esc(p.nombre)}</b><br><small style="color:var(--suave)"><span class="chip az" style="font-size:10.5px">${esc(p.tipo || 'Sin tipo')}</span> · ${esc(emp ? nombreCliente(emp) : (p.cliente || '—'))}</small></td><td class="n">${Number(p.horas) ? Number(p.horas) + ' h' : '—'}</td><td class="n">${dinero(cuentasCreacion(p).gastos)}</td><td><button class="btn-mini" data-editar-proyecto="${p.id}">Editar</button></td></tr>`; }).join('')}
       </tbody></table>` : '<div class="adm-vacio"><b>Todavía no hay sistemas</b>Toca «+ Sistema», elige su tipo y escribe sus horas.</div>');
 }
 function vCreacion() {
@@ -3100,7 +3102,7 @@ function vResumen() {
   for (let d = 1; d <= diasMes; d++) {
     const f = mes + '-' + String(d).padStart(2, '0');
     const dia = pagos.filter(p => String(p.vence) === f);
-    celdas.push(`<div><span class="n">${d}</span>${dia.map(p => `<span class="dot ${estadoDe(p) === 'v' ? 'v' : estadoDe(p) === 'rj' ? 'rj' : 'a'}" style="display:block;margin-top:4px;font-size:10.5px;line-height:1.25;overflow-wrap:anywhere">${esc(p.concepto)}: ${dinero(p.monto)}</span>`).join('')}</div>`);
+    celdas.push(`<div><span class="n">${d}</span>${dia.map(p => `<span class="dot ${estadoDe(p) === 'v' ? 'v' : estadoDe(p) === 'rj' ? 'rj' : 'a'}" style="display:block;margin-top:3px;font-size:10px;line-height:1.25">${esc(p.concepto)}: ${dinero(p.monto)}</span>`).join('')}</div>`);
   }
   const quienDebe = pagos.filter(p => !p.pagado_el).sort((x, y) => String(x.vence).localeCompare(String(y.vence)));
   const horas = P && P.proyectos ? P.proyectos.filter(x => (x.administracion || 'centralia') === clave) : [];
@@ -3110,10 +3112,10 @@ function vResumen() {
   const diasProm = diasCreacion.length ? Math.round(diasCreacion.reduce((t, n) => t + n, 0) / diasCreacion.length) : 0;
   const tipos = {};
   for (const x of horas) { const t = x.tipo || 'Sin tipo'; tipos[t] = tipos[t] || { sistemas: 0, clientes: new Set() }; tipos[t].sistemas++; if (x.empresa_id) tipos[t].clientes.add(x.empresa_id); }
-  const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:10px;padding:9px 11px;min-height:0;display:flex;flex-direction:column;justify-content:space-between;border-left:4px solid ${c}"><small style="color:var(--suave);font-size:11px;text-transform:uppercase">${t}</small><b style="font-size:17px;font-variant-numeric:tabular-nums">${n}</b><i style="font-style:normal;font-size:12px;color:var(--suave)">${d}</i></div>`;
+  const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:10px;padding:7px 9px;border-left:3px solid ${c}"><small style="display:block;color:var(--suave);font-size:10px;text-transform:uppercase;letter-spacing:.03em">${t}</small><b style="display:block;font-size:14px;font-variant-numeric:tabular-nums;margin-top:2px">${n}</b><i style="font-style:normal;font-size:11px;color:var(--suave)">${d}</i></div>`;
   return `
   <div class="caja" style="margin-bottom:12px">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px">
       ${k('Cobrado', dinero(cobrado), 'pagos recibidos este mes', '#13c08a')}
       ${k('Gastos', dinero(gastos), 'sistemas + plataforma', '#eb6834')}
       ${k('Utilidad', dinero(utilidad), 'para repartir', '#0b5cad')}
@@ -3123,7 +3125,7 @@ function vResumen() {
   </div>
   <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">
     <div class="caja"><h2>Calendario de cobros</h2>
-      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:12px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:56px;border:1px solid #e3e9f2;border-radius:10px;padding:4px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:11px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:44px;border:1px solid #e3e9f2;border-radius:8px;padding:3px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
       <div style="display:flex;gap:10px;font-size:12px;margin-top:10px"><span class="chip verde">Pagado</span><span class="chip ambar">Pendiente</span><span class="chip rj">Vencido</span></div>
     </div>
     <div>
