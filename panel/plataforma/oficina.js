@@ -123,6 +123,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       moneda VARCHAR(5) NOT NULL DEFAULT 'US$', vence DATE NOT NULL, pagado_el DATE, forma TEXT NOT NULL DEFAULT '',
       nota TEXT NOT NULL DEFAULT '', auto_mes VARCHAR(7), creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS oficina_pagos_auto ON oficina_pagos (empresa_id, auto_mes) WHERE auto_mes IS NOT NULL');
+    // Mensualidades automáticas que el usuario borró: no se vuelven a crear.
+    await client.query(`CREATE TABLE IF NOT EXISTS oficina_cobros_borrados (
+      empresa_id INTEGER NOT NULL, auto_mes VARCHAR(7) NOT NULL, borrado TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (empresa_id, auto_mes))`);
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_gastos (
       id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, categoria VARCHAR(20) NOT NULL DEFAULT 'otro', monto NUMERIC(12,2) NOT NULL DEFAULT 0,
       moneda VARCHAR(5) NOT NULL DEFAULT 'US$', frecuencia VARCHAR(10) NOT NULL DEFAULT 'mensual', dia INTEGER, fecha DATE,
@@ -276,7 +280,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       for (; mes <= mesHoy; mes = mesMas(mes, 1)) {
         const vence = `${mes}-${pad(Math.min(28, Math.max(1, Number(p.dia) || 1)))}`;
         await client.query(`INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence, auto_mes)
-          VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`, [e.id, 'Mensualidad ' + nombreMes(mes), valor, moneda(p.moneda), vence, mes]);
+          SELECT $1, $2, $3, $4, $5, $6 WHERE NOT EXISTS (SELECT 1 FROM oficina_cobros_borrados b WHERE b.empresa_id = $1 AND b.auto_mes = $6)
+          ON CONFLICT DO NOTHING`, [e.id, 'Mensualidad ' + nombreMes(mes), valor, moneda(p.moneda), vence, mes]);
       }
       // Si en el panel de la empresa ya se marcó pagado un mes (desde Empresas), aquí también queda pagado.
       if (e.cuenta && /^\d{4}-\d{2}$/.test(e.cuenta.pagado || '')) {
@@ -1019,8 +1024,17 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           await guardar(g[2], f);
           await registrar(u, 'oficina_guardar', g[2], f.id || 'nuevo', '', '', texto(f.concepto || f.nombre || f.titulo, 120));
         } else {
+          let detalle = '';
+          if (g[2] === 'pagos') {
+            // Antes de borrar, se guarda qué cobro era (la auditoría necesita concepto y monto).
+            const c = (await client.query('SELECT empresa_id, concepto, monto, moneda, vence, pagado_el, auto_mes FROM oficina_pagos WHERE id = $1', [Number(f.id)])).rows[0];
+            if (!c) return json(res, 404, { error: 'Ese cobro ya no existe.' });
+            detalle = `${c.concepto} · ${c.moneda} ${c.monto} · vence ${String(c.vence).slice(0, 10)} · ${c.pagado_el ? 'pagado' : 'pendiente'}`;
+            // Si es una mensualidad automática, se recuerda que se borró para que no vuelva a crearse.
+            if (c.auto_mes && c.empresa_id) await client.query('INSERT INTO oficina_cobros_borrados (empresa_id, auto_mes) VALUES ($1, $2) ON CONFLICT DO NOTHING', [c.empresa_id, c.auto_mes]);
+          }
           await client.query(`DELETE FROM oficina_${g[2]} WHERE id = $1`, [Number(f.id)]);
-          await registrar(u, 'oficina_borrar', g[2], f.id, '', '', '');
+          await registrar(u, 'oficina_borrar', g[2], f.id, detalle, '', detalle);
         }
         return json(res, 200, { ok: true });
       }
