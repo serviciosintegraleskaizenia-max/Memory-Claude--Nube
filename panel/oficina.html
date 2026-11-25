@@ -50,6 +50,28 @@
   .kpi .d { font-size:12px; color:var(--suave); margin-top:2px; }
   .rej { display:grid; gap:16px; } .r2 { grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); } .r21 { grid-template-columns:minmax(0,2fr) minmax(0,1fr); }
   .caja { background:var(--tarjeta); border-radius:14px; padding:16px 18px; box-shadow:0 1px 3px #0f172a14; margin-bottom:16px; min-width:0; overflow-x:auto; }
+  /* Administración: cuatro bloques en una pantalla (Clientes · Cobro, gastos y reparto · Creación de sistema · Resumen del mes) */
+  .adm-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; align-items:start; }
+  .adm-bloque { background:var(--tarjeta); border-radius:14px; padding:16px 18px; box-shadow:0 1px 3px #0f172a14; min-width:0; overflow-x:auto; }
+  .adm-bloque > header { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:12px; }
+  .adm-tit { font-size:16px; }
+  .adm-sub { font-size:12px; color:var(--suave); }
+  .adm-etiqueta { font-size:13px; color:var(--suave); margin-bottom:8px; }
+  .adm-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+  .adm-kpis > div { background:#f5f8fc; border-radius:10px; padding:8px 10px; }
+  .adm-kpis small { display:block; font-size:11px; color:var(--suave); text-transform:uppercase; }
+  .adm-kpis b { font-size:16px; font-variant-numeric:tabular-nums; }
+  .adm-cols { display:grid; grid-template-columns:minmax(0,1fr); gap:14px; }
+  .adm-reparto { display:grid; gap:8px; }
+  .adm-reparto > div { border:1px solid var(--borde); border-radius:10px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .adm-reparto small { color:var(--suave); }
+  .adm-reparto .verde { border-color:var(--verde); background:#e7f6ee; }
+  .btn-mini.activo { background:#0b5cad; color:#fff; border-color:#0b5cad; }
+  .adm-bloque td, .adm-bloque th { padding:7px 5px; font-size:12.5px; }
+  .adm-bloque .btn-mini { padding:3px 6px; font-size:11.5px; }
+  .adm-bloque table { font-size:12px; }
+  .adm-bloque td.n { white-space:nowrap; }
+  @media (max-width:900px) { .adm-grid, .adm-cols { grid-template-columns:minmax(0,1fr); } .adm-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   .caja h2 { margin:0 0 4px; font-size:15px; } .caja .sub { margin:0 0 12px; color:var(--suave); font-size:12px; }
   .caja .cab { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -373,12 +395,13 @@ let R = null;                 // conector con Chatwoot: estado
 let rProbe = null;            // bandejas y equipos leídos de Chatwoot
 let P = null;                 // gastos de creación de cada sistema, reparto entre socios y recargas de OpenRouter
 let gastosTab = 'negocio';    // Gastos: 'negocio' (lo de siempre) o 'creacion' (Christian y socio)
-let admSec = 'clientes';      // Administración: 'clientes' · 'gastos' · 'creacion' · 'resumen'
+let admSec = 'todo';          // Administración: 'todo' (cuatro bloques) · 'clientes' · 'cobros' · 'creacion' · 'resumen' · 'gastos'
 let fichaSel = null;          // cliente abierto en su ficha
 const selCobros = new Set();  // cobros marcados para pagarlos de una vez
 let enAdmin = false;          // true mientras se arma la sección Administración
 let adminVista = 'kaizen';    // Administración que se ve en Gastos: 'kaizen' (Kaizen IA) o 'centralia' (Centralia)
 let pSel = null;              // sistema elegido en Creación del sistema
+let progSel = null;           // sistema elegido en el bloque «Cobro, gastos y reparto»
 const timers = {};
 
 /* ---------- Utilidades ---------- */
@@ -1043,11 +1066,99 @@ function cuentasCreacion(p) {
   const variable = redondo(variables.reduce((a, m) => a + (m.categoria === 'ia' && iaMes ? iaMes : m.monto), 0));
   return { comision, neto, gastos, compartidos, queda, quedaTotal, adelantos: adelantosTotal, socios, fijo, variables, iaMes, emp, variable, total: redondo(fijo + variable), alMes };
 }
+// ---------- Administración: cuatro bloques en una sola pantalla ----------
+function bloqueAdm(titulo, sub, cuerpo, ver) {
+  return `<section class="adm-bloque"><header><div><b class="adm-tit">${titulo}</b>${sub ? `<div class="adm-sub">${sub}</div>` : ''}</div>${ver ? `<button class="btn-mini" data-adm-sec="${ver}">Ver completo</button>` : ''}</header>${cuerpo}</section>`;
+}
+function vAdmTodo() {
+  return `<div class="adm-grid">
+    ${bloqueAdm('👥 Clientes', 'Listado, ficha y estado de cuenta', vClientesAdm(), 'clientes')}
+    ${bloqueAdm('💰 Cobro, gastos y reparto', 'Por sistema y por cliente', bloqueCobros(), 'cobros')}
+    ${bloqueAdm('🏗️ Creación de sistema', 'Sistemas, tipo, horas y costo de creación', bloqueSistemas(), 'creacion')}
+    ${bloqueAdm('📊 Resumen del mes', esc(admin(adminVista).nombre) + ' · ' + esc(D.nombreMes), vResumen(), 'resumen')}
+  </div>`;
+}
+// Cobro, gastos y reparto: etiquetado por cliente y por sistema; muestra solo los gastos y cobros de ese sistema.
+function bloqueCobros() {
+  if (!P) return '<div class="vacio">Cargando…</div>';
+  const empresas = D.empresas.filter(x => !x.es_demo && (x.administracion || 'kaizen') === adminVista);
+  if (!empresas.some(x => x.id === fichaSel)) fichaSel = empresas[0] ? empresas[0].id : null;
+  const e = empresas.find(x => x.id === fichaSel);
+  if (!e) return '<div class="vacio">Esta administración todavía no tiene clientes. Créalo en Empresas.</div>';
+  const progs = programasDe(e.id);
+  if (!progs.some(x => x.id === progSel)) progSel = progs[0] ? progs[0].id : null;
+  const p = progs.find(x => x.id === progSel);
+  if (!p) return `<div class="vacio"><b>${esc(nombreCliente(e))}</b> todavía no tiene sistemas. Crea uno en «Creación de sistema».</div>`;
+  pSel = progSel;   // «+ Gasto» y «Editar» de gasto escriben en este sistema
+  const selector = progs.map(x => `<button class="btn-mini ${x.id === p.id ? 'activo' : ''}" data-prog-cobro="${x.id}">${esc(x.nombre)}</button>`).join(' ');
+  const cobros = (D.pagos || []).filter(x => x.proyecto_id === p.id || (!x.proyecto_id && x.empresa_id === e.id)).sort((x, y) => String(x.vence).localeCompare(String(y.vence)));
+  const cobrado = redondo(cobros.filter(x => x.pagado_el).reduce((t, x) => t + (Number(x.monto) || 0), 0));
+  const c = cuentasCreacion(p);
+  const plataforma = gastosPlataformaDe(e.id);
+  const utilidad = redondo(cobrado - c.gastos - plataforma);
+  const a = admin(adminVista), pct = Number(a.socio_porcentaje) || 0;
+  const miParte = redondo(utilidad * (100 - pct) / 100), parteSocio = redondo(utilidad * pct / 100);
+  const retirado = redondo((D.recibos || []).filter(r => r.administracion === adminVista && r.tipo === 'socio').reduce((t, r) => t + (Number(r.monto) || 0), 0));
+  const quedaSocio = redondo(parteSocio - retirado);
+  const CAT = P.categorias || {}, FREC = P.frecuencias || {};
+  const gastosSistema = p.gastos.filter(g => g.categoria !== 'adelanto');
+  const fijos = p.mensuales.filter(m => m.activo);
+  return `
+    <div class="adm-etiqueta">Cliente: <b>${esc(nombreCliente(e))}</b> · Sistema: <b>${esc(p.nombre)}</b></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${selector}</div>
+    <div class="adm-kpis">
+      <div><small>Cobrado al cliente</small><b>${dinero(cobrado)}</b></div>
+      <div><small>Gastos del sistema</small><b>${dinero(c.gastos)}</b></div>
+      <div><small>Plataforma que le toca</small><b>${dinero(plataforma)}</b></div>
+      <div><small>Utilidad a repartir</small><b style="color:var(--verde)">${dinero(utilidad)}</b></div>
+    </div>
+    <div class="adm-cols">
+      <div>
+        <b>Cobros del cliente</b> <span class="chip ambar" style="font-size:11px">editable · borrable</span>
+        <table><thead><tr><th>Concepto</th><th>Pagado / vence</th><th>Método · ref.</th><th class="n">Monto</th><th></th></tr></thead><tbody>
+        ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b></td><td>${x.pagado_el ? fechaCorta(x.pagado_el) : 'vence ' + fechaCorta(x.vence)}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td class="n">${dinero(x.monto, x.moneda)}</td>
+          <td style="white-space:nowrap">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button> ` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button> `}<button class="btn-mini" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}" style="color:var(--rojo,#b42318)">Borrar</button></td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin cobros todavía.</td></tr>'}
+        </tbody></table>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos del sistema</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-cgasto>+ Gasto</button><button class="btn-mini" data-editar-proyecto="${p.id}">Editar sistema</button></span></div>
+        <table><thead><tr><th>Gasto</th><th>Tipo</th><th class="n">Monto</th><th></th></tr></thead><tbody>
+        ${gastosSistema.map(g => `<tr><td><b>${esc(g.concepto)}</b></td><td><span class="chip az">${esc(CAT[g.categoria] || g.categoria)}</span></td><td class="n">${g.monto ? dinero(g.monto) : 'gratis'}</td><td><button class="btn-mini" data-editar-cgasto="${g.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos de creación.</td></tr>'}
+        </tbody></table>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Gastos fijos mensuales</b><span style="display:flex;gap:6px"><button class="btn-mini" data-nuevo-mensual>+ Gasto fijo</button><button class="btn-mini" data-registrar-mensualidad="${p.id}">+ Mensualidad de este mes</button></span></div>
+        <table><thead><tr><th>Gasto</th><th>Cada</th><th class="n">Monto</th><th></th></tr></thead><tbody>
+        ${fijos.map(m => `<tr><td><b>${esc(m.concepto)}</b></td><td>${esc(FREC[m.frecuencia] || m.frecuencia)}</td><td class="n">${m.frecuencia === 'variable' ? 'según uso' : dinero(m.monto)}</td><td><button class="btn-mini" data-editar-mensual="${m.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Sin gastos fijos.</td></tr>'}
+        </tbody></table>
+      </div>
+      <div>
+        <b>Reparto de la utilidad</b>
+        <div class="adm-reparto" style="margin-top:8px">
+          ${pct > 0 ? `
+          <div><span>${esc(a.etiqueta_mia || 'Mi parte')}<br><small>${100 - pct} %</small></span><b>${dinero(miParte)}</b></div>
+          <div><span>${esc(a.etiqueta_socio || 'Parte del socio')} · ${esc(a.socio_nombre || 'Socio')}<br><small>${pct} %</small></span><b>${dinero(parteSocio)}</b></div>
+          <div><span>Retirado hasta hoy</span><b>${dinero(retirado)}</b></div>
+          <div class="verde"><span>Queda por retirar</span><b>${dinero(quedaSocio)}</b></div>` : `
+          <div><span>Sin reparto<br><small>Esta administración no reparte utilidades</small></span><b>${dinero(utilidad)}</b></div>`}
+        </div>
+        <p style="font-size:12px;color:var(--suave);margin-top:10px">Utilidad = cobrado − gastos del sistema − plataforma que le toca. Los nombres, porcentajes y etiquetas se cambian en Datos de la administración.</p>
+      </div>
+    </div>`;
+}
+// Creación de sistema: programas de esta administración con su tipo, horas y costo de creación.
+function bloqueSistemas() {
+  if (!P) return '<div class="vacio">Cargando…</div>';
+  const lista = P.proyectos.filter(x => (x.administracion || 'centralia') === adminVista);
+  const cobradoDe = p => redondo((D.pagos || []).filter(x => x.proyecto_id === p.id && x.pagado_el).reduce((t, x) => t + (Number(x.monto) || 0), 0));
+  return `<div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn-mini" data-nuevo-proyecto>+ Sistema</button></div>` +
+    (lista.length ? `<table><thead><tr><th>Sistema</th><th>Tipo</th><th>Cliente</th><th class="n">Horas</th><th class="n">Costo de creación</th><th class="n">Cobrado</th><th></th></tr></thead><tbody>
+      ${lista.map(p => { const emp = D.empresas.find(e => e.id === p.empresa_id); return `<tr><td><b>${esc(p.nombre)}</b></td><td><span class="chip az">${esc(p.tipo || 'Sin tipo')}</span></td><td>${esc(emp ? nombreCliente(emp) : (p.cliente || '—'))}</td><td class="n">${Number(p.horas) ? Number(p.horas) + ' h' : '—'}</td><td class="n">${dinero(cuentasCreacion(p).gastos)}</td><td class="n">${dinero(cobradoDe(p))}</td><td><button class="btn-mini" data-editar-proyecto="${p.id}">Editar</button></td></tr>`; }).join('')}
+      </tbody></table>` : '<div class="vacio">Todavía no hay sistemas. Toca «+ Sistema» y escribe su tipo y sus horas.</div>');
+}
 function vCreacion() {
   const lista = P ? P.proyectos.filter(x => (x.administracion || 'centralia') === adminVista) : [];
   if (!pSel || !lista.some(x => x.id === pSel)) pSel = lista[0] ? lista[0].id : null;
   const p = lista.find(x => x.id === pSel);
-  const cab = cabecera('💸 Gastos', 'Solo para ti y tu socio: lo que costó crear cada sistema, el reparto y los gastos de cada mes. No se suma a los gastos del negocio.',
+  const cab = cabecera('🏗️ Creación de sistema', 'Solo para ti y tu socio: lo que costó crear cada sistema, el reparto y los gastos de cada mes. No se suma a los gastos del negocio.',
     `${lista.length > 1 ? `<select id="selProyecto">${lista.map(x => `<option value="${x.id}" ${x.id === pSel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>` : ''}<button class="btn-sec" data-nuevo-proyecto>+ Sistema</button>${p ? '<button class="btn" data-imprimir-creacion>🖨️ Resumen para el socio</button>' : ''}`) + barraGastos();
   if (!P) return cab + '<div class="vacio">Cargando…</div>';
   if (!p) return cab + `<div class="caja vacio">Todavía no hay sistemas. Toca <b>+ Sistema</b> y pon lo que cobraste, la comisión del banco y cómo se reparte entre los socios.</div>`;
@@ -1103,6 +1214,7 @@ function formProyecto(p = {}) {
   abrirModal(`<h2>${p.id ? 'Editar sistema' : 'Nuevo sistema'}</h2>
     ${campo('fCli', 'Cliente (de la base de datos)', `<select id="fCli"><option value="">Elige el cliente…</option>${clientes.map(e => `<option value="${e.id}" ${Number(p.empresa_id) === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`, clientes.length ? 'Si no aparece, créalo en Empresas.' : 'Esta administración no tiene clientes todavía. Créalo en Empresas.')}
     ${campo('fNom', 'Nombre del programa', `<input id="fNom" value="${esc(p.nombre || '')}" placeholder="Ej.: Panel de reservas · Somos Viajes">`)}
+    <div class="fila2">${campo('fTipo', 'Tipo de sistema', `<input id="fTipo" list="tiposSistema" value="${esc(p.tipo || '')}" placeholder="Elige o escribe otro"><datalist id="tiposSistema"><option value="Meta Campañas"><option value="Panel de correos"><option value="Operaciones (reservas)"><option value="CRM"><option value="Automatización o chatbot"></datalist>`, 'Puedes elegir uno o escribir otro tipo.')}${campo('fHoras', 'Horas de trabajo', `<input id="fHoras" type="number" step="0.5" min="0" value="${p.horas || ''}">`, 'Las horas que te tomó crearlo.')}</div>
     <div class="fila2">${campo('fPrecio', 'Precio total del programa (US$)', `<input id="fPrecio" type="number" step="0.01" min="0" value="${p.precio_total || ''}">`)}${campo('fMetodo', 'Método de pago', `<select id="fMetodo">${['', ...METODOS_BASE, 'Efectivo', 'Otro'].map(m => `<option value="${esc(m)}" ${m === (p.comision_nota || '') ? 'selected' : ''}>${esc(m || 'Elige…')}</option>`).join('')}</select>`)}</div>
     <div class="fila2">${campo('fAbono', 'Abono recibido (US$)', `<input id="fAbono" type="number" step="0.01" min="0" value="">`, 'Si el abono ya llegó, ponlo aquí y su fecha.')}${campo('fAbonoF', 'Fecha del abono', `<input id="fAbonoF" type="date" value="">`)}</div>
     <div class="fila2">${campo('fSaldoF', 'Fecha en que paga el saldo', `<input id="fSaldoF" type="date" value="">`, 'Normalmente al entregar el programa.')}${campo('fEnt', 'Entrega del programa', `<input id="fEnt" type="date" value="${esc(p.fecha_entrega || '')}">`)}</div>
@@ -1116,7 +1228,7 @@ function formProyecto(p = {}) {
     const ss = socios.map((_, i) => ({ nombre: document.querySelector(`[data-socio-n="${i}"]`).value.trim(), pct: document.querySelector(`[data-socio-p="${i}"]`).value })).filter(x => x.nombre);
     const ex = extras.map((_, i) => ({ nombre: document.querySelector(`[data-ext-n="${i}"]`).value.trim(), monto: document.querySelector(`[data-ext-m="${i}"]`).value })).filter(x => x.nombre);
     const emp = clientes.find(e => String(e.id) === v('fCli'));
-    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: adm, empresa_id: v('fCli'), cliente: emp ? emp.nombre : '', nombre: v('fNom'), precio_total: v('fPrecio'), metodo: v('fMetodo'), abono_monto: v('fAbono'), abono_fecha: v('fAbonoF'), saldo_fecha: v('fSaldoF'), fecha_entrega: v('fEnt'), fecha_inicio: v('fIni'), cuota_mensual: v('fCuota'), dia_cobro: v('fDia'), extras: ex, socios: ss, nota: v('fNota') }, 'Sistema guardado.');
+    guardarCreacion({ tipo: 'proyecto', id: p.id, administracion: adm, empresa_id: v('fCli'), cliente: emp ? emp.nombre : '', nombre: v('fNom'), tipo: v('fTipo'), horas: v('fHoras'), precio_total: v('fPrecio'), metodo: v('fMetodo'), abono_monto: v('fAbono'), abono_fecha: v('fAbonoF'), saldo_fecha: v('fSaldoF'), fecha_entrega: v('fEnt'), fecha_inicio: v('fIni'), cuota_mensual: v('fCuota'), dia_cobro: v('fDia'), extras: ex, socios: ss, nota: v('fNota') }, 'Sistema guardado.');
   };
   borrarCreacion('proyecto', p.id, '¿Borrar este sistema con todos sus gastos? No se puede deshacer.');
 }
@@ -1204,7 +1316,7 @@ document.addEventListener('click', ev => {
   if (d.editarAdmin) return formAdmin((D.administraciones || []).find(a => a.clave === d.editarAdmin) || { clave: d.editarAdmin });
   if (d.moverEmpresa) { const [id, a] = d.moverEmpresa.split(':'); return moverEmpresa(Number(id), a); }
   if ('nuevoProyecto' in d) return formProyecto();
-  if (d.editarProyecto) return p && formProyecto(p);
+  if (d.editarProyecto) { const q = P && P.proyectos.find(x => String(x.id) === d.editarProyecto); return q && formProyecto(q); }
   if ('nuevoCgasto' in d) return formCGasto();
   if (d.editarCgasto) { const g = p && p.gastos.find(x => String(x.id) === d.editarCgasto); return g && formCGasto(g); }
   if ('nuevoMensual' in d) return formMensual();
@@ -2956,10 +3068,16 @@ function vResumen() {
   }
   const quienDebe = pagos.filter(p => !p.pagado_el).sort((x, y) => String(x.vence).localeCompare(String(y.vence)));
   const horas = P && P.proyectos ? P.proyectos.filter(x => (x.administracion || 'centralia') === clave) : [];
-  const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:14px;padding:14px;min-height:98px;display:flex;flex-direction:column;justify-content:space-between;border-left:4px solid ${c}"><small style="color:var(--suave);font-size:11px;text-transform:uppercase">${t}</small><b style="font-size:21px;font-variant-numeric:tabular-nums">${n}</b><i style="font-style:normal;font-size:12px;color:var(--suave)">${d}</i></div>`;
-  return cabecera('📊 Resumen del mes', `${esc(a.nombre)} · ${esc(D.nombreMes)}`, selectorMes()) + barraGastos() + `
+  // Tiempo y tipos de sistema del bloque de resumen.
+  const totalHoras = horas.reduce((t, x) => t + (Number(x.horas) || 0), 0);
+  const diasCreacion = horas.filter(x => x.fecha_inicio && x.fecha_entrega).map(x => diasEntre(String(x.fecha_inicio).slice(0, 10), String(x.fecha_entrega).slice(0, 10)));
+  const diasProm = diasCreacion.length ? Math.round(diasCreacion.reduce((t, n) => t + n, 0) / diasCreacion.length) : 0;
+  const tipos = {};
+  for (const x of horas) { const t = x.tipo || 'Sin tipo'; tipos[t] = tipos[t] || { sistemas: 0, clientes: new Set() }; tipos[t].sistemas++; if (x.empresa_id) tipos[t].clientes.add(x.empresa_id); }
+  const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:10px;padding:9px 11px;min-height:0;display:flex;flex-direction:column;justify-content:space-between;border-left:4px solid ${c}"><small style="color:var(--suave);font-size:11px;text-transform:uppercase">${t}</small><b style="font-size:17px;font-variant-numeric:tabular-nums">${n}</b><i style="font-style:normal;font-size:12px;color:var(--suave)">${d}</i></div>`;
+  return `
   <div class="caja" style="margin-bottom:12px">
-    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px">
       ${k('Cobrado', dinero(cobrado), 'pagos recibidos este mes', '#13c08a')}
       ${k('Gastos', dinero(gastos), 'sistemas + plataforma', '#eb6834')}
       ${k('Utilidad', dinero(utilidad), 'para repartir', '#0b5cad')}
@@ -2967,13 +3085,17 @@ function vResumen() {
       ${pct > 0 ? k(esc(etiquetaSocio), dinero(socio), `${pct} % · ${esc(socioNombre)}`, '#8a5a00') : ''}
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px">
+  <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">
     <div class="caja"><h2>Calendario de cobros</h2>
-      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:12px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:70px;border:1px solid #e3e9f2;border-radius:10px;padding:6px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:12px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:56px;border:1px solid #e3e9f2;border-radius:10px;padding:4px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
       <div style="display:flex;gap:10px;font-size:12px;margin-top:10px"><span class="chip verde">Pagado</span><span class="chip ambar">Pendiente</span><span class="chip rj">Vencido</span></div>
     </div>
     <div>
       <div class="caja" style="margin-bottom:12px"><h2>Horas de trabajo</h2>${horas.length ? horas.map(x => `<div style="margin-bottom:8px"><b>${esc(x.nombre)}</b> · ${Number(x.horas) || 0} h<div class="bar" style="margin-top:4px"><i style="width:${Math.min(100, (Number(x.horas) || 0) * 1)}%"></i></div></div>`).join('') : '<div class="vacio">Sin programas. Las horas se escriben en cada programa.</div>'}</div>
+      <div class="caja" style="margin-bottom:12px"><h2>Tiempo y tipos de sistema</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><div><small style="color:var(--suave)">Horas usadas</small><br><b>${totalHoras} h</b></div><div><small style="color:var(--suave)">Días promedio de creación</small><br><b>${diasProm || '—'}</b></div></div>
+        ${Object.keys(tipos).length ? Object.entries(tipos).map(([t, v]) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--borde)"><span class="chip az">${esc(t)}</span><span>${v.sistemas} sistema(s) · ${v.clientes.size} cliente(s)</span></div>`).join('') : '<div class="vacio">Sin sistemas todavía.</div>'}
+      </div>
       <div class="caja"><h2>Quién debe</h2>${quienDebe.length ? quienDebe.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--borde)"><span>${esc(nombreCliente(empresas.find(e => e.id === p.empresa_id) || {}))} · vence ${fechaCorta(p.vence)}</span><b>${dinero(p.monto)}</b></div>`).join('') : '<div class="vacio">Nadie debe nada este mes.</div>'}</div>
     </div>
   </div>`;
@@ -2982,14 +3104,16 @@ function vResumen() {
 function vAdministracion() {
   if (!permitidasAdmin().includes(adminVista)) adminVista = permitidasAdmin()[0] || 'kaizen';
   const pestanasAdmin = permitidasAdmin().map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('');
-  const secciones = [['clientes', '👥 Clientes y cobros'], ['gastos', '💸 Gastos y reparto'], ['creacion', '🏗️ Creación de sistemas'], ['resumen', '📊 Resumen del mes']]
+  const secciones = [['todo', '🏛️ Todo'], ['clientes', '👥 Clientes'], ['cobros', '💰 Cobro, gastos y reparto'], ['creacion', '🏗️ Creación de sistema'], ['resumen', '📊 Resumen del mes'], ['gastos', '💸 Gastos del negocio']]
     .map(([k, t]) => `<button class="pestana ${admSec === k ? 'activa' : ''}" data-adm-sec="${k}">${t}</button>`).join('');
   let cuerpo;
   enAdmin = true;
   try {
-    if (admSec === 'gastos') { gastosTab = 'negocio'; cuerpo = vGastos(); }
+    if (admSec === 'todo') cuerpo = vAdmTodo();
+    else if (admSec === 'cobros') cuerpo = bloqueAdm('💰 Cobro, gastos y reparto', 'Por sistema y por cliente', bloqueCobros());
     else if (admSec === 'creacion') { gastosTab = 'creacion'; cuerpo = vCreacion(); }
-    else if (admSec === 'resumen') { gastosTab = 'resumen'; cuerpo = vResumen(); }
+    else if (admSec === 'resumen') cuerpo = vResumen();
+    else if (admSec === 'gastos') { gastosTab = 'negocio'; cuerpo = vGastos(); }
     else cuerpo = vClientesAdm();
   } finally { enAdmin = false; }
   return cabecera('🏛️ Administración', 'Cada administración con sus clientes, cobros, gastos y reparto', selectorMes()) +
@@ -3121,10 +3245,11 @@ function formPagarVarios() {
   };
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios],[data-registrar-mensualidad],[data-toggle-estado],[data-imprimir-estado],[data-borrar-cobro]'); if (!t) return;
+  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios],[data-registrar-mensualidad],[data-toggle-estado],[data-imprimir-estado],[data-borrar-cobro],[data-prog-cobro]'); if (!t) return;
   ev.preventDefault();
   const d = t.dataset;
   if (d.borrarCobro) return borrarCobro(Number(d.borrarCobro), d.texto);
+  if (d.progCobro) { progSel = Number(d.progCobro); return pintar(); }
   if (d.admSec) { admSec = d.admSec; return pintar(); }
   if (d.ficha) { fichaSel = Number(d.ficha); return pintar(); }
   if (d.toggleEstado) { estadoAbierto = !estadoAbierto; return pintar(); }
