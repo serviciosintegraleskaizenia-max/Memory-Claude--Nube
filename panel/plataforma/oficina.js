@@ -852,8 +852,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
         if (logo !== null) await client.query('UPDATE empresas SET logo = $2 WHERE id = $1', [e.id, logo]);
         const metodos = Array.isArray(f.metodos_pago) ? f.metodos_pago.map(m => texto(m, 40)).filter(Boolean).slice(0, 20) : [];
-        await client.query('UPDATE empresas SET documento=$2, pais=$3, direccion=$4, web=$5, redes=$6, metodos_pago=$7, administracion=$8, nombre_oficina=$9, razon_social=$10 WHERE id=$1',
-          [e.id, doc, texto(f.pais, 60), texto(f.direccion, 300), texto(f.web, 200), texto(f.redes, 400), JSON.stringify(metodos), admin, texto(f.nombre_oficina, 120), texto(f.razon_social, 160)]);
+        await client.query('UPDATE empresas SET documento=$2, pais=$3, direccion=$4, web=$5, redes=$6, metodos_pago=$7, administracion=$8, nombre_oficina=COALESCE($9, nombre_oficina), razon_social=COALESCE($10, razon_social) WHERE id=$1',
+          [e.id, doc, texto(f.pais, 60), texto(f.direccion, 300), texto(f.web, 200), texto(f.redes, 400), JSON.stringify(metodos), admin, f.nombre_oficina === undefined ? null : texto(f.nombre_oficina, 120), f.razon_social === undefined ? null : texto(f.razon_social, 160)]);
         await registrar(u, 'cliente_datos', 'empresa', e.id, '', '', doc);
         return json(res, 200, { ok: true });
       }
@@ -993,9 +993,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(logo)) return json(res, 400, { error: 'El logo debe ser una imagen PNG, JPG o WEBP.' });
         if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
         const pct = f.socio_porcentaje === '' || f.socio_porcentaje == null ? null : Math.min(100, Math.max(0, Number(f.socio_porcentaje) || 0));
-        await client.query('UPDATE oficina_administraciones SET nombre=$2, legal=$3, documento=$4, direccion=$5, correo=$6, telefono=$7, web=$8, logo=COALESCE($9, logo), socio_nombre=$10, socio_documento=$11, socio_porcentaje=$12, etiqueta_mia=$13, etiqueta_socio=$14, actualizado=NOW() WHERE clave=$1',
+        await client.query('UPDATE oficina_administraciones SET nombre=$2, legal=$3, documento=$4, direccion=$5, correo=$6, telefono=$7, web=$8, logo=COALESCE($9, logo), socio_nombre=$10, socio_documento=$11, socio_porcentaje=$12, etiqueta_mia=COALESCE($13, etiqueta_mia), etiqueta_socio=COALESCE($14, etiqueta_socio), actualizado=NOW() WHERE clave=$1',
           [f.clave, texto(f.nombre, 120), texto(f.legal, 160), texto(f.documento, 60), texto(f.direccion, 300), texto(f.correo, 120), texto(f.telefono, 40), texto(f.web, 160), logo,
-           texto(f.socio_nombre, 120), texto(f.socio_documento, 60), pct, texto(f.etiqueta_mia, 40) || 'Mi parte', texto(f.etiqueta_socio, 40) || 'Parte del socio']);
+           texto(f.socio_nombre, 120), texto(f.socio_documento, 60), pct, f.etiqueta_mia === undefined ? null : (texto(f.etiqueta_mia, 40) || 'Mi parte'), f.etiqueta_socio === undefined ? null : (texto(f.etiqueta_socio, 40) || 'Parte del socio')]);
         await registrar(u, 'administracion_guardar', 'administracion', f.clave, '', '', texto(f.nombre, 120));
         return json(res, 200, { ok: true });
       }
