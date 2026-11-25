@@ -2752,6 +2752,7 @@ function formDatosCliente(e) {
     ${campo('fAdminC', 'Administración a la que pertenece', `<select id="fAdminC">${permitidasAdmin().map(c => `<option value="${c}" ${c === (e.administracion || 'kaizen') ? 'selected' : ''}>${esc(admin(c).nombre)}</option>`).join('')}</select>`)}
     ${campo('fDir', 'Dirección', `<input id="fDir" value="${esc(e.direccion || '')}">`)}
     <div class="fila2">${campo('fWeb', 'Página web', `<input id="fWeb" value="${esc(e.web || '')}">`)}${campo('fRedes', 'Redes sociales', `<input id="fRedes" value="${esc(e.redes || '')}" placeholder="Instagram, Facebook, TikTok…">`)}</div>
+    <div class="campo"><label for="fLogoC">Logo del cliente (PNG, JPG o WEBP, menos de 150 KB)</label><input type="file" id="fLogoC" accept="image/png,image/jpeg,image/webp"><div class="ay">${e.logo ? 'Ya tiene logo. Elige otro para cambiarlo.' : 'Todavía no tiene logo.'}</div></div>
     <div class="campo"><label>Métodos de pago que usa</label><div id="fMetodos"></div>
       <div class="fila2" style="margin-top:6px"><input id="fNuevoMetodo" placeholder="Agregar otro método (ej.: Zelle, Yappy)"><button class="btn-sec" id="fAddMetodo" type="button">+ Agregar</button></div></div>
     ${e.plan_cobro ? `<div class="campo"><label>Plan de cobro</label><div class="ay">Ya creado: ${esc({ unico: 'pago único', abono: 'setup con abono y saldo', mensual: 'solo mensualidad' }[e.plan_cobro] || e.plan_cobro)}. Sus cobros están en el estado de cuenta.</div></div>` : `
@@ -2777,7 +2778,13 @@ function formDatosCliente(e) {
   };
   document.querySelectorAll('input[name="fPlan"]').forEach(r => r.onchange = pintarPlan);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/cliente/datos', { empresa_id: e.id, documento: v('fDoc'), pais: v('fPais'), administracion: v('fAdminC'), direccion: v('fDir'), web: v('fWeb'), redes: v('fRedes'), metodos_pago: [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value) });
+    const arch = document.getElementById('fLogoC').files[0];
+    let logo = null;
+    if (arch) {
+      if (arch.size > 150 * 1024) { document.getElementById('errForm').textContent = 'El logo pesa más de 150 KB. Usa una imagen más pequeña.'; return; }
+      logo = await leerComoDataURL(arch);
+    }
+    const r = await api('/api/oficina/cliente/datos', { empresa_id: e.id, documento: v('fDoc'), pais: v('fPais'), administracion: v('fAdminC'), direccion: v('fDir'), web: v('fWeb'), redes: v('fRedes'), metodos_pago: [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value), logo });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     const tipo = (document.querySelector('input[name="fPlan"]:checked') || {}).value;
     if (!e.plan_cobro && tipo) {
@@ -2982,7 +2989,7 @@ function vClientesAdm() {
     const montoMarcados = sumar(marcados);
     ficha = `<div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid var(--linea,#e5e7eb)">
       <div style="background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;padding:16px 18px;display:grid;grid-template-columns:110px 1fr auto;gap:14px;align-items:center">
-        <div style="width:110px;height:70px;border-radius:12px;background:#fff;color:#5b6676;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center">Logo del cliente</div>
+        ${sel.logo ? `<img src="${sel.logo}" alt="Logo de ${esc(sel.nombre)}" style="width:110px;height:70px;object-fit:contain;border-radius:12px;background:#fff">` : '<div style="width:110px;height:70px;border-radius:12px;background:#fff;color:#5b6676;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center">Logo del cliente</div>'}
         <div><div style="font-size:12px;opacity:.85">Ficha del cliente · ${esc(a.nombre)}</div><div style="font-size:22px;font-weight:700">${esc(sel.nombre)}</div>
           <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 12px;font-size:12px;margin-top:6px">
             <div>Documento<b style="display:block">${esc(sel.documento || '—')}</b></div><div>Dirección<b style="display:block">${esc(sel.direccion || '—')}</b></div>

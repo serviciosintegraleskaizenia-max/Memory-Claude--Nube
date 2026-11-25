@@ -136,6 +136,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
     await client.query("ALTER TABLE oficina_gastos ADD COLUMN IF NOT EXISTS pagadores JSONB NOT NULL DEFAULT '[]'::jsonb");
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS logo TEXT NOT NULL DEFAULT ''");
     for (const col of ['documento TEXT', 'pais TEXT', 'direccion TEXT', 'web TEXT', 'redes TEXT']) {
       await client.query(`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ${col} NOT NULL DEFAULT ''`);
     }
@@ -451,7 +452,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const e = porId.get(d.id);
         return {
           id: d.id, nombre: d.nombre, slug: d.slug, url: d.url, estado: d.estado, vivo: d.vivo, es_demo: d.es_demo, externa: d.externa,
-          administracion: e.administracion || 'kaizen', documento: e.documento || '', pais: e.pais || '', direccion: e.direccion || '', web: e.web || '', redes: e.redes || '', metodos_pago: e.metodos_pago || '[]', plan_cobro: e.plan_cobro || '', plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
+          administracion: e.administracion || 'kaizen', logo: e.logo || '', documento: e.documento || '', pais: e.pais || '', direccion: e.direccion || '', web: e.web || '', redes: e.redes || '', metodos_pago: e.metodos_pago || '[]', plan_cobro: e.plan_cobro || '', plan: e.plan, contacto: e.contacto, telefono: e.telefono, correo_contacto: e.correo_contacto, notas: e.notas,
           tieneClaveIA: Boolean(claveDe(e)), claveIAPropia: Boolean(e.ia_clave), tieneN8n: Boolean(e.n8n_clave), correo_lectura: e.correo_lectura || '', correo_host: e.correo_host || '', tieneCorreo: Boolean(e.correo_clave),
           pago: d.pagoCentral || {}, pagado: (d.cuenta || {}).pagado || '', etapaPago: d.etapaPago,
           usuarios: (d.numeros || {}).usuarios ?? null, correosHoy: (d.numeros || {}).correos_hoy ?? null, error: d.error || '',
@@ -839,6 +840,11 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (!puedeAdmin(u, permisos, e.administracion) || !puedeAdmin(u, permisos, admin)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
         const doc = texto(f.documento, 60);
         if (!doc) return json(res, 400, { error: 'El documento fiscal es obligatorio (RUC, DNI, cédula u otro según el país).' });
+        // Logo del cliente: solo se cambia si se manda uno nuevo.
+        const logo = f.logo == null ? null : String(f.logo);
+        if (logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(logo)) return json(res, 400, { error: 'El logo debe ser una imagen PNG, JPG o WEBP.' });
+        if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
+        if (logo !== null) await client.query('UPDATE empresas SET logo = $2 WHERE id = $1', [e.id, logo]);
         const metodos = Array.isArray(f.metodos_pago) ? f.metodos_pago.map(m => texto(m, 40)).filter(Boolean).slice(0, 20) : [];
         await client.query('UPDATE empresas SET documento=$2, pais=$3, direccion=$4, web=$5, redes=$6, metodos_pago=$7, administracion=$8 WHERE id=$1',
           [e.id, doc, texto(f.pais, 60), texto(f.direccion, 300), texto(f.web, 200), texto(f.redes, 400), JSON.stringify(metodos), admin]);
