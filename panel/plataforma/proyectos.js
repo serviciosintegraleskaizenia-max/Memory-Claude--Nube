@@ -98,6 +98,11 @@ module.exports = function crearProyectos({ client }) {
     // Lo que te descontaron al recibir el cobro del abono (opcional). Si escribes lo que llegó, debe cuadrar con el cobro.
     const descuentos = (Array.isArray(f.descuentos) ? f.descuentos : []).map(x => ({ nombre: texto(x.nombre, 80) || 'Descuento', monto: monto(x.monto) })).filter(x => x.monto > 0).slice(0, 10);
     const totalDesc = Math.round(descuentos.reduce((t, x) => t + x.monto, 0) * 100) / 100;
+    // Voucher y referencia del cobro del abono (se piden al crear el sistema y también al cobrar).
+    const comprobante = typeof f.comprobante === 'string' && f.comprobante ? String(f.comprobante) : '';
+    if (comprobante && !/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comprobante)) throw error('El voucher debe ser PDF, PNG, JPG o WEBP.');
+    if (comprobante.length > 2800000) throw error('El voucher pesa más de 2 MB.');
+    const nombreComp = texto(f.comprobante_nombre, 200), referencia = texto(f.referencia, 120);
     let recibido = f.recibido === undefined || f.recibido === null || f.recibido === '' ? null : monto(f.recibido);
     if (recibido === null && descuentos.length && abono > 0) recibido = Math.round((abono - totalDesc) * 100) / 100;
     if (recibido !== null && abono > 0) {
@@ -115,7 +120,7 @@ module.exports = function crearProyectos({ client }) {
     // El cobro del setup se crea una sola vez: el abono (si ya lo recibiste) y el saldo que falta.
     const hoyF = new Date().toLocaleDateString('sv-SE');
     if (precio > 0 && empresaId && !(await client.query('SELECT 1 FROM oficina_pagos WHERE proyecto_id = $1 LIMIT 1', [id])).rowCount) {
-      if (abono > 0) await client.query("INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, pagado_el, forma, nota, recibido, descuentos) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)", [empresaId, id, 'Setup · abono', abono, 'US$', abonoFecha || hoyF, abonoFecha || hoyF, metodo, '', recibido, JSON.stringify(descuentos)]);
+      if (abono > 0) await client.query("INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, pagado_el, forma, nota, recibido, descuentos, comprobante, comprobante_nombre, referencia) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14)", [empresaId, id, 'Setup · abono', abono, 'US$', abonoFecha || hoyF, abonoFecha || hoyF, metodo, '', recibido, JSON.stringify(descuentos), comprobante, nombreComp, referencia]);
       if (precio - abono > 0) await client.query('INSERT INTO oficina_pagos (empresa_id, proyecto_id, concepto, monto, moneda, vence, nota) VALUES ($1,$2,$3,$4,$5,$6,$7)', [empresaId, id, 'Setup · saldo al entregar', Math.round((precio - abono) * 100) / 100, 'US$', saldoFecha || hoyF, '']);
     }
     return id;
