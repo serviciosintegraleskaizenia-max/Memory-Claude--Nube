@@ -2822,7 +2822,7 @@ function htmlRecibo(rc, a, em) {
   const filas = (lista) => lista.map(([k, val]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eef1f5;font-size:14px"><span>${k}</span><span style="font-variant-numeric:tabular-nums">${val}</span></div>`).join('');
   const numero = String(rc.numero).padStart(4, '0');
   const fecha = fechaCorta(rc.fecha);
-  const adm = `<b>${esc(a.legal || a.nombre || '')}</b><br>${esc(a.documento ? 'Documento: ' + a.documento : '')}<br>${esc(a.direccion || '')}<br>${esc([a.correo, a.telefono, a.web].filter(Boolean).join(' · '))}`;
+  const adm = `<b>${esc(a.legal || a.nombre || '')}</b>${a.legal && a.nombre && a.nombre !== a.legal ? ` · <span>${esc(a.nombre)}</span>` : ''}<br>${esc(a.documento ? 'Documento: ' + a.documento : '')}<br>${esc(a.direccion || '')}<br>${esc([a.correo, a.telefono, a.web].filter(Boolean).join(' · '))}`;
   let cuerpo, quien;
   if (rc.tipo === 'socio') {
     const d = rc.detalle || {};
