@@ -2926,28 +2926,59 @@ async function formRetiro() {
 }
 // Resumen del mes: cobrado, gastos, utilidad y reparto de cada administración, con gráfica de 6 meses.
 function vResumen() {
-  const cs = permitidasAdmin();
-  const bloque = c => {
-    const serie = (D.resumen || {})[c] || [];
-    const actual = serie[serie.length - 1] || { cobrado: 0, gastos: 0, utilidad: 0, socio: 0, tuyo: 0, pct: 0 };
-    const max = Math.max(1, ...serie.map(s => Math.max(s.cobrado, s.gastos)));
-    const barras = serie.map(s => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
-        <div style="display:flex;align-items:flex-end;gap:3px;height:150px"><i title="Cobrado ${dinero(s.cobrado)}" style="display:block;width:14px;height:${Math.round(150 * s.cobrado / max)}px;background:#2563eb;border-radius:4px 4px 0 0"></i><i title="Gastos ${dinero(s.gastos)}" style="display:block;width:14px;height:${Math.round(150 * s.gastos / max)}px;background:#eb6834;border-radius:4px 4px 0 0"></i></div>
-        <small style="color:var(--suave)">${esc(s.mes.slice(5))}</small></div>`).join('');
-    return `<div class="caja"><h2>${esc(admin(c).nombre)}</h2>
-      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-        <div class="kpi"><div class="e">Cobrado · ${esc(D.nombreMes)}</div><div class="n">${dinero(actual.cobrado)}</div></div>
-        <div class="kpi"><div class="e">Gastos</div><div class="n">${dinero(actual.gastos)}</div></div>
-        <div class="kpi"><div class="e">Utilidad</div><div class="n">${dinero(actual.utilidad)}</div></div>
-        ${actual.pct > 0 ? `<div class="kpi" style="border-color:var(--verde)"><div class="e">Tuyo (${100 - actual.pct}%)</div><div class="n">${dinero(actual.tuyo)}</div></div><div class="kpi"><div class="e">Socio (${actual.pct}%)</div><div class="n">${dinero(actual.socio)}</div></div>` : '<div class="kpi" style="border-color:var(--verde)"><div class="e">Sin reparto</div><div class="n">100% tuyo</div></div>'}
-      </div>
-      <p class="sub">Azul = cobrado · naranja = gastos · últimos 6 meses</p>
-      <div style="display:flex;gap:6px;align-items:flex-end;padding:8px 4px;border-bottom:1px solid #e5e7eb">${barras}</div></div>`;
-  };
-  return cabecera('📊 Resumen del mes', 'Lo cobrado, lo gastado y lo que le toca a cada quien', selectorMes()) + barraGastos() +
-    (cs.length ? `<div class="rej r21">${cs.map(bloque).join('')}</div>` : '<div class="vacio">No tienes administraciones asignadas.</div>');
+  const clave = adminVista, a = admin(clave);
+  const pct = Number((D.administraciones || []).find(x => x.clave === clave) ? (D.administraciones.find(x => x.clave === clave).socio_porcentaje) : 0) || 0;
+  const etiquetaMia = (D.administraciones || []).find(x => x.clave === clave)?.etiqueta_mia || 'Mi parte';
+  const etiquetaSocio = (D.administraciones || []).find(x => x.clave === clave)?.etiqueta_socio || 'Parte del socio';
+  const socioNombre = (D.administraciones || []).find(x => x.clave === clave)?.socio_nombre || 'Socio';
+  const empresas = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === clave);
+  const ids = new Set(empresas.map(e => e.id));
+  const pagos = (D.pagos || []).filter(p => ids.has(p.empresa_id));
+  const cobrado = Math.round(pagos.filter(p => p.pagado_el && String(p.pagado_el).slice(0, 7) === mes).reduce((t, p) => t + (Number(p.monto) || 0), 0) * 100) / 100;
+  const gastosAdmin = (D.gastos || []).filter(g => administracionDe(g) === clave);
+  const gastosNegocio = gastosAdmin.reduce((t, g) => t + (gastoDelMes(g, mes) || 0), 0);
+  const creacion = (P && P.proyectos ? P.proyectos.filter(x => (x.administracion || 'centralia') === clave) : []).reduce((t, x) => t + (x.gastos || []).reduce((a2, g) => a2 + (Number(g.monto) || 0), 0), 0);
+  const plataforma = Math.round(ids.size ? [...ids].reduce((t, id) => t + gastosPlataformaDe(id), 0) * 100 : 0) / 100;
+  const gastos = Math.round((gastosNegocio + creacion + plataforma) * 100) / 100;
+  const utilidad = Math.round((cobrado - gastos) * 100) / 100;
+  const tuyaReal = Math.round(utilidad * (100 - pct)) / 100;
+  const socio = Math.round(utilidad * pct) / 100;
+  const hoyF = hoy();
+  const estadoDe = p => p.pagado_el ? 'v' : (String(p.vence) < hoyF ? 'rj' : 'a');
+  const diasMes = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
+  const primero = new Date(mes + '-01T12:00:00Z').getUTCDay();
+  const celdas = [];
+  for (let i = 0; i < (primero + 6) % 7; i++) celdas.push('<div style="background:transparent;border-color:transparent"></div>');
+  for (let d = 1; d <= diasMes; d++) {
+    const f = mes + '-' + String(d).padStart(2, '0');
+    const dia = pagos.filter(p => String(p.vence) === f);
+    celdas.push(`<div><span class="n">${d}</span>${dia.map(p => `<span class="dot ${estadoDe(p) === 'v' ? 'v' : estadoDe(p) === 'rj' ? 'rj' : 'a'}" style="display:block;margin-top:4px">${esc(p.concepto)}: ${dinero(p.monto)}</span>`).join('')}</div>`);
+  }
+  const quienDebe = pagos.filter(p => !p.pagado_el).sort((x, y) => String(x.vence).localeCompare(String(y.vence)));
+  const horas = P && P.proyectos ? P.proyectos.filter(x => (x.administracion || 'centralia') === clave) : [];
+  const k = (t, n, d, c) => `<div style="background:#f5f8fc;border-radius:14px;padding:14px;min-height:98px;display:flex;flex-direction:column;justify-content:space-between;border-left:4px solid ${c}"><small style="color:var(--suave);font-size:11px;text-transform:uppercase">${t}</small><b style="font-size:21px;font-variant-numeric:tabular-nums">${n}</b><i style="font-style:normal;font-size:12px;color:var(--suave)">${d}</i></div>`;
+  return cabecera('📊 Resumen del mes', `${esc(a.nombre)} · ${esc(D.nombreMes)}`, selectorMes()) + barraGastos() + `
+  <div class="caja" style="margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px">
+      ${k('Cobrado', dinero(cobrado), 'pagos recibidos este mes', '#13c08a')}
+      ${k('Gastos', dinero(gastos), 'sistemas + plataforma', '#eb6834')}
+      ${k('Utilidad', dinero(utilidad), 'para repartir', '#0b5cad')}
+      ${pct > 0 ? k(esc(etiquetaMia), dinero(tuyaReal), `${100 - pct} % · ${esc(socioNombre)}`, '#0f7b6c') : k('Sin reparto', '100 % tuyo', 'Kaizen no reparte', '#0f7b6c')}
+      ${pct > 0 ? k(esc(etiquetaSocio), dinero(socio), `${pct} % · ${esc(socioNombre)}`, '#8a5a00') : ''}
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px">
+    <div class="caja"><h2>Calendario de cobros</h2>
+      <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:12px">${['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].map(d => `<div style="font-weight:700;color:var(--suave);padding:4px">${d}</div>`).join('')}${celdas.map(c => c.replace('<div>', '<div style="min-height:70px;border:1px solid #e3e9f2;border-radius:10px;padding:6px">').replace('<div style="background:transparent;border-color:transparent"></div>', '<div></div>')).join('')}</div>
+      <div style="display:flex;gap:10px;font-size:12px;margin-top:10px"><span class="chip verde">Pagado</span><span class="chip ambar">Pendiente</span><span class="chip rj">Vencido</span></div>
+    </div>
+    <div>
+      <div class="caja" style="margin-bottom:12px"><h2>Horas de trabajo</h2>${horas.length ? horas.map(x => `<div style="margin-bottom:8px"><b>${esc(x.nombre)}</b> · ${Number(x.horas) || 0} h<div class="bar" style="margin-top:4px"><i style="width:${Math.min(100, (Number(x.horas) || 0) * 1)}%"></i></div></div>`).join('') : '<div class="vacio">Sin programas. Las horas se escriben en cada programa.</div>'}</div>
+      <div class="caja"><h2>Quién debe</h2>${quienDebe.length ? quienDebe.map(p => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--borde)"><span>${esc(nombreCliente(empresas.find(e => e.id === p.empresa_id) || {}))} · vence ${fechaCorta(p.vence)}</span><b>${dinero(p.monto)}</b></div>`).join('') : '<div class="vacio">Nadie debe nada este mes.</div>'}</div>
+    </div>
+  </div>`;
 }
-// ---------- Administración: clientes en fichas, cobros en línea y pago conjunto ----------
+
 function vAdministracion() {
   if (!permitidasAdmin().includes(adminVista)) adminVista = permitidasAdmin()[0] || 'kaizen';
   const pestanasAdmin = permitidasAdmin().map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('');
