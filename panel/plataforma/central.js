@@ -245,7 +245,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   // ---------- Conexión y procesos de cada empresa ----------
 
   async function conEmpresa(e, fn) {
-    const c = new Client({ ...config.db, database: e.base_datos });
+    // Con límite de tiempo: si la base de una empresa no responde, no se queda esperando y bloquea la Oficina.
+    const c = new Client({ ...config.db, database: e.base_datos, connectionTimeoutMillis: 4000, query_timeout: 8000 });
     await c.connect();
     try { return await fn(c); } finally { await c.end().catch(() => {}); }
   }
