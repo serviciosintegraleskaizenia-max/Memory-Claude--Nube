@@ -3038,7 +3038,7 @@ function vClientesAdm() {
       <td>${p.pagado_el ? '' : `<input type="checkbox" data-sel-cobro="${p.id}" ${selCobros.has(p.id) ? 'checked' : ''}> `}<b>${esc(p.concepto)}</b></td><td>${p.pagado_el ? 'Pagado ' + fechaCorta(p.pagado_el) : 'Vence ' + fechaCorta(p.vence)}</td>
       <td>${esc([p.forma, p.referencia].filter(Boolean).join(' · ') || '—')}</td><td class="n">${dinero(p.monto, p.moneda)}</td>
       <td>${p.pagado_el ? '<span class="chip verde">Pagado</span>' : '<span class="chip ambar">Pendiente</span>'}</td>
-      <td style="white-space:nowrap">${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">Comprobante</button> ` : ''}${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Cobrar</button>`}</td></tr>`).join('') : '';
+      <td style="white-space:nowrap">${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">Comprobante</button> ` : ''}${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Cobrar</button> `}<button class="btn-mini" data-borrar-cobro="${p.id}" data-texto="${esc(p.concepto + ' · ' + dinero(p.monto, p.moneda) + (p.pagado_el ? ' (pagado)' : ' (pendiente)'))}" style="color:var(--rojo,#b42318)">Borrar</button></td></tr>`).join('') : '';
     ficha = `<div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid var(--linea,#e5e7eb);padding-bottom:14px">
       <div style="background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;padding:16px 18px;display:grid;grid-template-columns:100px 1fr auto;gap:14px;align-items:center">
         ${sel.logo ? `<img src="${sel.logo}" alt="Logo" style="width:100px;height:64px;object-fit:contain;border-radius:10px;background:#fff">` : '<div style="width:100px;height:64px;border-radius:10px;background:#fff;color:#5b6676;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center">Logo del cliente</div>'}
@@ -3121,9 +3121,10 @@ function formPagarVarios() {
   };
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios],[data-registrar-mensualidad],[data-toggle-estado],[data-imprimir-estado]'); if (!t) return;
+  const t = ev.target.closest('[data-adm-sec],[data-ficha],[data-pagar-varios],[data-registrar-mensualidad],[data-toggle-estado],[data-imprimir-estado],[data-borrar-cobro]'); if (!t) return;
   ev.preventDefault();
   const d = t.dataset;
+  if (d.borrarCobro) return borrarCobro(Number(d.borrarCobro), d.texto);
   if (d.admSec) { admSec = d.admSec; return pintar(); }
   if (d.ficha) { fichaSel = Number(d.ficha); return pintar(); }
   if (d.toggleEstado) { estadoAbierto = !estadoAbierto; return pintar(); }
@@ -3169,6 +3170,12 @@ async function registrarMensualidad(id) {
   const r = await api('/api/oficina/proyectos/mensualidad', { proyecto_id: id, mes: hoy().slice(0, 7) });
   if (!r.ok) return aviso(r.data.error || 'No se pudo registrar la mensualidad.');
   aviso('Mensualidad registrada. Ya aparece para cobrar.'); await ir(vista);
+}
+async function borrarCobro(id, texto) {
+  if (!confirm('¿Borrar este cobro? Se quita de los totales y no se puede deshacer.\n\n' + texto)) return;
+  const r = await api('/api/oficina/borrar/pagos', { id });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo borrar el cobro.');
+  aviso('Cobro borrado.'); await ir(vista);
 }
 function formEvento(ev = {}, fecha) {
   abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
