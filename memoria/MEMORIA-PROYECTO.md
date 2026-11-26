@@ -86,3 +86,12 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 11. Enviar la revisión a Meta.
 12. Replicar con PEX, Premios Carrasco y Somos Viajes (con sus varios números).
 13. Pendientes de proyecto anteriores: Hoja de operación del día (#47), API de Zentralia (#53), Etapa 2 de Oficina: correo propio (#28), página principal de kaizenia.app con pagos (#24).
+
+## ARQUITECTURA APROBADA POR EL DUEÑO (decisión vigente)
+- **Oficina** (oficina.kaizenia.app): control central. Solo el Programador configura empresas, conexiones, entrenamiento de la IA y reportes.
+- **Chatwoot** (redes.kaizenia.app, CONFIRMADO por el dueño que es Chatwoot): bandeja única de chat, **una cuenta de Chatwoot por empresa**. Los clientes solo entran para chatear, nunca a configuración.
+- **n8n** (automatizacion.kaizenia.app): un flujo por empresa, copiado de la plantilla. Solo el Programador entra.
+- **Paneles de producto** (correo, operaciones, reservas): solo Somos Viajes por ahora. Un subdominio nuevo solo cuando un producto tenga panel propio.
+- **No crear subdominio por cliente para el chat.** El subdominio kaizenconsulting-ia de la ficha no hace falta por ahora.
+- Entrenamiento de la IA: se hace en Oficina (Base del asistente), no en un subdominio aparte.
+- Plan en orden: (1) cuenta Kaizen en Chatwoot + bandeja WhatsApp; (2) webhook de Meta hacia Chatwoot + prueba con Test; (3) flujo n8n de Kaizen en nota privada; (4) revisión de Meta con textos actualizados a Chatwoot, videos y envío; (5) replicar con Somos Viajes (varios números), PEX y Premios Carrasco.
