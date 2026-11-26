@@ -1,0 +1,29 @@
+IDENTIFICADORES DE WHATSAPP · KAIZEN CONSULTING (no son claves secretas, pero no los compartas fuera de la empresa)
+
+Número real de Kaizen: +51 989 480 556
+  Identificador del número de teléfono (phone_number_id): 1436733079519865
+  Fuente: Administrador de WhatsApp → cuenta Kaizen Consulting → Números de teléfono → +51 989 480 556
+  Estado: CONFIRMADO en pantalla de Meta (Administrador de WhatsApp, cuenta Kaizen Consulting).
+
+Negocio (business_id) Kaizen Consulting: 1407345434652908
+
+ID de la cuenta WhatsApp Business (WABA) de Kaizen: 1126190176716418 (guardado en Oficina; PENDIENTE de verificar contra Ajustes → Cuentas de WhatsApp → Kaizen Consulting)
+Enlace de referencia (asset_id en la URL):
+  asset_id: 1126190176716418
+
+Número de prueba de Meta (NO usar para Zentralia real): +1 555-138-1526
+  Identificador: 1376670675538773
+
+NO GUARDAR AQUÍ: tokens de acceso ni contraseñas. El token va solo en Oficina → Automatización → Conexión con WhatsApp (Meta) → Token del sistema.
+
+CLAVE SECRETA DE LA APP (Zentralia WB): NO se guarda aquí. Se obtiene en developers.facebook.com → Mis apps → Zentralia WB → Configuración → Básica → Clave secreta de la aplicación → Mostrar. Se guarda solo en Oficina → Conexión con WhatsApp (Meta) → Clave secreta de la app de Meta. Estado: PENDIENTE de reemplazar por la actual de Meta (la guardada no se puede verificar).
+
+INSTAGRAM · @kaizenconsultor.ia
+  ID de la cuenta de Instagram: 17841443950091905
+  Usuario (sin @): kaizenconsultor.ia
+  Fuente: captura de Meta Business Settings → Cuentas de Instagram (propiedad: Kaizen Consulting)
+
+FACEBOOK · página Kaizen Consulting
+  ID de la página de Facebook: 1263788503473729
+  Nombre de la página: Kaizen Consulting
+  Fuente: captura de Meta Business Settings → Cuentas → Páginas (propiedad: Kaizen Consulting)
