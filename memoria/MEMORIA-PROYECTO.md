@@ -128,3 +128,8 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Mensaje de WhatsApp al +51 989 480 556 → Chatwoot (cuenta Kaizen) → n8n (flujo de Kaizen, en modo prueba) → asistente de Oficina (empresa Kaizen Consulting IA) → respuesta llega al WhatsApp del dueño.
 - Problemas resueltos: aplicación "Zentralia interno" de Cloudflare Access bloqueaba el webhook (se creó excepción "Webhooks n8n Kaizen" con Bypass para /webhook y /webhook-test); credencial de n8n equivocada (ahora "Clave asistente Kaizen" usa la clave kc_… de la empresa Kaizen).
 - Pendientes de Kaizen: (1) cargar el documento de servicios (memoria/documentos/Servicios-Kaizen-para-el-asistente.docx) con los datos reales; (2) instrucciones y bienvenida ya puestas, ajustar tono; (3) cambiar "Responder en Chatwoot" a respuesta pública solo al activar para clientes; (4) correo soporte@ pendiente; (5) borrar canal de Messenger de Somos Viajes.
+
+## DECISIÓN DE PUBLICACIÓN (26 nov)
+- El dueño decidió: respuestas PÚBLICAS desde el inicio, porque por ahora solo él tiene el número +51 989 480 556. Revisar esta decisión antes de compartir el número con clientes.
+- Canal de Messenger "Kaizen Consulting" borrado de la cuenta de Somos Viajes.
+- Pasos de publicación: (1) Publish del flujo en n8n; (2) cambiar el webhook de Chatwoot (cuenta Kaizen) a la URL de producción /webhook/automatizacion/kaizenconsulting-ia/chatwoot; (3) probar con mensaje desde el celular.
