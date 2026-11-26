@@ -56,7 +56,7 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - n8n: **funciona** en el servidor. URL: **pendiente de confirmar**.
 - Dominio base: **kaizenia.app**, administrado en Cloudflare (dash.cloudflare.com, cuenta del dueño).
 - Subdominios por empresa previstos: kaizenconsulting-ia, pex-solution, premios-carrasco (todos en kaizenia.app). Pendiente de crear en Cloudflare como registros tipo A con DNS only.
-- **IP del servidor: NO está en el repositorio.** El script de instalación usa el alias SSH `zentralia` de la computadora del dueño. Para verla: `ssh -G zentralia | Select-String hostname` en PowerShell. Pendiente de confirmar.
+- **IP pública del servidor: 2.25.172.8** (confirmada por el dueño con `ssh -G zentralia` en PowerShell).
 - Flujo de n8n de Kaizen: memoria copiada en n8n/kaizen-consulting-automatizacion-redes.json, **inactivo**. Pendiente: dominio y número de cuenta de Chatwoot, y crear credenciales en n8n (no en el archivo).
 - Plantilla general del flujo: n8n/automatizacion-redes.json.
 
@@ -71,7 +71,7 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - memoria/documentos/textos-permisos-meta.md: mismos textos en Markdown (de respaldo).
 
 ## Pendientes (en orden)
-1. Confirmar la IP del servidor, la URL de Chatwoot y la URL de n8n.
+1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear los registros DNS en Cloudflare (kaizenconsulting-ia, pex-solution, premios-carrasco) con DNS only.
 3. Configurar el servidor para responder a esos subdominios con HTTPS (pendiente: confirmar cómo está montado el servidor web).
 4. Crear la cuenta de Kaizen en Chatwoot y su bandeja de WhatsApp con los IDs de arriba.
