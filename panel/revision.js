@@ -55,7 +55,18 @@ function vueloIncompleto(vuelo) {
   return partes.filter(p => !/^[A-Z0-9]{2}\s?-?\s?\d{1,4}[A-Z]?$/i.test(p) && !/[a-záéíóúñ]{3,}.*\d{1,4}[A-Z]?$/i.test(p));
 }
 
-const esTraslado = f => /traslad|transfer|shuttle|aeropuerto|airport|llegada|salida|in\/out|in-out/.test(normal([f.tipo_servicio, f.actividad, f.punto_partida, f.punto_llegada].join(' '))) || Boolean(f.aeropuerto);
+// "N/A" o "no aplica" en un campo: significa que ese dato no corresponde al servicio (por ejemplo vuelo en una actividad).
+const esNoAplica = v => /^(n\/?a|no aplica)$/i.test(String(v || '').trim());
+// Un crucero llega al puerto (no a un aeropuerto): no lleva vuelo.
+const esCrucero = f => /\bpuerto\b|crucero|cruise|muelle/i.test(String(f.aeropuerto || ''));
+// Una actividad sola nunca es traslado, aunque traiga aeropuerto o N/A. Un IN, OUT o INTERHOTEL sí lo es.
+const esTraslado = f => {
+  const tipo = String(f.tipo_servicio || '').trim().toUpperCase();
+  if (tipo === 'ACTIVIDAD') return false;
+  if (['IN', 'OUT', 'INTERHOTEL'].includes(tipo)) return true;
+  return /traslad|transfer|shuttle|aeropuerto|airport|llegada|salida|in\/out|in-out/.test(normal([f.tipo_servicio, f.punto_partida, f.punto_llegada].join(' ')))
+    || /\b[A-Z]{3}\b/.test(String(f.aeropuerto || '').toUpperCase());
+};
 const esLlegada = f => /llegada|arrival|\bin\b|entrada/.test(normal(f.actividad + ' ' + f.tipo_servicio)) || /aeropuerto|airport/.test(normal(f.punto_partida));
 const esSalida = f => /salida|departure|\bout\b|regreso/.test(normal(f.actividad + ' ' + f.tipo_servicio)) || /aeropuerto|airport/.test(normal(f.punto_llegada));
 const fechaCorta = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
@@ -121,15 +132,19 @@ function revisarReservas(filas, { isoDe, claveDe, hoy }) {
       const iso = isoDe(f);
       const traslado = esTraslado(f);
       if (!iso) puntos.push({ tipo: 'falta', texto: 'Falta la fecha del servicio.' });
-      if (traslado && !String(f.vuelo || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el número de vuelo.' });
-      else if (traslado) {
+      // El vuelo solo se pide en IN y OUT. No aplica en interhoteles, actividades, cruceros ni cuando dice N/A.
+      const tipoSrv = String(f.tipo_servicio || '').trim().toUpperCase();
+      const vueloAplica = ['IN', 'OUT'].includes(tipoSrv) && !esCrucero(f) && !esNoAplica(f.vuelo);
+      if (vueloAplica && !String(f.vuelo || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el número de vuelo.' });
+      else if (vueloAplica) {
         const malos = vueloIncompleto(f.vuelo);
         if (malos.length) puntos.push({ tipo: 'falta', texto: `El vuelo "${malos.join(', ')}" está incompleto: falta el número (2 letras y de 1 a 4 números, por ejemplo CM 425).` });
       }
-      if (traslado && !String(f.hora_servicio || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta la hora (del vuelo o de recogida).' });
+      // La hora no bloquea la reserva: a veces se confirma el día anterior o a última hora. No se marca como falta.
       if (!f.hotel && !f.punto_llegada && !f.punto_partida) puntos.push({ tipo: 'falta', texto: 'Falta el hotel o el lugar del servicio.' });
+      if (!String(f.nombre_cliente || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el nombre del pasajero.' });
       if ((Number(f.adultos) || 0) + (Number(f.ninos) || 0) + (Number(f.infantes) || 0) === 0 && ad + ni + inf === 0) puntos.push({ tipo: 'falta', texto: 'Falta la cantidad de pasajeros.' });
-      if (!String(f.telefono || '').trim()) puntos.push({ tipo: 'falta', texto: 'Falta el teléfono del pasajero.' });
+      // El teléfono no bloquea la reserva: no es uno de los datos obligatorios (día, nombre y hotel).
       // La IA avisa de qué datos no está segura (nota "[DUDA: vuelo, hora_servicio]").
       const duda = String(f.error_ia ? '' : f.motivo || '').match(/\[DUDA:\s*([^\]]+)\]/i);
       if (duda) puntos.push({ tipo: 'duda', texto: 'La IA no está segura de: ' + duda[1].replace(/_/g, ' ').replace(/ servicio/g, '') + '. Compáralo con el correo.' });

@@ -3782,12 +3782,14 @@ function datosQueFaltan(r) {
     const t = tipoServicio(s);
     const nombre = (TIPOS_SRV[t] && t !== 'OTRO' ? TIPOS_SRV[t].replace(/^\S+\s/, '') : 'Servicio') + (s.fecha_servicio ? ' del ' + fechaBonita(s.fecha_servicio) : '') + (s.actividad && t === 'ACTIVIDAD' ? ' (' + s.actividad + ')' : '');
     const falta = [];
-    const esAeropuerto = t === 'IN' || t === 'OUT';
+    // El vuelo solo aplica en IN y OUT: no en cruceros (llegan al puerto) ni cuando dice N/A.
+    const esAeropuerto = (t === 'IN' || t === 'OUT') && !/\bpuerto\b|crucero|cruise|muelle/i.test(String(s.aeropuerto || '')) && !/^(n\/?a|no aplica)$/i.test(String(s.vuelo || '').trim());
     if (!s.fecha_servicio) falta.push('la fecha');
     const vuelos = String(s.vuelo || '').split(/[,;/]+/).map(x => x.trim()).filter(Boolean);
     if (esAeropuerto && !vuelos.length) falta.push('el número de vuelo');
     else if (esAeropuerto && vuelos.some(v => !VUELO_COMPLETO.test(v))) falta.push('el número de vuelo completo (solo vino "' + vuelos.filter(v => !VUELO_COMPLETO.test(v)).join(', ') + '")');
-    if (!s.hora_servicio) falta.push(t === 'IN' ? 'la hora de llegada del vuelo' : t === 'OUT' ? 'la hora de salida del vuelo' : 'la hora');
+    // La hora no bloquea la reserva: a veces se confirma el día anterior o a última hora.
+    if (!String(s.nombre_cliente || '').trim()) falta.push('el nombre del pasajero');
     if (!s.hotel && !s.punto_llegada && !s.punto_partida) falta.push('el hotel');
     if (!(Number(s.adultos) || Number(s.ninos) || Number(s.infantes))) falta.push('la cantidad de pasajeros (adultos, niños e infantes)');
     if (falta.length) lista.push((g.length > 1 && !s.fecha_servicio ? nombre + ' ' + (g.indexOf(s) + 1) : nombre) + ': ' + falta.join(', '));
@@ -4197,8 +4199,10 @@ function serviciosCalendario() {
 }
 function faltaEnServicio(x) {
   const s = x.r;
-  if (x.t !== 'IN' && x.t !== 'OUT') return !s.hora_servicio;
-  return !s.vuelo || !VUELO_COMPLETO.test(String(s.vuelo).split(/[,;/]/)[0].trim()) || !s.hora_servicio;
+  // Solo IN y OUT piden vuelo. Actividades, interhoteles, cruceros y N/A no cuentan como falta; la hora tampoco.
+  if (x.t !== 'IN' && x.t !== 'OUT') return false;
+  if (/\bpuerto\b|crucero|cruise|muelle/i.test(String(s.aeropuerto || '')) || /^(n\/?a|no aplica)$/i.test(String(s.vuelo || '').trim())) return false;
+  return !s.vuelo || !VUELO_COMPLETO.test(String(s.vuelo).split(/[,;/]/)[0].trim());
 }
 function pintarCalendario() {
   const caja = document.getElementById('calendario');
