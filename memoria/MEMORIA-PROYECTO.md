@@ -111,3 +111,11 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Siguiente trabajo: **pruebas del flujo de n8n de Kaizen**, luego replicar con las otras empresas.
 - Pasos de prueba: (1) importar el flujo en automatizacion.kaizenia.app, apagado; (2) credenciales: clave del asistente (Oficina → Clientes → IA) y token de acceso de Chatwoot (perfil del agente); (3) número de cuenta de Kaizen en Chatwoot; (4) en Chatwoot de Kaizen: Ajustes → Integraciones → Webhooks, usar la URL de prueba de n8n, evento message_created; (5) cargar contenido de prueba en la Base del asistente de Kaizen (Oficina); (6) probar: mensaje desde celular → nota privada en Chatwoot; (7) revisar y luego activar.
 - Pendiente aparte: borrar el canal de Messenger "Kaizen Consulting" de la cuenta de Somos Viajes (el dueño lo confirmó).
+
+## CAUSA DEL ERROR "Clave del asistente no válida" (verificada en el código)
+- La ruta /api/conocimiento/responder valida la clave contra `empresas.conocimiento_token` (conocimiento.js, línea ~1304).
+- La clave que se ve en Oficina → Base del asistente → Ajustes del asistente (formato kc_…) es la de cada EMPRESA. Se copia con "Copiar clave".
+- "Ver clave para n8n" (Empresas y demo) es otra clave general de n8n: NO sirve para el asistente.
+- Kaizen está en `automatizacion_clientes`, no en `empresas`, así que no tiene clave del asistente y no aparece en el selector de Base del asistente.
+- Solución de hoy: crear Kaizen también como empresa (Empresas y demo → Nueva empresa, tipo Otro negocio) y usar su clave kc_… en la credencial de n8n ("Bearer " + clave).
+- Pendiente a largo plazo: que la Base del asistente liste también los clientes de automatización (cambio de código en Oficina) y unificar ambos registros.
