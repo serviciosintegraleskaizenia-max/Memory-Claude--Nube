@@ -105,3 +105,9 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Pendiente inmediato: (1) agregar al dueño como agente en Kaizen Consulting IA; (2) verificar en Meta que el webhook apunte a Chatwoot; (3) importar el flujo de n8n de Kaizen inactivo, con la URL del webhook de Chatwoot, y probarlo en nota privada.
 - **Webhook de la app Zentralia WB:** la URL general sigue siendo oficina.kaizenia.app/api/whatsapp/webhook. Los mensajes de Kaizen llegan a Chatwoot, probablemente por una suscripción propia de la cuenta de WhatsApp (WABA). **No cambiar la URL general sin revisar antes** para no romper la recepción.
 - **Webhook de Chatwoot para la bandeja de Kaizen (no secreto):** https://redes.kaizenia.app/webhooks/whatsapp/+51989480556 . El token de verificación NO se guarda en el repositorio.
+
+## DECISIÓN VIGENTE (dueño, 26 nov)
+- Oficina se queda como está (recepción de WhatsApp de Kaizen ya llega a Chatwoot). No cambiar el webhook general de la app.
+- Siguiente trabajo: **pruebas del flujo de n8n de Kaizen**, luego replicar con las otras empresas.
+- Pasos de prueba: (1) importar el flujo en automatizacion.kaizenia.app, apagado; (2) credenciales: clave del asistente (Oficina → Clientes → IA) y token de acceso de Chatwoot (perfil del agente); (3) número de cuenta de Kaizen en Chatwoot; (4) en Chatwoot de Kaizen: Ajustes → Integraciones → Webhooks, usar la URL de prueba de n8n, evento message_created; (5) cargar contenido de prueba en la Base del asistente de Kaizen (Oficina); (6) probar: mensaje desde celular → nota privada en Chatwoot; (7) revisar y luego activar.
+- Pendiente aparte: borrar el canal de Messenger "Kaizen Consulting" de la cuenta de Somos Viajes (el dueño lo confirmó).
