@@ -1150,12 +1150,15 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       // Clientes de automatización (redes y CRM), separados del motor de correo.
       if (req.method === 'GET' && url === '/api/central/automatizacion') {
         const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
-        const sinClave = clientes.map(c => {
+        const sinClave = [];
+        for (const c of clientes) {
           const p = { ...(c.perfil || {}), ia: { ...((c.perfil || {}).ia || {}) } };
           p.ia.clave_configurada = Boolean(p.ia.clave_openrouter_enc);
           delete p.ia.clave_openrouter_enc;
-          return { ...c, perfil: p };
-        });
+          // Últimos mensajes de WhatsApp que llegaron a este cliente (por su número de API).
+          const entrantes = (await client.query('SELECT de, nombre, tipo, texto, recibido FROM whatsapp_entrantes WHERE slug = $1 ORDER BY id DESC LIMIT 20', [c.slug])).rows;
+          sinClave.push({ ...c, perfil: p, entrantes });
+        }
         return json(res, 200, { clientes: sinClave, clave_general_configurada: Boolean(await leerConfigAuto('openrouter_enc')) });
       }
       if (req.method === 'POST' && url === '/api/central/automatizacion/clave-ia/guardar') {

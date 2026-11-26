@@ -5012,6 +5012,9 @@ function formAutomatizacion() {
     ${marca('aMetaWa', 'El número de WhatsApp está verificado', m.whatsapp_verificado)}
     ${marca('aMetaPermisos', 'Los permisos de la app de Meta están aprobados', m.permisos_aprobados)}
 
+    <div class="titulo-seccion">5 · Mensajes de WhatsApp que llegan a este número</div>
+    ${(e.entrantes || []).length ? `<div class="lista-entrantes">${(e.entrantes || []).map(x => `<div class="fila-entrante"><b>${esc(x.nombre || x.de || 'Sin nombre')}</b> <small class="etiqueta-sec">${esc(x.de || '')} · ${esc(String(x.recibido || '').slice(0, 16).replace('T', ' '))}</small><br>${esc(x.texto || ('[' + (x.tipo || 'mensaje') + ']'))}</div>`).join('')}</div>` : '<p class="etiqueta-sec">Todavía no ha llegado ningún mensaje a este número.</p>'}
+
     `)}
     ${seccionAuto('clientes', 'ia', `
     <div class="titulo-seccion">5 · Inteligencia artificial</div>
