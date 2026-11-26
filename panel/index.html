@@ -1710,7 +1710,19 @@ function paxCorto(r) {
   return p.join(' · ');
 }
 // En actividades e interhoteles el aeropuerto y el vuelo no aplican: se muestra "—" en vez de "Falta".
-function campoSrv(s, valor) { return valor ? esc(valor) : (['ACTIVIDAD', 'INTERHOTEL'].includes(tipoServicio(s)) ? '<span class="na">—</span>' : falta('')); }
+// Campos que no aplican al servicio se muestran como N/A, nunca como "Falta" ni "pendiente".
+// campo: 'vuelo' o 'aerolinea' (solo llegadas y salidas de aeropuerto llevan vuelo) o 'aeropuerto' (no lo llevan actividades ni interhoteles).
+function esCruceroSrv(s) { return /\bpuerto\b|crucero|cruise|muelle/i.test(String(s.aeropuerto || '')); }
+function campoSrv(s, valor, campo) {
+  const v = String(valor || '').trim();
+  if (v && !/^(n\/?a|no aplica)$/i.test(v)) return esc(v);
+  const t = tipoServicio(s);
+  const vueloNoAplica = !['IN', 'OUT'].includes(t) || esCruceroSrv(s) || /^(n\/?a|no aplica)$/i.test(String(s.vuelo || '').trim());
+  const noAplica = (campo === 'vuelo' || campo === 'aerolinea') ? vueloNoAplica
+    : campo === 'aeropuerto' ? ['ACTIVIDAD', 'INTERHOTEL'].includes(t)
+    : false;
+  return noAplica ? '<span class="na">N/A</span>' : falta('');
+}
 function tipoServicio(r) {
   const t = String(r.tipo_servicio || '').trim().toUpperCase();
   if (TIPOS_SRV[t] && t !== 'OTRO') return t;
@@ -1768,7 +1780,8 @@ function paxReserva(g, corto) {
 }
 function horaServicio(s) {
   const t = tipoServicio(s);
-  if (!s.hora_servicio) return falta('');
+  // La hora no bloquea nada: si aún no se confirma, se dice "Por confirmar".
+  if (!s.hora_servicio) return '<span class="na">Por confirmar</span>';
   return `${esc(s.hora_servicio)}<small>${t === 'IN' ? 'llega' : t === 'OUT' ? 'sale' : ''}</small>`;
 }
 function lineas(g, fn) { return g.map(s => `<div class="srv">${fn(s)}</div>`).join(''); }
@@ -2160,8 +2173,8 @@ function pintarTarjetas(grupos, ks) {
       return `<div class="t-srv">
         ${ver('servicio') ? `<div><span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${incluyeCorto(s, t)}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</div>` : ''}
         <div class="t-fila">${[dato('fecha', 'Fecha', falta(s.fecha_servicio)), dato('hora', 'Hora', `<span class="srv-hora">${horaServicio(s)}</span>`),
-          dato('vuelo', 'Vuelo', campoSrv(s, s.vuelo)), dato('aerolinea', 'Aerolínea', campoSrv(s, aerolineaDe(s.vuelo))),
-          dato('aeropuerto', 'Aeropuerto', campoSrv(s, s.aeropuerto)), dato('hotel', 'Hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))].join('')}</div>
+          dato('vuelo', 'Vuelo', campoSrv(s, s.vuelo, 'vuelo')), dato('aerolinea', 'Aerolínea', campoSrv(s, aerolineaDe(s.vuelo), 'aerolinea')),
+          dato('aeropuerto', 'Aeropuerto', campoSrv(s, s.aeropuerto, 'aeropuerto')), dato('hotel', 'Hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))].join('')}</div>
       </div>`;
     }).join('');
     return `<div class="tarjeta-reserva" data-id="${r.id}">${cabeza}${general ? `<div class="t-fila">${general}</div>` : ''}${servicios}</div>`;
@@ -2281,12 +2294,12 @@ function pintar() {
             clientes: () => reserva(` class="recortar" title="${esc(clientesDe(g))}"`, `${falta(clientesDe(g))}`),
             telefono: () => reserva('', `${falta([...new Set(g.map(x => x.telefono).filter(Boolean))].join(', '))}`),
             pax: () => variosPax ? `<td>${falta(paxCorto(s))}</td>` : reserva('', `${falta(paxReserva(g, compacto))}`),
-            aeropuerto: () => `<td>${dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto))}</td>`,
-            servicio: c => `<td class="col-srv">${c.con ? `<div class="sub">${campoSrv(s, s.aeropuerto)}</div>` : ''}<span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${incluyeCorto(s, t)}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>`,
+            aeropuerto: () => `<td>${dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto, 'aeropuerto'))}</td>`,
+            servicio: c => `<td class="col-srv">${c.con ? `<div class="sub">${campoSrv(s, s.aeropuerto, 'aeropuerto')}</div>` : ''}<span class="srv-tipo srv-${t}">${TIPOS_SRV[t]}</span>${s.actividad && t !== 'IN' && t !== 'OUT' ? ' ' + esc(s.actividad) : ''}${incluyeCorto(s, t)}${nota ? `<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>` : ''}</td>`,
             fecha: c => `<td${c.con ? ' class="srv-hora"' : ''}>${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio))}${c.con ? `<div class="sub">${dudoso(s, 'hora_servicio', horaServicio(s))}</div>` : ''}</td>`,
             hora: () => `<td class="srv-hora">${dudoso(s, 'hora_servicio', horaServicio(s))}</td>`,
-            aerolinea: () => `<td>${campoSrv(s, aerolineaDe(s.vuelo))}</td>`,
-            vuelo: c => `<td>${dudoso(s, 'vuelo', campoSrv(s, s.vuelo))}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo))}</div>` : ''}</td>`,
+            aerolinea: () => `<td>${campoSrv(s, aerolineaDe(s.vuelo), 'aerolinea')}</td>`,
+            vuelo: c => `<td>${dudoso(s, 'vuelo', campoSrv(s, s.vuelo, 'vuelo'))}${c.con ? `<div class="sub">${campoSrv(s, aerolineaDe(s.vuelo), 'aerolinea')}</div>` : ''}</td>`,
             hotel: () => `<td>${dudoso(s, 'hotel', falta(s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada)))}</td>`,
             estado: () => reserva(' class="col-estado"', `${etiquetaEstado(estadoReserva(g))}${marca}${botonPedirFila(r)}`)
           };
