@@ -95,3 +95,11 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **No crear subdominio por cliente para el chat.** El subdominio kaizenconsulting-ia de la ficha no hace falta por ahora.
 - Entrenamiento de la IA: se hace en Oficina (Base del asistente), no en un subdominio aparte.
 - Plan en orden: (1) cuenta Kaizen en Chatwoot + bandeja WhatsApp; (2) webhook de Meta hacia Chatwoot + prueba con Test; (3) flujo n8n de Kaizen en nota privada; (4) revisión de Meta con textos actualizados a Chatwoot, videos y envío; (5) replicar con Somos Viajes (varios números), PEX y Premios Carrasco.
+
+## ESTADO ACTUAL (actualizado)
+- **Chatwoot · cuenta "Kaizen Consulting IA"** (administrador: dueño): creada.
+- **Bandeja "Kaizen Consulting WhatsApp"** (WhatsApp manual, Nube de WhatsApp): creada con número +51 989 480 556, ID de número 1436733079519865, WABA 1126190176716418 y token de acceso nuevo (generado el 25-26 nov, guardado solo en Chatwoot).
+- **Recepción probada:** llegó un mensaje real ("hola") a la bandeja de Kaizen.
+- **Envío probado:** el mensaje de prueba "Prueba de Zentralia" salió desde Chatwoot y llegó al celular del dueño.
+- **Canal de Messenger "Kaizen Consulting" que estaba en la cuenta de Somos Viajes:** es una conversación de prueba. El dueño autorizó borrarlo; pendiente de eliminarlo desde Somos Viajes → Ajustes → Bandejas.
+- Pendiente inmediato: (1) agregar al dueño como agente en Kaizen Consulting IA; (2) verificar en Meta que el webhook apunte a Chatwoot; (3) importar el flujo de n8n de Kaizen inactivo, con la URL del webhook de Chatwoot, y probarlo en nota privada.
