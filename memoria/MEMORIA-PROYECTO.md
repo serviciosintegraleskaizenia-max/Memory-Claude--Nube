@@ -119,3 +119,7 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Kaizen está en `automatizacion_clientes`, no en `empresas`, así que no tiene clave del asistente y no aparece en el selector de Base del asistente.
 - Solución de hoy: crear Kaizen también como empresa (Empresas y demo → Nueva empresa, tipo Otro negocio) y usar su clave kc_… en la credencial de n8n ("Bearer " + clave).
 - Pendiente a largo plazo: que la Base del asistente liste también los clientes de automatización (cambio de código en Oficina) y unificar ambos registros.
+
+## PENDIENTES POSPUESTOS (26 nov)
+- **Correo de soporte@kaizenia.app (reenvío a Gmail):** pendiente. Hay que activar la verificación en 2 pasos de la cuenta Gmail (aparece desactivada; al intentar activarla da error, por confirmar el texto exacto) y crear una contraseña de aplicación "Zentralia". En Oficina, el campo Usuario debe ser el Gmail completo, no soporte@. La cuenta tiene una llave de acceso (passkey) creada por error: se conserva.
+- Mientras tanto: crear Kaizen como empresa en Oficina (Empresas y demo → Nueva empresa, tipo Otro negocio) y usar su clave del asistente en n8n.
