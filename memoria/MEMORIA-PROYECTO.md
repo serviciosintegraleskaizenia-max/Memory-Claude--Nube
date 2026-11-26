@@ -123,3 +123,8 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 ## PENDIENTES POSPUESTOS (26 nov)
 - **Correo de soporte@kaizenia.app (reenvío a Gmail):** pendiente. Hay que activar la verificación en 2 pasos de la cuenta Gmail (aparece desactivada; al intentar activarla da error, por confirmar el texto exacto) y crear una contraseña de aplicación "Zentralia". En Oficina, el campo Usuario debe ser el Gmail completo, no soporte@. La cuenta tiene una llave de acceso (passkey) creada por error: se conserva.
 - Mientras tanto: crear Kaizen como empresa en Oficina (Empresas y demo → Nueva empresa, tipo Otro negocio) y usar su clave del asistente en n8n.
+
+## HITO: FLUJO DE KAIZEN FUNCIONANDO DE PUNTA A PUNTA (26 nov)
+- Mensaje de WhatsApp al +51 989 480 556 → Chatwoot (cuenta Kaizen) → n8n (flujo de Kaizen, en modo prueba) → asistente de Oficina (empresa Kaizen Consulting IA) → respuesta llega al WhatsApp del dueño.
+- Problemas resueltos: aplicación "Zentralia interno" de Cloudflare Access bloqueaba el webhook (se creó excepción "Webhooks n8n Kaizen" con Bypass para /webhook y /webhook-test); credencial de n8n equivocada (ahora "Clave asistente Kaizen" usa la clave kc_… de la empresa Kaizen).
+- Pendientes de Kaizen: (1) cargar el documento de servicios (memoria/documentos/Servicios-Kaizen-para-el-asistente.docx) con los datos reales; (2) instrucciones y bienvenida ya puestas, ajustar tono; (3) cambiar "Responder en Chatwoot" a respuesta pública solo al activar para clientes; (4) correo soporte@ pendiente; (5) borrar canal de Messenger de Somos Viajes.
