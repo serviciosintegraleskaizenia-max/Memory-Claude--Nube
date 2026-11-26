@@ -55,7 +55,9 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Chatwoot: **funciona** en el servidor. Dominio público: **pendiente de confirmar**.
 - n8n: **funciona** en el servidor. URL: **pendiente de confirmar**.
 - Dominio base: **kaizenia.app**, administrado en Cloudflare (dash.cloudflare.com, cuenta del dueño).
-- Subdominios por empresa previstos: kaizenconsulting-ia, pex-solution, premios-carrasco (todos en kaizenia.app). Pendiente de crear en Cloudflare como registros tipo A con DNS only.
+- **Publicación por TÚNEL de Cloudflare (no por registros A):** túnel `pc-kaizen` (ID 6e898640-d115-4a96-a11b-9ddd56495e89), réplica `srv2149086`, IP de origen 2.25.172.8. Rutas publicadas: somosviajes, oficina, demo, redes, automatizacion y servidor (.kaizenia.app).
+- Para crear un subdominio nuevo: Cloudflare → Zero Trust / Conexión de red → Tunnels → pc-kaizen → pestaña Rutas → Agregar ruta (aplicación publicada). Cloudflare crea el DNS solo. **NO crear registros A hacia 2.25.172.8.**
+- Subdominios previstos: kaizenconsulting-ia, pex-solution, premios-carrasco (todos en kaizenia.app). Pendiente: crear sus rutas en el túnel, copiando el 'servicio' (URL local) de una ruta existente.
 - **IP pública del servidor: 2.25.172.8** (confirmada por el dueño con `ssh -G zentralia` en PowerShell).
 - Flujo de n8n de Kaizen: memoria copiada en n8n/kaizen-consulting-automatizacion-redes.json, **inactivo**. Pendiente: dominio y número de cuenta de Chatwoot, y crear credenciales en n8n (no en el archivo).
 - Plantilla general del flujo: n8n/automatizacion-redes.json.
@@ -72,8 +74,8 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
-2. Crear los registros DNS en Cloudflare (kaizenconsulting-ia, pex-solution, premios-carrasco) con DNS only.
-3. Configurar el servidor para responder a esos subdominios con HTTPS (pendiente: confirmar cómo está montado el servidor web).
+2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
+3. Confirmar el 'servicio' (URL local) de la ruta de oficina y usar el mismo para cada subdominio nuevo.
 4. Crear la cuenta de Kaizen en Chatwoot y su bandeja de WhatsApp con los IDs de arriba.
 5. Cambiar el webhook de Meta a Chatwoot (esto deja de enviar a Oficina). Decidir si se quita la sección de mensajes de la ficha.
 6. Importar el flujo de n8n de Kaizen, crear credenciales, dejarlo inactivo y probar con un mensaje real (requiere app publicada para llegar desde clientes reales).
