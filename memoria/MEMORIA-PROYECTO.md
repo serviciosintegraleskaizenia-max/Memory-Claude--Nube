@@ -103,3 +103,4 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Envío probado:** el mensaje de prueba "Prueba de Zentralia" salió desde Chatwoot y llegó al celular del dueño.
 - **Canal de Messenger "Kaizen Consulting" que estaba en la cuenta de Somos Viajes:** es una conversación de prueba. El dueño autorizó borrarlo; pendiente de eliminarlo desde Somos Viajes → Ajustes → Bandejas.
 - Pendiente inmediato: (1) agregar al dueño como agente en Kaizen Consulting IA; (2) verificar en Meta que el webhook apunte a Chatwoot; (3) importar el flujo de n8n de Kaizen inactivo, con la URL del webhook de Chatwoot, y probarlo en nota privada.
+- **Webhook de la app Zentralia WB:** la URL general sigue siendo oficina.kaizenia.app/api/whatsapp/webhook. Los mensajes de Kaizen llegan a Chatwoot, probablemente por una suscripción propia de la cuenta de WhatsApp (WABA). **No cambiar la URL general sin revisar antes** para no romper la recepción.
