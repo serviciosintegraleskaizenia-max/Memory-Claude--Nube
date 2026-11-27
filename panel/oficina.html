@@ -2837,6 +2837,8 @@ function vCaja() {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">${socio('dueno')}${CAJA.pct > 0 ? socio('socio') : ''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button class="btn" data-caja-gasto>+ Gasto</button><button class="btn-sec" data-caja-reparto ${e.fondo > 0 ? '' : 'disabled'}>Repartir ${dinero(Math.max(0, e.fondo))}</button></div>
+    <div class="caja" style="margin-bottom:12px"><h2 style="display:flex;justify-content:space-between">Planes de los clientes <a href="#" data-caja-plan="0" style="font-size:13px">+ Plan</a></h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px">${(CAJA.planes || []).map(pl => `<div class="caja" data-caja-plan="${pl.id}" style="cursor:pointer;padding:8px 10px;margin:0"><b>${esc(pl.empresa)} · ${esc(pl.nombre)}</b><div class="ay" style="font-size:12px">${dinero(pl.mensualidad)}/mes · día ${pl.cobro_paquete ? pl.dia_paquete + ' (paquete)' : pl.dia_cobro}${pl.activo ? '' : ' · inactivo'}<br>cobrado ${dinero(pl.cobrado)} · costó ${dinero(pl.creacion + pl.mensuales)} · <b>deja ${dinero(pl.deja)}</b></div></div>`).join('') || '<div class="ay">Todavía no hay planes. Crea el primero con «+ Plan».</div>'}</div></div>
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px">
       <div class="caja"><h2 style="display:flex;justify-content:space-between">Recibos <a href="#" data-caja-ver="recibos" style="font-size:13px">Ver todos ›</a></h2>
         <table><thead><tr><th>Fecha</th><th>N.º</th><th>A</th><th class="n">Monto</th></tr></thead><tbody>${recibos || '<tr><td colspan="4" class="vacio">Sin recibos todavía.</td></tr>'}</tbody></table></div>
@@ -2849,6 +2851,7 @@ function formCajaGasto() {
   abrirModal(`<h2>Nuevo gasto · ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'}</h2>
     <div class="fila2">${campo('cgCon', '¿Qué se pagó?', '<input id="cgCon" placeholder="Ej.: Recarga de tokens OpenRouter">')}${campo('cgMon', 'Monto (US$)', '<input id="cgMon" type="number" min="0" step="0.01">')}</div>
     <div class="fila2">${campo('cgTipo', 'Tipo', '<select id="cgTipo"><option value="gasto_mensual">Gasto mensual (Claude, IA, servidor, programas)</option><option value="gasto_creacion">Creación del sistema</option></select>')}${campo('cgFec', 'Fecha', `<input id="cgFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
+    ${campo('cgPlan', 'Cargar a', `<select id="cgPlan"><option value="">General (todo ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'})</option>${(CAJA.planes || []).map(pl => `<option value="${pl.id}">${esc(pl.empresa)} · ${esc(pl.nombre)}</option>`).join('')}</select>`)}
     <div class="ay">Fondo de la empresa: <b>${dinero(Math.max(0, e.fondo))}</b>. Si el gasto es mayor, lo que falta lo presta un socio de su parte (con su autorización) y el otro le queda debiendo.</div>
     <div class="fila2" id="cgPresta" style="display:none">${campo('cgQuien', 'Lo que falta lo presta', `<select id="cgQuien">${['dueno', 'socio'].filter(k => k === 'dueno' || CAJA.pct > 0).map(k => `<option value="${k}">${esc(n[k])} (tiene ${dinero(Math.max(0, e.libre[k]))})</option>`).join('')}</select>`)}${campo('cgFalta', 'Monto del préstamo', '<input id="cgFalta" type="number" min="0" step="0.01" readonly>')}</div>
     ${campo('cgNota', 'Nota (opcional)', '<input id="cgNota">')}
@@ -2859,7 +2862,7 @@ function formCajaGasto() {
     const falta = Number(v('cgFalta')) || 0, presta = v('cgQuien');
     const prestamos = falta > 0 ? [{ presta, debe: presta === 'dueno' ? 'socio' : 'dueno', monto: falta }] : [];
     if (falta > 0 && !confirm(`${n[presta]} presta ${dinero(falta)} de su parte y ${n[presta === 'dueno' ? 'socio' : 'dueno']} se los queda debiendo. ¿Lo autoriza?`)) return;
-    const r = await api('/api/oficina/caja/gasto', { administracion: cajaAdm, concepto: v('cgCon'), monto: v('cgMon'), tipo: v('cgTipo'), fecha: v('cgFec'), nota: v('cgNota'), prestamos });
+    const r = await api('/api/oficina/caja/gasto', { administracion: cajaAdm, concepto: v('cgCon'), monto: v('cgMon'), tipo: v('cgTipo'), fecha: v('cgFec'), nota: v('cgNota'), plan_id: v('cgPlan'), prestamos });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     cerrarModal(); aviso('Gasto anotado.'); ir('caja');
   };
@@ -2891,6 +2894,40 @@ function formCajaRetiro(k) {
     const r = await api('/api/oficina/caja/retiro', { administracion: cajaAdm, socio: k, monto: v('ctMon'), fecha: v('ctFec'), metodo: v('ctMet'), referencia: v('ctRef'), nota: v('ctNota') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     cerrarModal(); aviso('Retiro anotado con su recibo.'); await ir('caja'); abrirRecibo(r.data.recibo_id);
+  };
+}
+function formCajaPlan(id) {
+  const pl = (CAJA.planes || []).find(x => x.id === id) || { empresa_id: (CAJA.empresas[0] || {}).id, dia_cobro: 5, activo: true };
+  const emp = id => CAJA.empresas.find(x => x.id === Number(id)) || {};
+  const gastosSin = CAJA.movimientos.filter(m => m.tipo.startsWith('gasto') && !m.plan_id);
+  const lista = (titulo, filas) => filas.length ? `<div class="campo"><label>${titulo}</label><div style="max-height:150px;overflow:auto;border:1px solid var(--borde);border-radius:8px;padding:6px 8px">${filas.join('')}</div></div>` : '';
+  const movPlan = CAJA.movimientos.filter(m => m.plan_id === pl.id);
+  abrirModal(`<h2>${pl.id ? esc(pl.empresa + ' · ' + pl.nombre) : 'Nuevo plan'}</h2>
+    <div class="fila2">${campo('cpEmp', 'Cliente', `<select id="cpEmp">${CAJA.empresas.map(e => `<option value="${e.id}" ${e.id === pl.empresa_id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`)}${campo('cpNom', 'Nombre del plan', `<input id="cpNom" value="${esc(pl.nombre || '')}" placeholder="Ej.: Plan de panel de correo">`)}</div>
+    <div class="fila2">${campo('cpPre', 'Precio de creación (US$)', `<input id="cpPre" type="number" min="0" step="0.01" value="${pl.precio_creacion || ''}">`)}${campo('cpMen', 'Mensualidad (US$)', `<input id="cpMen" type="number" min="0" step="0.01" value="${pl.mensualidad || ''}">`)}</div>
+    <div class="fila2">${campo('cpDia', 'Día de cobro (1 a 31; en meses cortos, el último día)', `<input id="cpDia" type="number" min="1" max="31" value="${pl.dia_cobro || 5}">`)}${campo('cpAct', 'Estado', `<select id="cpAct"><option value="1">Activo</option><option value="0" ${pl.activo ? '' : 'selected'}>Inactivo</option></select>`)}</div>
+    <label style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="cpPaq" ${emp(pl.empresa_id).cobro_paquete ? 'checked' : ''} style="width:auto"> Cobrar todos los planes de este cliente en un solo paquete, el día <input id="cpDiaPaq" type="number" min="1" max="31" value="${emp(pl.empresa_id).dia_paquete || 5}" style="width:64px"></label>
+    ${lista('Cobros ya pagados de este cliente que son de este plan', CAJA.cobrosSinPlan.filter(c => c.empresa_id === pl.empresa_id).map(c => `<label style="display:flex;gap:6px"><input type="checkbox" class="cpCob" value="${c.id}" style="width:auto"> ${fechaCorta(c.fecha)} · ${esc(c.concepto)} · ${dinero(c.monto)}</label>`))}
+    ${lista('Gastos sin plan que son de este plan', gastosSin.map(m => `<label style="display:flex;gap:6px"><input type="checkbox" class="cpGas" value="${m.id}" style="width:auto"> ${fechaCorta(m.fecha)} · ${esc(m.concepto)} · ${dinero(m.monto)}</label>`))}
+    ${pl.id ? `<div class="caja" style="margin:8px 0;padding:8px 10px"><b>Cobrar el mes</b> <span class="ay">crea los cobros de este cliente según sus planes; el recibo sale con una línea por plan y por extra</span>
+      <div class="fila2" style="margin-top:6px">${campo('cmMes', 'Mes', `<input id="cmMes" type="month" value="${new Date().toISOString().slice(0, 7)}">`)}${campo('cmExtra', 'Extra (opcional)', '<input id="cmExtra" placeholder="Ej.: Consumo de IA sobre lo incluido">')}</div>
+      <div class="fila2">${campo('cmExtraM', 'Monto del extra (US$)', '<input id="cmExtraM" type="number" min="0" step="0.01">')}<div class="campo" style="align-self:end"><button class="btn-sec" id="cmCrear">Crear cobros del mes</button></div></div></div>
+      <div class="ay">Movimientos de este plan: ${movPlan.length ? movPlan.map(m => `${fechaCorta(m.fecha)} ${esc(m.concepto)} ${m.tipo === 'entrada' ? '+' : '−'}${dinero(m.monto)}`).join(' · ') : 'ninguno todavía'}</div>` : ''}
+    ${pieModal(false)}`);
+  document.getElementById('modal').classList.add('grande');
+  const marcados = cls => [...document.querySelectorAll('#modal .' + cls + ':checked')].map(x => Number(x.value));
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/caja/plan', { administracion: cajaAdm, id: pl.id || 0, empresa_id: Number(v('cpEmp')), nombre: v('cpNom'), precio_creacion: v('cpPre'), mensualidad: v('cpMen'), dia_cobro: v('cpDia'), activo: v('cpAct') === '1',
+      paquete: document.getElementById('cpPaq').checked, dia_paquete: v('cpDiaPaq'), cobros: marcados('cpCob'), gastos: marcados('cpGas') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    cerrarModal(); aviso('Plan guardado.'); ir('caja');
+  };
+  const crearMes = document.getElementById('cmCrear');
+  if (crearMes) crearMes.onclick = async () => {
+    const extras = v('cmExtra') && Number(v('cmExtraM')) > 0 ? [{ concepto: v('cmExtra'), monto: v('cmExtraM') }] : [];
+    const r = await api('/api/oficina/caja/cobrar-mes', { administracion: cajaAdm, empresa_id: pl.empresa_id, mes: v('cmMes'), extras });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo crear.'; return; }
+    cerrarModal(); aviso(`Cobros creados: ${r.data.creados.map(c => c.concepto + ' ' + dinero(c.total)).join(' · ')}. Se cobran en Administración → Clientes.`); ir('caja');
   };
 }
 function verCaja(que) {
@@ -3335,8 +3372,13 @@ function htmlRecibo(rc, a, em) {
   let cuerpo, quien;
   if (rc.tipo === 'socio') {
     const d = rc.detalle || {};
-    quien = `<b>${esc(rc.socio || 'Socio')}</b><br>Participación: ${Number(d.pct) || 0}% de la utilidad`;
-    cuerpo = filas([
+    quien = d.caja ? `<b>${esc(rc.socio || 'Socio')}</b><br>Retiro de su parte de la utilidad` : `<b>${esc(rc.socio || 'Socio')}</b><br>Participación: ${Number(d.pct) || 0}% de la utilidad`;
+    cuerpo = d.caja ? filas([
+      ['Su parte libre antes del retiro', dinero(d.le_tocaba)],
+      ['<b>Este retiro</b>', `<b>${dinero(rc.monto)}</b>`],
+      ['Le queda por retirar', dinero(d.queda)],
+      ...(d.nota ? [['Nota', esc(d.nota)]] : [])
+    ]) : filas([
       ['Utilidad a repartir', dinero(d.utilidad)],
       ['Participación del socio', dinero(d.participacion)],
       ['Ya retirado antes de este', dinero(d.retirado_antes)],
@@ -3347,8 +3389,9 @@ function htmlRecibo(rc, a, em) {
     ]);
   } else {
     quien = `<b>${esc(em.nombre || rc.empresa || '')}</b><br>${esc(em.documento ? 'Documento: ' + em.documento : '')}<br>${esc([em.pais, em.direccion].filter(Boolean).join(' · '))}`;
+    const lineas = ((rc.detalle || {}).lineas || []).filter(l => Number(l.monto) > 0);
     cuerpo = filas([
-      [esc(rc.concepto), dinero(rc.monto, rc.moneda)],
+      ...(lineas.length ? [...lineas.map(l => [esc(l.concepto), dinero(l.monto, rc.moneda)]), ['<b>Total</b>', `<b>${dinero(rc.monto, rc.moneda)}</b>`]] : [[esc(rc.concepto), dinero(rc.monto, rc.moneda)]]),
       ['Método', esc(rc.metodo || '—')],
       ['Referencia', esc(rc.referencia || '—')]
     ]);
@@ -3783,9 +3826,9 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
-  if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer) return;
+  if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer && t.dataset.cajaPlan === undefined) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
   if (t.hasAttribute('data-editar-api')) return formApi(APIS.find(x => String(x.id) === t.dataset.editarApi) || {});
   ev.preventDefault();
@@ -3823,6 +3866,7 @@ document.addEventListener('click', async ev => {
   if ('cajaReparto' in d) return formCajaReparto();
   if (d.cajaRetiro) return formCajaRetiro(d.cajaRetiro);
   if (d.cajaVer) return verCaja(d.cajaVer);
+  if (d.cajaPlan !== undefined) return formCajaPlan(Number(d.cajaPlan));
   if (d.cajaDeshacer) {
     if (!confirm('¿Deshacer este movimiento? Si era un retiro, su recibo queda anulado.')) return;
     const r = await api('/api/oficina/caja/deshacer', { administracion: cajaAdm, id: Number(d.cajaDeshacer) });

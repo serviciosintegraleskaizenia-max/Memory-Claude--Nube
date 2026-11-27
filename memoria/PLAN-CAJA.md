@@ -39,4 +39,5 @@ Prueba obligatoria (ejemplo del dueño): entra 1,000 → reparto 1,000 (C 600 / 
 ## Estado (27 nov)
 - HECHO y entregado en el paquete 6bbf0cb: paso 1 (recibos que faltan), pasos 4-6 (caja, reparto, retiros con recibo, préstamos, deshacer el último) y la pantalla «💰 Caja» (Zentralia / Kaizen IA). Pruebas: reglas 5/5, API 17/17, recibos 5/5, navegador 6/6.
 - Al instalar: los gastos de «Creación de sistema» y los retiros con recibo pasan solos a la caja (una sola vez); los cobros pagados entran solos.
-- FALTA: paso 2 (planes por cliente con día propio o paquete y recibo con líneas), paso 3 (cargar gastos a un plan), ficha de planes en la Caja.
+- HECHO después: paso 2 y 3 (planes por cliente con precio de creación, mensualidad y día 1-31 o paquete; «Cobrar el mes» con extras; recibo con una línea por plan y por extra; gastos y cobros cargados a un plan; fichas de planes en la Caja con cobrado / costó / deja). Pruebas: planes 8/8, navegador 5/5.
+- FALTA: pausa automática por prórroga (#80), acceso del socio (#81), automatización dentro del panel de Somos Viajes (#76).

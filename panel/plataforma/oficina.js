@@ -383,6 +383,15 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       await client.query('CREATE UNIQUE INDEX IF NOT EXISTS caja_mov_pago ON caja_movimientos (pago_id) WHERE pago_id IS NOT NULL');
       await client.query("ALTER TABLE oficina_administraciones ADD COLUMN IF NOT EXISTS dueno_nombre TEXT NOT NULL DEFAULT ''");
       await client.query('CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+      // Planes de cada cliente: precio de creación, mensualidad y día de cobro propio (o todos juntos en un paquete).
+      await client.query(`CREATE TABLE IF NOT EXISTS oficina_planes (
+        id SERIAL PRIMARY KEY, empresa_id INTEGER NOT NULL, nombre TEXT NOT NULL, precio_creacion NUMERIC(12,2) NOT NULL DEFAULT 0,
+        mensualidad NUMERIC(12,2) NOT NULL DEFAULT 0, moneda VARCHAR(5) NOT NULL DEFAULT 'US$', dia_cobro INTEGER NOT NULL DEFAULT 5,
+        activo BOOLEAN NOT NULL DEFAULT TRUE, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+      await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS cobro_paquete BOOLEAN NOT NULL DEFAULT FALSE');
+      await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS dia_paquete INTEGER NOT NULL DEFAULT 5');
+      await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS plan_id INTEGER');
+      await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS lineas JSONB NOT NULL DEFAULT '[]'::jsonb");
       if ((await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'caja_v1'")).rowCount) return;
       const admins = new Map((await client.query('SELECT clave, socio_nombre FROM oficina_administraciones')).rows.map(a => [a.clave, a]));
       const gastos = (await client.query(`SELECT g.*, TO_CHAR(COALESCE(g.fecha, p.creado::date), 'YYYY-MM-DD') AS f, p.administracion, p.socios, p.nombre AS sistema
@@ -416,13 +425,15 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   async function sincronizarEntradas(adm) {
     await client.query(`DELETE FROM caja_movimientos c WHERE c.administracion = $1 AND c.pago_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM oficina_pagos p WHERE p.id = c.pago_id AND p.pagado_el IS NOT NULL)`, [adm]);
-    const pagos = (await client.query(`SELECT p.id, p.monto, p.concepto, p.empresa_id, p.descuentos, p.recibo_id, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS f, e.nombre
+    await client.query(`UPDATE caja_movimientos c SET plan_id = p.plan_id FROM oficina_pagos p
+      WHERE c.pago_id = p.id AND c.administracion = $1 AND c.plan_id IS DISTINCT FROM p.plan_id`, [adm]);
+    const pagos = (await client.query(`SELECT p.id, p.monto, p.concepto, p.empresa_id, p.descuentos, p.recibo_id, p.plan_id, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS f, e.nombre
       FROM oficina_pagos p JOIN empresas e ON e.id = p.empresa_id
       WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.pagado_el IS NOT NULL AND p.moneda = 'US$'
         AND NOT EXISTS (SELECT 1 FROM caja_movimientos c WHERE c.pago_id = p.id) ORDER BY p.pagado_el, p.id`, [adm])).rows;
     for (const p of pagos) {
-      await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, empresa_id, pago_id, recibo_id) VALUES ($1,$2,'entrada',$3,$4,$5,$6,$7)`,
-        [adm, p.f, `${p.concepto} · ${p.nombre}`, p.monto, p.empresa_id, p.id, p.recibo_id]);
+      await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, empresa_id, pago_id, recibo_id, plan_id) VALUES ($1,$2,'entrada',$3,$4,$5,$6,$7,$8)`,
+        [adm, p.f, `${p.concepto} · ${p.nombre}`, p.monto, p.empresa_id, p.id, p.recibo_id, p.plan_id]);
       const desc = Array.isArray(p.descuentos) ? p.descuentos : [];
       const total = Math.round(desc.reduce((t, x) => t + (Number(x.monto) || 0), 0) * 100) / 100;
       if (!(total > 0)) continue;
@@ -456,7 +467,20 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const lista = movs.map(m => { saldo = Math.round((saldo + (m.tipo === 'entrada' ? m.monto : m.tipo === 'reparto' ? 0 : -m.monto)) * 100) / 100; return { ...m, queda: saldo }; }).reverse();
     const recibos = (await client.query(`SELECT r.id, r.numero, r.tipo, r.socio, r.monto::float AS monto, r.moneda, r.concepto, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha, e.nombre AS empresa
       FROM oficina_recibos r LEFT JOIN empresas e ON e.id = r.empresa_id WHERE r.administracion = $1 ORDER BY r.fecha DESC, r.id DESC LIMIT 200`, [adm])).rows;
-    return { administracion: adm, nombres: await nombresSocios(adm), pct, estado, movimientos: lista, recibos, tipos: caja.TIPOS };
+    const planes = (await client.query(`SELECT pl.id, pl.empresa_id, pl.nombre, pl.precio_creacion::float AS precio_creacion, pl.mensualidad::float AS mensualidad,
+        pl.moneda, pl.dia_cobro, pl.activo, e.nombre AS empresa, e.cobro_paquete, e.dia_paquete
+      FROM oficina_planes pl JOIN empresas e ON e.id = pl.empresa_id WHERE COALESCE(e.administracion, 'kaizen') = $1 ORDER BY e.nombre, pl.id`, [adm])).rows;
+    for (const pl of planes) {
+      const de = movs.filter(m => m.plan_id === pl.id);
+      pl.cobrado = Math.round(de.filter(m => m.tipo === 'entrada').reduce((t, m) => t + m.monto, 0) * 100) / 100;
+      pl.creacion = Math.round(de.filter(m => m.tipo === 'gasto_creacion').reduce((t, m) => t + m.monto, 0) * 100) / 100;
+      pl.mensuales = Math.round(de.filter(m => m.tipo === 'gasto_mensual').reduce((t, m) => t + m.monto, 0) * 100) / 100;
+      pl.deja = Math.round((pl.cobrado - pl.creacion - pl.mensuales) * 100) / 100;
+    }
+    const empresas = (await client.query("SELECT id, nombre, cobro_paquete, dia_paquete FROM empresas WHERE COALESCE(administracion, 'kaizen') = $1 AND es_demo = FALSE ORDER BY nombre", [adm])).rows;
+    const sinPlan = (await client.query(`SELECT p.id, p.empresa_id, p.concepto, p.monto::float AS monto, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS fecha FROM oficina_pagos p JOIN empresas e ON e.id = p.empresa_id
+      WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.plan_id IS NULL AND p.pagado_el IS NOT NULL ORDER BY p.pagado_el`, [adm])).rows;
+    return { administracion: adm, nombres: await nombresSocios(adm), pct, estado, movimientos: lista, recibos, tipos: caja.TIPOS, planes, empresas, cobrosSinPlan: sinPlan };
   }
 
   // Porcentaje del socio: Centralia 40% por defecto (tú 60%); Kaizen IA 0% (todo es tuyo).
@@ -500,7 +524,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
       VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, p.forma || '', p.referencia || '', p.pagado,
-        JSON.stringify({ comprobante_nombre: p.comprobante_nombre || '', descuentos: p.descuentos || [], recibido: p.recibido })])).rows[0];
+        JSON.stringify({ comprobante_nombre: p.comprobante_nombre || '', descuentos: p.descuentos || [], recibido: p.recibido, lineas: p.lineas || [] })])).rows[0];
     await client.query('UPDATE oficina_pagos SET recibo_id = $2 WHERE id = $1', [p.id, rec.id]);
     return { id: rec.id, numero };
   }
@@ -1059,7 +1083,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const numero = await siguienteNumero(p.administracion);
         const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
           VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-          [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC, descuentos, recibido })])).rows[0];
+          [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC, descuentos, recibido, lineas: p.lineas || [] })])).rows[0];
         await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7, recibido = $8, descuentos = $9::jsonb WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id, texto(f.referencia, 120), recibido, JSON.stringify(descuentos)]);
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
@@ -1140,7 +1164,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const mov = { tipo, monto: monto(f.monto), concepto, detalle: { prestamos } };
           const err = caja.revisar(actual.estado, mov);
           if (err) return json(res, 400, { error: err, fondo: actual.estado.fondo, libre: actual.estado.libre });
-          const plan = Number(f.plan_id) || null;
+          let plan = Number(f.plan_id) || null;
+          if (plan && !(await client.query("SELECT 1 FROM oficina_planes pl JOIN empresas e ON e.id = pl.empresa_id WHERE pl.id = $1 AND COALESCE(e.administracion, 'kaizen') = $2", [plan, adm])).rowCount) plan = null;
           const r = await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, plan_id, detalle, usuario) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
             [adm, fecha, tipo, concepto, mov.monto, plan, { prestamos, nota: texto(f.nota, 300) }, quien]);
           await registrar(u, 'caja_gasto', 'caja', r.rows[0].id, '', String(mov.monto), concepto);
@@ -1171,6 +1196,69 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
             [adm, fecha, `Retiro · ${nombre}`, mov.monto, socio, rec.id, quien]);
           await registrar(u, 'caja_retiro', 'recibo', rec.id, '', String(mov.monto), nombre);
           return json(res, 200, { ok: true, recibo_id: rec.id, numero });
+        }
+        if (url === '/api/oficina/caja/plan') {
+          const empresaId = Number(f.empresa_id);
+          const e = (await client.query("SELECT id, nombre FROM empresas WHERE id = $1 AND COALESCE(administracion, 'kaizen') = $2", [empresaId, adm])).rows[0];
+          if (!e) return json(res, 400, { error: 'Elige el cliente del plan.' });
+          const nombre = texto(f.nombre, 120);
+          if (!nombre) return json(res, 400, { error: 'Escribe el nombre del plan (ej.: Plan de panel de correo).' });
+          const dia = Math.min(31, Math.max(1, Number(f.dia_cobro) || 5));
+          const vals = [empresaId, nombre, monto(f.precio_creacion), monto(f.mensualidad), dia, f.activo !== false];
+          let id = Number(f.id) || 0;
+          if (id) {
+            const r = await client.query('UPDATE oficina_planes SET empresa_id=$1, nombre=$2, precio_creacion=$3, mensualidad=$4, dia_cobro=$5, activo=$6 WHERE id=$7 RETURNING id', [...vals, id]);
+            if (!r.rowCount) return json(res, 404, { error: 'Ese plan ya no existe.' });
+          } else id = (await client.query('INSERT INTO oficina_planes (empresa_id, nombre, precio_creacion, mensualidad, dia_cobro, activo) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', vals)).rows[0].id;
+          // Cobros ya pagados y gastos sin plan que son de este plan.
+          for (const pid of (Array.isArray(f.cobros) ? f.cobros : []).map(Number).filter(Boolean)) {
+            await client.query('UPDATE oficina_pagos SET plan_id = $1 WHERE id = $2 AND empresa_id = $3 AND plan_id IS NULL', [id, pid, empresaId]);
+          }
+          for (const mid of (Array.isArray(f.gastos) ? f.gastos : []).map(Number).filter(Boolean)) {
+            await client.query("UPDATE caja_movimientos SET plan_id = $1 WHERE id = $2 AND administracion = $3 AND tipo LIKE 'gasto%' AND plan_id IS NULL", [id, mid, adm]);
+          }
+          if (f.paquete !== undefined) {
+            await client.query('UPDATE empresas SET cobro_paquete = $1, dia_paquete = $2 WHERE id = $3', [Boolean(f.paquete), Math.min(31, Math.max(1, Number(f.dia_paquete) || dia)), empresaId]);
+          }
+          await registrar(u, 'caja_plan', 'plan', id, '', nombre, e.nombre);
+          return json(res, 200, { ok: true, id });
+        }
+        // Cobros del mes según los planes: uno por plan con su día, o uno solo en paquete; los extras van como líneas.
+        if (url === '/api/oficina/caja/cobrar-mes') {
+          const empresaId = Number(f.empresa_id);
+          const e = (await client.query("SELECT id, nombre, cobro_paquete, dia_paquete FROM empresas WHERE id = $1 AND COALESCE(administracion, 'kaizen') = $2", [empresaId, adm])).rows[0];
+          if (!e) return json(res, 400, { error: 'Elige el cliente.' });
+          const mes = /^\d{4}-\d{2}$/.test(f.mes || '') ? f.mes : hoyLocal().slice(0, 7);
+          const nombreMes = new Date(mes + '-15T12:00:00Z').toLocaleDateString('es-DO', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+          const planes = (await client.query('SELECT * FROM oficina_planes WHERE empresa_id = $1 AND activo = TRUE AND mensualidad > 0 ORDER BY id', [empresaId])).rows;
+          const extras = (Array.isArray(f.extras) ? f.extras : []).map(x => ({ concepto: texto(x.concepto, 150), monto: monto(x.monto) })).filter(x => x.concepto && x.monto > 0).slice(0, 10);
+          if (!planes.length && !extras.length) return json(res, 400, { error: 'Este cliente no tiene planes con mensualidad.' });
+          // Día de cobro; en un mes más corto (ej. 30 en febrero) cae el último día de ese mes.
+          const ultimo = new Date(Date.UTC(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0)).getUTCDate();
+          const dia = d => `${mes}-${String(Math.min(ultimo, Math.max(1, Number(d) || 5))).padStart(2, '0')}`;
+          const ya = async (planId, concepto) => (await client.query("SELECT 1 FROM oficina_pagos WHERE empresa_id = $1 AND TO_CHAR(vence, 'YYYY-MM') = $2 AND (plan_id = $3 OR concepto = $4)", [empresaId, mes, planId, concepto])).rowCount > 0;
+          const creados = [];
+          const crear = async (concepto, lineas, vence, planId) => {
+            const total = Math.round(lineas.reduce((t, l) => t + l.monto, 0) * 100) / 100;
+            const r = await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence, plan_id, lineas) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [empresaId, concepto, total, 'US$', vence, planId, JSON.stringify(lineas)]);
+            creados.push({ id: r.rows[0].id, concepto, total, vence });
+          };
+          const lineaPlan = pl => ({ concepto: `Mensualidad ${nombreMes} · ${pl.nombre}`, monto: Number(pl.mensualidad), plan_id: pl.id });
+          if (e.cobro_paquete) {
+            const concepto = `Mensualidad ${nombreMes} · paquete`;
+            if (await ya(null, concepto)) return json(res, 400, { error: `Ya está creado el cobro de ${nombreMes}.` });
+            await crear(concepto, [...planes.map(lineaPlan), ...extras], dia(e.dia_paquete), planes.length === 1 ? planes[0].id : null);
+          } else {
+            for (const pl of planes) {
+              const l = lineaPlan(pl);
+              if (await ya(pl.id, l.concepto)) continue;
+              await crear(l.concepto, [l, ...(pl === planes[0] ? extras : [])], dia(pl.dia_cobro), pl.id);
+            }
+            if (!planes.length && extras.length) await crear(`Extras ${nombreMes}`, extras, dia(5), null);
+            if (!creados.length) return json(res, 400, { error: `Ya están creados los cobros de ${nombreMes}.` });
+          }
+          await registrar(u, 'caja_cobrar_mes', 'empresa', empresaId, '', mes, creados.map(c => c.concepto).join(' | '));
+          return json(res, 200, { ok: true, creados });
         }
         if (url === '/api/oficina/caja/deshacer') {
           // Solo el último movimiento hecho a mano (gasto, reparto o retiro), para que las cuentas siempre cuadren.
