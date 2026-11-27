@@ -718,6 +718,22 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   .hist-plegado > summary::after { content: "Mostrar"; font-size: 12px; font-weight: 500; border: 1px dashed #6f8fb8; border-radius: 7px; padding: 4px 10px; }
   .hist-plegado[open] > summary::after { content: "Ocultar"; }
   @media (max-width: 760px) { .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mt.d2, .mt.d3 { grid-column: span 2; } }
+
+  /* Ajuste al diseño aprobado: encabezado limpio, valores grandes, correo como tarjeta, historial en el pie. */
+  #fondoModal #mMeta, #fondoModal #mRevision { display: none !important; }
+  #fondoModal .modal-cuerpo > .titulo-seccion:not(.seccion-datos) { display: none; }
+  #fondoModal .modal-cuerpo > .titulo-seccion.seccion-datos { display: none; }
+  #fondoModal .mt .mv { font-size: 24px; }
+  #fondoModal .mt.d3 .mv { font-size: 15px; font-weight: 600; }
+  #fondoModal .mt.aviso .mv { font-size: 19px; }
+  #fondoModal .correo-texto { background: #ffffff; border: 1px solid #d3deeb; border-radius: 10px; padding: 18px 22px; font-size: 14px; line-height: 1.65; }
+  #fondoModal .hist-plegado { border-top: 0; padding-top: 0; margin-top: 10px; }
+  #fondoModal .hist-plegado > summary { display: none; }
+  .hist-pie { font: inherit; font-size: 12.5px; padding: 8px 12px; border-radius: 8px; border: 1px dashed #6f8fb8; background: transparent; color: #2f6fb6; white-space: nowrap; }
+
+  #fondoModal .modal { width: min(1320px, 96vw); }
+  #fondoModal .estado-seg button { white-space: nowrap; padding: 7px 10px; }
+  #fondoModal .modal-pie { gap: 6px; }
 </style>
 </head>
 <body>
@@ -916,6 +932,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
       <button class="btn-sec" id="btnReanalizar" style="display:none;">Volver a analizar</button>
       <button class="btn" id="btnGuardar">Guardar estado</button>
       <button class="btn-sec" id="btnGuardarSiguiente" title="Guarda el estado y abre la siguiente reserva de la tabla">Guardar y siguiente &#8594;</button>
+      <button class="btn-sec hist-pie" id="btnHistorialPie" type="button" title="Ver los cambios anteriores de esta reserva">Ver historial</button>
       <div class="mensaje" id="mMensaje"></div>
     </div>
   </div>
@@ -2706,11 +2723,15 @@ function tarjetasDatos(r, g, celdaAgencia) {
   const ad = (Number(paxReserva(g, false)) || 0);
   const aeropuertoPrincipal = (g.map(s => s.aeropuerto).find(Boolean)) || '';
   let html = '';
+  const avisoRevision = document.getElementById('mRevision');
+  const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
+  const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'd2') : '';
   html += cuadro('', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
   html += cuadro('', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
   html += cuadro('', ICONOS_TABLERO.pax, 'Pax', falta(paxReserva(g)), clientesDe(g) ? clientesDe(g).split(', ').length + ' nombres en el correo' : '');
   html += cuadro('', ICONOS_TABLERO.sede, 'Sede', falta(sedeDeServicios(g)), aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
   html += cuadro('', ICONOS_TABLERO.tel, 'Teléfono', falta(r.telefono), 'del pasajero');
+  html += avisoRevisionHtml;
   if (r.error_ia) html += cuadro('aviso', ICONOS_TABLERO.aviso, porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA', porAnalizar(r) ? 'Por analizar' : 'La IA no respondió', porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'Sin detalle') + '. Se analiza de nuevo en la próxima ejecución del flujo.', 'd2');
   else if (r.cancelada_por) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cancelada', 'Correo #' + r.cancelada_por, 'Cancélala también en el sistema de reservas y márcala como corresponde.', 'd2');
   else if (r.cambio_id) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cambio recibido', 'Correo #' + r.cambio_id, 'Revisa los datos nuevos antes de seguir.', 'd2');
@@ -6356,6 +6377,7 @@ document.getElementById('mTiles').addEventListener('click', e => {
   if (e.target.id === 'btnAgencia') guardarAgencia();
   if (e.target.id === 'btnAsignar') asignarReserva();
 });
+document.getElementById('btnHistorialPie').addEventListener('click', () => { const d = document.getElementById('mHistDetalle'); d.open = !d.open; if (d.open) d.scrollIntoView({ block: 'nearest' }); });
 document.getElementById('btnResponder').addEventListener('click', mostrarRespuesta);
 document.getElementById('btnPedirDatos').addEventListener('click', pedirDatos);
 document.getElementById('btnReanalizar').addEventListener('click', reanalizar);
