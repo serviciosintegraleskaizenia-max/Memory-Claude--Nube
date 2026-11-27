@@ -2812,11 +2812,12 @@ function tarjetasDatos(r, g, celdaAgencia) {
   const avisoRevision = document.getElementById('mRevision');
   const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
   const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
-  base += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
+  base += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + (isNaN(new Date(r.fecha)) ? esc(r.fecha) : new Date(r.fecha).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })));
   base += cuadro('r-agencia', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
   const totalPax = Math.max(0, ...g.map(x => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0)));
   if (totalPax) base += cuadro('r-pax', ICONOS_TABLERO.pax, 'Pax', totalPax + (totalPax === 1 ? ' persona' : ' personas'), '');
-  if (aeropuertoPrincipal || sedeDeServicios(g)) base += cuadro('r-sede', ICONOS_TABLERO.sede, 'Sede', sedeDeServicios(g) || aeropuertoPrincipal, aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
+  const sedeTxt = sedeDeServicios(g);
+  if (sedeTxt && !/^n\/?a$/i.test(sedeTxt.trim())) base += cuadro('r-sede', ICONOS_TABLERO.sede, 'Sede', sedeTxt, aeropuertoPrincipal && !/^n\/?a$/i.test(aeropuertoPrincipal) ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
   if (r.telefono) base += cuadro('r-tel', ICONOS_TABLERO.tel, 'Teléfono', esc(r.telefono), 'del pasajero');
   html = '<div class="mbanner">' + base + '</div>' + avisoRevisionHtml;
   if (r.error_ia) html += cuadro('aviso', ICONOS_TABLERO.aviso, porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA', porAnalizar(r) ? 'Por analizar' : 'La IA no respondió', porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'Sin detalle') + '. Se analiza de nuevo en la próxima ejecución del flujo.', 'd2');
