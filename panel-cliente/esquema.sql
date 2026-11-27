@@ -137,3 +137,25 @@ CREATE TABLE IF NOT EXISTS enlaces (
   valor TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (cuenta_id, clave)
 );
+
+-- Puente con Oficina (segunda parte).
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS visto TIMESTAMPTZ;
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS prompt_base TEXT NOT NULL DEFAULT '';
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS bienvenida_base TEXT NOT NULL DEFAULT '';
+ALTER TABLE plantillas_whatsapp ADD COLUMN IF NOT EXISTS origen TEXT NOT NULL DEFAULT 'kaizen';
+ALTER TABLE plantillas_whatsapp ADD COLUMN IF NOT EXISTS creada TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE mensajes_kaizen ADD COLUMN IF NOT EXISTS archivo_nombre TEXT NOT NULL DEFAULT '';
+ALTER TABLE mensajes_kaizen ADD COLUMN IF NOT EXISTS archivo_tipo TEXT NOT NULL DEFAULT '';
+ALTER TABLE mensajes_kaizen ADD COLUMN IF NOT EXISTS archivo_datos TEXT NOT NULL DEFAULT '';
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS creado TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS pagado_el TIMESTAMPTZ;
+
+-- Avisos para Oficina: plantillas por aprobar, mensajes y documentos del cliente.
+CREATE TABLE IF NOT EXISTS avisos_kaizen (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  creado TIMESTAMPTZ NOT NULL DEFAULT now(),
+  leido BOOLEAN NOT NULL DEFAULT FALSE
+);

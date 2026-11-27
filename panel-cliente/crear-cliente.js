@@ -27,11 +27,11 @@ function opciones(argv) {
       await pool.query('INSERT INTO ajustes (cuenta_id) VALUES ($1) ON CONFLICT DO NOTHING', [r.rows[0].id]);
       console.log('Cuenta creada:', usuario);
     } else if (orden === 'suspender') {
-      await pool.query('UPDATE cuentas SET suspendida = TRUE, motivo_suspension = $2 WHERE usuario = $1', [usuario, o.motivo || 'Tu cuenta está suspendida. Comunícate con Kaizen.']);
+      await pool.query('UPDATE cuentas SET suspendida = TRUE, estado = \'suspendida\', motivo_suspension = $2 WHERE usuario = $1', [usuario, o.motivo || 'Tu cuenta está suspendida. Comunícate con Kaizen.']);
       await pool.query('DELETE FROM sesiones WHERE cuenta_id IN (SELECT id FROM cuentas WHERE usuario = $1)', [usuario]);
       console.log('Cuenta suspendida:', usuario);
     } else if (orden === 'activar') {
-      await pool.query('UPDATE cuentas SET suspendida = FALSE, motivo_suspension = \'\' WHERE usuario = $1', [usuario]);
+      await pool.query('UPDATE cuentas SET suspendida = FALSE, estado = \'activa\', motivo_suspension = \'\' WHERE usuario = $1', [usuario]);
       console.log('Cuenta activa:', usuario);
     } else if (orden === 'clave') {
       if (!o.clave || o.clave.length < 8) throw new Error('La clave debe tener al menos 8 caracteres.');
