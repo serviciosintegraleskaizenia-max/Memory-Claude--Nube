@@ -50,6 +50,8 @@
   .e-verde { background:#dcfce7; color:var(--verde); }
   .e-ambar { background:#fef3c7; color:var(--ambar); }
   .e-gris { background:#e2e8f0; color:#334155; }
+  .e-rojo { background:#fee2e2; color:var(--rojo); }
+  .plantilla { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:8px 10px; margin-top:6px; white-space:pre-wrap; }
   .btn { border:1px solid var(--borde); background:#fff; color:var(--texto); border-radius:8px; padding:8px 12px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
   .btn.primario { background:var(--azul); border-color:var(--azul); color:#fff; }
   .btn.peligro { color:var(--rojo); }
@@ -134,6 +136,7 @@
       <button data-v="inicio" class="on">Inicio</button>
       <button data-v="redes">Redes sociales</button>
       <button data-v="conv">Conversaciones</button>
+      <button data-v="plantillas">Plantillas</button>
       <button data-v="kaizen">Chat con Kaizen <span class="cuenta" id="cuentaKaizen">1</span></button>
       <button data-v="crm">Clientes (CRM)</button>
       <button data-v="entreno">Entrenar la IA</button>
@@ -205,6 +208,34 @@
             <input id="entradaMsj" placeholder="Escribe una respuesta (la IA queda pausada en esta conversación)">
             <button class="btn primario" id="btnEnviarMsj">Enviar</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLANTILLAS -->
+    <section class="vista" id="v-plantillas">
+      <div class="tabs" id="tabsPl">
+        <button data-p="rapidas" class="on">Respuestas rápidas</button>
+        <button data-p="whatsapp">Plantillas de WhatsApp</button>
+      </div>
+      <div class="panel-t on" id="p-rapidas">
+        <div class="bloque">
+          <h3>Respuestas rápidas</h3>
+          <div id="listaRapidas"></div>
+          <div class="dos" style="margin-top:12px">
+            <div class="campo"><label for="rapTitulo">Nombre</label><input id="rapTitulo" placeholder="Por ejemplo: Horario"></div>
+            <div class="campo"><label for="rapTexto">Texto</label><input id="rapTexto" placeholder="Lo que se envía al cliente"></div>
+          </div>
+          <button class="btn primario" id="btnRapida">Guardar respuesta rápida</button>
+          <div class="aviso">Se usan en el chat con un clic. No necesitan aprobación de Meta.</div>
+        </div>
+      </div>
+      <div class="panel-t" id="p-whatsapp">
+        <div class="bloque">
+          <h3>Plantillas de WhatsApp</h3>
+          <div class="aviso" style="margin-top:0;margin-bottom:8px">WhatsApp revisa cada plantilla antes de usarla para escribir a un cliente que no te ha escrito en las últimas 24 horas. Se envía a Meta cuando el canal esté aprobado.</div>
+          <div id="listaPlantillas"></div>
+          <button class="btn" style="margin-top:12px" id="btnNuevaPlantilla">+ Nueva plantilla</button>
         </div>
       </div>
     </section>
@@ -399,7 +430,7 @@ const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&a
 function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2200); }
 
 // ---------- Navegación ----------
-const titulos = { inicio: 'Inicio', redes: 'Redes sociales', conv: 'Conversaciones', kaizen: 'Chat con Kaizen', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', pagos: 'Pagos y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
+const titulos = { inicio: 'Inicio', redes: 'Redes sociales', conv: 'Conversaciones', plantillas: 'Plantillas', kaizen: 'Chat con Kaizen', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', pagos: 'Pagos y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => mostrar(b.dataset.v)));
 function mostrar(v) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
@@ -560,8 +591,49 @@ $('btnClave').addEventListener('click', () => avisar('Vista de prueba: la contra
 // ---------- Correo ----------
 $('btnConectarCorreo').addEventListener('click', () => { $('bloqueCorreo').hidden = false; avisar('Vista de prueba: el correo se conecta en solo lectura.'); });
 
+// ---------- Plantillas ----------
+const rapidas = [
+  { t: 'Horario', x: 'Abrimos de lunes a sábado, de 9:00 a 18:00.' },
+  { t: 'Saludo de espera', x: 'Gracias por escribir. En unos minutos te respondemos.' },
+  { t: 'Pedir datos', x: '¿Me compartes tu nombre y el número de mascota para ayudarte mejor?' }
+];
+const plantillasWA = [
+  { nombre: 'recordatorio_cita', tipo: 'Recordatorio', texto: 'Hola {{1}}, te recordamos tu cita el {{2}} a las {{3}}.', estado: 'En revisión de Meta' },
+  { nombre: 'bienvenida_cliente', tipo: 'Bienvenida', texto: 'Hola {{1}}, gracias por escribirnos a PEX Solution. ¿En qué te ayudamos?', estado: 'Aprobada' },
+  { nombre: 'promo_vacunas', tipo: 'Promoción', texto: 'Vacunas con 10% de descuento este mes. Responde SÍ para reservar.', estado: 'Rechazada', motivo: 'Promoción sin opción para dejar de recibir mensajes. Corregir y enviar de nuevo.' }
+];
+document.querySelectorAll('#tabsPl button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#tabsPl button').forEach(x => x.classList.toggle('on', x === b));
+  document.getElementById('p-rapidas').classList.toggle('on', b.dataset.p === 'rapidas');
+  document.getElementById('p-whatsapp').classList.toggle('on', b.dataset.p === 'whatsapp');
+}));
+function pintarRapidas() {
+  $('listaRapidas').innerHTML = rapidas.map((r, i) => `
+    <div class="fila"><div><b>${esc(r.t)}</b><br><small>${esc(r.x)}</small></div>
+      <div style="display:flex;gap:6px"><button class="btn" data-usar="${i}">Usar en chat</button><button class="btn peligro" data-quitar="${i}">Quitar</button></div></div>`).join('') || '<div class="aviso">Todavía no hay respuestas rápidas.</div>';
+  document.querySelectorAll('[data-usar]').forEach(b => b.addEventListener('click', () => {
+    $('entradaMsj').value = rapidas[Number(b.dataset.usar)].x; mostrar('conv'); avisar('Respuesta puesta en el chat. Revisa y envía.');
+  }));
+  document.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => { rapidas.splice(Number(b.dataset.quitar), 1); pintarRapidas(); }));
+}
+function pintarPlantillas() {
+  const clase = e => e === 'Aprobada' ? 'e-verde' : e === 'Rechazada' ? 'e-rojo' : 'e-ambar';
+  $('listaPlantillas').innerHTML = plantillasWA.map(p => `
+    <div class="fila" style="display:block">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b>${esc(p.nombre)}</b> <small>· ${esc(p.tipo)}</small></div><span class="estado ${clase(p.estado)}">${esc(p.estado)}</span></div>
+      <div class="plantilla">${esc(p.texto)}</div>
+      ${p.motivo ? `<div class="aviso" style="color:var(--rojo)">${esc(p.motivo)}</div>` : ''}
+    </div>`).join('');
+}
+$('btnRapida').addEventListener('click', () => {
+  const t = $('rapTitulo').value.trim(), x = $('rapTexto').value.trim();
+  if (!t || !x) { avisar('Escribe el nombre y el texto.'); return; }
+  rapidas.push({ t, x }); $('rapTitulo').value = ''; $('rapTexto').value = ''; pintarRapidas(); avisar('Respuesta rápida guardada');
+});
+$('btnNuevaPlantilla').addEventListener('click', () => avisar('Vista de prueba: la plantilla se envía a Meta para revisión desde la versión conectada.'));
+
 // ---------- Arranque ----------
-pintarIA(); pintarKaizen(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos(); pintarPrueba();
+pintarIA(); pintarRapidas(); pintarPlantillas(); pintarKaizen(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos(); pintarPrueba();
 </script>
 </body>
 </html>
