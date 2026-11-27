@@ -798,6 +798,22 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .srow .sdato { font-size: 14px; }
   #fondoModal .srow .stipo { font-size: 13.5px; }
   #fondoModal .srow small { font-size: 12px; }
+
+  /* Cada servicio en cuadros: aerolínea, aeropuerto, fecha, hora. Solo aparece lo que el correo trae. */
+  #fondoModal .mbanner { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  #fondoModal .srow { display: block; font-size: 14px; padding: 8px 10px; background: #f7f9fc; }
+  #fondoModal .srow.in { background: #e6f6ee; }
+  #fondoModal .srow.out { background: #e6f0fc; }
+  #fondoModal .stop { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #fondoModal .sicono svg { width: 20px; height: 20px; stroke: #2f6fb6; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+  #fondoModal .srow.in .sicono svg { stroke: #2f8a5a; }
+  #fondoModal .sact { font-weight: 600; color: #334155; }
+  #fondoModal .sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px 10px; }
+  #fondoModal .scel { display: flex; flex-direction: column; min-width: 0; }
+  #fondoModal .scel small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 700; }
+  #fondoModal .scel { font-weight: 600; color: #0f1f38; overflow-wrap: anywhere; }
+  #fondoModal .snota { margin-top: 6px; font-size: 12.5px; color: #7a4b06; }
+  #fondoModal .mt.linea small { font-size: 11px; color: #64748b; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -2793,31 +2809,43 @@ function tarjetasDatos(r, g, celdaAgencia) {
   const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
   base += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
   base += cuadro('r-agencia', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
-  base += cuadro('r-pax', ICONOS_TABLERO.pax, 'Pax', falta(paxReserva(g)), clientesDe(g) ? (clientesDe(g).split(', ').length === 1 ? '1 nombre en el correo' : clientesDe(g).split(', ').length + ' nombres en el correo') : '');
-  base += cuadro('r-sede', ICONOS_TABLERO.sede, 'Sede', falta(sedeDeServicios(g)), aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
-  base += cuadro('r-tel', ICONOS_TABLERO.tel, 'Teléfono', falta(r.telefono), 'del pasajero');
+  const totalPax = Math.max(0, ...g.map(x => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0)));
+  if (totalPax) base += cuadro('r-pax', ICONOS_TABLERO.pax, 'Pax', totalPax + (totalPax === 1 ? ' persona' : ' personas'), '');
+  if (aeropuertoPrincipal || sedeDeServicios(g)) base += cuadro('r-sede', ICONOS_TABLERO.sede, 'Sede', sedeDeServicios(g) || aeropuertoPrincipal, aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
+  if (r.telefono) base += cuadro('r-tel', ICONOS_TABLERO.tel, 'Teléfono', esc(r.telefono), 'del pasajero');
   html = '<div class="mbanner">' + base + '</div>' + avisoRevisionHtml;
   if (r.error_ia) html += cuadro('aviso', ICONOS_TABLERO.aviso, porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA', porAnalizar(r) ? 'Por analizar' : 'La IA no respondió', porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'Sin detalle') + '. Se analiza de nuevo en la próxima ejecución del flujo.', 'd2');
   else if (r.cancelada_por) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cancelada', 'Correo #' + r.cancelada_por, 'Cancélala también en el sistema de reservas y márcala como corresponde.', 'd2');
   else if (r.cambio_id) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cambio recibido', 'Correo #' + r.cambio_id, 'Revisa los datos nuevos antes de seguir.', 'd2');
   else if (r.categoria === 'MODIFICACION') html += cuadro('', ICONOS_TABLERO.otro, 'Reserva original', r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada', '', 'd2');
+  const pasajeros = (x) => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0);
   const filas = g.map((s, n) => {
     const t = tipoServicio(s);
     const nota = notaServicio(s);
     const esVuelo = t === 'IN' || t === 'OUT';
     const clase = t === 'IN' ? 'in' : t === 'OUT' ? 'out' : '';
+    const icono = t === 'IN' ? ICONOS_TABLERO.llegada : t === 'OUT' ? ICONOS_TABLERO.salida : ICONOS_TABLERO.otro;
     const hotel = s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada);
-    const partes = [];
-    if (esVuelo) partes.push(dudoso(s, 'vuelo', campoSrv(s, s.vuelo, 'vuelo')) + (aerolineaDe(s.vuelo) ? ' ' + esc(aerolineaDe(s.vuelo)) : ''));
-    partes.push(dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto, 'aeropuerto')));
-    partes.push(dudoso(s, 'hotel', falta(hotel)));
-    partes.push(dudoso(s, 'pax', falta(paxDe(s))));
-    if (t !== 'IN' && t !== 'OUT' && s.actividad) partes.unshift('<b>' + esc(s.actividad) + '</b>');
-    if (nota) partes.push(`<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>`);
-    return `<div class="srow ${clase}"><span class="stipo">${etiquetaTipo(s).replace(/^\S+\s/, '')}${g.length > 1 ? ' ' + (n + 1) : ''}</span><span class="sdato">${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio ? fechaBonita(s.fecha_servicio) : ''))} · ${dudoso(s, 'hora_servicio', horaServicio(s))}</span><span class="sdet">${partes.join(' · ')}</span></div>`;
+    const sinVuelo = !esVuelo || esCruceroSrv(s) || /^n\/?a$/i.test(String(s.vuelo || '').trim());
+    const sinAeropuerto = t === 'ACTIVIDAD' || t === 'INTERHOTEL';
+    const vueloTxt = sinVuelo ? 'N/A' : (s.vuelo ? dudoso(s, 'vuelo', esc(s.vuelo)) : '');
+    const aerolinea = !sinVuelo && s.vuelo ? aerolineaDe(s.vuelo) : '';
+    const aeroTxt = sinAeropuerto ? 'N/A' : (s.aeropuerto ? dudoso(s, 'aeropuerto', esc(s.aeropuerto)) : '');
+    const fecha = s.fecha_servicio ? dudoso(s, 'fecha_servicio', esc(fechaBonita(s.fecha_servicio))) : '';
+    const hora = s.hora_servicio ? dudoso(s, 'hora_servicio', esc(s.hora_servicio) + '<small>' + (t === 'IN' ? 'llega' : t === 'OUT' ? 'sale' : '') + '</small>') : '';
+    const pax = pasajeros(s) ? pasajeros(s) + (pasajeros(s) === 1 ? ' persona' : ' personas') : '';
+    const celda = (etiqueta, contenido) => contenido ? `<span class="scel"><small>${etiqueta}</small>${contenido}</span>` : '';
+    const actividad = (t !== 'IN' && t !== 'OUT' && s.actividad) ? ' <span class="sact">' + esc(s.actividad) + '</span>' : '';
+    const numero = g.length > 1 ? ' ' + (n + 1) : '';
+    return `<div class="srow ${clase}"><div class="stop"><span class="sicono">${icono}</span><b>${etiquetaTipo(s).replace(/^\S+\s/, '')}${numero}</b>${actividad}</div><div class="sgrid">${celda('Vuelo', vueloTxt)}${celda('Aerolínea', esc(aerolinea))}${celda('Aeropuerto', aeroTxt)}${celda('Fecha', fecha)}${celda('Hora', hora)}${celda('Hotel / destino', hotel ? esc(hotel) : '')}${celda('Pax', pax)}</div>${nota ? `<div class="snota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</div>` : ''}</div>`;
   });
-  html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
-  html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', falta(clientesDe(g)), '', 'linea');
+  if (filas.length) html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
+  const personas = [...new Set(g.flatMap(x => String(x.nombre_cliente || '').split(/\s*,\s*/)).map(x => x.trim()).filter(Boolean))];
+  if (personas.length) {
+    const tipoDe = (nombre) => /\b(INF|INFANTE)\b/i.test(nombre) ? 'infante' : /\b(CHD|CHILD|NI[ÑN]O)\b/i.test(nombre) ? 'niño' : /\b(ADL|ADT|ADULTO)\b/i.test(nombre) ? 'adulto' : '';
+    const lista = personas.map(x => { const tipo = tipoDe(x); const limpio = x.replace(/\b(INF|INFANTE|CHD|CHILD|ADL|ADT|ADULTO)\b/gi, '').trim(); return esc(limpio) + (tipo ? ' <small>(' + tipo + ')</small>' : ''); }).join('  ·  ');
+    html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', lista, '', 'linea');
+  }
   if (r.asignado_a) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
   return html;
 }
