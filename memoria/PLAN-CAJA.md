@@ -62,3 +62,18 @@ Decisiones:
 - [x] R5 Administración: pestañas General (antes Todo) + cuadrito Socios · Clientes · Gastos · Socios · Creación de sistema · Resumen; quitar el menú «Caja» aparte, «Cobro, gastos y reparto» y «Gastos del negocio» (queda dentro de Gastos).
 - [x] R6 Ficha del cliente: Datos de la empresa (con contacto, teléfono, correo) · Programas (planes, mensualidad total, paquete, moneda) · Configuración (claves, correo de lectura) · Estado de cuenta; quitar «Cerrado» si tiene mensualidad.
 - [x] R7 Pruebas con los números reales (cobrado 1,890; gastos 1,088.20; adelantos 765; reparto 801.80 → 481.08/320.72; libres 22.08/14.72; caja 36.80) y paquete.
+
+## CORRECCIONES TRAS INSTALAR (dueño, 27 nov) · decisiones y pasos
+Decisiones:
+- **Reparto automático, sin botón «Repartir».** Utilidad = cobrado − gastos (− fondo reservado si el dueño lo pone). A cada socio le toca su % de la utilidad; disponible = le toca − retirado; puede retirar = mín(disponible, caja). Si un socio retiró de más (disponible negativo) queda debiendo y no retira.
+- **Regla del préstamo (versión final del dueño):** entran 2,000, gastos 1,000, se reparte 600/400; José retira 400; emergencia 300 con la empresa en 0 → Cristian presta 300 de sus 600; cuando entra un pago nuevo, primero se le devuelve lo prestado, luego los gastos y lo que sobra se reparte 60/40. (Es idéntico al cálculo automático acumulado: con un pago de 1,000 → Cristian 1,020 total, José 680.)
+- **Gastos fijos mensuales** (Claude el 13, servidor, contador): se anotan una vez como fijos; cada mes se confirma el pago con su **monto real editable** (ej. servidor 23 el primer mes y 45 después). Solo cuenta lo confirmado.
+- **Editar gastos directo en Gastos** (fecha, monto, nombre, borrar); si vino de Creación de sistema se cambia también allá.
+- **Varios socios con su %** (suman 100): editar nombres y porcentajes, agregar y quitar.
+Pasos:
+- [ ] C1 Reparto automático y varios socios (tabla oficina_socios; claves dueno/socio para los dos primeros).
+- [ ] C2 Gastos: debajo del total, «Retiros de ganancias de socios» (cada socio y total) y «Queda en caja»; mensuales y del negocio con flechita por mes (octubre, noviembre…) sin agrandar el cuadro.
+- [ ] C3 Editar / borrar gastos en Gastos; «Hacer fijo mensual»; confirmar pago del fijo con monto real.
+- [ ] C4 Retiros con método, referencia y voucher (también completar los adelantos ya hechos) y que salgan en el recibo.
+- [ ] C5 Creación de sistema → resumen para el socio: retención 8 % (151.20), llegó a la cuenta 1,738.80; «Gastos de cada mes» con los reales.
+- [ ] C6 Resumen del mes: calendario con cobros de mensualidad y depósitos de cada programa (el mensaje del dueño se cortó: falta el resto).
