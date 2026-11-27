@@ -918,7 +918,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
       </div>
     </div>
     <div class="modal-cuerpo">
-      <div class="titulo-seccion seccion-datos"><span id="mTituloDatos">Datos que leyó la IA</span><span id="mBotonesEdicion"></span></div>
+      <div class="titulo-seccion seccion-datos"><span id="mTituloDatos">Datos extraídos del correo</span><span id="mBotonesEdicion"></span></div>
       <div class="mtiles" id="mTiles"></div>
       <table class="datos" id="mDatos" hidden></table>
       <div class="titulo-seccion" style="margin-top:18px">Correo</div>
@@ -2793,7 +2793,7 @@ let editandoIA = false;
 function pintarDatosModal(r) {
   // Un correo de factura muestra la propuesta de pago, no datos de reserva.
   if (r.categoria === 'FACTURA') { mostrarTiles(false); return pintarDatosFactura(r); }
-  document.getElementById('mTituloDatos').textContent = 'Datos que leyó la IA';
+  document.getElementById('mTituloDatos').textContent = 'Datos extraídos del correo';
   const g = serviciosDe(r);
   const botones = document.getElementById('mBotonesEdicion');
   botones.innerHTML = !puede('editar_ia') ? ''
