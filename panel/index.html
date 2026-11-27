@@ -768,6 +768,31 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .mt.mini .mv { font-size: 14px; }
   #fondoModal .mt.mini .ms { font-size: 11.5px; }
   @media (max-width: 760px) { #fondoModal .mbanner { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* Ventana completa: datos de la IA a la izquierda (editables) y correo a la derecha, sin subir ni bajar para comparar. */
+  #fondoModal .modal { width: min(1440px, 97vw); height: 94vh; max-height: 94vh; }
+  #fondoModal .modal-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; flex: 1; min-height: 0; overflow: hidden; padding: 10px 16px; }
+  #fondoModal .modal-cuerpo > .titulo-seccion.seccion-datos { grid-column: 1; grid-row: 1; margin: 0 0 4px; }
+  #fondoModal #mTiles { grid-column: 1; grid-row: 2; min-height: 0; overflow: auto; margin: 0; grid-template-columns: repeat(10, minmax(0, 1fr)); align-content: start; }
+  #fondoModal #mDatos { grid-column: 1; grid-row: 2; min-height: 0; overflow: auto; }
+  #fondoModal #mHistDetalle { grid-column: 1; grid-row: 3; max-height: 30vh; overflow: auto; margin: 0; border-top: 1px solid var(--borde); }
+  #fondoModal #mCorreo { grid-column: 2; grid-row: 1 / span 2; height: 100%; max-height: none; min-height: 0; overflow: auto; margin: 0; }
+  #fondoModal #mCompleto { grid-column: 2; grid-row: 1 / span 2; min-height: 0; overflow: auto; }
+  #fondoModal .modal-cuerpo > .titulo-seccion:not(.seccion-datos) { display: none; }
+  #fondoModal .mbanner { grid-column: span 10; gap: 6px; padding: 6px; }
+  #fondoModal .mbanner .mt { padding: 6px 8px; gap: 2px; }
+  #fondoModal .mbanner .mt .mv { font-size: 15px; }
+  #fondoModal .mt.mserv { grid-column: span 10; padding: 8px 10px; gap: 4px; }
+  #fondoModal .srow { display: grid; grid-template-columns: 110px 150px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12.5px; padding: 4px 6px; border-radius: 6px; background: #f7f9fc; }
+  #fondoModal .srow.in { background: #e6f6ee; }
+  #fondoModal .srow.out { background: #e6f0fc; }
+  #fondoModal .srow .stipo { font-weight: 700; color: #0f1f38; }
+  #fondoModal .srow .sdato { font-weight: 600; color: #0f1f38; white-space: nowrap; }
+  #fondoModal .srow .sdet { color: #334155; overflow-wrap: anywhere; }
+  #fondoModal .mt.linea { grid-column: span 10; padding: 6px 10px; }
+  #fondoModal .mt.linea .mv { font-size: 13px; }
+  #fondoModal .mt.aviso.linea .mv { font-size: 13px; }
+  @media (max-width: 900px) { #fondoModal .modal-cuerpo { grid-template-columns: 1fr; grid-template-rows: auto; overflow: auto; } #fondoModal #mCorreo, #fondoModal #mTiles, #fondoModal #mHistDetalle { grid-column: 1; grid-row: auto; } }
 </style>
 </head>
 <body>
@@ -2771,24 +2796,23 @@ function tarjetasDatos(r, g, celdaAgencia) {
   else if (r.cancelada_por) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cancelada', 'Correo #' + r.cancelada_por, 'Cancélala también en el sistema de reservas y márcala como corresponde.', 'd2');
   else if (r.cambio_id) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cambio recibido', 'Correo #' + r.cambio_id, 'Revisa los datos nuevos antes de seguir.', 'd2');
   else if (r.categoria === 'MODIFICACION') html += cuadro('', ICONOS_TABLERO.otro, 'Reserva original', r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada', '', 'd2');
-  g.forEach((s, n) => {
+  const filas = g.map((s, n) => {
     const t = tipoServicio(s);
     const nota = notaServicio(s);
     const esVuelo = t === 'IN' || t === 'OUT';
-    const icono = t === 'IN' ? ICONOS_TABLERO.llegada : t === 'OUT' ? ICONOS_TABLERO.salida : ICONOS_TABLERO.otro;
     const clase = t === 'IN' ? 'in' : t === 'OUT' ? 'out' : '';
     const hotel = s.hotel || (t === 'OUT' ? s.punto_partida : s.punto_llegada);
-    const valor = `${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio ? fechaBonita(s.fecha_servicio) : ''))} · ${dudoso(s, 'hora_servicio', horaServicio(s))}`;
-    const lineas = [];
-    if (esVuelo) lineas.push(dudoso(s, 'vuelo', campoSrv(s, s.vuelo, 'vuelo')) + (aerolineaDe(s.vuelo) ? ' · ' + esc(aerolineaDe(s.vuelo)) : ''));
-    lineas.push(dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto, 'aeropuerto')));
-    lineas.push(dudoso(s, 'hotel', falta(hotel)));
-    lineas.push(dudoso(s, 'pax', falta(paxDe(s))));
-    if (t !== 'IN' && t !== 'OUT' && s.actividad) lineas.unshift(esc(s.actividad));
-    if (nota) lineas.push(`<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>`);
-    html += cuadro(clase, icono, etiquetaTipo(s).replace(/^\S+\s/, '') + (g.length > 1 ? ' ' + (n + 1) : ''), valor, lineas.join('<br>'), esVuelo ? 'd2' : 'mini');
+    const partes = [];
+    if (esVuelo) partes.push(dudoso(s, 'vuelo', campoSrv(s, s.vuelo, 'vuelo')) + (aerolineaDe(s.vuelo) ? ' ' + esc(aerolineaDe(s.vuelo)) : ''));
+    partes.push(dudoso(s, 'aeropuerto', campoSrv(s, s.aeropuerto, 'aeropuerto')));
+    partes.push(dudoso(s, 'hotel', falta(hotel)));
+    partes.push(dudoso(s, 'pax', falta(paxDe(s))));
+    if (t !== 'IN' && t !== 'OUT' && s.actividad) partes.unshift('<b>' + esc(s.actividad) + '</b>');
+    if (nota) partes.push(`<span class="srv-nota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</span>`);
+    return `<div class="srow ${clase}"><span class="stipo">${etiquetaTipo(s).replace(/^\S+\s/, '')}${g.length > 1 ? ' ' + (n + 1) : ''}</span><span class="sdato">${dudoso(s, 'fecha_servicio', falta(s.fecha_servicio ? fechaBonita(s.fecha_servicio) : ''))} · ${dudoso(s, 'hora_servicio', horaServicio(s))}</span><span class="sdet">${partes.join(' · ')}</span></div>`;
   });
-  html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', falta(clientesDe(g)), '', 'd3');
+  html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
+  html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', falta(clientesDe(g)), '', 'linea');
   if ((r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a)) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
   return html;
 }
