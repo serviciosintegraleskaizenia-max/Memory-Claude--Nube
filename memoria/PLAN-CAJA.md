@@ -52,3 +52,4 @@ Decisiones:
 - Recibos: descargar PDF, WhatsApp, correo y enlace para ver en línea.
 - Ficha del cliente: «Datos y plan» → **Datos de la empresa** (con contacto, teléfono, correo); «Editar» → **Configuración** (clave OpenRouter, n8n, correo de lectura, otros); **Programas** (varios por cliente: setup y mensualidad, se suman); **Estado de cuenta**. Somos Viajes no es «Cerrado»: le falta la mensualidad de 750.
 - Creación de sistema: al guardar un abono, recibo automático para compartir.
+- **Regla del dueño (27 nov):** una mensualidad o cobro pendiente (ej. 750 de Somos Viajes) NUNCA se suma a lo cobrado, a la caja ni a la utilidad. Solo cuenta cuando está pagado con su voucher. «Por cobrar» se muestra aparte y no entra en ningún total.
