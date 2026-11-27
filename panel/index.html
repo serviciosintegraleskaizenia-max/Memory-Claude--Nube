@@ -814,6 +814,11 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .scel { font-weight: 600; color: #0f1f38; overflow-wrap: anywhere; }
   #fondoModal .snota { margin-top: 6px; font-size: 12.5px; color: #7a4b06; }
   #fondoModal .mt.linea small { font-size: 11px; color: #64748b; font-weight: 600; }
+  #fondoModal .spax { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin-left: 3px; white-space: nowrap; }
+  #fondoModal .spax::before { content: "● "; }
+  #fondoModal .spax-inf { color: #6d28d9; }
+  #fondoModal .spax-nino { color: #b45309; }
+  #fondoModal .spax-adl { color: #475569; }
 </style>
 </head>
 <body>
@@ -2843,7 +2848,7 @@ function tarjetasDatos(r, g, celdaAgencia) {
   const personas = [...new Set(g.flatMap(x => String(x.nombre_cliente || '').split(/\s*,\s*/)).map(x => x.trim()).filter(Boolean))];
   if (personas.length) {
     const tipoDe = (nombre) => /\b(INF|INFANTE)\b/i.test(nombre) ? 'infante' : /\b(CHD|CHILD|NI[ÑN]O)\b/i.test(nombre) ? 'niño' : /\b(ADL|ADT|ADULTO)\b/i.test(nombre) ? 'adulto' : '';
-    const lista = personas.map(x => { const tipo = tipoDe(x); const limpio = x.replace(/\b(INF|INFANTE|CHD|CHILD|ADL|ADT|ADULTO)\b/gi, '').trim(); return esc(limpio) + (tipo ? ' <small>(' + tipo + ')</small>' : ''); }).join('  ·  ');
+    const lista = personas.map(x => { const tipo = tipoDe(x); const limpio = x.replace(/\b(INF|INFANTE|CHD|CHILD|ADL|ADT|ADULTO)\b/gi, '').trim(); const clase = tipo === 'infante' ? 'inf' : tipo === 'niño' ? 'nino' : tipo === 'adulto' ? 'adl' : ''; return esc(limpio) + (tipo ? ' <span class="spax spax-' + clase + '">' + tipo + '</span>' : ''); }).join('  ·  ');
     html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', lista, '', 'linea');
   }
   if (r.asignado_a) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
