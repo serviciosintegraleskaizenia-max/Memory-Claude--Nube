@@ -12,7 +12,7 @@ falla() { echo; echo "    FALLA: $1"; echo "    No sigas: mandame este mensaje."
 id zentralia >/dev/null 2>&1 || falla "no existe el usuario zentralia"
 
 echo "== 1/4 Revisando el código"
-for f in servidor.js crear-cliente.js; do node --check "$D/$f" || falla "$f tiene errores"; done
+for f in servidor.js crear-cliente.js crear-base.js; do node --check "$D/$f" || falla "$f tiene errores"; done
 echo "    OK  sin errores"
 
 echo "== 2/4 Base de datos"
@@ -22,13 +22,12 @@ for a in panel-correos kaizen-pruebas; do [ -f "/srv/zentralia/apps/$a/config.js
 CLAVE_PG=$(node -e "console.log(require('/srv/zentralia/apps/$ORIGEN/config.js').db.password)")
 [ -n "$CLAVE_PG" ] || falla "la configuración no trae la clave de PostgreSQL"
 ESCAPADA=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$CLAVE_PG")
-EXISTE=$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='panel_cliente'")
-[ "$EXISTE" = 1 ] || sudo -u postgres createdb panel_cliente
+node "$D/crear-base.js" "$CLAVE_PG" "/srv/zentralia/apps/$ORIGEN" || falla "no pude crear la base panel_cliente"
 echo "    OK  base panel_cliente lista"
 
 echo "== 3/4 Copiando el panel"
 mkdir -p "$APP" /srv/zentralia/datos
-cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$APP/"
+cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$D/crear-base.js" "$APP/"
 if [ ! -d "$APP/node_modules/pg" ]; then
   if [ -d /srv/zentralia/apps/panel-correos/node_modules/pg ]; then
     cp -r /srv/zentralia/apps/panel-correos/node_modules "$APP/"
