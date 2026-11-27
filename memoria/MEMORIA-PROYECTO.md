@@ -187,3 +187,7 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Prueba: `panel` cargado en navegador con datos de ejemplo (Maral Turismo, reserva con IN y OUT): 9 cuadros, tabla oculta, historial plegado, 6 estados y el correcto activo. No se probó con la base de datos real.
 - Pendiente: el salto de ventana al pasar a la siguiente reserva (no está en este cambio).
 - Pendiente: la etiqueta "Crucero" y el estado "Pendiente por registrar" en Operaciones y Control siguen como estaban.
+
+## REGLA DE ENTREGA DE PAQUETES (27 nov)
+- Cada paquete de instalación que se entrega va junto con el comando completo de instalación, sin que el dueño tenga que pedirlo.
+- El comando está en `memoria/INSTALAR-PANEL.md`.
