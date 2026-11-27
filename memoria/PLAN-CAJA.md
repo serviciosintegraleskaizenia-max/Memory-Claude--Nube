@@ -77,3 +77,5 @@ Pasos:
 - [ ] C4 Retiros con método, referencia y voucher (también completar los adelantos ya hechos) y que salgan en el recibo.
 - [ ] C5 Creación de sistema → resumen para el socio: retención 8 % (151.20), llegó a la cuenta 1,738.80; «Gastos de cada mes» con los reales.
 - [ ] C6 Resumen del mes: calendario con cobros de mensualidad y depósitos de cada programa (el mensaje del dueño se cortó: falta el resto).
+- [ ] C7 Estados de cuenta: por mes y completo (financiero de todo: entradas, gastos por grupo, retiros, lo que queda), imprimibles.
+- [ ] C8 Recibos (pedido del dueño con captura del R-C 0001): dirección del cliente más corta (no ocupar tanto espacio); en vez de «Setup · abono», el nombre del software/programa; en «Datos del pago» poner método, banco, desde dónde se pagó y número de referencia; **sección para editar recibos** (de clientes y de socios) para corregirlos y mejorarlos.
