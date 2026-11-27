@@ -794,6 +794,10 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .mt.aviso.linea .mv { font-size: 13px; }
   @media (max-width: 900px) { #fondoModal .modal-cuerpo { grid-template-columns: 1fr; grid-template-rows: auto; overflow: auto; } #fondoModal #mCorreo, #fondoModal #mTiles, #fondoModal #mHistDetalle { grid-column: 1; grid-row: auto; } }
   #fondoModal .srow small { margin-left: 5px; font-size: 11px; }
+  #fondoModal .srow { font-size: 14px; padding: 6px 8px; }
+  #fondoModal .srow .sdato { font-size: 14px; }
+  #fondoModal .srow .stipo { font-size: 13.5px; }
+  #fondoModal .srow small { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -2814,7 +2818,7 @@ function tarjetasDatos(r, g, celdaAgencia) {
   });
   html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
   html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', falta(clientesDe(g)), '', 'linea');
-  if ((r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION' || r.asignado_a) && (puede('supervisar') || r.asignado_a)) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
+  if (r.asignado_a) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
   return html;
 }
 function pintarEstadoSeg() {
