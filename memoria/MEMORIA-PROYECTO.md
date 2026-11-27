@@ -115,6 +115,13 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Decisiones abiertas: cómo se cobra al cliente (solo se muestran recibos por ahora); si el cliente puede editar el prompt sin aprobación (decisión 26 nov: sí, con historial y prueba).
 - Lo que el cliente no ve nunca: n8n, claves, consumo de la IA (eso se queda en Oficina), otros clientes.
 
+## CORRECCIÓN DE ESTADO · PEX EN OFICINA (27 nov, capturas del dueño)
+- Ya existe la empresa **PEX SOLUTIONS** en Oficina (estado Activa, En línea, 1 usuario). Su correo de lectura está configurado (IMAP, achaconintpx@gmail.com) pero **falta la clave**.
+- Ya existe el perfil de **cliente de automatización** PEX Solutions, con WhatsApp, Instagram, Facebook y TikTok pendientes, Meta 0 de 5 y CRM apagado.
+- **Dos nombres de subdominio distintos:** la empresa dice pex-solutions.kaizenia.app y el cliente de automatización dice pexsolutions.kaizenia.app. Hay que dejar uno solo antes de crear la ruta del túnel.
+- Oficina ya tiene: indicador En línea, cobro y recordatorio de pago (hoy apagado), Pausar servicio y Apagar. Son la base para suspender el servicio si no paga.
+- **Modelo de acceso decidido por el dueño (27 nov):** el cliente NO entra a Oficina. Tiene un usuario y contraseña creados por el dueño, válidos solo para su panel. Sin pago, se suspende la cuenta. El dueño ve si está en línea, le escribe y le envía recibos desde Oficina.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
