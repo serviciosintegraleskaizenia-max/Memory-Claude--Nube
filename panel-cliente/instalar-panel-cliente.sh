@@ -27,7 +27,7 @@ echo "    OK  base panel_cliente lista"
 
 echo "== 3/4 Copiando el panel"
 mkdir -p "$APP" /srv/zentralia/datos
-cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$D/crear-base.js" "$APP/"
+cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$D/crear-base.js" "$D/plantillas-pex.json" "$APP/"
 if [ ! -d "$APP/node_modules/pg" ]; then
   if [ -d /srv/zentralia/apps/panel-correos/node_modules/pg ]; then
     cp -r /srv/zentralia/apps/panel-correos/node_modules "$APP/"

@@ -5,6 +5,7 @@
 //   node crear-cliente.js activar --usuario pexsolutions
 //   node crear-cliente.js clave --usuario pexsolutions --clave "NUEVA-CLAVE"
 //   node crear-cliente.js listar
+//   node crear-cliente.js plantillas --usuario pexsolutions   (carga plantillas-pex.json, reemplaza las de esa cuenta)
 const { pool, prepararBase, hashClave } = require('./servidor');
 
 function opciones(argv) {
@@ -37,8 +38,20 @@ function opciones(argv) {
       await pool.query('UPDATE cuentas SET clave_hash = $2 WHERE usuario = $1', [usuario, hashClave(o.clave)]);
       await pool.query('DELETE FROM sesiones WHERE cuenta_id IN (SELECT id FROM cuentas WHERE usuario = $1)', [usuario]);
       console.log('Clave cambiada:', usuario);
+    } else if (orden === 'plantillas') {
+      const fs = require('fs'); const path = require('path');
+      const archivo = o.archivo || path.join(__dirname, 'plantillas-pex.json');
+      const lista = JSON.parse(fs.readFileSync(archivo, 'utf8'));
+      const c = (await pool.query('SELECT id FROM cuentas WHERE usuario = $1', [usuario])).rows[0];
+      if (!c) throw new Error('No existe la cuenta ' + usuario + '.');
+      await pool.query('DELETE FROM plantillas_whatsapp WHERE cuenta_id = $1', [c.id]);
+      for (const p of lista) {
+        await pool.query('INSERT INTO plantillas_whatsapp (cuenta_id, nombre, tipo, texto, estado, motivo) VALUES ($1, $2, $3, $4, $5, $6)',
+          [c.id, p.nombre, p.tipo, p.texto, p.estado, p.motivo || '']);
+      }
+      console.log('Plantillas cargadas:', lista.length);
     } else {
-      console.log('Órdenes: crear, suspender, activar, clave, listar. Ver el encabezado de este archivo.');
+      console.log('Órdenes: crear, suspender, activar, clave, listar, plantillas. Ver el encabezado de este archivo.');
     }
   } catch (e) {
     console.error('Error:', e.message); process.exitCode = 1;

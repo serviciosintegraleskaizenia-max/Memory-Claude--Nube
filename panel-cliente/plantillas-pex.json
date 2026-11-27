@@ -1,0 +1,42 @@
+[
+  {
+    "nombre": "retomar_conversacion",
+    "tipo": "Marketing",
+    "uso": "Reabrir la conversación fuera de 24 horas (CRM-4)",
+    "estado": "Pendiente de envío a Meta",
+    "texto": "Hola, {{1}}. 👋\n\nTe saludamos de *PEX Solutions*.\n\nQueríamos retomar nuestra conversación sobre las soluciones en sistemas de tubería PEX para tu proyecto.\n\nEstamos a tu disposición para brindarte asesoría técnica, información de nuestros productos o apoyo con tu cotización.\n\n¿Te gustaría que continuemos con tu solicitud?\n\nSi prefieres no recibir más mensajes, responde SALIR.",
+    "motivo": ""
+  },
+  {
+    "nombre": "seguimiento_48h",
+    "tipo": "Marketing",
+    "uso": "Seguimiento a las 48 horas",
+    "estado": "En revisión de Meta",
+    "texto": "Hola, {{1}}. 👋\n\nTe saludamos nuevamente de *PEX Solutions*.\n\nQueríamos dar seguimiento a nuestra conversación sobre los sistemas de tubería PEX y saber si pudiste revisar la información que compartimos.\n\nEstamos para ayudarte con cualquier consulta técnica, cotización o información adicional que necesites para tu proyecto.\n\n¿Hay algo más en lo que podamos apoyarte?\n\nSi no deseas recibir más seguimientos, responde SALIR.",
+    "motivo": ""
+  },
+  {
+    "nombre": "seguimiento_2_semanas",
+    "tipo": "Marketing",
+    "uso": "Reactivación a los 14 días",
+    "estado": "En revisión de Meta",
+    "texto": "Hola, {{1}}. 👋\n\nEsperamos que estés muy bien.\n\nDesde *PEX Solutions* queremos saber cómo avanza tu proyecto y si todavía necesitas apoyo con nuestros sistemas de tubería PEX.\n\n¿Tu proyecto sigue en marcha o te gustaría recibir una cotización actualizada?\n\nSi prefieres no recibir más mensajes, responde SALIR.",
+    "motivo": ""
+  },
+  {
+    "nombre": "recordatorio_cita",
+    "tipo": "Utilidad",
+    "uso": "Recordatorio de cita ya programada",
+    "estado": "Pendiente de envío a Meta",
+    "texto": "Hola, {{1}}. 👋\n\nTe saludamos de *PEX Solutions*.\n\nTe recordamos que tienes una visita o cita programada con nuestro equipo.\n\n📅 Fecha: {{2}}\n🕒 Hora: {{3}}\n📍 Lugar: {{4}}\n\nNuestro equipo estará listo para atenderte y brindarte el acompañamiento técnico que necesitas.\n\nSi necesitas realizar algún cambio en tu cita, puedes responder directamente a este mensaje.\n\n¡Nos vemos pronto!",
+    "motivo": ""
+  },
+  {
+    "nombre": "confirmacion_cita",
+    "tipo": "Utilidad",
+    "uso": "Confirmación al agendar la cita",
+    "estado": "Pendiente de envío a Meta",
+    "texto": "Hola, {{1}}. 👋\n\nTu cita con *PEX Solutions* ha sido agendada exitosamente. ✅\n\nEstos son los detalles:\n\n📅 Fecha: {{2}}\n🕒 Hora: {{3}}\n📍 Lugar: {{4}}\n\nNuestro equipo te estará acompañando para atender tus consultas y necesidades relacionadas con tu proyecto.\n\nSi necesitas reprogramar tu cita, responde a este mensaje.\n\n¡Gracias por confiar en PEX Solutions!",
+    "motivo": ""
+  }
+]
