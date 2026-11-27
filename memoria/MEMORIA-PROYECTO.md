@@ -87,6 +87,14 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Interruptor de la IA: se aplica en el servidor (el flujo consulta el estado antes de responder), no solo en la pantalla.
 - Lo que necesita el dueño: ruta pex-solution en el túnel de Cloudflare; acceso a Chatwoot para crear el canal Website (credencial por formulario seguro, nunca en el chat); plataforma del sitio de PEX para instalar el cuadro de chat.
 
+## PENDIENTE IMPORTANTE · OFICINA CONTROLA TODO EL CLIENTE (27 nov, para después del panel de PEX)
+- **Orden del dueño:** primero se termina el panel de PEX (construido y probado en la computadora del dueño, luego subido al servidor). Después se completa Oficina, porque le faltan muchas cosas que hay que tener listas.
+- **Al crear una empresa en Oficina** se genera automáticamente su subdominio (por ejemplo, `nombre.kaizenia.app`), sin pasos manuales en Cloudflare.
+- **Acceso completo para el asistente (Claude):** debe poder crear esa ruta, configurarla y revisarla desde Oficina. Para hacerlo necesita una credencial de Cloudflare guardada en el entorno, nunca en el repositorio ni en el chat.
+- **Notificaciones desde Oficina al cliente:** avisos de cobro, de actualizaciones, de pago de la API, de pago de la IA y de conexión de redes sociales. Todo se gestiona desde Oficina.
+- **Control total:** Oficina debe ver y administrar el subdominio, las redes, la IA y los avisos de cada cliente, de forma exacta.
+- **Estado:** pendiente. No se empieza hasta terminar el panel de PEX.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
