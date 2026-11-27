@@ -35,7 +35,6 @@
   .notif h4 { margin:4px 6px 8px; font-size:13px; color:var(--suave); }
   .notif div { padding:9px 8px; border-radius:8px; font-size:13px; border-bottom:1px solid #f1f5f9; }
   .banner { height:120px; border-radius:14px; background:linear-gradient(120deg,#1d4ed8,#0b1f4d); background-size:cover; background-position:center; margin-bottom:16px; display:flex; align-items:flex-end; padding:14px 18px; color:#fff; font-weight:700; font-size:18px; }
-  .banner.con-imagen { background-color:#0b1f4d; }
   .vista { display:none; }
   .vista.on { display:block; }
   .tarjetas { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap:12px; margin-bottom:16px; }
@@ -51,24 +50,24 @@
   .e-verde { background:#dcfce7; color:var(--verde); }
   .e-ambar { background:#fef3c7; color:var(--ambar); }
   .e-gris { background:#e2e8f0; color:#334155; }
-  .e-azul { background:#dbeafe; color:var(--azul2); }
   .btn { border:1px solid var(--borde); background:#fff; color:var(--texto); border-radius:8px; padding:8px 12px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
   .btn.primario { background:var(--azul); border-color:var(--azul); color:#fff; }
   .btn.peligro { color:var(--rojo); }
-  .btn:disabled { opacity:.5; cursor:default; }
   input, select, textarea { font:inherit; font-size:14px; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; width:100%; background:#fff; color:var(--texto); }
-  textarea { min-height:160px; resize:vertical; line-height:1.5; }
+  textarea { min-height:180px; resize:vertical; line-height:1.5; }
   label { font-size:13px; font-weight:600; color:#334155; display:block; margin-bottom:6px; }
   .campo { margin-bottom:12px; }
   .dos { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
-  .tres { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; }
   .aviso { font-size:12px; color:var(--suave); margin-top:6px; line-height:1.4; }
   .chip { display:inline-block; background:#eff6ff; color:var(--azul2); border-radius:999px; padding:3px 9px; font-size:12px; font-weight:600; margin:2px 4px 2px 0; }
   .chip button { border:0; background:none; color:var(--azul2); cursor:pointer; padding:0 0 0 4px; font-size:13px; }
-  /* Chat */
+  .presencia { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
+  .presencia .punto { background:var(--verde); }
+  .presencia.fuera .punto { background:#94a3b8; }
+  /* Chat con Kaizen y conversaciones */
   .chat { display:grid; grid-template-columns: 300px 1fr; gap:14px; height:calc(100vh - 150px); min-height:520px; }
   .lista-chat, .hilo { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
-  .lista-chat .cabeza, .hilo .cabeza { padding:12px 14px; border-bottom:1px solid var(--borde); font-weight:700; font-size:14px; }
+  .lista-chat .cabeza, .hilo .cabeza { padding:12px 14px; border-bottom:1px solid var(--borde); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .conv { padding:11px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; }
   .conv.on { background:#eff6ff; }
   .conv b { font-size:14px; display:block; }
@@ -76,14 +75,15 @@
   .conv .sin { float:right; background:#f97316; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px; font-weight:700; }
   .mensajes { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
   .m { max-width:70%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.4; }
-  .m.cliente { background:#fff; border:1px solid var(--borde); align-self:flex-start; }
-  .m.ia { background:#dbeafe; align-self:flex-end; }
-  .m.humano { background:#0f172a; color:#fff; align-self:flex-end; }
+  .m.cliente { background:#0f172a; color:#fff; align-self:flex-end; }
+  .m.kaizen { background:#fff; border:1px solid var(--borde); align-self:flex-start; }
+  .m.ia { background:#dbeafe; align-self:flex-start; }
+  .m.humano { background:#e0e7ff; align-self:flex-end; }
   .m small { display:block; font-size:11px; color:var(--suave); margin-bottom:3px; }
-  .m.humano small { color:#cbd5e1; }
+  .m.cliente small { color:#cbd5e1; }
   .redactar { display:flex; gap:8px; padding:12px; border-top:1px solid var(--borde); }
   .redactar input { flex:1; }
-  .sello { font-size:12px; color:var(--ambar); background:#fef3c7; padding:6px 10px; margin:10px 14px 0; border-radius:8px; }
+  .sello { font-size:12px; color:var(--ambar); background:#fef3c7; padding:6px 10px; border-radius:8px; }
   /* CRM */
   .crm { display:grid; grid-template-columns: 340px 1fr; gap:14px; }
   .lista-cli { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:12px; }
@@ -94,10 +94,18 @@
   .ficha { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:18px; }
   .ficha h2 { margin:0 0 4px; font-size:19px; }
   .nota { background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; font-size:13px; margin-bottom:8px; }
-  .nota small { color:var(--suave); display:block; font-size:11px; }
   /* Entrenamiento */
+  .tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .tabs button { border:1px solid var(--borde); background:#fff; border-radius:999px; padding:7px 14px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; color:#334155; }
+  .tabs button.on { background:#0f172a; color:#fff; border-color:#0f172a; }
+  .panel-t { display:none; }
+  .panel-t.on { display:block; }
   .archivo { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #eef2f7; font-size:14px; gap:10px; }
   .archivo small { color:var(--suave); }
+  .prueba { background:#f8fafc; border:1px solid var(--borde); border-radius:12px; height:380px; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .interruptor { display:flex; align-items:center; justify-content:space-between; gap:10px; background:#eff6ff; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:14px; font-weight:600; }
+  .interruptor button { border:0; border-radius:999px; padding:6px 14px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; background:#0f172a; color:#fff; }
+  .interruptor.off button { background:#94a3b8; }
   /* Ajustes */
   .vista-logo { width:86px; height:86px; border-radius:14px; border:1px dashed var(--borde); display:grid; place-items:center; overflow:hidden; background:#fff; }
   .vista-logo img { width:100%; height:100%; object-fit:contain; }
@@ -109,7 +117,7 @@
     .app { grid-template-columns: 1fr; }
     .menu { flex-direction:row; flex-wrap:wrap; }
     nav { flex-direction:row; flex-wrap:wrap; }
-    .chat, .crm, .dos, .tres { grid-template-columns: 1fr; }
+    .chat, .crm, .dos { grid-template-columns: 1fr; }
     .ayuda { display:none; }
     .m { max-width:90%; }
   }
@@ -125,14 +133,15 @@
     <nav>
       <button data-v="inicio" class="on">Inicio</button>
       <button data-v="redes">Redes sociales</button>
-      <button data-v="chat">Chat <span class="cuenta" id="cuentaChat">2</span></button>
+      <button data-v="conv">Conversaciones</button>
+      <button data-v="kaizen">Chat con Kaizen <span class="cuenta" id="cuentaKaizen">1</span></button>
       <button data-v="crm">Clientes (CRM)</button>
       <button data-v="entreno">Entrenar la IA</button>
-      <button data-v="factura">Consumo y recibos</button>
+      <button data-v="pagos">Pagos y recibos</button>
       <button data-v="correo">Correo (solo lectura)</button>
       <button data-v="ajustes">Ajustes</button>
     </nav>
-    <div class="ayuda">Esta es una vista de prueba con datos de ejemplo. Lo que está marcado como pendiente de Meta se activa cuando Meta lo apruebe.</div>
+    <div class="ayuda">Vista de prueba con datos de ejemplo. Lo que está marcado como pendiente de Meta se activa cuando Meta lo apruebe.</div>
   </aside>
 
   <main>
@@ -143,8 +152,8 @@
         <button class="campana" id="btnCampana" aria-label="Notificaciones">🔔 <span id="cuentaNotif">3</span></button>
         <div class="notif" id="panelNotif" hidden>
           <h4>Notificaciones</h4>
-          <div>Nuevo mensaje en el chat del sitio web · hace 4 min</div>
-          <div>Factura de noviembre disponible · ayer</div>
+          <div>Kaizen te escribió en el chat · hace 4 min</div>
+          <div>Nuevo mensaje en el chat del sitio web · hace 10 min</div>
           <div>Permiso de Meta en revisión · sin cambios</div>
         </div>
       </div>
@@ -181,8 +190,8 @@
       <div class="aviso">Cada canal aparece con su estado real. Los mensajes de WhatsApp, Facebook e Instagram solo llegan cuando Meta apruebe la aplicación y tu empresa esté verificada.</div>
     </section>
 
-    <!-- CHAT -->
-    <section class="vista" id="v-chat">
+    <!-- CONVERSACIONES (canales) -->
+    <section class="vista" id="v-conv">
       <div class="sello">Vista de prueba: las conversaciones son de ejemplo.</div>
       <div class="chat" style="margin-top:10px">
         <div class="lista-chat">
@@ -195,6 +204,28 @@
           <div class="redactar">
             <input id="entradaMsj" placeholder="Escribe una respuesta (la IA queda pausada en esta conversación)">
             <button class="btn primario" id="btnEnviarMsj">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHAT CON KAIZEN (interno) -->
+    <section class="vista" id="v-kaizen">
+      <div class="chat">
+        <div class="lista-chat">
+          <div class="cabeza">Kaizen</div>
+          <div class="conv on"><b>Kaizen Consulting</b><small>Tu equipo de soporte</small></div>
+          <div style="padding:14px;font-size:13px;color:var(--suave);line-height:1.5">Escribe aquí cuando necesites ayuda con el panel, la IA o tus canales. Te respondemos en este mismo chat.</div>
+        </div>
+        <div class="hilo">
+          <div class="cabeza">
+            <span>Kaizen Consulting</span>
+            <span class="presencia" id="presencia"><span class="punto"></span><span id="presenciaTexto">Kaizen está conectado</span></span>
+          </div>
+          <div class="mensajes" id="mensajesKaizen"></div>
+          <div class="redactar">
+            <input id="entradaKaizen" placeholder="Escribe a Kaizen">
+            <button class="btn primario" id="btnEnviarKaizen">Enviar</button>
           </div>
         </div>
       </div>
@@ -214,44 +245,76 @@
 
     <!-- ENTRENAMIENTO -->
     <section class="vista" id="v-entreno">
-      <div class="dos">
+      <div class="tabs" id="tabsEntreno">
+        <button data-t="prompt" class="on">Instrucciones (prompt)</button>
+        <button data-t="probar">Probar la IA</button>
+        <button data-t="archivos">Archivos de entrenamiento</button>
+        <button data-t="historial">Historial de cambios</button>
+      </div>
+
+      <div class="panel-t on" id="t-prompt">
         <div class="bloque">
-          <h3>Instrucciones de la IA</h3>
-          <div class="campo"><label for="prompt">Cómo debe responder tu asistente</label>
+          <h3>Cómo responde tu asistente</h3>
+          <div class="campo"><label for="prompt">Instrucciones</label>
             <textarea id="prompt">Eres el asistente de PEX Solution. Responde en español, con tono amable y breve. Si no sabes un dato, dilo y ofrece hablar con un asesor. No inventes precios: usa solo los que aparecen en los archivos de entrenamiento.</textarea>
           </div>
           <div class="campo"><label for="bienvenida">Mensaje de bienvenida</label>
             <input id="bienvenida" value="Hola, soy el asistente de PEX Solution. ¿En qué te puedo ayudar?"></div>
-          <div class="acciones-fila"><button class="btn primario" id="btnGuardarPrompt">Guardar cambios</button>
-          <button class="btn" id="btnProbarPrompt">Probar en el chat de prueba</button></div>
+          <button class="btn primario" id="btnGuardarPrompt">Guardar cambios</button>
           <div class="aviso">Cada cambio queda en el historial. Puedes volver a una versión anterior.</div>
         </div>
+      </div>
+
+      <div class="panel-t" id="t-probar">
+        <div class="dos">
+          <div class="bloque">
+            <h3>Encender la IA para probar</h3>
+            <div class="interruptor" id="interruptorPrueba"><span id="textoPrueba">IA de prueba apagada</span><button id="btnPrueba">Encender</button></div>
+            <div class="aviso">Prueba cómo responde tu asistente antes de dejarlo activo con clientes. Lo que escribas aquí no llega a nadie.</div>
+          </div>
+          <div class="bloque">
+            <h3>Chat de prueba</h3>
+            <div class="prueba" id="pruebaMsj"></div>
+            <div class="redactar" style="padding:10px 0 0;border:0">
+              <input id="entradaPrueba" placeholder="Escribe como si fueras un cliente">
+              <button class="btn primario" id="btnPruebaEnviar">Probar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-t" id="t-archivos">
         <div class="bloque">
           <h3>Archivos de entrenamiento</h3>
-          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel o Word)</label>
+          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel, Word o texto)</label>
             <input type="file" id="subirArchivo" accept=".pdf,.xlsx,.xls,.docx,.txt,.csv"></div>
           <div id="listaArchivos"></div>
           <div class="aviso">Los archivos sirven para que la IA responda con tu información: precios, servicios, horarios y preguntas frecuentes.</div>
-          <h3 style="margin-top:16px">Historial de cambios</h3>
+        </div>
+      </div>
+
+      <div class="panel-t" id="t-historial">
+        <div class="bloque">
+          <h3>Versiones de las instrucciones</h3>
           <div class="fila"><span>Versión 3 · hoy 09:40</span><button class="btn">Volver a esta</button></div>
           <div class="fila"><span>Versión 2 · ayer 17:15</span><button class="btn">Volver a esta</button></div>
         </div>
       </div>
     </section>
 
-    <!-- FACTURA -->
-    <section class="vista" id="v-factura">
+    <!-- PAGOS Y RECIBOS -->
+    <section class="vista" id="v-pagos">
       <div class="tarjetas">
-        <div class="tarjeta"><small>Consumo de IA este mes</small><b>US$ 18.50</b><span>Monto de ejemplo</span></div>
-        <div class="tarjeta"><small>Mensajes atendidos</small><b>842</b><span>Este mes (ejemplo)</span></div>
-        <div class="tarjeta"><small>Próximo recibo</small><b>1 dic</b><span>Se genera automáticamente</span></div>
+        <div class="tarjeta"><small>Próximo pago</small><b>US$ 00.00</b><span>Vence el 1 de diciembre (ejemplo)</span></div>
+        <div class="tarjeta"><small>Estado</small><b>Al día</b><span>Último pago registrado</span></div>
       </div>
       <div class="bloque">
-        <h3>Recibos</h3>
-        <div class="fila"><div><b>Noviembre 2026</b><br><small>Consumo de IA · monto de ejemplo</small></div><div><span class="estado e-ambar">Pendiente</span> <button class="btn">Descargar</button></div></div>
-        <div class="fila"><div><b>Octubre 2026</b><br><small>Consumo de IA · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Descargar</button></div></div>
+        <h3>Pagos mensuales</h3>
+        <div class="fila"><div><b>Diciembre 2026</b><br><small>Servicio mensual · vence 1 dic · monto de ejemplo</small></div><div><span class="estado e-ambar">Por pagar</span> <button class="btn">Ver recibo</button></div></div>
+        <div class="fila"><div><b>Noviembre 2026</b><br><small>Servicio mensual · vence 1 nov · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Ver recibo</button></div></div>
+        <div class="fila"><div><b>Octubre 2026</b><br><small>Servicio mensual · vence 1 oct · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Ver recibo</button></div></div>
       </div>
-      <div class="aviso">Solo puedes ver tu consumo y tus recibos. Los datos de pago los maneja Kaizen.</div>
+      <div class="aviso">Aquí solo ves tus pagos y tus recibos. Los datos de pago los maneja Kaizen.</div>
     </section>
 
     <!-- CORREO -->
@@ -286,9 +349,8 @@
           <div class="campo"><label for="claveNueva">Contraseña nueva</label><input type="password" id="claveNueva"></div>
           <button class="btn" id="btnClave">Cambiar contraseña</button>
           <h3 style="margin-top:18px">Ayuda</h3>
-          <div class="fila"><span>Cómo usar el chat</span><button class="btn">Ver</button></div>
+          <div class="fila"><span>Cómo usar el chat con Kaizen</span><button class="btn">Ver</button></div>
           <div class="fila"><span>Cómo cargar archivos de entrenamiento</span><button class="btn">Ver</button></div>
-          <div class="fila"><span>Hablar con Kaizen</span><button class="btn" id="btnSoporte">Escribir</button></div>
         </div>
       </div>
     </section>
@@ -315,6 +377,11 @@ const conversaciones = [
       { de: 'cliente', t: 'Quiero saber precios de vacunas.' },
       { de: 'humano', t: 'Hola Lucía, te envío la lista en un momento.' } ] }
 ];
+const chatKaizen = [
+  { de: 'kaizen', t: 'Hola, ya dejamos lista la primera versión del panel. ¿Quieres revisarla?' },
+  { de: 'cliente', t: 'Sí, ¿por dónde empiezo?' },
+  { de: 'kaizen', t: 'Empieza por Entrenar la IA y prueba cómo responde.' }
+];
 const archivos = [
   { nombre: 'Lista-de-precios.xlsx', tam: '48 KB', fecha: 'hoy' },
   { nombre: 'Preguntas-frecuentes.pdf', tam: '212 KB', fecha: 'ayer' }
@@ -322,6 +389,9 @@ const archivos = [
 let clienteActivo = 1;
 let convActiva = 1;
 let iaActiva = true;
+let kaizenConectado = true;
+let pruebaActiva = false;
+const pruebaMsj = [];
 
 // ---------- Utilidades ----------
 const $ = id => document.getElementById(id);
@@ -329,7 +399,7 @@ const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&a
 function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2200); }
 
 // ---------- Navegación ----------
-const titulos = { inicio: 'Inicio', redes: 'Redes sociales', chat: 'Chat', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', factura: 'Consumo y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
+const titulos = { inicio: 'Inicio', redes: 'Redes sociales', conv: 'Conversaciones', kaizen: 'Chat con Kaizen', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', pagos: 'Pagos y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => mostrar(b.dataset.v)));
 function mostrar(v) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
@@ -338,7 +408,7 @@ function mostrar(v) {
   $('panelNotif').hidden = true;
 }
 
-// ---------- IA on/off ----------
+// ---------- IA encendida o pausada ----------
 function pintarIA() {
   $('ia').classList.toggle('pausada', !iaActiva);
   $('iaTexto').textContent = iaActiva ? 'IA activa' : 'IA pausada';
@@ -347,7 +417,7 @@ function pintarIA() {
 }
 $('btnIA').addEventListener('click', () => {
   iaActiva = !iaActiva; pintarIA();
-  avisar(iaActiva ? 'IA encendida. Responde en todos los canales listos.' : 'IA pausada. Los mensajes quedan para tu equipo.');
+  avisar(iaActiva ? 'IA encendida. Responde en los canales listos.' : 'IA pausada. Los mensajes quedan para tu equipo.');
 });
 
 // ---------- Notificaciones ----------
@@ -355,14 +425,33 @@ $('btnCampana').addEventListener('click', e => { e.stopPropagation(); $('panelNo
 document.addEventListener('click', () => { $('panelNotif').hidden = true; });
 $('panelNotif').addEventListener('click', e => e.stopPropagation());
 
-// ---------- Chat ----------
+// ---------- Chat con Kaizen ----------
+function pintarKaizen() {
+  $('presencia').classList.toggle('fuera', !kaizenConectado);
+  $('presenciaTexto').textContent = kaizenConectado ? 'Kaizen está conectado' : 'Kaizen no está conectado. Te responde en cuanto entre.';
+  $('mensajesKaizen').innerHTML = chatKaizen.map(m => {
+    const clase = m.de === 'cliente' ? 'cliente' : 'kaizen';
+    const quien = m.de === 'cliente' ? 'Tú' : 'Kaizen';
+    return `<div class="m ${clase}"><small>${quien}</small>${esc(m.t)}</div>`;
+  }).join('');
+  $('mensajesKaizen').scrollTop = $('mensajesKaizen').scrollHeight;
+}
+function enviarKaizen() {
+  const t = $('entradaKaizen').value.trim(); if (!t) return;
+  chatKaizen.push({ de: 'cliente', t }); $('entradaKaizen').value = ''; pintarKaizen();
+  avisar(kaizenConectado ? 'Enviado a Kaizen.' : 'Enviado. Kaizen te responde cuando esté conectado.');
+}
+$('btnEnviarKaizen').addEventListener('click', enviarKaizen);
+$('entradaKaizen').addEventListener('keydown', e => { if (e.key === 'Enter') enviarKaizen(); });
+
+// ---------- Conversaciones de los canales ----------
 function pintarConversaciones() {
   $('listaConv').innerHTML = conversaciones.map(c => `
     <div class="conv ${c.id === convActiva ? 'on' : ''}" data-id="${c.id}">
       ${c.sinLeer ? `<span class="sin">${c.sinLeer}</span>` : ''}
       <b>${esc(c.nombre)}</b><small>${esc(c.canal)} · ${c.ia ? 'con IA' : 'con asesor'}</small>
     </div>`).join('');
-  document.querySelectorAll('.conv').forEach(d => d.addEventListener('click', () => { convActiva = Number(d.dataset.id); const c = conversaciones.find(x => x.id === convActiva); c.sinLeer = 0; pintarChat(); pintarCuentas(); }));
+  document.querySelectorAll('.conv').forEach(d => d.addEventListener('click', () => { convActiva = Number(d.dataset.id); conversaciones.find(x => x.id === convActiva).sinLeer = 0; pintarChat(); pintarCuentas(); }));
 }
 function pintarChat() {
   pintarConversaciones();
@@ -377,11 +466,11 @@ function pintarChat() {
 }
 function pintarCuentas() {
   const sin = conversaciones.reduce((s, c) => s + c.sinLeer, 0);
-  $('cuentaChat').textContent = sin; $('cuentaNotif').textContent = sin; $('sinResponder').textContent = sin;
+  $('cuentaNotif').textContent = sin; $('sinResponder').textContent = sin;
 }
-$('btnEnviarMsj').addEventListener('click', enviar);
-$('entradaMsj').addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
-function enviar() {
+$('btnEnviarMsj').addEventListener('click', enviarConv);
+$('entradaMsj').addEventListener('keydown', e => { if (e.key === 'Enter') enviarConv(); });
+function enviarConv() {
   const t = $('entradaMsj').value.trim(); if (!t) return;
   const c = conversaciones.find(x => x.id === convActiva);
   c.msgs.push({ de: 'humano', t }); c.ia = false; $('entradaMsj').value = '';
@@ -424,7 +513,11 @@ $('btnNuevoCli').addEventListener('click', () => {
   clienteActivo = id; pintarClientes(); pintarFicha(); avisar('Cliente guardado');
 });
 
-// ---------- Entrenamiento ----------
+// ---------- Entrenar la IA ----------
+document.querySelectorAll('#tabsEntreno button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#tabsEntreno button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.panel-t').forEach(p => p.classList.toggle('on', p.id === 't-' + b.dataset.t));
+}));
 function pintarArchivos() {
   $('listaArchivos').innerHTML = archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${esc(a.tam)} · ${esc(a.fecha)}</small></span><button class="btn peligro">Quitar</button></div>`).join('');
 }
@@ -434,10 +527,23 @@ $('subirArchivo').addEventListener('change', e => {
   e.target.value = ''; pintarArchivos(); avisar('Archivo cargado. La IA lo usará en sus próximas respuestas.');
 });
 $('btnGuardarPrompt').addEventListener('click', () => avisar('Cambios guardados (vista de prueba)'));
-$('btnProbarPrompt').addEventListener('click', () => { mostrar('chat'); avisar('Aquí se probaría la IA con tus cambios, sin publicarlos.'); });
-
-// ---------- Factura y correo ----------
-$('btnConectarCorreo').addEventListener('click', () => { $('bloqueCorreo').hidden = false; avisar('Vista de prueba: el correo se conecta en solo lectura.'); });
+function pintarPrueba() {
+  $('interruptorPrueba').classList.toggle('off', !pruebaActiva);
+  $('textoPrueba').textContent = pruebaActiva ? 'IA de prueba encendida' : 'IA de prueba apagada';
+  $('btnPrueba').textContent = pruebaActiva ? 'Apagar' : 'Encender';
+  $('pruebaMsj').innerHTML = pruebaMsj.map(m => `<div class="m ${m.de === 'cliente' ? 'cliente' : 'ia'}"><small>${m.de === 'cliente' ? 'Tú (cliente de prueba)' : 'IA (prueba)'}</small>${esc(m.t)}</div>`).join('') || '<div class="aviso">Escribe un mensaje para ver cómo responde.</div>';
+}
+$('btnPrueba').addEventListener('click', () => { pruebaActiva = !pruebaActiva; pintarPrueba(); });
+function enviarPrueba() {
+  const t = $('entradaPrueba').value.trim(); if (!t) return;
+  $('entradaPrueba').value = '';
+  pruebaMsj.push({ de: 'cliente', t });
+  if (!pruebaActiva) { pruebaMsj.push({ de: 'ia', t: 'La IA de prueba está apagada. Enciéndela para ver la respuesta.' }); }
+  else { pruebaMsj.push({ de: 'ia', t: 'Respuesta de ejemplo: aquí aparecerá la respuesta real de la IA con tus instrucciones y archivos.' }); }
+  pintarPrueba();
+}
+$('btnPruebaEnviar').addEventListener('click', enviarPrueba);
+$('entradaPrueba').addEventListener('keydown', e => { if (e.key === 'Enter') enviarPrueba(); });
 
 // ---------- Ajustes: logo, banner, marca ----------
 function leerImagen(input, destino, cb) {
@@ -450,10 +556,12 @@ $('subirLogo').addEventListener('change', e => leerImagen(e.target, $('vistaLogo
 $('subirBanner').addEventListener('change', e => leerImagen(e.target, $('vistaBanner'), url => { const b = $('bannerInicio'); b.style.backgroundImage = `url(${url})`; b.textContent = ''; }));
 $('btnGuardarMarca').addEventListener('click', () => { $('nombreEmpresa').textContent = $('nombreCampo').value || 'Mi empresa'; avisar('Marca guardada'); });
 $('btnClave').addEventListener('click', () => avisar('Vista de prueba: la contraseña se cambia desde la versión conectada.'));
-$('btnSoporte').addEventListener('click', () => avisar('Vista de prueba: aquí se abre el chat con Kaizen.'));
+
+// ---------- Correo ----------
+$('btnConectarCorreo').addEventListener('click', () => { $('bloqueCorreo').hidden = false; avisar('Vista de prueba: el correo se conecta en solo lectura.'); });
 
 // ---------- Arranque ----------
-pintarIA(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos();
+pintarIA(); pintarKaizen(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos(); pintarPrueba();
 </script>
 </body>
 </html>
