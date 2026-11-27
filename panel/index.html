@@ -182,6 +182,22 @@
   .emp-cabeza a { margin-left: auto; font-size: 13px; }
   .emp-tarjeta details { border-top: 1px solid var(--borde); padding: 8px 0; }
   .emp-tarjeta summary { cursor: pointer; font-weight: 600; }
+  /* Lista de empresas: una franja por empresa; al tocarla se despliega todo. */
+  .emp-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .emp-buscar { margin-bottom: 10px; }
+  .emp-buscar input { width: 100%; box-sizing: border-box; }
+  .emp-caja { border: 1px solid var(--borde); border-radius: 12px; margin-bottom: 8px; background: var(--tarjeta); }
+  .emp-caja.abierta { border: 2px solid #1b6fd1; }
+  .emp-franja { display: flex; align-items: center; gap: 10px; padding: 9px 14px; }
+  .emp-franja-boton { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 0; }
+  .emp-flecha { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: 12px; border: 1px solid var(--borde); }
+  .emp-caja.abierta .emp-flecha { background: #1b6fd1; border-color: #1b6fd1; color: #fff; }
+  .emp-nom { font-weight: 700; font-size: 15px; min-width: 190px; }
+  .emp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .emp-franja > a { margin-left: auto; font-size: 13px; white-space: nowrap; }
+  .emp-dentro { padding: 0 14px 12px; border-top: 1px solid var(--borde); }
+  .emp-dentro .emp-tarjeta { border: 0; padding: 0; margin: 0; background: none; }
+  @media (max-width: 700px) { .emp-franja { flex-wrap: wrap; } .emp-nom { min-width: 0; } .emp-franja > a { margin-left: 36px; } }
   .emp-info { font-size: 12px; color: var(--texto-suave); margin: 8px 0; line-height: 1.6; }
   .emp-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0; }
   .chip-verde { color: #166534; border-color: #86efac; }
@@ -4698,7 +4714,7 @@ async function cargarEmpresas() {
   }
   datosEmpresas = r.data;
   plantillasMensaje = p.ok ? p.data : [];
-  pintarEmpresas();
+  await cargarAutomatizacion();
 }
 
 function pintarEmpresas() {
@@ -4709,18 +4725,37 @@ function pintarEmpresas() {
   if (vistaEmpresas === 'nueva') cuerpo = formNuevaEmpresa();
   else if (vistaEmpresas === 'mensajes') cuerpo = vistaMensajes();
   else if (vistaEmpresas === 'existente') cuerpo = formExistente();
-  else if (vistaEmpresas === 'auto') cuerpo = formAutomatizacion();
+  else if (vistaEmpresas === 'redes') cuerpo = vistaGeneralAuto();
   else if (vistaEmpresas === 'demo') cuerpo = '<div id="panelDemo">Cargando…</div>';
   else cuerpo = (resultadoEmpresas || '') + listaEmpresas();
   box.innerHTML = `
-    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('auto', '+ Automatización')}${sub('existente', '+ Agregar existente')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}</div>
+    <div class="emp-subnav">${sub('lista', 'Empresas')}${sub('nueva', '+ Nueva empresa')}${sub('existente', '+ Agregar existente')}${sub('mensajes', 'Banco de mensajes')}${sub('demo', 'Demo de ventas')}${sub('redes', 'Redes: general de Kaizen')}</div>
     ${cuerpo}`;
   if (vistaEmpresas === 'demo') cargarDemo();
   actualizarCamposCorreo(box);
-  if (vistaEmpresas === 'auto' && AUTO_AREA === 'clientes' && AUTO_PESTANA.clientes === 'panel' && AUTO_EDIT) cargarPanelCliente();
+  if (vistaEmpresas === 'lista' && EMP_ABIERTA && AUTO_EDIT && AUTO_EDIT.id && AUTO_PESTANA.clientes === 'panel') cargarPanelCliente();
+  // Buscador: filtra las franjas sin volver a dibujar (no se pierde lo que se escribe).
+  const buscar = document.getElementById('empBuscar');
+  if (buscar) {
+    buscar.value = EMP_BUSCAR;
+    const filtrar = () => {
+      EMP_BUSCAR = buscar.value;
+      const q = normalEmp(buscar.value.trim());
+      let n = 0;
+      box.querySelectorAll('.emp-caja').forEach(c => { const ver = !q || c.dataset.buscar.includes(q); c.hidden = !ver; if (ver) n++; });
+      const sr = document.getElementById('empSinResultados');
+      if (sr) sr.style.display = !q || n > 0 ? 'none' : '';
+    };
+    buscar.oninput = filtrar;
+    filtrar();
+  }
 }
 
 function chipEstado(e) {
+  if (e.sin_panel) {
+    const st = { activa: ['Activa', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'] }[(e.cuenta && e.cuenta.estado) || e.estado] || ['Activa', 'chip-verde'];
+    return `<span class="chip ${st[1]}">${st[0]}</span><span class="chip chip-gris" title="Solo redes, CRM o panel del cliente">Sin panel de reservas</span>`;
+  }
   const estado = { activa: ['Activa', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'], apagada: ['Apagada', 'chip-gris'], creando: ['Creándose…', 'chip-amarillo'] }[e.estado] || [e.estado, 'chip-gris'];
   return `<span class="chip ${estado[1]}">${estado[0]}</span>` + (e.estado === 'apagada' ? ''
     : `<span class="chip ${e.vivo ? 'chip-verde' : 'chip-rojo'}">${e.vivo ? '● En línea' : '● Sin respuesta'}</span>`);
@@ -4733,13 +4768,70 @@ function avisoEmpresas(texto, ok) {
   if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+// Empresas en franjas: una pestaña por administración (Kaizen IA / Zentralia), una abierta a la vez, con buscador.
+let EMP_PESTANA = 'kaizen';
+let EMP_ABIERTA = null;
+let EMP_BUSCAR = '';
+const normalEmp = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function autoDeEmpresa(e) { return AUTO_CLIENTES.find(c => c.empresa_id === e.id) || null; }
+function administracionesEmp() {
+  const a = datosEmpresas && datosEmpresas.administraciones;
+  return a && a.length ? a : [{ clave: 'kaizen', nombre: 'Kaizen IA' }, { clave: 'centralia', nombre: 'Zentralia' }];
+}
 function listaEmpresas() {
-  const lista = datosEmpresas.empresas.filter(e => !e.es_demo);
-  if (!lista.length) {
-    return `<div class="vacio-total">Todavía no hay empresas. Crea la primera con <strong>+ Nueva empresa</strong>.<br>
-      Cada empresa tiene su propia base de datos y su propio panel: los datos nunca se mezclan.</div>`;
+  const todas = datosEmpresas.empresas.filter(e => !e.es_demo);
+  const de = clave => todas.filter(e => (e.administracion || 'kaizen') === clave);
+  const tabs = administracionesEmp().map(a => `<button class="${EMP_PESTANA === a.clave ? 'btn' : 'btn-sec'}" data-accion="emp-pestana" data-adm="${esc(a.clave)}">${esc(a.nombre)} · ${de(a.clave).length}</button>`).join('');
+  const lista = de(EMP_PESTANA);
+  return `<div class="emp-tabs">${tabs}</div>
+    <div class="emp-buscar"><input id="empBuscar" type="search" placeholder="🔍 Buscar empresa…" autocomplete="off" aria-label="Buscar empresa"></div>
+    ${lista.length ? lista.map(franjaEmpresa).join('') : `<div class="vacio-total">Todavía no hay empresas aquí. Crea una con <strong>+ Nueva empresa</strong>.<br>
+      Cada empresa puede tener su panel de reservas, sus redes con IA, su CRM y su panel del cliente: todo en una sola ficha.</div>`}
+    <p class="etiqueta-sec" id="empSinResultados" style="display:none">Ninguna empresa con ese nombre en esta pestaña.</p>`;
+}
+function chipsProgramas(e, auto) {
+  const c = [];
+  if (!e.sin_panel) c.push('📧 Correo y reservas');
+  if (auto) {
+    const p = auto.perfil || {}, r = p.redes || {};
+    const listas = [r.whatsapp && r.whatsapp.cuenta_id && r.whatsapp.numero_id, r.instagram && r.instagram.cuenta_id, r.facebook && r.facebook.pagina_id, r.tiktok && r.tiktok.cuenta].filter(Boolean).length;
+    c.push(`💬 Redes ${listas} de 4`);
+    if (p.crm && p.crm.activo) c.push('👥 CRM');
+  } else if (e.modulos && e.modulos.crm) c.push('👥 CRM');
+  return c.map(t => `<span class="chip chip-gris">${esc(t)}</span>`).join('');
+}
+function chipCobro(e) {
+  const pago = e.pagoCentral || {};
+  if (!pago.activo) return '<span class="chip chip-gris">Sin cobro automático</span>';
+  const et = e.etapaPago;
+  if (!et) return '<span class="chip chip-verde">Al día</span>';
+  if (et.etapa === 'vencido') return `<span class="chip chip-rojo">Vencido hace ${et.dias} día(s)</span>`;
+  if (et.etapa === 'dia') return '<span class="chip chip-rojo">Vence hoy</span>';
+  return `<span class="chip chip-amarillo">Vence en ${et.dias} día(s)</span>`;
+}
+function franjaEmpresa(e) {
+  const abierta = EMP_ABIERTA === e.id;
+  const auto = autoDeEmpresa(e);
+  return `<div class="emp-caja${abierta ? ' abierta' : ''}" data-buscar="${esc(normalEmp(e.nombre + ' ' + e.slug))}">
+    <div class="emp-franja">
+      <button type="button" class="emp-franja-boton" data-accion="emp-abrir" data-id="${e.id}" aria-expanded="${abierta}">
+        <span class="emp-flecha" aria-hidden="true">${abierta ? '▾' : '▸'}</span><span class="emp-nom">${esc(e.nombre)}</span>
+        <span class="emp-chips">${chipEstado(e)}${chipsProgramas(e, auto)}${chipCobro(e)}${e.error ? '<span class="chip chip-rojo">Sin conexión con su base</span>' : ''}</span>
+      </button>
+      ${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url.replace(/^https?:\/\//, ''))}</a>` : ''}
+    </div>
+    ${abierta ? `<div class="emp-dentro">${tarjetaEmpresa(e, true, bloqueAutoEmpresa(e, auto))}</div>` : ''}
+  </div>`;
+}
+// Automatización de la empresa (redes, IA, CRM y panel del cliente), dentro de su misma ficha.
+function bloqueAutoEmpresa(e, auto) {
+  const titulo = '<summary>Automatización: redes, IA, CRM y panel del cliente</summary>';
+  const editando = AUTO_EDIT && (AUTO_EDIT.empresa_id === e.id);
+  if (!auto && !editando) {
+    return `<details open>${titulo}<p class="etiqueta-sec">Esta empresa todavía no tiene automatización.</p>
+      <div class="pie-acciones"><button class="btn-sec" data-accion="emp-auto-agregar" data-id="${e.id}">Agregar automatización</button></div></details>`;
   }
-  return lista.map(tarjetaEmpresa).join('');
+  return `<details open>${titulo}${formAutomatizacion()}</details>`;
 }
 
 function opcionesPlantilla(tipo, elegida) {
@@ -4747,7 +4839,7 @@ function opcionesPlantilla(tipo, elegida) {
     .map(p => `<option value="${p.id}" ${Number(elegida) === p.id ? 'selected' : ''}>${esc(p.titulo)}</option>`).join('');
 }
 
-function tarjetaEmpresa(e) {
+function tarjetaEmpresa(e, incrustada = false, extra = '') {
   const id = e.id;
   const c = e.correo || {};
   const n = e.numeros || {};
@@ -4764,21 +4856,26 @@ function tarjetaEmpresa(e) {
     `<label class="chk"><input type="checkbox" data-modulo="${k}" ${e.modulos[k] ? 'checked' : ''}> ${esc(m.nombre)}</label>`).join('');
   return `
   <div class="emp-tarjeta" data-emp="${id}">
-    <div class="emp-cabeza">
+    ${incrustada ? '' : `<div class="emp-cabeza">
       <strong>${esc(e.nombre)}</strong> ${chipEstado(e)}${e.externa ? ' <span class="chip chip-gris" title="Se maneja en su propia carpeta; el central solo la administra">Externa · base ' + esc(e.base_datos) + '</span>' : ''}
       <a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a>
-    </div>
+    </div>`}
     ${e.error ? `<p class="salud-falla">${esc(e.error)}</p>` : ''}
-    <p class="emp-info">${e.externa ? 'Correo e IA: en su propio config.js' : 'Correo: ' + esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
+    ${incrustada ? `<div class="form-fila" style="align-items:flex-end;margin-top:8px">
+      <label>Pertenece a<select id="adm-${id}">${administracionesEmp().map(a => `<option value="${esc(a.clave)}" ${(e.administracion || 'kaizen') === a.clave ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select></label>
+      <div class="pie-acciones" style="margin:0"><button class="btn-sec" data-accion="emp-adm" data-id="${id}">Cambiar</button></div>
+      ${e.externa ? `<span class="chip chip-gris" title="Se maneja en su propia carpeta; Oficina solo la administra">Externa · base ${esc(e.base_datos)}</span>` : ''}
+    </div>` : ''}
+    ${e.sin_panel ? '<p class="emp-info">Sin panel de reservas: usa redes, IA, CRM o su panel del cliente (abajo, en Automatización).</p>' : `<p class="emp-info">${e.externa ? 'Correo e IA: en su propio config.js' : 'Correo: ' + esc(proveedor)}${c.buzon ? ' · ' + esc(c.buzon) : ''}${c.proveedor && c.proveedor !== 'ninguno' ? (c.clavePuesta ? ' · clave ✔' : ' · <span class="salud-falla">falta la clave</span>') : ''}
       ${e.externa ? '' : `· IA: ${esc((c.modelo || modelosIA.defecto).split('/').pop())} ${c.iaPuesta ? '✔' : '<span class="salud-falla">sin clave</span>'}`} · Usuarios: ${n.usuarios ?? '—'} · Correos hoy: ${n.correos_hoy ?? '—'}
-      ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor && e.motor.mensaje ? '<br>Motor: ' + esc(e.motor.mensaje) : ''}</p>
+      ${n.ultimo_correo ? ' · Último: ' + esc(fechaHora(n.ultimo_correo)) : ''}${e.motor && e.motor.mensaje ? '<br>Motor: ' + esc(e.motor.mensaje) : ''}</p>`}
 
-    <details><summary>Módulos contratados</summary>
+    ${e.sin_panel ? '' : `<details${incrustada ? ' open' : ''}><summary>Módulos contratados</summary>
       <div class="emp-checks">${modulos}</div>
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-modulos" data-id="${id}">Guardar módulos</button></div>
-    </details>
+    </details>`}
 
-    <details><summary>Cobro y recordatorio de pago — ${textoEtapa}</summary>
+    <details${incrustada ? ' open' : ''}><summary>Cobro y recordatorio de pago — ${textoEtapa}</summary>
       <label class="chk"><input type="checkbox" id="pActivo-${id}" ${pago.activo ? 'checked' : ''}> Recordar el pago automáticamente</label>
       <div class="form-fila">
         <label>Día de pago (1 a 28)<input id="pDia-${id}" type="number" min="1" max="28" value="${esc(pago.dia || 5)}"></label>
@@ -4801,7 +4898,7 @@ function tarjetaEmpresa(e) {
       </div>
     </details>
 
-    <details><summary>Enviar un anuncio</summary>
+    <details${incrustada ? ' open' : ''}><summary>Enviar un anuncio</summary>
       <div class="form-fila">
         <label>Para<select id="aPara-${id}"><option value="*">Todos los usuarios</option>${usuarios.map(u => `<option value="${esc(u.usuario)}">${esc(u.nombre)} (${esc(u.grupo)})</option>`).join('')}</select></label>
         <label>Título<input id="aTitulo-${id}" maxlength="120" value="Aviso de Kaizen IA"></label>
@@ -4811,25 +4908,28 @@ function tarjetaEmpresa(e) {
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-anuncio" data-id="${id}">Enviar anuncio</button></div>
     </details>
 
-    ${e.externa ? '' : `<details><summary>Correo e inteligencia artificial</summary>
+    ${e.externa || e.sin_panel ? '' : `<details><summary>Correo e inteligencia artificial</summary>
       ${camposCorreo('c' + id, { ...c, empresaId: id })}
       <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="c${id}Confirmar" type="password" autocomplete="current-password"></label></div>
       <div class="pie-acciones"><button class="btn-sec" data-accion="emp-correo" data-id="${id}">Guardar y reiniciar su panel</button></div>
     </details>`}
 
-    <details><summary class="salud-falla">${e.externa ? 'Quitar de la lista' : 'Eliminar empresa'}</summary>
-      ${e.externa ? '<p>Solo se quita de esta lista. <strong>Su panel, su base de datos y sus datos quedan intactos.</strong></p>'
-        : `<p>Se borra <strong>para siempre</strong>: su base de datos (reservas, usuarios, historial), sus ajustes y claves, y se apaga su panel. No se puede deshacer.
+    ${extra}
+
+    <details><summary class="salud-falla">${e.externa || e.sin_panel ? 'Quitar de la lista' : 'Eliminar empresa'}</summary>
+      ${e.sin_panel ? '<p>Se quita de Oficina con su automatización (redes, IA y CRM). <strong>Su panel del cliente y sus datos ahí no se borran.</strong></p>'
+        : e.externa ? '<p>Solo se quita de esta lista, junto con su automatización en Oficina. <strong>Su panel, su base de datos y sus datos quedan intactos.</strong></p>'
+        : `<p>Se borra <strong>para siempre</strong>: su base de datos (reservas, usuarios, historial), sus ajustes y claves, su automatización en Oficina, y se apaga su panel. No se puede deshacer.
         Si es un cliente real, antes descarga sus datos (Exportar a Excel dentro de su panel).</p>`}
       <div class="form-fila">
         <label>Escribe «${esc(e.slug)}» para confirmar<input id="xSlug-${id}" maxlength="30" autocomplete="off"></label>
         <label>Tu contraseña<input id="xClave-${id}" type="password" autocomplete="current-password"></label>
       </div>
-      <div class="pie-acciones"><button class="btn-peligro" data-accion="emp-eliminar" data-id="${id}">${e.externa ? 'Quitar de la lista' : 'Eliminar para siempre'}</button></div>
+      <div class="pie-acciones"><button class="btn-peligro" data-accion="emp-eliminar" data-id="${id}">${e.externa || e.sin_panel ? 'Quitar de la lista' : 'Eliminar para siempre'}</button></div>
     </details>
 
     <div class="pie-acciones">
-      ${e.externa ? '' : e.estado === 'apagada' ? `<button class="btn-sec" data-accion="emp-encender" data-id="${id}">Encender</button>`
+      ${e.externa || e.sin_panel ? '' : e.estado === 'apagada' ? `<button class="btn-sec" data-accion="emp-encender" data-id="${id}">Encender</button>`
         : `<button class="btn-sec" data-accion="emp-apagar" data-id="${id}">Apagar</button>`}
       ${e.estado === 'pausada' ? `<button class="btn" data-accion="emp-reanudar" data-id="${id}">Reanudar servicio</button>`
         : e.estado === 'activa' ? `<button class="btn-sec" data-accion="emp-pausar" data-id="${id}">Pausar servicio</button>` : ''}
@@ -4975,8 +5075,9 @@ function areasAuto() {
   const b = (id, texto) => `<button class="${AUTO_AREA === id ? 'btn' : 'btn-sec'}" data-accion="emp-auto-area" data-area="${id}">${texto}</button>`;
   return `<div class="pie-acciones" style="margin-bottom:8px">${b('clientes', 'Clientes')}${b('general', 'General de Oficina (Kaizen)')}</div>`;
 }
+let AUTO_OCULTAS = [];
 function pestanasAuto(grupo) {
-  return `<div class="pie-acciones" style="margin:10px 0">${AUTO_PESTANAS[grupo].map(([id, texto]) => `<button class="${AUTO_PESTANA[grupo] === id ? 'btn' : 'btn-sec'}" data-accion="emp-auto-pestana" data-grupo="${grupo}" data-pestana="${id}">${texto}</button>`).join('')}</div>`;
+  return `<div class="pie-acciones" style="margin:10px 0">${AUTO_PESTANAS[grupo].filter(([id]) => grupo !== 'clientes' || !AUTO_OCULTAS.includes(id)).map(([id, texto]) => `<button class="${AUTO_PESTANA[grupo] === id ? 'btn' : 'btn-sec'}" data-accion="emp-auto-pestana" data-grupo="${grupo}" data-pestana="${id}">${texto}</button>`).join('')}</div>`;
 }
 function seccionAuto(grupo, id, html) {
   return `<div data-grupo="${grupo}" data-sec="${id}" style="display:${AUTO_PESTANA[grupo] === id ? 'block' : 'none'}">${html}</div>`;
@@ -4990,8 +5091,7 @@ function elegirPestanaAuto(grupo, id) {
 }
 function vistaGeneralAuto() {
   return `<div class="emp-form">
-    ${areasAuto()}
-    <p class="etiqueta-sec">Esto es de Kaizen (Oficina). No pertenece a ningún cliente.</p>
+    <p class="etiqueta-sec">Esto es de Kaizen (Oficina): la app de Meta, los números, las plantillas generales y las reglas de la IA. No pertenece a ninguna empresa.</p>
     ${pestanasAuto('general')}
     ${seccionAuto('general', 'meta', bloqueMeta() + bloqueEstadoWa())}
     ${seccionAuto('general', 'plantillas', bloquePlantillasWa())}
@@ -5007,6 +5107,8 @@ async function cargarAutomatizacion() {
   AUTO_PROMPTS = p.ok ? p.data.prompts : [];
   AUTO_WA = w.ok ? w.data : {};
   AUTO_WA_ESTADO = e.ok ? e.data : { numeros: [], alertas: [] };
+  // La ficha abierta sigue mostrando la automatización de su empresa con los datos recién cargados.
+  if (EMP_ABIERTA) AUTO_EDIT = AUTO_CLIENTES.find(c => c.empresa_id === EMP_ABIERTA) || (AUTO_EDIT && !AUTO_EDIT.id && AUTO_EDIT.empresa_id === EMP_ABIERTA ? AUTO_EDIT : null);
   pintarEmpresas();
   iniciarAvisosClientes();
 }
@@ -5408,12 +5510,17 @@ function pintarAvisosClientes() {
     await api('/api/central/panel-cliente/avisos/leidos', { ids: [Number(b.dataset.pcAviso)] });
     const c = AUTO_CLIENTES.find(x => x.slug === b.dataset.pcIr);
     l.hidden = true;
-    if (c) { vistaEmpresas = 'auto'; AUTO_AREA = 'clientes'; AUTO_EDIT = c; AUTO_PESTANA.clientes = 'panel'; pintarEmpresas(); }
+    if (c) {
+      const emp = datosEmpresas && datosEmpresas.empresas.find(x => x.id === c.empresa_id);
+      if (emp) EMP_PESTANA = emp.administracion || 'kaizen';
+      vistaEmpresas = 'lista'; EMP_ABIERTA = c.empresa_id || null; AUTO_EDIT = c; AUTO_OCULTAS = []; AUTO_PESTANA.clientes = 'panel'; pintarEmpresas();
+      const caja = document.querySelector('.emp-caja.abierta');
+      if (caja) caja.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
     revisarAvisosClientes();
   });
 }
-function formAutomatizacion() {
-  if (AUTO_AREA === 'general') return vistaGeneralAuto();
+function formAutomatizacion(opc = {}) {
   const e = AUTO_EDIT || {};
   const p = e.perfil || {};
   const r = p.redes || {}, m = p.meta || {}, g = p.gerente || {}, ia = p.ia || {}, crm = p.crm || {};
@@ -5425,20 +5532,10 @@ function formAutomatizacion() {
     `<label class="chk"><input type="checkbox" id="${id}" ${marcado ? 'checked' : ''}> ${texto}${ayuda ? `<br><small class="etiqueta-sec">${ayuda}</small>` : ''}</label>`;
   const modelos = ['Anthropic: Claude Haiku 5.5 (recomendado)', 'Anthropic: Claude Sonnet 5.5 (más preciso, más caro)'];
   const tonos = ['Amable y directo', 'Formal', 'Cercano'];
-  const lista = AUTO_CLIENTES.length ? AUTO_CLIENTES.map(c => `
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px;border:1px solid #2a3b57;border-radius:10px;margin:6px 0">
-      <div><strong>${esc(c.nombre)}</strong> <small class="etiqueta-sec">${esc(c.slug)}.kaizenia.app</small></div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${resumenRedes(c)}</div>
-      <button class="btn-sec" data-accion="emp-auto-editar" data-id="${c.id}">Editar</button>
-    </div>`).join('') : '<p class="etiqueta-sec">Todavía no hay clientes de automatización. Crea el primero abajo.</p>';
   return `
-  <div class="emp-form">
-    ${areasAuto()}
-    <div class="titulo-seccion">Clientes de automatización</div>
-    ${lista}
-    <div class="titulo-seccion">${e.id ? 'Editar: ' + esc(e.nombre) : 'Nuevo cliente de automatización'}</div>
-    <p class="etiqueta-sec">Este perfil no crea correos ni reservas: sirve para automatizar redes y el CRM. Aquí no se piden claves ni contraseñas.</p>
-    <input type="hidden" id="aId" value="${e.id || ''}">
+  <div class="emp-auto">
+    <input type="hidden" id="aId" value="${e.id || ''}"><input type="hidden" id="aEmpresa" value="${e.empresa_id || ''}">
+    ${opc.nueva ? '<p class="etiqueta-sec">Opcional: lo que no uses déjalo vacío. Se puede completar después en la ficha de la empresa.</p>' : ''}
     ${pestanasAuto('clientes')}
     ${seccionAuto('clientes', 'datos', `
     <div class="titulo-seccion">1 · Datos del cliente</div>
@@ -5530,17 +5627,16 @@ function formAutomatizacion() {
     <div class="titulo-seccion">6 · CRM</div>
     ${marca('aCrm', 'Activar el CRM para este cliente (servicio aparte)', crm.activo, 'Solo tú lo ves y lo activas. Después le das permiso al cliente desde su panel.')}
     `)}
-    <div class="pie-acciones">
-      <button class="btn" data-accion="emp-auto-guardar">Guardar cliente</button>
-      ${e.id ? '<button class="btn-sec" data-accion="emp-auto-nuevo">Nuevo cliente</button>' : ''}
-    </div>
+    ${opc.nueva ? '' : `<div class="pie-acciones">
+      <button class="btn" data-accion="emp-auto-guardar">Guardar automatización</button>
+    </div>`}
   </div>`;
 }
 function leerAutomatizacion() {
   const v = id => document.getElementById(id).value.trim();
   const ck = id => document.getElementById(id).checked;
   return {
-    id: Number(v('aId')) || 0, nombre: v('aNombre'), slug: v('aSlug').toLowerCase(),
+    id: Number(v('aId')) || 0, empresa_id: Number(v('aEmpresa')) || 0, nombre: v('aNombre'), slug: v('aSlug').toLowerCase(),
     perfil: {
       sedes: v('aSedes'),
       gerente: { nombre: v('aGerNombre'), usuario: v('aGerUsuario') },
@@ -5578,7 +5674,7 @@ async function guardarAutomatizacionUI(b) {
   await cargarAutomatizacion();
   AUTO_EDIT = AUTO_CLIENTES.find(c => c.id === r.data.id) || null;
   pintarEmpresas();
-  mostrarAviso('Cliente guardado. Las redes y el CRM se conectan en el siguiente paso.', true);
+  mostrarAviso('Automatización guardada.', true);
 }
 
 function formNuevaEmpresa() {
@@ -5587,23 +5683,39 @@ function formNuevaEmpresa() {
   const dominio = datosEmpresas.dominio;
   return `
   <div class="emp-form">
-    <p>Se crea una base de datos nueva y vacía y su propio panel. ${dominio
-      ? `Quedará en <strong>nombre.${esc(dominio)}</strong>.`
-      : `Mientras no hay dominio, se abre en esta red con la IP de esta PC: <strong>http://${esc(datosEmpresas.ip)}:puerto</strong>.`}</p>
+    <div class="titulo-seccion">1 · Datos del negocio</div>
     <div class="form-fila">
       <label>Nombre de la empresa<input id="nNombre" maxlength="120" placeholder="Viajes del Mar"></label>
       <label>Subdominio (minúsculas, sin espacios)<input id="nSlug" maxlength="30" placeholder="viajes-del-mar"></label>
       <label>Sedes u oficinas (opcional, separadas por coma)<input id="nSedes" maxlength="300" placeholder="Santo Domingo, Punta Cana"></label>
     </div>
     <div class="form-fila">
-      <label>Usuario principal: nombre<input id="nAdminNombre" maxlength="100" placeholder="Pedro Marte"></label>
-      <label>Usuario principal: usuario para entrar<input id="nAdminUsuario" maxlength="50" placeholder="pedro"></label>
+      <label>Pertenece a<select id="nAdm">${administracionesEmp().map(a => `<option value="${esc(a.clave)}" ${EMP_PESTANA === a.clave ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select></label>
+      <label>Gerente: nombre<input id="nAdminNombre" maxlength="100" placeholder="Pedro Marte"></label>
+      <label>Gerente: usuario para entrar<input id="nAdminUsuario" maxlength="50" placeholder="pedro"></label>
     </div>
-    <p class="etiqueta-sec">El usuario principal es el gerente de la empresa: administra sus usuarios y recibe los recordatorios de pago. Recibe una contraseña temporal que debe cambiar al entrar.</p>
-    ${camposCorreo('n', {})}
-    <div class="titulo-seccion">Módulos contratados</div>
-    <div class="emp-checks">${modulos}</div>
-    <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="nConfirmar" type="password" autocomplete="current-password"></label></div>
+    <p class="etiqueta-sec">El gerente administra sus usuarios y recibe los recordatorios de pago. Recibe una contraseña temporal que debe cambiar al entrar.</p>
+
+    <div class="titulo-seccion">2 · ¿Qué programas usa? (se puede cambiar después)</div>
+    <label class="chk"><input type="checkbox" id="nConPanel" checked onchange="document.getElementById('nBloquePanel').hidden = !this.checked"> <b>Correo y reservas</b> — crea su base de datos y su propio panel</label>
+    <label class="chk"><input type="checkbox" id="nConAuto" checked onchange="document.getElementById('nBloqueAuto').hidden = !this.checked"> <b>Redes, IA, CRM o panel del cliente</b> — WhatsApp, Instagram, Facebook, TikTok</label>
+
+    <div id="nBloquePanel">
+      <div class="titulo-seccion">3 · Correo y reservas</div>
+      <p class="etiqueta-sec">Se crea una base de datos nueva y vacía y su propio panel. ${dominio
+        ? `Quedará en <strong>nombre.${esc(dominio)}</strong>.`
+        : `Mientras no hay dominio, se abre en esta red con la IP de esta PC: <strong>http://${esc(datosEmpresas.ip)}:puerto</strong>.`}</p>
+      ${camposCorreo('n', {})}
+      <div class="titulo-seccion">Módulos del panel</div>
+      <div class="emp-checks">${modulos}</div>
+      <div class="form-fila"><label>Tu contraseña (para confirmar)<input id="nConfirmar" type="password" autocomplete="current-password"></label></div>
+    </div>
+
+    <div id="nBloqueAuto">
+      <div class="titulo-seccion">4 · Redes, IA y CRM</div>
+      ${formAutomatizacion({ nueva: true })}
+    </div>
+    <p class="etiqueta-sec">El cobro, los anuncios y el panel del cliente se ponen después, en la ficha de la empresa.</p>
     <div class="pie-acciones"><button class="btn" data-accion="emp-crear">Crear empresa</button></div>
   </div>`;
 }
@@ -5707,7 +5819,38 @@ async function accionEmpresas(a, b) {
     salida.style.color = ok ? '#16a34a' : '#dc2626';
     return;
   }
-  if (a === 'emp-vista') { vistaEmpresas = b.dataset.vista; resultadoEmpresas = ''; if (vistaEmpresas === 'auto') return cargarAutomatizacion(); return pintarEmpresas(); }
+  if (a === 'emp-vista') {
+    vistaEmpresas = b.dataset.vista; resultadoEmpresas = '';
+    if (vistaEmpresas === 'nueva') { AUTO_EDIT = null; AUTO_OCULTAS = ['datos', 'panel']; AUTO_PESTANA.clientes = 'conexiones'; }
+    else { AUTO_OCULTAS = []; if (AUTO_PESTANA.clientes === 'conexiones' && !EMP_ABIERTA) AUTO_PESTANA.clientes = 'datos'; }
+    if (vistaEmpresas === 'redes') return cargarAutomatizacion();
+    if (vistaEmpresas === 'lista' && EMP_ABIERTA) AUTO_EDIT = AUTO_CLIENTES.find(c => c.empresa_id === EMP_ABIERTA) || null;
+    return pintarEmpresas();
+  }
+  if (a === 'emp-pestana') { EMP_PESTANA = b.dataset.adm; EMP_ABIERTA = null; AUTO_EDIT = null; return pintarEmpresas(); }
+  if (a === 'emp-abrir') {
+    const idE = Number(b.dataset.id);
+    EMP_ABIERTA = EMP_ABIERTA === idE ? null : idE;
+    AUTO_EDIT = EMP_ABIERTA ? (AUTO_CLIENTES.find(c => c.empresa_id === idE) || null) : null;
+    AUTO_OCULTAS = []; AUTO_PESTANA.clientes = 'datos';
+    pintarEmpresas();
+    const caja = document.querySelector('.emp-caja.abierta');
+    if (caja) caja.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+  if (a === 'emp-auto-agregar') {
+    const emp = datosEmpresas.empresas.find(x => x.id === Number(b.dataset.id));
+    if (!emp) return;
+    AUTO_EDIT = { id: 0, empresa_id: emp.id, nombre: emp.nombre, slug: emp.slug, perfil: {} };
+    AUTO_OCULTAS = []; AUTO_PESTANA.clientes = 'datos';
+    return pintarEmpresas();
+  }
+  if (a === 'emp-adm') {
+    const r = await api('/api/central/empresas/administracion', { id: Number(b.dataset.id), administracion: val('adm-' + b.dataset.id) });
+    if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo cambiar.', false);
+    EMP_PESTANA = val('adm-' + b.dataset.id);
+    return recargar('Listo: la empresa ahora está en ' + ((administracionesEmp().find(x => x.clave === EMP_PESTANA) || {}).nombre || EMP_PESTANA) + '.');
+  }
   if (a === 'emp-auto-area') { AUTO_AREA = b.dataset.area; return pintarEmpresas(); }
   if (a === 'emp-auto-pestana') return elegirPestanaAuto(b.dataset.grupo, b.dataset.pestana);
   if (a === 'emp-auto-nuevo') { AUTO_EDIT = null; AUTO_PESTANA.clientes = 'datos'; return pintarEmpresas(); }
@@ -5748,19 +5891,43 @@ async function accionEmpresas(a, b) {
     if (!val('nNombre').trim()) return marcar('nNombre', 'Falta el nombre de la empresa.');
     if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(slug)) return marcar('nSlug', `Subdominio: "${slug}" no sirve. Usa de 3 a 30 letras minúsculas, números o guiones, sin espacios ni acentos (ej.: viajes-caribe).`);
     if (RESERVADAS.includes(slug)) return marcar('nSlug', `Subdominio: "${slug}" es una palabra reservada. Usa otra (ej.: ${slug}-viajes).`);
-    if (!val('nAdminNombre').trim()) return marcar('nAdminNombre', 'Falta el nombre del usuario principal.');
-    if (!/^[a-z0-9._-]{3,50}$/.test(val('nAdminUsuario').trim().toLowerCase())) return marcar('nAdminUsuario', 'El usuario principal necesita de 3 a 50 letras o números, sin espacios.');
+    const conPanel = document.getElementById('nConPanel').checked;
+    const conAuto = document.getElementById('nConAuto').checked;
+    if (!conPanel && !conAuto) return marcar('nConPanel', 'Marca al menos un programa: correo y reservas, o redes, IA y CRM.');
+    // Su automatización: los datos del negocio y del gerente son los mismos de arriba.
+    const guardarAuto = async empresaId => {
+      if (!conAuto) return '';
+      const pon = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      pon('aNombre', val('nNombre').trim()); pon('aSlug', val('nSlug').trim().toLowerCase()); pon('aSedes', val('nSedes'));
+      pon('aGerNombre', val('nAdminNombre').trim()); pon('aGerUsuario', val('nAdminUsuario').trim().toLowerCase()); pon('aEmpresa', empresaId);
+      const ra = await api('/api/central/automatizacion/guardar', leerAutomatizacion());
+      return ra.ok ? '' : ' Ojo: la automatización no se guardó (' + (ra.data.error || 'error') + '); complétala en la ficha de la empresa.';
+    };
+    const abrirNueva = id => { EMP_PESTANA = val('nAdm') || 'kaizen'; EMP_ABIERTA = id || null; AUTO_EDIT = null; AUTO_OCULTAS = []; AUTO_PESTANA.clientes = 'datos'; };
+    if (!conPanel) {
+      b.disabled = true;
+      const r = await api('/api/central/empresas/sin-panel', { nombre: val('nNombre').trim(), slug, administracion: val('nAdm') });
+      if (!r.ok) { b.disabled = false; return r.data.campo === 'slug' ? marcar('nSlug', r.data.error) : avisoEmpresas(r.data.error || 'No se pudo crear la empresa.', false); }
+      const ojo = await guardarAuto(r.data.id);
+      b.disabled = false;
+      abrirNueva(r.data.id);
+      vistaEmpresas = 'lista';
+      resultadoEmpresas = '';
+      return recargar('Empresa creada sin panel de reservas.' + ojo);
+    }
+    if (!val('nAdminNombre').trim()) return marcar('nAdminNombre', 'Falta el nombre del gerente.');
+    if (!/^[a-z0-9._-]{3,50}$/.test(val('nAdminUsuario').trim().toLowerCase())) return marcar('nAdminUsuario', 'El gerente necesita un usuario de 3 a 50 letras o números, sin espacios.');
     if (val('nProveedor') === 'imap') {
       const usuarioImap = val('nUsuario').trim();
       if (usuarioImap && !usuarioImap.includes('@')) return marcar('nUsuario', 'El usuario del correo debe ser el correo completo (ej.: reservas@gmail.com), o déjalo vacío para usar el buzón.');
       if (!val('nBuzon').includes('@')) return marcar('nBuzon', 'Escribe el buzón completo (ej.: reservas@gmail.com).');
     }
     if (!val('nConfirmar')) return marcar('nConfirmar', 'Escribe tu contraseña para confirmar.');
-    const modulos = Object.fromEntries([...document.querySelectorAll('.emp-form [data-modulo]')].map(x => [x.dataset.modulo, x.checked]));
+    const modulos = Object.fromEntries([...document.querySelectorAll('#nBloquePanel [data-modulo]')].map(x => [x.dataset.modulo, x.checked]));
     const datos = {
       nombre: val('nNombre').trim(), slug: val('nSlug').trim().toLowerCase(), sedes: val('nSedes'),
       admin: { nombre: val('nAdminNombre').trim(), usuario: val('nAdminUsuario').trim().toLowerCase() },
-      ...leerCorreo('n'), modulos, confirmar: val('nConfirmar')
+      ...leerCorreo('n'), modulos, confirmar: val('nConfirmar'), administracion: val('nAdm')
     };
     b.disabled = true;
     const textoBoton = b.textContent;
@@ -5774,10 +5941,12 @@ async function accionEmpresas(a, b) {
       return avisoEmpresas(r.data.error || 'No se pudo crear la empresa.', false);
     }
     const bienvenida = `Hola ${datos.admin.nombre}, ya está listo el panel de reservas de ${datos.nombre}.\n\nEntra aquí: ${r.data.url}\nUsuario: ${r.data.admin.usuario}\nContraseña temporal: ${r.data.admin.clave}\n\nAl entrar te pedirá cambiar la contraseña. Equipo Kaizen IA.`;
+    const ojo = await guardarAuto(r.data.id);
     resultadoEmpresas = `<div class="emp-resultado"><div class="titulo-seccion">✔ Empresa creada</div>
       <p>Guarda estos datos ahora: <strong>la contraseña temporal no se vuelve a mostrar</strong>.</p>${textoCopiable(bienvenida)}</div>`;
+    abrirNueva(r.data.id);
     vistaEmpresas = 'lista';
-    return recargar('Empresa creada.');
+    return recargar('Empresa creada.' + ojo);
   }
 
   const tarjeta = b.closest('.emp-tarjeta');

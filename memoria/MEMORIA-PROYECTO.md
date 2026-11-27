@@ -165,6 +165,15 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
   7. Lista: franjas cerradas, **una abierta a la vez**, con buscador.
   8. «+ Nueva empresa» con todo en un formulario; se quita «+ Automatización».
 
+## EMPRESAS UNIFICADAS · HECHO (27 nov, etapas 1-3)
+- Una sola cuenta por empresa: cada automatización va dentro de su empresa (automatizacion_clientes.empresa_id). Empresas sin panel de reservas (sin_panel, sin base ni puerto; estado/programas/pagado en empresas.cuenta_central).
+- Al instalar: PEX y Premios Carrasco pasan a empresas sin panel en Kaizen IA; Kaizen Consulting IA se junta en una ficha (por nombre). Se hace sola al arrancar Oficina.
+- Lista compacta: pestañas por administración (Kaizen IA / Zentralia — nombre tomado de oficina_administraciones), buscador, una abierta a la vez; dentro: pertenece a, módulos, cobro, anuncio, correo e IA, automatización (Datos, Conexiones, IA, CRM, Panel del cliente), quitar/eliminar, pausar/apagar.
+- «+ Automatización» quitado; lo general de Kaizen (Meta, números, plantillas, IA) en «Redes: general de Kaizen». «+ Nueva empresa» pide datos, a quién pertenece, programas (correo y reservas / redes-IA-CRM) y la automatización.
+- Somos Viajes aparece en Zentralia (reparto 60/40 con José Betancourt).
+- Pruebas: API 29/29, navegador 25/25, panel del cliente 40/40.
+- **Falta:** pausa automática por prórroga (etapa 4), acceso del socio (etapa 5), plantillas y recibos dentro del panel de Somos Viajes.
+
 ## CORRECCIÓN · TARJETA «PARA REVISAR» (27 nov)
 - La tarjeta contaba las reservas que alguien tenía abiertas en ese momento (lo mismo que la pestaña «En revisión ahora»), no las que muestran la etiqueta «Revisar». Por eso marcaba 0 con varias en rojo.
 - Ahora «Para revisar» y «Pendientes de transcribir» cuentan lo que muestra la etiqueta de cada reserva: una pendiente sin día, cliente u hotel se ve como «Revisar» y cuenta ahí, no en Pendientes. El filtro de estado usa la misma regla y la tarjeta abre «Todas» filtrada por «Para revisar». La pestaña «En revisión ahora» sigue igual.
