@@ -92,3 +92,16 @@ test('números reales de Zentralia: adelantos anotados antes del reparto', () =>
   assert.strictEqual(e.fondo, 0);
   assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 555 }), /Solo puede retirar 14.72/);
 });
+
+test('gasto anotado después del reparto: un socio lo cubre como préstamo', () => {
+  const movs = [{ tipo: 'entrada', monto: 1000 }, { tipo: 'reparto', monto: 1000 }, { tipo: 'retiro', socio: 'socio', monto: 400 }, { tipo: 'gasto_creacion', monto: 30 }];
+  let e = calcular(movs, 40);
+  assert.strictEqual(e.fondo, -30);
+  assert.match(revisar(e, { tipo: 'prestamo', monto: 40, detalle: { presta: 'dueno', debe: 'socio' } }), /Solo faltan 30/);
+  assert.strictEqual(revisar(e, { tipo: 'prestamo', monto: 30, detalle: { presta: 'dueno', debe: 'socio' } }), '');
+  movs.push({ tipo: 'prestamo', monto: 30, detalle: { presta: 'dueno', debe: 'socio' } });
+  e = calcular(movs, 40);
+  assert.strictEqual(e.fondo, 0);
+  assert.strictEqual(e.libre.dueno, 570);
+  assert.strictEqual(e.debe.socio, 30);
+});

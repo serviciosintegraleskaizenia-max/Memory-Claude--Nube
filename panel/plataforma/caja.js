@@ -9,7 +9,7 @@
 
 const TIPOS = {
   entrada: 'Entrada', gasto_creacion: 'Creación del sistema', gasto_mensual: 'Gasto mensual', gasto_negocio: 'Gasto del negocio',
-  reparto: 'Reparto', retiro: 'Retiro de socio'
+  reparto: 'Reparto', retiro: 'Retiro de socio', prestamo: 'Préstamo de socio'
 };
 const SOCIOS = ['dueno', 'socio'];
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100 || 0;
@@ -36,6 +36,13 @@ function calcular(movs, pct) {
         e.libre[p.presta] = r2(e.libre[p.presta] - pm);
         e.prestado[p.presta] = r2(e.prestado[p.presta] + pm);
         e.deudas.push({ presta: p.presta, debe: p.debe, saldo: pm, concepto: m.concepto || '' });
+      }
+    } else if (m.tipo === 'prestamo') {
+      // Un socio cubre con su parte lo que falta en el fondo (ej. un gasto anotado después del reparto); el otro le queda debiendo.
+      if (SOCIOS.includes(d.presta) && SOCIOS.includes(d.debe) && d.presta !== d.debe) {
+        e.libre[d.presta] = r2(e.libre[d.presta] - monto);
+        e.prestado[d.presta] = r2(e.prestado[d.presta] + monto);
+        e.deudas.push({ presta: d.presta, debe: d.debe, saldo: monto, concepto: m.concepto || '' });
       }
     } else if (m.tipo === 'reparto') {
       const parte = { socio: r2(monto * pct / 100) };
@@ -83,6 +90,14 @@ function revisar(e, m) {
     const fondo = Math.max(0, e.fondo);
     if (r2(fondo + prestado) < monto) return `El fondo de la empresa tiene ${fondo.toFixed(2)}. Faltan ${r2(monto - fondo - prestado).toFixed(2)}: elige qué socio lo presta de su parte.`;
     if (monto > r2(e.caja)) return `En caja solo hay ${r2(e.caja).toFixed(2)}.`;
+    return '';
+  }
+  if (m.tipo === 'prestamo') {
+    const d = m.detalle || {};
+    if (!SOCIOS.includes(d.presta) || !SOCIOS.includes(d.debe) || d.presta === d.debe) return 'Indica quién presta y quién le queda debiendo.';
+    if (!(e.fondo < 0)) return 'El fondo de la empresa no está en negativo: no hace falta préstamo.';
+    if (monto > r2(-e.fondo)) return `Solo faltan ${r2(-e.fondo).toFixed(2)} en el fondo.`;
+    if (monto > r2(e.libre[d.presta])) return `No puede prestar más de lo que tiene libre (${r2(e.libre[d.presta]).toFixed(2)}).`;
     return '';
   }
   if (m.tipo === 'reparto') {

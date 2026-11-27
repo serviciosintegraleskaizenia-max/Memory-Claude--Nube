@@ -405,7 +405,6 @@
   <div class="marca"><div class="logo">Z</div><div><b>Zentralia App</b><small>Oficina · Kaizen IA</small></div></div>
   <button class="nav" data-ir="inicio"><b>🏠 Inicio</b><small>Resumen del día</small></button>
   <button class="nav" data-ir="negocios"><b>🩺 Estado de cada negocio</b><small>Salud de cada negocio</small><span class="num" id="numNegocios" style="display:none"></span></button>
-  <button class="nav" data-ir="caja"><b>💰 Caja</b><small>Entradas, gastos, reparto y retiros</small></button>
   <button class="nav" data-ir="administracion"><b>🏛️ Administración</b><small>Clientes, cobros, gastos y reparto</small><span class="num" id="numCobros" style="display:none"></span></button>
   <button class="nav" data-ir="calendario"><b>📅 Calendario</b><small>Servicios del mes</small></button>
   <button class="nav" data-ir="chat"><b>💬 Chat con los negocios</b><small>Mensajes de gerentes</small><span class="num" id="numChat" style="display:none"></span></button>
@@ -643,6 +642,7 @@ async function cargarSeccion(v) {
   if (v === 'inicio' || v === 'negocios') tareas.push(cargarNegocios());
   if (v === 'gastos' || v === 'administracion') tareas.push(cargarProyectos());
   if (v === 'administracion') tareas.push(cargarDisenoAdm());
+  if (v === 'administracion') { cajaAdm = adminVista; tareas.push(cargarCaja()); }
   if (v === 'inicio' || v === 'enlaces') tareas.push(cargarServicios());
   if (v === 'apis') tareas.push(cargarApis());
   if (v === 'caja') tareas.push(cargarCaja());
@@ -1155,7 +1155,8 @@ function bloqueAdm(titulo, sub, cuerpo, ver, acento = '#1679c2', id = '') {
 // Diseño del panel «Todo»: cada usuario acomoda sus bloques (orden, ancho y campos visibles).
 const BLOQUES_ADM = {
   clientes: { titulo: '👥 Clientes', sub: 'Listado y estado de cobro', ver: 'clientes', color: '#1679c2' },
-  cobros: { titulo: '💰 Cobro, gastos y reparto', sub: 'Por sistema y por cliente', ver: 'cobros', color: '#16a34a' },
+  cobros: { titulo: '🧾 Gastos', sub: 'Creación, mensuales y del negocio', ver: 'gastosCaja', color: '#c62828' },
+  socios: { titulo: '🤝 Socios', sub: 'Porcentaje, retiros y lo que queda', ver: 'socios', color: '#6b3fa0' },
   sistemas: { titulo: '🏗️ Creación de sistema', sub: 'Sistemas, tipo, horas y costo de creación', ver: 'creacion', color: '#d97706' },
   resumen: { titulo: '📊 Resumen del mes', sub: '', ver: 'resumen', color: '#7c3aed' },
 };
@@ -1163,10 +1164,11 @@ const CAMPOS_ADM = {
   clientes: [['cl.kpis', 'Cuadros de arriba (cobrado este mes, por cobrar, clientes, por cerrar)'], ['cl.resta', 'Columna «Resta»'], ['cl.pct', 'Columna «% pagado»'], ['cl.estado', 'Columna «Estado»']],
   cobros: [['co.kpis', 'Cuadros de arriba (cobrado, gastos, plataforma, utilidad)'], ['co.cobros', 'Cobros del cliente'], ['co.gastos', 'Gastos del sistema'], ['co.fijos', 'Gastos fijos mensuales'], ['co.reparto', 'Reparto de la utilidad']],
   sistemas: [['si.horas', 'Columna «Horas»'], ['si.costo', 'Columna «Costo»']],
+  socios: [['so.lista', 'Lista de socios']],
   resumen: [['re.kpis', 'Cuadros de arriba (cobrado, gastos, utilidad, mi parte, socio)'], ['re.calendario', 'Calendario de cobros'], ['re.horas', 'Horas de trabajo'], ['re.tipos', 'Tiempo y tipos de sistema'], ['re.debe', 'Quién debe']],
 };
 let DISENO_ADM = null, EDITANDO_ADM = false, guardarDisenoT = null, ARRASTRANDO_ADM = null;
-const POS_ADM = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 } };
+const POS_ADM = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 }, socios: { x: 0, y: 22, w: 6, h: 8 } };
 function baseAdm() {
   const bloques = {};
   for (const b of Object.keys(CAMPOS_ADM)) bloques[b] = { ...POS_ADM[b], campos: Object.fromEntries(CAMPOS_ADM[b].map(([k]) => [k, k !== 'cl.kpis'])) };
@@ -1209,7 +1211,7 @@ function vAdmTodo() {
   const d = disenoAdm();
   const piezas = Object.keys(BLOQUES_ADM).map(id => {
     const m = BLOQUES_ADM[id], b = d.bloques[id];
-    const cuerpo = id === 'clientes' ? clientesCompactos() : id === 'cobros' ? bloqueCobros() : id === 'sistemas' ? bloqueSistemas() : vResumen();
+    const cuerpo = id === 'clientes' ? clientesCompactos() : id === 'cobros' ? vGastosCaja(true) : id === 'socios' ? vSociosCaja(true) : id === 'sistemas' ? bloqueSistemas() : vResumen();
     const sub = id === 'resumen' ? esc(admin(adminVista).nombre) + ' · ' + esc(D.nombreMes) : m.sub;
     const asas = EDITANDO_ADM ? ['nw', 'ne', 'sw', 'se'].map(a => `<i class="adm-asa ${a}" data-asa="${a}" title="Arrastra para cambiar el tamaño"></i>`).join('') : '';
     return `<div class="adm-celda" data-bloque-id="${id}" style="grid-column:${b.x + 1} / span ${b.w};grid-row:${b.y + 1} / span ${b.h}">${bloqueAdm(m.titulo, sub, cuerpo, m.ver, m.color, id)}${asas}</div>`;
@@ -1535,7 +1537,7 @@ document.addEventListener('click', ev => {
   ev.preventDefault();
   const d = t.dataset, p = pActual();
   if (d.gastosTab) { gastosTab = d.gastosTab; try { localStorage.setItem('gastosTab', gastosTab); } catch (e) {} return pintar(); }
-  if (d.admin) { adminVista = d.admin; try { localStorage.setItem('adminVista', adminVista); } catch (e) {} return pintar(); }
+  if (d.admin) { adminVista = d.admin; try { localStorage.setItem('adminVista', adminVista); } catch (e) {} pintar(); if (vista === 'administracion') { cajaAdm = adminVista; cargarCaja().then(pintar); } return; }
   if (d.editarAdmin) return formAdmin((D.administraciones || []).find(a => a.clave === d.editarAdmin) || { clave: d.editarAdmin });
   if (d.moverEmpresa) { const [id, a] = d.moverEmpresa.split(':'); return moverEmpresa(Number(id), a); }
   if ('nuevoProyecto' in d) return formProyecto();
@@ -2804,14 +2806,15 @@ async function cargarCaja() {
   const r = await api('/api/oficina/caja?administracion=' + encodeURIComponent(cajaAdm));
   CAJA = r.ok ? r.data : { error: r.data.error || 'No se pudo cargar la caja.' };
 }
-const TIPO_CAJA = { entrada: ['Entrada', 'ok'], gasto_creacion: ['Creación del sistema', 'az'], gasto_mensual: ['Gasto mensual', 'ojo'], reparto: ['Reparto', 'gris'], retiro: ['Retiro de socio', 'mal'] };
+const TIPO_CAJA = { prestamo: ['Préstamo de socio', 'gris'], entrada: ['Entrada', 'ok'], gasto_creacion: ['Creación del sistema', 'az'], gasto_mensual: ['Gasto mensual', 'ojo'], reparto: ['Reparto', 'gris'], retiro: ['Retiro de socio', 'mal'] };
 function filaMov(m) {
   const [t, c] = TIPO_CAJA[m.tipo] || [m.tipo, 'gris'];
-  const signo = m.tipo === 'entrada' ? '+' : m.tipo === 'reparto' ? '' : '−';
-  const color = m.tipo === 'entrada' ? 'var(--verde,#1d7a3e)' : m.tipo === 'reparto' ? 'inherit' : 'var(--rojo,#b42318)';
+  const interno = m.tipo === 'reparto' || m.tipo === 'prestamo';
+  const signo = m.tipo === 'entrada' ? '+' : interno ? '' : '−';
+  const color = m.tipo === 'entrada' ? 'var(--verde,#1d7a3e)' : interno ? 'inherit' : 'var(--rojo,#b42318)';
   const prest = ((m.detalle || {}).prestamos || []).map(x => `prestó ${CAJA.nombres[x.presta]} ${dinero(x.monto)}`).join(' · ');
   return `<tr><td>${fechaCorta(m.fecha)}</td><td>${esc(m.concepto)}${prest ? `<div class="ay" style="font-size:12px">${esc(prest)}</div>` : ''}</td><td><span class="chip ${c}">${t}</span></td>
-    <td class="n" style="color:${color}">${signo}${dinero(m.monto)}</td><td class="n">${m.tipo === 'reparto' ? '—' : dinero(m.queda)}</td>
+    <td class="n" style="color:${color}">${signo}${dinero(m.monto)}</td><td class="n">${interno ? '—' : dinero(m.queda)}</td>
     <td>${m.recibo_id ? `<button class="btn-mini" data-recibo="${m.recibo_id}">Recibo</button>` : ''}</td></tr>`;
 }
 function vCaja() {
@@ -2846,11 +2849,56 @@ function vCaja() {
         <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th class="n">Monto</th><th class="n">Queda</th><th></th></tr></thead><tbody>${CAJA.movimientos.slice(0, 6).map(filaMov).join('') || '<tr><td colspan="6" class="vacio">Sin movimientos todavía.</td></tr>'}</tbody></table></div>
     </div>`;
 }
+let verGastosFijos = false;
+// Cambiar el grupo de un gasto o el programa al que se carga (se guarda al elegir).
+document.addEventListener('change', async ev => {
+  const sel = ev.target;
+  if (!sel.dataset || (!sel.dataset.gastoTipo && !sel.dataset.gastoPlan)) return;
+  const id = Number(sel.dataset.gastoTipo || sel.dataset.gastoPlan);
+  const cuerpo = sel.dataset.gastoTipo ? { tipo: sel.value } : { plan_id: sel.value };
+  const r = await api('/api/oficina/caja/clasificar', { administracion: adminVista, id, ...cuerpo });
+  if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar.');
+  aviso('Listo, gasto actualizado.'); await cargarCaja(); pintar();
+});
+const GRUPOS_GASTO = [['gasto_creacion', 'Creación del sistema', 'az', 'Claude, tokens, n8n, Chatwoot, dominio, servidor…'], ['gasto_mensual', 'Gastos mensuales', 'ojo', 'lo que cuesta mantenerlo cada mes'], ['gasto_negocio', 'Gastos del negocio', 'mal', 'contador, abogado, plataforma compartida']];
+function vGastosCaja(compacto = false) {
+  if (!CAJA || CAJA.administracion !== adminVista) return '<div class="vacio">Cargando…</div>';
+  if (CAJA.error) return `<div class="vacio">${esc(CAJA.error)}</div>`;
+  const e = CAJA.estado, total = { gasto_creacion: e.creacion, gasto_mensual: e.mensuales, gasto_negocio: e.negocio };
+  const grupos = `<table><tbody>${GRUPOS_GASTO.map(([k, t, c, ay]) => `<tr><td><span class="chip ${c}">${t}</span> <span class="ay" style="font-size:12px">${ay}</span></td><td class="n">${dinero(total[k])}</td></tr>`).join('')}
+    <tr><td><b>Total que se resta antes de repartir</b></td><td class="n"><b>${dinero(e.gastos)}</b></td></tr></tbody></table>`;
+  if (compacto) return grupos;
+  const planes = CAJA.planes || [];
+  const gastos = CAJA.movimientos.filter(m => m.tipo.startsWith('gasto'));
+  const fila = m => `<tr><td>${fechaCorta(m.fecha)}</td><td>${esc(m.concepto)}${(m.detalle || {}).origen === 'creacion' ? ' <span class="ay" style="font-size:11px">(de Creación de sistema)</span>' : ''}</td>
+    <td><select data-gasto-tipo="${m.id}">${GRUPOS_GASTO.map(([k, t]) => `<option value="${k}" ${m.tipo === k ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+    <td><select data-gasto-plan="${m.id}"><option value="">General</option>${planes.map(pl => `<option value="${pl.id}" ${m.plan_id === pl.id ? 'selected' : ''}>${esc(pl.empresa)} · ${esc(pl.nombre)}</option>`).join('')}</select></td>
+    <td class="n" style="color:var(--rojo,#b42318)">−${dinero(m.monto)}</td></tr>`;
+  return `<div class="caja" style="margin-bottom:12px"><h2 style="display:flex;justify-content:space-between;align-items:center">🧾 Gastos de ${esc(admin(adminVista).nombre)} <span style="display:flex;gap:6px"><button class="btn-sec" data-gastos-fijos>${verGastosFijos ? 'Ocultar' : 'Ver'} gastos que se repiten y alarmas</button><button class="btn" data-caja-gasto>+ Gasto</button></span></h2>${grupos}
+    <p class="ay" style="font-size:12px">Los gastos que anotes en Creación de sistema o en los gastos que se repiten (cuando los marcas pagados) llegan aquí solos. Los adelantos ya no son gasto: son retiros en Socios.</p></div>
+    <div class="caja" style="margin-bottom:12px"><h2>Todos los gastos</h2><div style="max-height:520px;overflow:auto"><table><thead><tr><th>Fecha</th><th>Gasto</th><th>Grupo</th><th>Cargar a</th><th class="n">Monto</th></tr></thead><tbody>${gastos.map(fila).join('') || '<tr><td colspan="5" class="vacio">Sin gastos todavía.</td></tr>'}</tbody></table></div></div>`;
+}
+function vSociosCaja(compacto = false) {
+  if (!CAJA || CAJA.administracion !== adminVista) return '<div class="vacio">Cargando…</div>';
+  if (CAJA.error) return `<div class="vacio">${esc(CAJA.error)}</div>`;
+  const e = CAJA.estado, n = CAJA.nombres, ks = CAJA.pct > 0 ? ['dueno', 'socio'] : ['dueno'];
+  const pct = k => k === 'socio' ? CAJA.pct : 100 - CAJA.pct;
+  const debe = k => e.debe[k] > 0 ? ` <span class="chip mal">debe ${dinero(e.debe[k])}</span>` : '';
+  if (compacto) return `<table data-campo="so.lista"><tbody>${ks.map(k => `<tr><td><b>${esc(n[k])}</b> ${pct(k)} %${debe(k)}</td><td class="n">retiró ${dinero(e.retiros[k])}</td><td class="n" style="color:var(--verde,#16803c)">libre ${dinero(Math.max(0, e.libre[k]))}</td></tr>`).join('')}</tbody></table>`;
+  const recSocio = CAJA.recibos.filter(r => r.tipo === 'socio');
+  return `<div class="caja" style="margin-bottom:12px"><h2 style="display:flex;justify-content:space-between;align-items:center">🤝 Socios de ${esc(admin(adminVista).nombre)} <span style="display:flex;gap:6px"><button class="btn-sec" data-caja-ver="movimientos">Ver todos los movimientos</button><button class="btn" data-caja-reparto ${e.fondo > 0 ? '' : 'disabled'}>Repartir ${dinero(Math.max(0, e.fondo))}</button></span></h2>
+      <table><thead><tr><th></th><th class="n">Le tocó</th><th class="n">Retiró</th><th class="n">Prestó</th><th class="n">Puede retirar</th><th></th></tr></thead><tbody>
+      ${ks.map(k => `<tr><td><b>${esc(n[k])}</b> ${pct(k)} %${debe(k)}</td><td class="n">${dinero(e.repartido[k])}</td><td class="n">${dinero(e.retiros[k])}</td><td class="n">${dinero(e.prestado[k])}</td><td class="n" style="color:var(--verde,#16803c)"><b>${dinero(e.puedeRetirar[k])}</b></td><td><button class="btn-sec" data-caja-retiro="${k}" ${e.puedeRetirar[k] > 0 ? '' : 'disabled'}>Retirar</button></td></tr>`).join('')}</tbody></table>
+      ${e.fondo < 0 ? `<div class="caja" style="border-color:#f1a9a9;background:#fdeeee;margin:8px 0;padding:8px 10px"><b style="color:var(--rojo,#b42318)">Faltan ${dinero(-e.fondo)} en el fondo de la empresa.</b> <span class="ay">Hay gastos anotados después del reparto. ¿Quién los cubre con su parte? El otro le queda debiendo y se le cobra del próximo reparto.</span>
+        <div style="display:flex;gap:6px;margin-top:6px">${ks.map(k => `<button class="btn-sec" data-caja-cubrir="${k}" data-monto="${Math.min(-e.fondo, Math.max(0, e.libre[k]))}" ${e.libre[k] > 0 ? '' : 'disabled'}>Lo cubre ${esc(n[k])} (${dinero(Math.min(-e.fondo, Math.max(0, e.libre[k])))})</button>`).join('')}</div></div>` : ''}
+      <p class="ay" style="font-size:12px">Cobrado ${dinero(e.entradas)} − gastos ${dinero(e.gastos)} = ${dinero(e.entradas - e.gastos)} · sin repartir todavía ${dinero(Math.max(0, e.fondo))} · en caja ${dinero(e.caja)}. Nadie retira más de lo suyo ni más de lo que hay en caja; los préstamos y deudas salen aquí en rojo.</p></div>
+    <div class="caja"><h2>Recibos de socios</h2><table><thead><tr><th>Fecha</th><th>N.º</th><th>Socio</th><th>Concepto</th><th class="n">Monto</th></tr></thead><tbody>${recSocio.map(r => `<tr data-recibo="${r.id}" style="cursor:pointer"><td>${fechaCorta(r.fecha)}</td><td>R-S ${String(r.numero).padStart(4, '0')}</td><td>${esc(r.socio)}</td><td>${esc(r.concepto)}</td><td class="n">${dinero(r.monto)}</td></tr>`).join('') || '<tr><td colspan="5" class="vacio">Sin retiros todavía.</td></tr>'}</tbody></table></div>`;
+}
 function formCajaGasto() {
   const e = CAJA.estado, n = CAJA.nombres;
   abrirModal(`<h2>Nuevo gasto · ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'}</h2>
     <div class="fila2">${campo('cgCon', '¿Qué se pagó?', '<input id="cgCon" placeholder="Ej.: Recarga de tokens OpenRouter">')}${campo('cgMon', 'Monto (US$)', '<input id="cgMon" type="number" min="0" step="0.01">')}</div>
-    <div class="fila2">${campo('cgTipo', 'Tipo', '<select id="cgTipo"><option value="gasto_mensual">Gasto mensual (Claude, IA, servidor, programas)</option><option value="gasto_creacion">Creación del sistema</option></select>')}${campo('cgFec', 'Fecha', `<input id="cgFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
+    <div class="fila2">${campo('cgTipo', 'Tipo', '<select id="cgTipo"><option value="gasto_mensual">Gasto mensual (Claude, IA, servidor, programas)</option><option value="gasto_creacion">Creación del sistema</option><option value="gasto_negocio">Gasto del negocio (contador, abogado…)</option></select>')}${campo('cgFec', 'Fecha', `<input id="cgFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
     ${campo('cgPlan', 'Cargar a', `<select id="cgPlan"><option value="">General (todo ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'})</option>${(CAJA.planes || []).map(pl => `<option value="${pl.id}">${esc(pl.empresa)} · ${esc(pl.nombre)}</option>`).join('')}</select>`)}
     <div class="ay">Fondo de la empresa: <b>${dinero(Math.max(0, e.fondo))}</b>. Si el gasto es mayor, lo que falta lo presta un socio de su parte (con su autorización) y el otro le queda debiendo.</div>
     <div class="fila2" id="cgPresta" style="display:none">${campo('cgQuien', 'Lo que falta lo presta', `<select id="cgQuien">${['dueno', 'socio'].filter(k => k === 'dueno' || CAJA.pct > 0).map(k => `<option value="${k}">${esc(n[k])} (tiene ${dinero(Math.max(0, e.libre[k]))})</option>`).join('')}</select>`)}${campo('cgFalta', 'Monto del préstamo', '<input id="cgFalta" type="number" min="0" step="0.01" readonly>')}</div>
@@ -2864,7 +2912,7 @@ function formCajaGasto() {
     if (falta > 0 && !confirm(`${n[presta]} presta ${dinero(falta)} de su parte y ${n[presta === 'dueno' ? 'socio' : 'dueno']} se los queda debiendo. ¿Lo autoriza?`)) return;
     const r = await api('/api/oficina/caja/gasto', { administracion: cajaAdm, concepto: v('cgCon'), monto: v('cgMon'), tipo: v('cgTipo'), fecha: v('cgFec'), nota: v('cgNota'), plan_id: v('cgPlan'), prestamos });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
-    cerrarModal(); aviso('Gasto anotado.'); ir('caja');
+    cerrarModal(); aviso('Gasto anotado.'); ir(vista);
   };
 }
 function formCajaReparto() {
@@ -2879,7 +2927,7 @@ function formCajaReparto() {
   document.getElementById('fGuardar').onclick = async () => {
     const r = await api('/api/oficina/caja/reparto', { administracion: cajaAdm, monto: v('crMon'), fecha: v('crFec') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo repartir.'; return; }
-    cerrarModal(); aviso('Reparto anotado.'); ir('caja');
+    cerrarModal(); aviso('Reparto anotado.'); ir(vista);
   };
 }
 function formCajaRetiro(k) {
@@ -2893,7 +2941,7 @@ function formCajaRetiro(k) {
   document.getElementById('fGuardar').onclick = async () => {
     const r = await api('/api/oficina/caja/retiro', { administracion: cajaAdm, socio: k, monto: v('ctMon'), fecha: v('ctFec'), metodo: v('ctMet'), referencia: v('ctRef'), nota: v('ctNota') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
-    cerrarModal(); aviso('Retiro anotado con su recibo.'); await ir('caja'); abrirRecibo(r.data.recibo_id);
+    cerrarModal(); aviso('Retiro anotado con su recibo.'); await ir(vista); abrirRecibo(r.data.recibo_id);
   };
 }
 function formCajaPlan(id) {
@@ -2921,14 +2969,14 @@ function formCajaPlan(id) {
     const r = await api('/api/oficina/caja/plan', { administracion: cajaAdm, id: pl.id || 0, empresa_id: Number(v('cpEmp')), nombre: v('cpNom'), precio_creacion: v('cpPre'), mensualidad: v('cpMen'), moneda: v('cpMoneda'), dia_cobro: v('cpDia'), activo: v('cpAct') === '1',
       paquete: document.getElementById('cpPaq').checked, dia_paquete: v('cpDiaPaq'), cobros: marcados('cpCob'), gastos: marcados('cpGas') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
-    cerrarModal(); aviso('Plan guardado.'); ir('caja');
+    cerrarModal(); aviso('Plan guardado.'); ir(vista);
   };
   const crearMes = document.getElementById('cmCrear');
   if (crearMes) crearMes.onclick = async () => {
     const extras = v('cmExtra') && Number(v('cmExtraM')) > 0 ? [{ concepto: v('cmExtra'), monto: v('cmExtraM') }] : [];
     const r = await api('/api/oficina/caja/cobrar-mes', { administracion: cajaAdm, empresa_id: pl.empresa_id, mes: v('cmMes'), extras });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo crear.'; return; }
-    cerrarModal(); aviso(`Cobros creados: ${r.data.creados.map(c => c.concepto + ' ' + dinero(c.total)).join(' · ')}. Se cobran en Administración → Clientes.`); ir('caja');
+    cerrarModal(); aviso(`Cobros creados: ${r.data.creados.map(c => c.concepto + ' ' + dinero(c.total)).join(' · ')}. Se cobran en Administración → Clientes.`); ir(vista);
   };
 }
 function verCaja(que) {
@@ -3584,16 +3632,19 @@ function vResumen() {
 function vAdministracion() {
   if (!permitidasAdmin().includes(adminVista)) adminVista = permitidasAdmin()[0] || 'kaizen';
   const pestanasAdmin = permitidasAdmin().map(c => `<button class="pestana ${adminVista === c ? 'activa' : ''}" data-admin="${c}">${esc(admin(c).nombre)}</button>`).join('');
-  const secciones = [['todo', '🏛️ Todo'], ['clientes', '👥 Clientes'], ['cobros', '💰 Cobro, gastos y reparto'], ['creacion', '🏗️ Creación de sistema'], ['resumen', '📊 Resumen del mes'], ['gastos', '💸 Gastos del negocio']]
+  if (admSec === 'cobros') admSec = 'socios';
+  if (admSec === 'gastos') admSec = 'gastosCaja';
+  cajaAdm = adminVista;
+  const secciones = [['todo', '🏛️ General'], ['clientes', '👥 Clientes'], ['gastosCaja', '🧾 Gastos'], ['socios', '🤝 Socios'], ['creacion', '🏗️ Creación de sistema'], ['resumen', '📊 Resumen del mes']]
     .map(([k, t]) => `<button class="pestana ${admSec === k ? 'activa' : ''}" data-adm-sec="${k}">${t}</button>`).join('');
   let cuerpo;
   enAdmin = true;
   try {
     if (admSec === 'todo') cuerpo = vAdmTodo();
-    else if (admSec === 'cobros') cuerpo = bloqueAdm('💰 Cobro, gastos y reparto', 'Por sistema y por cliente', bloqueCobros());
+    else if (admSec === 'socios') cuerpo = vSociosCaja();
+    else if (admSec === 'gastosCaja') cuerpo = vGastosCaja() + (verGastosFijos ? (gastosTab = 'negocio', vGastos()) : '');
     else if (admSec === 'creacion') { gastosTab = 'creacion'; cuerpo = vCreacion(); }
     else if (admSec === 'resumen') cuerpo = vResumen();
-    else if (admSec === 'gastos') { gastosTab = 'negocio'; cuerpo = vGastos(); }
     else cuerpo = vClientesAdm();
   } finally { enAdmin = false; }
   return cabecera('🏛️ Administración', 'Cada administración con sus clientes, cobros, gastos y reparto', selectorMes()) +
@@ -3875,7 +3926,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-caja-cubrir],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer && t.dataset.cajaPlan === undefined) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
@@ -3910,8 +3961,16 @@ document.addEventListener('click', async ev => {
   if (d.estadoCliente) { const e = buscar(D.empresas, d.estadoCliente); return e && formEstado(e); }
   if (d.pagarCobro) return formPagar(d.pagarCobro);
   if (d.recibo) return abrirRecibo(d.recibo);
-  if (d.cajaAdm) { cajaAdm = d.cajaAdm; try { localStorage.setItem('oficinaCajaAdm', cajaAdm); } catch (e) {} CAJA = null; return ir('caja'); }
+  if (d.cajaAdm) { cajaAdm = d.cajaAdm; try { localStorage.setItem('oficinaCajaAdm', cajaAdm); } catch (e) {} CAJA = null; return ir(vista); }
   if ('cajaGasto' in d) return formCajaGasto();
+  if ('gastosFijos' in d) { verGastosFijos = !verGastosFijos; return pintar(); }
+  if (d.cajaCubrir) {
+    const quien = CAJA.nombres[d.cajaCubrir], otro = CAJA.nombres[d.cajaCubrir === 'dueno' ? 'socio' : 'dueno'];
+    if (!confirm(`${quien} presta ${dinero(d.monto)} de su parte y ${otro} se los queda debiendo. ¿Lo autoriza?`)) return;
+    const r = await api('/api/oficina/caja/prestamo', { administracion: adminVista, presta: d.cajaCubrir, monto: d.monto });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo anotar.');
+    aviso('Préstamo anotado.'); await cargarCaja(); return pintar();
+  }
   if ('cajaReparto' in d) return formCajaReparto();
   if (d.cajaRetiro) return formCajaRetiro(d.cajaRetiro);
   if (d.cajaVer) return verCaja(d.cajaVer);
@@ -3920,7 +3979,7 @@ document.addEventListener('click', async ev => {
     if (!confirm('¿Deshacer este movimiento? Si era un retiro, su recibo queda anulado.')) return;
     const r = await api('/api/oficina/caja/deshacer', { administracion: cajaAdm, id: Number(d.cajaDeshacer) });
     if (!r.ok) return aviso(r.data.error || 'No se pudo deshacer.');
-    cerrarModal(); aviso('Listo, se deshizo.'); return ir('caja');
+    cerrarModal(); aviso('Listo, se deshizo.'); return ir(vista);
   }
   if ('retiroSocio' in d) return formRetiro();
   if (d.verComprobante) return verComprobante(d.verComprobante);

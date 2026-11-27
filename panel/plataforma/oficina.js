@@ -530,7 +530,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const movs = await movimientosCaja(adm);
     const estado = caja.calcular(movs, pct);
     let saldo = 0;
-    const lista = movs.map(m => { saldo = Math.round((saldo + (m.tipo === 'entrada' ? m.monto : m.tipo === 'reparto' ? 0 : -m.monto)) * 100) / 100; return { ...m, queda: saldo }; }).reverse();
+    const lista = movs.map(m => { saldo = Math.round((saldo + (m.tipo === 'entrada' ? m.monto : m.tipo === 'reparto' || m.tipo === 'prestamo' ? 0 : -m.monto)) * 100) / 100; return { ...m, queda: saldo }; }).reverse();
     const recibos = (await client.query(`SELECT r.id, r.numero, r.tipo, r.socio, r.monto::float AS monto, r.moneda, r.concepto, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha, e.nombre AS empresa
       FROM oficina_recibos r LEFT JOIN empresas e ON e.id = r.empresa_id WHERE r.administracion = $1 ORDER BY r.fecha DESC, r.id DESC LIMIT 200`, [adm])).rows;
     const planes = (await client.query(`SELECT pl.id, pl.empresa_id, pl.nombre, pl.precio_creacion::float AS precio_creacion, pl.mensualidad::float AS mensualidad,
@@ -1268,6 +1268,17 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           await registrar(u, 'caja_reparto', 'caja', r.rows[0].id, '', String(mov.monto), '');
           const despues = caja.calcular(await movimientosCaja(adm), actual.pct);
           return json(res, 200, { ok: true, libre: despues.libre, debe: despues.debe });
+        }
+        if (url === '/api/oficina/caja/prestamo') {
+          const presta = caja.SOCIOS.includes(f.presta) ? f.presta : '';
+          const debe = presta === 'dueno' ? 'socio' : 'dueno';
+          const mov = { tipo: 'prestamo', monto: monto(f.monto), detalle: { presta, debe } };
+          const err = caja.revisar(actual.estado, mov);
+          if (err) return json(res, 400, { error: err });
+          await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, detalle, usuario) VALUES ($1,$2,'prestamo',$3,$4,$5,$6,$7)`,
+            [adm, fecha, `Préstamo de ${actual.nombres[presta]} para cubrir el fondo (lo debe ${actual.nombres[debe]})`, mov.monto, presta, { presta, debe }, quien]);
+          await registrar(u, 'caja_prestamo', 'caja', presta, '', String(mov.monto), debe);
+          return json(res, 200, { ok: true });
         }
         if (url === '/api/oficina/caja/retiro') {
           const socio = caja.SOCIOS.includes(f.socio) ? f.socio : '';
