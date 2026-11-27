@@ -155,7 +155,15 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Pausa por falta de pago (para todos los clientes):** la IA NO se apaga, sigue contestando. Lo que se pausa es el acceso: panel (correo/reservas) y chat, hasta que paguen. Con días de prórroga después del vencimiento. (Se descarta la idea anterior de apagar la IA al pausar.)
 - **Unificar «+ Nueva empresa» y «+ Automatización»:** un solo formulario de empresa que pide todo (datos, programas, correo, conexiones, IA, CRM, panel del cliente, cobro), aunque no se use; se quita «+ Automatización». Una sola lista de empresas.
 - **Lista de empresas compacta:** una franja por empresa (nombre, estado, programas, cobro, enlace) con una flecha; al tocarla se despliega todo (módulos, cobro, anuncio, conexiones, pausar, apagar).
-- Maqueta enviada (maqueta-empresas.png); esperando que marque la lista de opciones antes de construir.
+- Maqueta enviada (maqueta-empresas.png). **Respuestas del dueño (27 nov), aprobado para construir:**
+  1. Pausa **automática** al terminar los días de prórroga; Oficina avisa un día antes; se reactiva sola al marcar pagado.
+  2. Durante la pausa se bloquea: el panel (correo, reservas, operaciones y cualquier otro programa), el chat del panel y la bandeja de Chatwoot de sus asesores. **La IA sigue contestando.** Lo de Chatwoot se prueba antes para no apagar la IA.
+  3. «Kaizen Consulting IA» repetida (Empresas + Automatización): **unir en una sola ficha de Kaizen**.
+  4. **Kaizen IA y Zentralia son empresas separadas** (Kaizen solo del dueño; Zentralia con socio, reparto). Misma base de datos, datos separados (ya existe en Oficina como «administraciones»: kaizen / centralia). En la lista única: **dos pestañas**, una «Kaizen IA» y otra «Zentralia», cada una con su lista.
+  5. PEX Solutions y Premios Carrasco pasan a la lista de empresas en **Kaizen IA**.
+  6. El **socio de Zentralia entra a Oficina** con su usuario y solo ve Zentralia (permiso oficina_admin_centralia ya existe).
+  7. Lista: franjas cerradas, **una abierta a la vez**, con buscador.
+  8. «+ Nueva empresa» con todo en un formulario; se quita «+ Automatización».
 
 ## CORRECCIÓN · TARJETA «PARA REVISAR» (27 nov)
 - La tarjeta contaba las reservas que alguien tenía abiertas en ese momento (lo mismo que la pestaña «En revisión ahora»), no las que muestran la etiqueta «Revisar». Por eso marcaba 0 con varias en rojo.
