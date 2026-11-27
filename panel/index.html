@@ -722,7 +722,6 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   /* Ajuste al diseño aprobado: encabezado limpio, valores grandes, correo como tarjeta, historial en el pie. */
   #fondoModal #mMeta, #fondoModal #mRevision { display: none !important; }
   #fondoModal .modal-cuerpo > .titulo-seccion:not(.seccion-datos) { display: none; }
-  #fondoModal .modal-cuerpo > .titulo-seccion.seccion-datos { display: none; }
   #fondoModal .mt .mv { font-size: 24px; }
   #fondoModal .mt.d3 .mv { font-size: 15px; font-weight: 600; }
   #fondoModal .mt.aviso .mv { font-size: 19px; }
@@ -734,6 +733,28 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .modal { width: min(1320px, 96vw); }
   #fondoModal .estado-seg button { white-space: nowrap; padding: 7px 10px; }
   #fondoModal .modal-pie { gap: 6px; }
+
+  /* Cuadros a todo el ancho de la ventana, más angostos; aviso como línea; llegada y salida visibles; correo con más espacio. */
+  #fondoModal .modal-cabecera { padding: 12px 16px 8px; }
+  #fondoModal .modal-cuerpo { padding: 10px 16px; }
+  #fondoModal .modal-cuerpo > .titulo-seccion.seccion-datos { display: flex; justify-content: space-between; align-items: center; margin: 0 0 6px; }
+  #fondoModal .mtiles { grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; margin: 4px 0 10px; }
+  #fondoModal .mt { grid-column: span 2; padding: 8px 10px; gap: 3px; }
+  #fondoModal .mt.d2 { grid-column: span 5; }
+  #fondoModal .mt.d3 { grid-column: span 10; }
+  #fondoModal .mt.linea { grid-column: span 10; flex-direction: row; align-items: center; gap: 10px; padding: 6px 12px; }
+  #fondoModal .mt.linea .ml { font-size: 11px; }
+  #fondoModal .mt.linea .mv { font-size: 13px; font-weight: 600; }
+  #fondoModal .mt.linea .ms { font-size: 12px; }
+  #fondoModal .mt .ml { font-size: 11px; }
+  #fondoModal .mt .mv { font-size: 18px; }
+  #fondoModal .mt.in .mv, #fondoModal .mt.out .mv { font-size: 22px; }
+  #fondoModal .mt.d3 .mv { font-size: 14px; font-weight: 600; }
+  #fondoModal .mt .ms { font-size: 12px; }
+  #fondoModal .mt .mi svg { width: 16px; height: 16px; }
+  #fondoModal .mt .input-ancho { width: 100%; max-width: 100%; box-sizing: border-box; }
+  #fondoModal .correo-texto { min-height: 46vh; }
+  @media (max-width: 760px) { #fondoModal .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } #fondoModal .mt, #fondoModal .mt.d2, #fondoModal .mt.d3, #fondoModal .mt.linea { grid-column: span 2; } }
 </style>
 </head>
 <body>
@@ -2725,7 +2746,7 @@ function tarjetasDatos(r, g, celdaAgencia) {
   let html = '';
   const avisoRevision = document.getElementById('mRevision');
   const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
-  const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'd2') : '';
+  const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
   html += cuadro('', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
   html += cuadro('', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
   html += cuadro('', ICONOS_TABLERO.pax, 'Pax', falta(paxReserva(g)), clientesDe(g) ? clientesDe(g).split(', ').length + ' nombres en el correo' : '');
