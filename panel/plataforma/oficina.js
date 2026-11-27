@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const crearConocimiento = require('./conocimiento');
 const crearRedes = require('./redes');
 const crearProyectos = require('./proyectos');
+const caja = require('./caja');
 const crearApps = require('./apps');
 const fsR = require('fs');
 const pathR = require('path');
@@ -369,6 +370,95 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const gastos = Math.round(gs.reduce((t, g) => t + gastoDelMes(g, mes), 0) * 100) / 100;
     return { cobrado, gastos, utilidad: Math.round((cobrado - gastos) * 100) / 100 };
   }
+  // ---------- Caja de cada administración (libro de movimientos; reglas en caja.js) ----------
+  const nombreN = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  let cajaLista = null;
+  // Crea la tabla y pasa una sola vez lo que ya existía: gastos de «Creación de sistema» y retiros con recibo de socio.
+  function asegurarCaja() {
+    if (!cajaLista) cajaLista = (async () => {
+      await client.query(`CREATE TABLE IF NOT EXISTS caja_movimientos (
+        id SERIAL PRIMARY KEY, administracion VARCHAR(20) NOT NULL, fecha DATE NOT NULL, tipo VARCHAR(20) NOT NULL,
+        concepto TEXT NOT NULL DEFAULT '', monto NUMERIC(12,2) NOT NULL, plan_id INTEGER, empresa_id INTEGER, socio VARCHAR(10) NOT NULL DEFAULT '',
+        pago_id INTEGER, recibo_id INTEGER, detalle JSONB NOT NULL DEFAULT '{}'::jsonb, usuario TEXT NOT NULL DEFAULT '', creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+      await client.query('CREATE UNIQUE INDEX IF NOT EXISTS caja_mov_pago ON caja_movimientos (pago_id) WHERE pago_id IS NOT NULL');
+      await client.query("ALTER TABLE oficina_administraciones ADD COLUMN IF NOT EXISTS dueno_nombre TEXT NOT NULL DEFAULT ''");
+      await client.query('CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+      if ((await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'caja_v1'")).rowCount) return;
+      const admins = new Map((await client.query('SELECT clave, socio_nombre FROM oficina_administraciones')).rows.map(a => [a.clave, a]));
+      const gastos = (await client.query(`SELECT g.*, TO_CHAR(COALESCE(g.fecha, p.creado::date), 'YYYY-MM-DD') AS f, p.administracion, p.socios, p.nombre AS sistema
+        FROM oficina_proyecto_gastos g JOIN oficina_proyectos p ON p.id = g.proyecto_id ORDER BY 6, g.id`).catch(() => ({ rows: [] }))).rows;
+      for (const g of gastos) {
+        const adm = ADMINISTRACIONES.includes(g.administracion) ? g.administracion : 'kaizen';
+        if (!(Number(g.monto) > 0)) continue;
+        if (g.categoria === 'adelanto') {
+          const socios = Array.isArray(g.socios) ? g.socios : [];
+          const nombre = (socios[g.para_socio] || {}).nombre || '';
+          const socioAdm = (admins.get(adm) || {}).socio_nombre || '';
+          const quien = nombre && socioAdm && nombreN(nombre) === nombreN(socioAdm) ? 'socio' : 'dueno';
+          await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, detalle) VALUES ($1,$2,'retiro',$3,$4,$5,$6)`,
+            [adm, g.f, `Adelanto de ganancia · ${nombre || 'socio'} (de Creación de sistema)`, g.monto, quien, { origen: 'creacion', id: g.id }]);
+        } else {
+          await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, detalle) VALUES ($1,$2,'gasto_creacion',$3,$4,$5)`,
+            [adm, g.f, `${g.concepto} · ${g.sistema}`, g.monto, { origen: 'creacion', id: g.id, categoria: g.categoria }]);
+        }
+      }
+      const retiros = (await client.query(`SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS f FROM oficina_recibos r WHERE r.tipo = 'socio' ORDER BY r.fecha, r.id`)).rows;
+      for (const r of retiros) {
+        await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, recibo_id, detalle) VALUES ($1,$2,'retiro',$3,$4,'socio',$5,$6)`,
+          [r.administracion, r.f, `Retiro · ${r.socio || 'socio'}`, r.monto, r.id, { origen: 'recibo' }]);
+      }
+      await client.query("INSERT INTO oficina_migraciones (clave) VALUES ('caja_v1')");
+    })().catch(err => { cajaLista = null; throw err; });
+    return cajaLista;
+  }
+  // Cada cobro pagado entra a la caja (lo que pagó el cliente). Los descuentos del banco o la plataforma salen como gasto,
+  // salvo que ya estén anotados (mismo monto dentro de un mes, ej. la retención que estaba en Creación de sistema).
+  async function sincronizarEntradas(adm) {
+    await client.query(`DELETE FROM caja_movimientos c WHERE c.administracion = $1 AND c.pago_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM oficina_pagos p WHERE p.id = c.pago_id AND p.pagado_el IS NOT NULL)`, [adm]);
+    const pagos = (await client.query(`SELECT p.id, p.monto, p.concepto, p.empresa_id, p.descuentos, p.recibo_id, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS f, e.nombre
+      FROM oficina_pagos p JOIN empresas e ON e.id = p.empresa_id
+      WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.pagado_el IS NOT NULL AND p.moneda = 'US$'
+        AND NOT EXISTS (SELECT 1 FROM caja_movimientos c WHERE c.pago_id = p.id) ORDER BY p.pagado_el, p.id`, [adm])).rows;
+    for (const p of pagos) {
+      await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, empresa_id, pago_id, recibo_id) VALUES ($1,$2,'entrada',$3,$4,$5,$6,$7)`,
+        [adm, p.f, `${p.concepto} · ${p.nombre}`, p.monto, p.empresa_id, p.id, p.recibo_id]);
+      const desc = Array.isArray(p.descuentos) ? p.descuentos : [];
+      const total = Math.round(desc.reduce((t, x) => t + (Number(x.monto) || 0), 0) * 100) / 100;
+      if (!(total > 0)) continue;
+      const ya = (await client.query(`SELECT 1 FROM caja_movimientos WHERE administracion = $1 AND tipo LIKE 'gasto%' AND monto = $2
+        AND fecha BETWEEN $3::date - 31 AND $3::date + 31`, [adm, total, p.f])).rowCount;
+      if (!ya) await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, empresa_id, detalle) VALUES ($1,$2,'gasto_mensual',$3,$4,$5,$6)`,
+        [adm, p.f, `Descuentos del cobro (${desc.map(x => x.nombre).join(', ')}) · ${p.nombre}`, total, p.empresa_id, { origen: 'descuento', pago_id: p.id }]);
+    }
+  }
+  async function nombresSocios(adm) {
+    const a = (await client.query('SELECT * FROM oficina_administraciones WHERE clave = $1', [adm])).rows[0] || {};
+    let dueno = a.dueno_nombre || '';
+    if (!dueno) {
+      const p = (await client.query('SELECT socios FROM oficina_proyectos WHERE administracion = $1 ORDER BY id LIMIT 1', [adm]).catch(() => ({ rows: [] }))).rows[0];
+      const lista = p && Array.isArray(p.socios) ? p.socios : [];
+      dueno = (lista.find(x => x.nombre && nombreN(x.nombre) !== nombreN(a.socio_nombre)) || {}).nombre || 'Dueño';
+    }
+    return { dueno, socio: a.socio_nombre || 'Socio', empresa: a.nombre || (adm === 'kaizen' ? 'Kaizen IA' : 'Zentralia') };
+  }
+  async function movimientosCaja(adm) {
+    return (await client.query(`SELECT id, TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha, tipo, concepto, monto::float AS monto, plan_id, empresa_id, socio, pago_id, recibo_id, detalle, usuario
+      FROM caja_movimientos WHERE administracion = $1 ORDER BY fecha, id`, [adm])).rows;
+  }
+  async function estadoCaja(adm) {
+    await asegurarCaja();
+    await sincronizarEntradas(adm);
+    const pct = await porcentajeSocio(adm);
+    const movs = await movimientosCaja(adm);
+    const estado = caja.calcular(movs, pct);
+    let saldo = 0;
+    const lista = movs.map(m => { saldo = Math.round((saldo + (m.tipo === 'entrada' ? m.monto : m.tipo === 'reparto' ? 0 : -m.monto)) * 100) / 100; return { ...m, queda: saldo }; }).reverse();
+    const recibos = (await client.query(`SELECT r.id, r.numero, r.tipo, r.socio, r.monto::float AS monto, r.moneda, r.concepto, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha, e.nombre AS empresa
+      FROM oficina_recibos r LEFT JOIN empresas e ON e.id = r.empresa_id WHERE r.administracion = $1 ORDER BY r.fecha DESC, r.id DESC LIMIT 200`, [adm])).rows;
+    return { administracion: adm, nombres: await nombresSocios(adm), pct, estado, movimientos: lista, recibos, tipos: caja.TIPOS };
+  }
+
   // Porcentaje del socio: Centralia 40% por defecto (tú 60%); Kaizen IA 0% (todo es tuyo).
   async function porcentajeSocio(clave) {
     const f = (await client.query('SELECT socio_porcentaje FROM oficina_administraciones WHERE clave = $1', [clave])).rows[0];
@@ -688,6 +778,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
+    if (url === '/api/oficina/caja' || url.startsWith('/api/oficina/caja/')) return ['gastos'];
     if (url.startsWith('/api/oficina/recibo/socio') || url.startsWith('/api/oficina/socio/')) return ['gastos'];
     if (url.startsWith('/api/oficina/recibo/') || url.startsWith('/api/oficina/cobro/') || url.startsWith('/api/oficina/cliente/datos')) return ['clientes', 'gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
@@ -1029,6 +1120,68 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const adm = (await client.query('SELECT * FROM oficina_administraciones WHERE clave = $1', [r.administracion])).rows[0] || {};
         const emp = r.empresa_id ? (await client.query('SELECT id, nombre, documento, pais, direccion, web, contacto, telefono, correo_contacto FROM empresas WHERE id = $1', [r.empresa_id])).rows[0] : null;
         return json(res, 200, { recibo: r, administracion: adm, empresa: emp });
+      }
+      // ---------- Caja: estado, gastos, reparto, retiros (con recibo) y deshacer el último ----------
+      if (url === '/api/oficina/caja' || url.startsWith('/api/oficina/caja/')) {
+        const f = req.method === 'POST' ? await leerCuerpo(req) : {};
+        const adm = ADMINISTRACIONES.includes(req.method === 'GET' ? p.get('administracion') : f.administracion) ? (req.method === 'GET' ? p.get('administracion') : f.administracion) : null;
+        if (!adm) return json(res, 400, { error: 'Elige Kaizen IA o Zentralia.' });
+        if (!puedeAdmin(u, permisos, adm)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        if (req.method === 'GET' && url === '/api/oficina/caja') return json(res, 200, await estadoCaja(adm));
+        if (req.method !== 'POST') return json(res, 404, { error: 'No encontrado.' });
+        const actual = await estadoCaja(adm);
+        const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
+        const quien = u.nombre || u.usuario;
+        if (url === '/api/oficina/caja/gasto') {
+          const tipo = f.tipo === 'gasto_creacion' ? 'gasto_creacion' : 'gasto_mensual';
+          const concepto = texto(f.concepto, 200);
+          if (!concepto) return json(res, 400, { error: 'Escribe qué se pagó.' });
+          const prestamos = (Array.isArray(f.prestamos) ? f.prestamos : []).map(x => ({ presta: x.presta, debe: x.debe, monto: monto(x.monto) })).filter(x => x.monto > 0).slice(0, 2);
+          const mov = { tipo, monto: monto(f.monto), concepto, detalle: { prestamos } };
+          const err = caja.revisar(actual.estado, mov);
+          if (err) return json(res, 400, { error: err, fondo: actual.estado.fondo, libre: actual.estado.libre });
+          const plan = Number(f.plan_id) || null;
+          const r = await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, plan_id, detalle, usuario) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+            [adm, fecha, tipo, concepto, mov.monto, plan, { prestamos, nota: texto(f.nota, 300) }, quien]);
+          await registrar(u, 'caja_gasto', 'caja', r.rows[0].id, '', String(mov.monto), concepto);
+          return json(res, 200, { ok: true, id: r.rows[0].id });
+        }
+        if (url === '/api/oficina/caja/reparto') {
+          const mov = { tipo: 'reparto', monto: f.monto === undefined || f.monto === '' ? Math.max(0, actual.estado.fondo) : monto(f.monto) };
+          const err = caja.revisar(actual.estado, mov);
+          if (err) return json(res, 400, { error: err });
+          const r = await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, detalle, usuario) VALUES ($1,$2,'reparto',$3,$4,$5,$6) RETURNING id`,
+            [adm, fecha, texto(f.concepto, 200) || 'Reparto de utilidad', mov.monto, { pct: actual.pct, nota: texto(f.nota, 300) }, quien]);
+          await registrar(u, 'caja_reparto', 'caja', r.rows[0].id, '', String(mov.monto), '');
+          const despues = caja.calcular(await movimientosCaja(adm), actual.pct);
+          return json(res, 200, { ok: true, libre: despues.libre, debe: despues.debe });
+        }
+        if (url === '/api/oficina/caja/retiro') {
+          const socio = caja.SOCIOS.includes(f.socio) ? f.socio : '';
+          const mov = { tipo: 'retiro', socio, monto: monto(f.monto) };
+          const err = caja.revisar(actual.estado, mov);
+          if (err) return json(res, 400, { error: err });
+          const nombre = actual.nombres[socio];
+          const numero = await siguienteNumero(adm);
+          const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, socio, monto, moneda, concepto, metodo, referencia, fecha, periodo, detalle)
+            VALUES ($1,$2,'socio',$3,$4,'US$',$5,$6,$7,$8,$9,$10) RETURNING id`,
+            [adm, numero, nombre, mov.monto, `Retiro de utilidad · ${nombre}`, texto(f.metodo, 60), texto(f.referencia, 120), fecha, fecha.slice(0, 7),
+              JSON.stringify({ caja: true, socio_clave: socio, le_tocaba: actual.estado.libre[socio], queda: Math.round((actual.estado.libre[socio] - mov.monto) * 100) / 100, nota: texto(f.nota, 300) })])).rows[0];
+          await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, recibo_id, usuario) VALUES ($1,$2,'retiro',$3,$4,$5,$6,$7)`,
+            [adm, fecha, `Retiro · ${nombre}`, mov.monto, socio, rec.id, quien]);
+          await registrar(u, 'caja_retiro', 'recibo', rec.id, '', String(mov.monto), nombre);
+          return json(res, 200, { ok: true, recibo_id: rec.id, numero });
+        }
+        if (url === '/api/oficina/caja/deshacer') {
+          // Solo el último movimiento hecho a mano (gasto, reparto o retiro), para que las cuentas siempre cuadren.
+          const ult = (await client.query("SELECT * FROM caja_movimientos WHERE administracion = $1 AND tipo <> 'entrada' AND detalle->>'origen' IS NULL ORDER BY id DESC LIMIT 1", [adm])).rows[0];
+          if (!ult || ult.id !== Number(f.id)) return json(res, 400, { error: 'Solo se puede deshacer el último movimiento que se anotó a mano.' });
+          await client.query('DELETE FROM caja_movimientos WHERE id = $1', [ult.id]);
+          if (ult.recibo_id) await client.query("UPDATE oficina_recibos SET detalle = detalle || '{\"anulado\": true}'::jsonb, concepto = concepto || ' (ANULADO)' WHERE id = $1", [ult.recibo_id]);
+          await registrar(u, 'caja_deshacer', 'caja', ult.id, ult.tipo, String(ult.monto), ult.concepto);
+          return json(res, 200, { ok: true });
+        }
+        return json(res, 404, { error: 'No encontrado.' });
       }
       // Retiro de utilidades del socio: lo que le toca en el mes menos lo que ya retiró.
       if (req.method === 'GET' && url === '/api/oficina/socio/disponible') {
