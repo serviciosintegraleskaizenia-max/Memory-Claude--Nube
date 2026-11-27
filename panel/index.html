@@ -755,6 +755,13 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .mt .input-ancho { width: 100%; max-width: 100%; box-sizing: border-box; }
   #fondoModal .correo-texto { min-height: 46vh; }
   @media (max-width: 760px) { #fondoModal .mtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } #fondoModal .mt, #fondoModal .mt.d2, #fondoModal .mt.d3, #fondoModal .mt.linea { grid-column: span 2; } }
+
+  /* Cada dato de la reserva tiene su color claro. */
+  #fondoModal .mt.r-reserva { background: #e9f2fd; border-color: #b7d2f1; }
+  #fondoModal .mt.r-agencia { background: #f1ecfd; border-color: #cbbdf1; }
+  #fondoModal .mt.r-pax { background: #fff8e1; border-color: #ead98e; }
+  #fondoModal .mt.r-sede { background: #fdeef1; border-color: #f1bcc7; }
+  #fondoModal .mt.r-tel { background: #e7f7f7; border-color: #a6dddc; }
 </style>
 </head>
 <body>
@@ -918,7 +925,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
       </div>
     </div>
     <div class="modal-cuerpo">
-      <div class="titulo-seccion seccion-datos"><span id="mTituloDatos">Datos extraídos del correo</span><span id="mBotonesEdicion"></span></div>
+      <div class="titulo-seccion seccion-datos"><span id="mTituloDatos">Datos registrados de la reserva</span><span id="mBotonesEdicion"></span></div>
       <div class="mtiles" id="mTiles"></div>
       <table class="datos" id="mDatos" hidden></table>
       <div class="titulo-seccion" style="margin-top:18px">Correo</div>
@@ -2747,11 +2754,11 @@ function tarjetasDatos(r, g, celdaAgencia) {
   const avisoRevision = document.getElementById('mRevision');
   const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
   const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
-  html += cuadro('', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
-  html += cuadro('', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
-  html += cuadro('', ICONOS_TABLERO.pax, 'Pax', falta(paxReserva(g)), clientesDe(g) ? clientesDe(g).split(', ').length + ' nombres en el correo' : '');
-  html += cuadro('', ICONOS_TABLERO.sede, 'Sede', falta(sedeDeServicios(g)), aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
-  html += cuadro('', ICONOS_TABLERO.tel, 'Teléfono', falta(r.telefono), 'del pasajero');
+  html += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + esc(r.fecha));
+  html += cuadro('r-agencia', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
+  html += cuadro('r-pax', ICONOS_TABLERO.pax, 'Pax', falta(paxReserva(g)), clientesDe(g) ? clientesDe(g).split(', ').length + ' nombres en el correo' : '');
+  html += cuadro('r-sede', ICONOS_TABLERO.sede, 'Sede', falta(sedeDeServicios(g)), aeropuertoPrincipal ? 'aeropuerto ' + esc(aeropuertoPrincipal) : '');
+  html += cuadro('r-tel', ICONOS_TABLERO.tel, 'Teléfono', falta(r.telefono), 'del pasajero');
   html += avisoRevisionHtml;
   if (r.error_ia) html += cuadro('aviso', ICONOS_TABLERO.aviso, porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA', porAnalizar(r) ? 'Por analizar' : 'La IA no respondió', porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'Sin detalle') + '. Se analiza de nuevo en la próxima ejecución del flujo.', 'd2');
   else if (r.cancelada_por) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cancelada', 'Correo #' + r.cancelada_por, 'Cancélala también en el sistema de reservas y márcala como corresponde.', 'd2');
@@ -2782,9 +2789,8 @@ function pintarEstadoSeg() {
   const sel = document.getElementById('mEstado');
   const caja = document.getElementById('mEstadoSeg');
   if (!sel || !caja) return;
-  const nombres = { revisar: 'Revisar', actualizada: 'Actualizada' };
   const notas = { 'pendiente de transcribir': 'La reserva está completa, pero falta pasarla a Operaciones', registrada: 'Ya pasó a Operaciones', revisar: 'Faltan día, nombre u hotel', actualizada: 'Se cambió después de registrarla', 'sin accion': 'No requiere acción', historico: 'Archivada' };
-  caja.innerHTML = ESTADOS.map(([valor, nombre]) => `<button type="button" data-estado="${valor}" class="${valor === 'revisar' ? 'rev' : ''}${valor === sel.value ? ' on' : ''}" title="${esc(notas[valor] || '')}" ${sel.disabled ? 'disabled' : ''}>${esc(nombres[valor] || (valor === 'pendiente de transcribir' ? 'Pendiente por registrar' : nombre))}</button>`).join('');
+  caja.innerHTML = ESTADOS.map(([valor, nombre]) => `<button type="button" data-estado="${valor}" class="${valor === 'revisar' ? 'rev' : ''}${valor === sel.value ? ' on' : ''}" title="${esc(notas[valor] || '')}" ${sel.disabled ? 'disabled' : ''}>${esc(nombre)}</button>`).join('');
   caja.querySelectorAll('button').forEach(b => { b.onclick = () => { sel.value = b.dataset.estado; pintarEstadoSeg(); }; });
 }
 
@@ -2793,7 +2799,7 @@ let editandoIA = false;
 function pintarDatosModal(r) {
   // Un correo de factura muestra la propuesta de pago, no datos de reserva.
   if (r.categoria === 'FACTURA') { mostrarTiles(false); return pintarDatosFactura(r); }
-  document.getElementById('mTituloDatos').textContent = 'Datos extraídos del correo';
+  document.getElementById('mTituloDatos').textContent = 'Datos registrados de la reserva';
   const g = serviciosDe(r);
   const botones = document.getElementById('mBotonesEdicion');
   botones.innerHTML = !puede('editar_ia') ? ''
