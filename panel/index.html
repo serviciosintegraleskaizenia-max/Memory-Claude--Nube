@@ -819,6 +819,24 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .spax-inf { color: #6d28d9; }
   #fondoModal .spax-nino { color: #b45309; }
   #fondoModal .spax-adl { color: #475569; }
+
+  /* Ajuste final de la ventana: cuadros compactos, aviso y cancelada que no cortan el texto, título de datos en negrita. */
+  #fondoModal #mTituloDatos, #fondoModal .modal-cuerpo > .titulo-seccion.seccion-datos { color: #0f1f38; font-weight: 700; font-size: 12px; letter-spacing: .04em; }
+  #fondoModal #mRecordar { margin: 0; width: 15px; height: 15px; cursor: pointer; }
+  #fondoModal .mt .chk { display: flex; align-items: center; gap: 6px; }
+  #fondoModal .mt .btn-mini { font-size: 11px; padding: 3px 9px; margin-top: 4px; }
+  #fondoModal .mbanner { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; padding: 6px; }
+  #fondoModal .mbanner .mt { padding: 5px 7px; gap: 1px; }
+  #fondoModal .mbanner .mt .ml { font-size: 10px; }
+  #fondoModal .mbanner .mt .mv { font-size: 13px; line-height: 1.2; }
+  #fondoModal .mbanner .mt .ms { font-size: 10.5px; }
+  /* Aviso: a todo el ancho, cada punto en su línea y el texto completo (sin recortes). */
+  #fondoModal .aviso-fila { grid-column: 1 / -1; display: block; width: 100%; }
+  #fondoModal .aviso-fila .mt.aviso { display: flex; flex-direction: column; align-items: stretch; gap: 4px; height: auto; min-height: 0; padding: 8px 12px; background: #fff8e6; border-color: #e8cf96; }
+  #fondoModal .mt.aviso .ml { color: #7a4b06; }
+  #fondoModal .mt.aviso .mi svg { stroke: #9a6b1c; }
+  #fondoModal .mt.aviso .mv { display: block; width: 100%; white-space: normal; overflow: visible; font-size: 13px; font-weight: 600; line-height: 1.45; color: #7a4b06; }
+  #fondoModal .mt.aviso .ms { display: block; width: 100%; white-space: normal; overflow: visible; font-size: 11.5px; font-weight: 400; line-height: 1.35; color: #6b5a3a; }
 </style>
 </head>
 <body>
@@ -2737,7 +2755,7 @@ async function abrirModal(id) {
   seleccionado = r;
   restaurarVentana();
 
-  document.getElementById('mAsunto').textContent = r.asunto || '(sin asunto)';
+  document.getElementById('mAsunto').textContent = (r.asunto || '(sin asunto)') + ' · #' + r.id + (agenciaDe(r) ? ' · ' + agenciaDe(r) : '');
   document.getElementById('mMeta').innerHTML =
     `Reserva <strong>#${r.id}</strong> · De: ${esc(r.remitente)}${r.buzon ? ' · Llegó a: ' + esc(r.buzon) : ''}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>` + cajaViator(r.viator);
   pintarRevision(r);
@@ -2811,7 +2829,7 @@ function tarjetasDatos(r, g, celdaAgencia) {
   let base = '';
   const avisoRevision = document.getElementById('mRevision');
   const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
-  const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.join(' · '), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
+  const avisoRevisionHtml = puntosRevision.length ? '<div class="aviso-fila">' + cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.map(p => '• ' + esc(p)).join('<br>'), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') + '</div>' : '';
   base += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + (isNaN(new Date(r.fecha)) ? esc(r.fecha) : new Date(r.fecha).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })));
   base += cuadro('r-agencia', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
   const totalPax = Math.max(0, ...g.map(x => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0)));
@@ -2845,13 +2863,13 @@ function tarjetasDatos(r, g, celdaAgencia) {
     const numero = g.length > 1 ? ' ' + (n + 1) : '';
     return `<div class="srow ${clase}"><div class="stop"><span class="sicono">${icono}</span><b>${etiquetaTipo(s).replace(/^\S+\s/, '')}${numero}</b>${actividad}</div><div class="sgrid">${celda('Vuelo', vueloTxt)}${celda('Aerolínea', esc(aerolinea))}${celda('Aeropuerto', aeroTxt)}${celda('Fecha', fecha)}${celda(t === 'ACTIVIDAD' ? 'Hora de salida' : 'Hora', hora)}${celda(t === 'ACTIVIDAD' ? 'Sale de' : 'Hotel / destino', hotel ? esc(hotel) : '')}${celda('Pax', pax)}</div>${nota ? `<div class="snota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</div>` : ''}</div>`;
   });
-  if (filas.length) html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
   const personas = [...new Set(g.flatMap(x => String(x.nombre_cliente || '').split(/\s*,\s*/)).map(x => x.trim()).filter(Boolean))];
   if (personas.length) {
     const tipoDe = (nombre) => /\b(INF|INFANTE)\b/i.test(nombre) ? 'infante' : /\b(CHD|CHILD|NI[ÑN]O)\b/i.test(nombre) ? 'niño' : /\b(ADL|ADT|ADULTO)\b/i.test(nombre) ? 'adulto' : '';
     const lista = personas.map(x => { const tipo = tipoDe(x); const limpio = x.replace(/\b(INF|INFANTE|CHD|CHILD|ADL|ADT|ADULTO)\b/gi, '').trim(); const clase = tipo === 'infante' ? 'inf' : tipo === 'niño' ? 'nino' : tipo === 'adulto' ? 'adl' : ''; return esc(limpio) + (tipo ? ' <span class="spax spax-' + clase + '">' + tipo + '</span>' : ''); }).join('  ·  ');
     html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', lista, '', 'linea');
   }
+  if (filas.length) html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
   if (r.asignado_a) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
   return html;
 }
@@ -2878,7 +2896,7 @@ function pintarDatosModal(r) {
   if (editandoIA) { mostrarTiles(false); return pintarEdicionIA(r, g); }
   const celdaAgencia = puede('editar_reservas')
     ? `<input id="mAgencia" class="input-ancho" maxlength="150" value="${esc(r.agencia || '')}" placeholder="${esc(agenciaDe(r) || 'Nombre de la agencia')}">
-       <label class="chk" style="margin-top:6px"><input type="checkbox" id="mRecordar" checked> Recordar para los próximos correos de este remitente</label>
+       <label class="chk" style="margin-top:4px" title="Recordar para los próximos correos de este remitente"><input type="checkbox" id="mRecordar" checked></label>
        <button class="btn-mini" id="btnAgencia" style="margin-top:6px">Guardar agencia</button>`
     : falta(agenciaDe(r));
   mostrarTiles(true);
