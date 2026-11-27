@@ -1,0 +1,13 @@
+{
+  "name": "panel-cliente",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Panel del cliente (PEX Solution y los que sigan)",
+  "main": "servidor.js",
+  "scripts": {
+    "iniciar": "node servidor.js",
+    "cuentas": "node crear-cliente.js listar"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "pg": "^8.11.3" }
+}

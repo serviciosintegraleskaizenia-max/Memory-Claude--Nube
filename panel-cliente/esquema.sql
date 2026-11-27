@@ -1,0 +1,113 @@
+-- Base de datos del panel del cliente (PEX Solution y los que sigan).
+-- Se crea sola al arrancar el servidor (CREATE ... IF NOT EXISTS). No guarda claves en texto plano.
+
+CREATE TABLE IF NOT EXISTS cuentas (
+  id SERIAL PRIMARY KEY,
+  usuario TEXT UNIQUE NOT NULL,
+  nombre_empresa TEXT NOT NULL DEFAULT '',
+  clave_hash TEXT NOT NULL,
+  activa BOOLEAN NOT NULL DEFAULT TRUE,
+  suspendida BOOLEAN NOT NULL DEFAULT FALSE,
+  motivo_suspension TEXT NOT NULL DEFAULT '',
+  kaizen_visto TIMESTAMPTZ,
+  creada TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sesiones (
+  token TEXT PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  creada TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expira TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ajustes (
+  cuenta_id INTEGER PRIMARY KEY REFERENCES cuentas(id) ON DELETE CASCADE,
+  logo TEXT NOT NULL DEFAULT '',
+  banner TEXT NOT NULL DEFAULT '',
+  ia_activa BOOLEAN NOT NULL DEFAULT TRUE,
+  prompt TEXT NOT NULL DEFAULT '',
+  bienvenida TEXT NOT NULL DEFAULT '',
+  prueba_activa BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS prompt_versiones (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  prompt TEXT NOT NULL,
+  bienvenida TEXT NOT NULL DEFAULT '',
+  creada TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS archivos_entrenamiento (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  tamano INTEGER NOT NULL DEFAULT 0,
+  datos TEXT NOT NULL DEFAULT '',
+  creado TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clientes (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  telefono TEXT NOT NULL DEFAULT '',
+  correo TEXT NOT NULL DEFAULT '',
+  creado TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS cliente_etiquetas (
+  id SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  texto TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cliente_notas (
+  id SERIAL PRIMARY KEY,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  texto TEXT NOT NULL,
+  creada TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS respuestas_rapidas (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL,
+  texto TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plantillas_whatsapp (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT '',
+  texto TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'En revisión de Meta',
+  motivo TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS mensajes_kaizen (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  de TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  creado TIMESTAMPTZ NOT NULL DEFAULT now(),
+  leido BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS recibos (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  periodo TEXT NOT NULL,
+  monto_centavos INTEGER NOT NULL DEFAULT 0,
+  vence DATE,
+  estado TEXT NOT NULL DEFAULT 'Por pagar'
+);
+
+CREATE TABLE IF NOT EXISTS notificaciones (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  texto TEXT NOT NULL,
+  creada TIMESTAMPTZ NOT NULL DEFAULT now(),
+  leida BOOLEAN NOT NULL DEFAULT FALSE
+);

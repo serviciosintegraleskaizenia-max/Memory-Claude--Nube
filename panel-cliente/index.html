@@ -3,15 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel del cliente · PEX Solution</title>
+<title>Panel del cliente</title>
 <style>
   :root { --azul:#1d4ed8; --azul2:#1e3a8a; --fondo:#f4f6fb; --tarjeta:#ffffff; --texto:#0f172a; --suave:#64748b; --borde:#dbe3ef; --verde:#15803d; --ambar:#b45309; --rojo:#b91c1c; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:var(--fondo); color:var(--texto); }
+  [hidden] { display:none !important; }
   .app { display:grid; grid-template-columns: 230px 1fr; min-height:100vh; }
   .menu { background:#0b1f4d; color:#e2e8f0; padding:18px 14px; display:flex; flex-direction:column; gap:14px; }
   .marca { display:flex; align-items:center; gap:10px; padding:4px 6px 12px; border-bottom:1px solid #1e3a8a; }
-  .logo { width:40px; height:40px; border-radius:10px; background:#fff; color:#0b1f4d; display:grid; place-items:center; font-weight:800; font-size:12px; overflow:hidden; }
+  .logo { width:40px; height:40px; border-radius:10px; background:#fff; color:#0b1f4d; display:grid; place-items:center; font-weight:800; font-size:12px; overflow:hidden; flex:0 0 40px; }
   .logo img { width:100%; height:100%; object-fit:contain; }
   .marca b { display:block; font-size:15px; }
   .marca small { color:#94a3b8; font-size:12px; }
@@ -20,7 +21,8 @@
   nav button:hover { background:#13326f; color:#fff; }
   nav button.on { background:var(--azul); color:#fff; }
   .cuenta { background:#f97316; color:#fff; border-radius:999px; font-size:11px; padding:2px 7px; font-weight:700; }
-  .ayuda { margin-top:auto; font-size:12px; color:#94a3b8; line-height:1.4; border-top:1px solid #1e3a8a; padding-top:12px; }
+  .menu-pie { margin-top:auto; display:flex; flex-direction:column; gap:8px; }
+  .menu-pie button { background:transparent; border:1px solid #1e3a8a; color:#cbd5e1; border-radius:8px; padding:8px; font:inherit; font-size:13px; cursor:pointer; }
   main { padding:0 22px 26px; min-width:0; }
   .top { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:18px 0 14px; flex-wrap:wrap; }
   .top h1 { font-size:22px; margin:0; }
@@ -51,10 +53,10 @@
   .e-ambar { background:#fef3c7; color:var(--ambar); }
   .e-gris { background:#e2e8f0; color:#334155; }
   .e-rojo { background:#fee2e2; color:var(--rojo); }
-  .plantilla { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:8px 10px; margin-top:6px; white-space:pre-wrap; }
   .btn { border:1px solid var(--borde); background:#fff; color:var(--texto); border-radius:8px; padding:8px 12px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
   .btn.primario { background:var(--azul); border-color:var(--azul); color:#fff; }
   .btn.peligro { color:var(--rojo); }
+  .btn:disabled { opacity:.5; cursor:default; }
   input, select, textarea { font:inherit; font-size:14px; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; width:100%; background:#fff; color:var(--texto); }
   textarea { min-height:180px; resize:vertical; line-height:1.5; }
   label { font-size:13px; font-weight:600; color:#334155; display:block; margin-bottom:6px; }
@@ -64,29 +66,24 @@
   .chip { display:inline-block; background:#eff6ff; color:var(--azul2); border-radius:999px; padding:3px 9px; font-size:12px; font-weight:600; margin:2px 4px 2px 0; }
   .chip button { border:0; background:none; color:var(--azul2); cursor:pointer; padding:0 0 0 4px; font-size:13px; }
   .presencia { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
-  .presencia .punto { background:var(--verde); }
   .presencia.fuera .punto { background:#94a3b8; }
-  /* Chat con Kaizen y conversaciones */
   .chat { display:grid; grid-template-columns: 300px 1fr; gap:14px; height:calc(100vh - 150px); min-height:520px; }
   .lista-chat, .hilo { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
   .lista-chat .cabeza, .hilo .cabeza { padding:12px 14px; border-bottom:1px solid var(--borde); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .conv { padding:11px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; }
+  .conv { padding:11px 14px; border-bottom:1px solid #f1f5f9; }
   .conv.on { background:#eff6ff; }
   .conv b { font-size:14px; display:block; }
   .conv small { color:var(--suave); font-size:12px; }
-  .conv .sin { float:right; background:#f97316; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px; font-weight:700; }
   .mensajes { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
-  .m { max-width:70%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.4; }
+  .m { max-width:70%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.4; white-space:pre-wrap; }
   .m.cliente { background:#0f172a; color:#fff; align-self:flex-end; }
   .m.kaizen { background:#fff; border:1px solid var(--borde); align-self:flex-start; }
   .m.ia { background:#dbeafe; align-self:flex-start; }
-  .m.humano { background:#e0e7ff; align-self:flex-end; }
   .m small { display:block; font-size:11px; color:var(--suave); margin-bottom:3px; }
   .m.cliente small { color:#cbd5e1; }
   .redactar { display:flex; gap:8px; padding:12px; border-top:1px solid var(--borde); }
   .redactar input { flex:1; }
   .sello { font-size:12px; color:var(--ambar); background:#fef3c7; padding:6px 10px; border-radius:8px; }
-  /* CRM */
   .crm { display:grid; grid-template-columns: 340px 1fr; gap:14px; }
   .lista-cli { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:12px; }
   .fila-cli { padding:10px 8px; border-radius:8px; cursor:pointer; border-bottom:1px solid #f1f5f9; }
@@ -96,7 +93,6 @@
   .ficha { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:18px; }
   .ficha h2 { margin:0 0 4px; font-size:19px; }
   .nota { background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; font-size:13px; margin-bottom:8px; }
-  /* Entrenamiento */
   .tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
   .tabs button { border:1px solid var(--borde); background:#fff; border-radius:999px; padding:7px 14px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; color:#334155; }
   .tabs button.on { background:#0f172a; color:#fff; border-color:#0f172a; }
@@ -108,43 +104,65 @@
   .interruptor { display:flex; align-items:center; justify-content:space-between; gap:10px; background:#eff6ff; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:14px; font-weight:600; }
   .interruptor button { border:0; border-radius:999px; padding:6px 14px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; background:#0f172a; color:#fff; }
   .interruptor.off button { background:#94a3b8; }
-  /* Ajustes */
-  .vista-logo { width:86px; height:86px; border-radius:14px; border:1px dashed var(--borde); display:grid; place-items:center; overflow:hidden; background:#fff; }
+  .plantilla { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:8px 10px; margin-top:6px; white-space:pre-wrap; }
+  .vista-logo { width:86px; height:86px; border-radius:14px; border:1px dashed var(--borde); display:grid; place-items:center; overflow:hidden; background:#fff; color:var(--suave); font-size:12px; }
   .vista-logo img { width:100%; height:100%; object-fit:contain; }
   .vista-banner { width:100%; height:110px; border-radius:12px; border:1px dashed var(--borde); overflow:hidden; background:#fff; display:grid; place-items:center; color:var(--suave); font-size:13px; }
   .vista-banner img { width:100%; height:100%; object-fit:cover; }
-  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw; text-align:center; }
   .toast.on { opacity:1; }
+  /* Inicio de sesión */
+  .entrada { position:fixed; inset:0; background:linear-gradient(135deg,#0b1f4d,#1d4ed8); display:grid; place-items:center; padding:16px; z-index:50; }
+  .entrada-caja { background:#fff; border-radius:16px; padding:26px; width:100%; max-width:380px; box-shadow:0 20px 50px rgba(0,0,0,.25); }
+  .entrada-caja h2 { margin:0 0 4px; font-size:20px; }
+  .entrada-caja .aviso { margin-bottom:12px; }
+  .error { color:var(--rojo); font-size:13px; min-height:18px; margin:8px 0; }
   @media (max-width: 900px) {
     .app { grid-template-columns: 1fr; }
     .menu { flex-direction:row; flex-wrap:wrap; }
     nav { flex-direction:row; flex-wrap:wrap; }
+    .menu-pie { display:none; }
     .chat, .crm, .dos { grid-template-columns: 1fr; }
-    .ayuda { display:none; }
     .m { max-width:90%; }
   }
 </style>
 </head>
 <body>
-<div class="app">
+
+<!-- Inicio de sesión -->
+<div class="entrada" id="entrada" hidden>
+  <form class="entrada-caja" id="formLogin">
+    <div class="logo" id="logoEntrada" style="width:52px;height:52px;margin-bottom:10px">PANEL</div>
+    <h2>Entrar a tu panel</h2>
+    <div class="aviso">Usa el usuario y la contraseña que te entregó Kaizen.</div>
+    <div class="campo"><label for="lUsuario">Usuario</label><input id="lUsuario" autocomplete="username" required></div>
+    <div class="campo"><label for="lClave">Contraseña</label><input id="lClave" type="password" autocomplete="current-password" required></div>
+    <div class="error" id="errorLogin"></div>
+    <button class="btn primario" style="width:100%" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
   <aside class="menu">
     <div class="marca">
-      <div class="logo" id="logoMenu">PEX</div>
-      <div><b id="nombreEmpresa">PEX Solution</b><small>Panel del cliente</small></div>
+      <div class="logo" id="logoMenu">PANEL</div>
+      <div><b id="nombreEmpresa">Mi empresa</b><small>Panel del cliente</small></div>
     </div>
     <nav>
       <button data-v="inicio" class="on">Inicio</button>
       <button data-v="redes">Redes sociales</button>
       <button data-v="conv">Conversaciones</button>
       <button data-v="plantillas">Plantillas</button>
-      <button data-v="kaizen">Chat con Kaizen <span class="cuenta" id="cuentaKaizen">1</span></button>
+      <button data-v="kaizen">Chat con Kaizen <span class="cuenta" id="cuentaKaizen" hidden>1</span></button>
       <button data-v="crm">Clientes (CRM)</button>
       <button data-v="entreno">Entrenar la IA</button>
       <button data-v="pagos">Pagos y recibos</button>
       <button data-v="correo">Correo (solo lectura)</button>
       <button data-v="ajustes">Ajustes</button>
     </nav>
-    <div class="ayuda">Vista de prueba con datos de ejemplo. Lo que está marcado como pendiente de Meta se activa cuando Meta lo apruebe.</div>
+    <div class="menu-pie">
+      <button id="btnSalir">Salir</button>
+    </div>
   </aside>
 
   <main>
@@ -152,28 +170,26 @@
       <h1 id="tituloVista">Inicio</h1>
       <div class="acciones">
         <div class="ia" id="ia"><span class="punto"></span><span id="iaTexto">IA activa</span><button id="btnIA">Pausar IA</button></div>
-        <button class="campana" id="btnCampana" aria-label="Notificaciones">🔔 <span id="cuentaNotif">3</span></button>
+        <button class="campana" id="btnCampana" aria-label="Notificaciones">🔔 <span id="cuentaNotif">0</span></button>
         <div class="notif" id="panelNotif" hidden>
           <h4>Notificaciones</h4>
-          <div>Kaizen te escribió en el chat · hace 4 min</div>
-          <div>Nuevo mensaje en el chat del sitio web · hace 10 min</div>
-          <div>Permiso de Meta en revisión · sin cambios</div>
+          <div id="listaNotif">Sin avisos.</div>
         </div>
       </div>
     </header>
 
     <!-- INICIO -->
     <section class="vista on" id="v-inicio">
-      <div class="banner" id="bannerInicio">PEX Solution · Tu asistente de atención</div>
+      <div class="banner" id="bannerInicio">Tu panel de atención</div>
       <div class="tarjetas">
-        <div class="tarjeta"><small>Conversaciones hoy</small><b>12</b><span>5 con la IA, 7 con asesor</span></div>
-        <div class="tarjeta"><small>Sin responder</small><b id="sinResponder">2</b><span>Esperando respuesta</span></div>
-        <div class="tarjeta"><small>Clientes en CRM</small><b id="totalClientes">3</b><span>Guardados</span></div>
+        <div class="tarjeta"><small>Clientes en CRM</small><b id="totalClientes">0</b><span>Guardados</span></div>
+        <div class="tarjeta"><small>Respuestas rápidas</small><b id="totalRapidas">0</b><span>Listas para el chat</span></div>
+        <div class="tarjeta"><small>Archivos de entrenamiento</small><b id="totalArchivos">0</b><span>Usados por la IA</span></div>
         <div class="tarjeta"><small>IA</small><b id="iaResumen">Activa</b><span>Puedes pausarla cuando quieras</span></div>
       </div>
       <div class="bloque">
         <h3>Canales</h3>
-        <div class="fila"><span>Chat de la página web</span><span class="estado e-verde">Activo</span></div>
+        <div class="fila"><span>Chat de la página web</span><span class="estado e-ambar">Pendiente de conexión</span></div>
         <div class="fila"><span>WhatsApp</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
         <div class="fila"><span>Facebook e Instagram</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
         <div class="fila"><span>Correo</span><span class="estado e-gris">Sin conectar</span></div>
@@ -185,30 +201,19 @@
       <div class="bloque">
         <h3>Redes sociales y mensajes</h3>
         <div class="fila"><div><b>WhatsApp</b><br><small>Mensajes de tus clientes. El número sigue en tu celular.</small></div><span class="estado e-ambar">En revisión de Meta</span></div>
-        <div class="fila"><div><b>Facebook (Messenger)</b><br><small>Mensajes de tu página.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
-        <div class="fila"><div><b>Instagram (mensajes directos)</b><br><small>Mensajes de tu cuenta profesional.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
-        <div class="fila"><div><b>Cuenta publicitaria de Meta</b><br><small>Ver tus anuncios y su gasto.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
-        <div class="fila"><div><b>Chat de la página web</b><br><small>Cuadro de chat en tu sitio. Responde la IA.</small></div><span class="estado e-verde">Listo para instalar</span></div>
+        <div class="fila"><div><b>Facebook (Messenger)</b><br><small>Mensajes de tu página.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
+        <div class="fila"><div><b>Instagram (mensajes directos)</b><br><small>Mensajes de tu cuenta profesional.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
+        <div class="fila"><div><b>Cuenta publicitaria de Meta</b><br><small>Ver tus anuncios y su gasto.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
+        <div class="fila"><div><b>Chat de la página web</b><br><small>Cuadro de chat en tu sitio. Responde la IA.</small></div><span class="estado e-ambar">Pendiente de conexión</span></div>
       </div>
       <div class="aviso">Cada canal aparece con su estado real. Los mensajes de WhatsApp, Facebook e Instagram solo llegan cuando Meta apruebe la aplicación y tu empresa esté verificada.</div>
     </section>
 
     <!-- CONVERSACIONES (canales) -->
     <section class="vista" id="v-conv">
-      <div class="sello">Vista de prueba: las conversaciones son de ejemplo.</div>
-      <div class="chat" style="margin-top:10px">
-        <div class="lista-chat">
-          <div class="cabeza">Conversaciones</div>
-          <div id="listaConv"></div>
-        </div>
-        <div class="hilo">
-          <div class="cabeza" id="cabeConv">Selecciona una conversación</div>
-          <div class="mensajes" id="mensajes"></div>
-          <div class="redactar">
-            <input id="entradaMsj" placeholder="Escribe una respuesta (la IA queda pausada en esta conversación)">
-            <button class="btn primario" id="btnEnviarMsj">Enviar</button>
-          </div>
-        </div>
+      <div class="bloque">
+        <h3>Conversaciones de tus canales</h3>
+        <div class="aviso" id="avisoCanales">Cargando...</div>
       </div>
     </section>
 
@@ -240,7 +245,7 @@
       </div>
     </section>
 
-    <!-- CHAT CON KAIZEN (interno) -->
+    <!-- CHAT CON KAIZEN -->
     <section class="vista" id="v-kaizen">
       <div class="chat">
         <div class="lista-chat">
@@ -251,7 +256,7 @@
         <div class="hilo">
           <div class="cabeza">
             <span>Kaizen Consulting</span>
-            <span class="presencia" id="presencia"><span class="punto"></span><span id="presenciaTexto">Kaizen está conectado</span></span>
+            <span class="presencia" id="presencia"><span class="punto" style="width:9px;height:9px;border-radius:50%;background:var(--verde)"></span><span id="presenciaTexto">Kaizen</span></span>
           </div>
           <div class="mensajes" id="mensajesKaizen"></div>
           <div class="redactar">
@@ -286,13 +291,10 @@
       <div class="panel-t on" id="t-prompt">
         <div class="bloque">
           <h3>Cómo responde tu asistente</h3>
-          <div class="campo"><label for="prompt">Instrucciones</label>
-            <textarea id="prompt">Eres el asistente de PEX Solution. Responde en español, con tono amable y breve. Si no sabes un dato, dilo y ofrece hablar con un asesor. No inventes precios: usa solo los que aparecen en los archivos de entrenamiento.</textarea>
-          </div>
-          <div class="campo"><label for="bienvenida">Mensaje de bienvenida</label>
-            <input id="bienvenida" value="Hola, soy el asistente de PEX Solution. ¿En qué te puedo ayudar?"></div>
+          <div class="campo"><label for="prompt">Instrucciones</label><textarea id="prompt"></textarea></div>
+          <div class="campo"><label for="bienvenida">Mensaje de bienvenida</label><input id="bienvenida"></div>
           <button class="btn primario" id="btnGuardarPrompt">Guardar cambios</button>
-          <div class="aviso">Cada cambio queda en el historial. Puedes volver a una versión anterior.</div>
+          <div class="aviso" id="avisoPrompt">Cada cambio queda en el historial. Puedes volver a una versión anterior.</div>
         </div>
       </div>
 
@@ -317,7 +319,7 @@
       <div class="panel-t" id="t-archivos">
         <div class="bloque">
           <h3>Archivos de entrenamiento</h3>
-          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel, Word o texto)</label>
+          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel, Word o texto, hasta 6 MB)</label>
             <input type="file" id="subirArchivo" accept=".pdf,.xlsx,.xls,.docx,.txt,.csv"></div>
           <div id="listaArchivos"></div>
           <div class="aviso">Los archivos sirven para que la IA responda con tu información: precios, servicios, horarios y preguntas frecuentes.</div>
@@ -327,8 +329,7 @@
       <div class="panel-t" id="t-historial">
         <div class="bloque">
           <h3>Versiones de las instrucciones</h3>
-          <div class="fila"><span>Versión 3 · hoy 09:40</span><button class="btn">Volver a esta</button></div>
-          <div class="fila"><span>Versión 2 · ayer 17:15</span><button class="btn">Volver a esta</button></div>
+          <div id="listaVersiones"></div>
         </div>
       </div>
     </section>
@@ -336,14 +337,11 @@
     <!-- PAGOS Y RECIBOS -->
     <section class="vista" id="v-pagos">
       <div class="tarjetas">
-        <div class="tarjeta"><small>Próximo pago</small><b>US$ 00.00</b><span>Vence el 1 de diciembre (ejemplo)</span></div>
-        <div class="tarjeta"><small>Estado</small><b>Al día</b><span>Último pago registrado</span></div>
+        <div class="tarjeta"><small>Último recibo</small><b id="ultimoRecibo">—</b><span>Según Kaizen</span></div>
       </div>
       <div class="bloque">
         <h3>Pagos mensuales</h3>
-        <div class="fila"><div><b>Diciembre 2026</b><br><small>Servicio mensual · vence 1 dic · monto de ejemplo</small></div><div><span class="estado e-ambar">Por pagar</span> <button class="btn">Ver recibo</button></div></div>
-        <div class="fila"><div><b>Noviembre 2026</b><br><small>Servicio mensual · vence 1 nov · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Ver recibo</button></div></div>
-        <div class="fila"><div><b>Octubre 2026</b><br><small>Servicio mensual · vence 1 oct · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Ver recibo</button></div></div>
+        <div id="listaRecibos"></div>
       </div>
       <div class="aviso">Aquí solo ves tus pagos y tus recibos. Los datos de pago los maneja Kaizen.</div>
     </section>
@@ -351,13 +349,9 @@
     <!-- CORREO -->
     <section class="vista" id="v-correo">
       <div class="bloque">
-        <div class="fila"><div><b>Correo conectado</b><br><small>Solo lectura: puedes ver los correos, no responder ni usar la IA.</small></div><button class="btn primario" id="btnConectarCorreo">Conectar mi correo</button></div>
+        <div class="fila"><div><b>Correo conectado</b><br><small>Solo lectura: puedes ver los correos, no responder ni usar la IA.</small></div><span class="estado e-gris">Pendiente de conexión</span></div>
       </div>
-      <div class="bloque" id="bloqueCorreo" hidden>
-        <h3>Últimos correos (ejemplo)</h3>
-        <div class="fila"><div><b>Reserva confirmada</b><br><small>Juan Pérez · hoy 08:12</small></div></div>
-        <div class="fila"><div><b>Consulta de precios</b><br><small>Ana Torres · ayer 16:40</small></div></div>
-      </div>
+      <div class="aviso">El correo se conecta cuando Kaizen termine la configuración.</div>
     </section>
 
     <!-- AJUSTES -->
@@ -371,63 +365,65 @@
             <div><label>Banner de inicio</label><div class="vista-banner" id="vistaBanner">Sin banner</div>
               <input type="file" id="subirBanner" accept="image/*" style="margin-top:8px"></div>
           </div>
-          <div class="campo" style="margin-top:12px"><label for="nombreCampo">Nombre de tu empresa</label><input id="nombreCampo" value="PEX Solution"></div>
+          <div class="campo" style="margin-top:12px"><label for="nombreCampo">Nombre de tu empresa</label><input id="nombreCampo"></div>
           <button class="btn primario" id="btnGuardarMarca">Guardar marca</button>
         </div>
         <div class="bloque">
-          <h3>Cuenta</h3>
+          <h3>Cambiar mi contraseña</h3>
           <div class="campo"><label for="claveActual">Contraseña actual</label><input type="password" id="claveActual"></div>
-          <div class="campo"><label for="claveNueva">Contraseña nueva</label><input type="password" id="claveNueva"></div>
+          <div class="campo"><label for="claveNueva">Contraseña nueva (mínimo 8 caracteres)</label><input type="password" id="claveNueva"></div>
           <button class="btn" id="btnClave">Cambiar contraseña</button>
           <h3 style="margin-top:18px">Ayuda</h3>
-          <div class="fila"><span>Cómo usar el chat con Kaizen</span><button class="btn">Ver</button></div>
-          <div class="fila"><span>Cómo cargar archivos de entrenamiento</span><button class="btn">Ver</button></div>
+          <div class="fila"><span>Cómo usar el chat con Kaizen</span><button class="btn" data-ayuda="chat">Ver</button></div>
+          <div class="fila"><span>Cómo cargar archivos de entrenamiento</span><button class="btn" data-ayuda="archivos">Ver</button></div>
         </div>
       </div>
     </section>
   </main>
 </div>
+
 <div class="toast" id="toast"></div>
 
 <script>
-// ---------- Datos de ejemplo (no son reales) ----------
-const clientes = [
-  { id: 1, nombre: 'María Gómez', tel: '+51 999 111 222', correo: 'maria@ejemplo.com', etiquetas: ['Frecuente', 'Gato'], notas: ['Pidió cita para el martes.'] },
-  { id: 2, nombre: 'Carlos Ruiz', tel: '+51 988 333 444', correo: 'carlos@ejemplo.com', etiquetas: ['Perro senior'], notas: [] },
-  { id: 3, nombre: 'Lucía Salas', tel: '+51 977 555 666', correo: '', etiquetas: ['Nuevo'], notas: ['Preguntó por vacunas.'] }
-];
-const conversaciones = [
-  { id: 1, canal: 'Web', nombre: 'Visitante del sitio', sinLeer: 1, ia: true, msgs: [
-      { de: 'cliente', t: 'Hola, ¿tienen alimento para perro senior?' },
-      { de: 'ia', t: 'Sí. Manejamos marcas para perros senior. ¿Cuál es el peso aproximado de tu perro?' },
-      { de: 'cliente', t: 'Unos 14 kilos.' } ] },
-  { id: 2, canal: 'WhatsApp', nombre: 'Carlos Ruiz (ejemplo)', sinLeer: 1, ia: true, msgs: [
-      { de: 'cliente', t: '¿A qué hora abren mañana?' },
-      { de: 'ia', t: 'Mañana abrimos de 9:00 a 18:00. ¿Necesitas una cita?' } ] },
-  { id: 3, canal: 'Facebook', nombre: 'Lucía Salas (ejemplo)', sinLeer: 0, ia: false, msgs: [
-      { de: 'cliente', t: 'Quiero saber precios de vacunas.' },
-      { de: 'humano', t: 'Hola Lucía, te envío la lista en un momento.' } ] }
-];
-const chatKaizen = [
-  { de: 'kaizen', t: 'Hola, ya dejamos lista la primera versión del panel. ¿Quieres revisarla?' },
-  { de: 'cliente', t: 'Sí, ¿por dónde empiezo?' },
-  { de: 'kaizen', t: 'Empieza por Entrenar la IA y prueba cómo responde.' }
-];
-const archivos = [
-  { nombre: 'Lista-de-precios.xlsx', tam: '48 KB', fecha: 'hoy' },
-  { nombre: 'Preguntas-frecuentes.pdf', tam: '212 KB', fecha: 'ayer' }
-];
-let clienteActivo = 1;
-let convActiva = 1;
-let iaActiva = true;
-let kaizenConectado = true;
-let pruebaActiva = false;
-const pruebaMsj = [];
-
 // ---------- Utilidades ----------
 const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2200); }
+function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2600); }
+function fecha(f) { if (!f) return ''; const d = new Date(f); return isNaN(d) ? String(f) : d.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+function soles(c) { return 'US$ ' + (Number(c || 0) / 100).toFixed(2); }
+
+// Llamada a la API. Si la sesión venció, vuelve a la pantalla de entrada.
+async function api(metodo, ruta, cuerpo) {
+  const r = await fetch(ruta, { method: metodo, credentials: 'same-origin', headers: cuerpo ? { 'Content-Type': 'application/json' } : {}, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
+  let datos = {}; try { datos = await r.json(); } catch (e) {}
+  if (r.status === 401 && ruta !== '/api/login') { entrar(false); }
+  if (r.status === 403 && datos.suspendida) { suspender(datos.error); }
+  if (!r.ok) { const err = new Error(datos.error || 'Algo salió mal.'); err.estado = r.status; throw err; }
+  return datos;
+}
+
+// ---------- Entrada y suspensión ----------
+let iaActiva = true, pruebaActiva = false, kaizenConectado = false, timerChat = null, timerNotif = null;
+function entrar(ver) {
+  $('entrada').hidden = !!ver ? true : false;
+  $('app').hidden = !ver;
+  if (!ver) { clearInterval(timerChat); clearInterval(timerNotif); }
+}
+function suspender(texto) {
+  $('app').hidden = true;
+  $('entrada').hidden = false;
+  $('errorLogin').textContent = texto || 'Tu cuenta está suspendida. Comunícate con Kaizen.';
+}
+$('formLogin').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('errorLogin').textContent = '';
+  try {
+    await api('POST', '/api/login', { usuario: $('lUsuario').value, clave: $('lClave').value });
+    $('lClave').value = '';
+    await arrancar();
+  } catch (err) { $('errorLogin').textContent = err.message; }
+});
+$('btnSalir').addEventListener('click', async () => { await api('POST', '/api/logout').catch(() => {}); entrar(false); });
 
 // ---------- Navegación ----------
 const titulos = { inicio: 'Inicio', redes: 'Redes sociales', conv: 'Conversaciones', plantillas: 'Plantillas', kaizen: 'Chat con Kaizen', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', pagos: 'Pagos y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
@@ -437,6 +433,13 @@ function mostrar(v) {
   document.querySelectorAll('.vista').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
   $('tituloVista').textContent = titulos[v] || '';
   $('panelNotif').hidden = true;
+  if (v === 'kaizen') cargarChat();
+  if (v === 'crm') cargarClientes();
+  if (v === 'plantillas') { cargarRapidas(); cargarPlantillas(); }
+  if (v === 'pagos') cargarRecibos();
+  if (v === 'conv') cargarCanales();
+  if (v === 'entreno') { cargarPrompt(); cargarArchivos(); cargarVersiones(); cargarPrueba(); }
+  if (v === 'inicio') cargarInicio();
 }
 
 // ---------- IA encendida o pausada ----------
@@ -446,102 +449,151 @@ function pintarIA() {
   $('btnIA').textContent = iaActiva ? 'Pausar IA' : 'Encender IA';
   $('iaResumen').textContent = iaActiva ? 'Activa' : 'Pausada';
 }
-$('btnIA').addEventListener('click', () => {
-  iaActiva = !iaActiva; pintarIA();
-  avisar(iaActiva ? 'IA encendida. Responde en los canales listos.' : 'IA pausada. Los mensajes quedan para tu equipo.');
+$('btnIA').addEventListener('click', async () => {
+  try {
+    const r = await api('POST', '/api/ia', { activa: !iaActiva });
+    iaActiva = r.ia_activa; pintarIA();
+    avisar(iaActiva ? 'IA encendida.' : 'IA pausada. Los mensajes quedan para tu equipo.');
+  } catch (e) { avisar(e.message); }
 });
 
 // ---------- Notificaciones ----------
-$('btnCampana').addEventListener('click', e => { e.stopPropagation(); $('panelNotif').hidden = !$('panelNotif').hidden; });
+$('btnCampana').addEventListener('click', async e => {
+  e.stopPropagation();
+  const abre = $('panelNotif').hidden;
+  $('panelNotif').hidden = !abre;
+  if (abre) {
+    const r = await api('GET', '/api/notificaciones').catch(() => ({ notificaciones: [] }));
+    $('listaNotif').innerHTML = r.notificaciones.map(n => `<div>${esc(n.texto)} · ${esc(fecha(n.creada))}</div>`).join('') || 'Sin avisos.';
+    await api('POST', '/api/notificaciones/leer').catch(() => {});
+    $('cuentaNotif').textContent = '0';
+  }
+});
 document.addEventListener('click', () => { $('panelNotif').hidden = true; });
 $('panelNotif').addEventListener('click', e => e.stopPropagation());
 
+// ---------- Inicio ----------
+async function cargarInicio() {
+  const cli = await api('GET', '/api/clientes').catch(() => ({ clientes: [] }));
+  const rap = await api('GET', '/api/rapidas').catch(() => ({ rapidas: [] }));
+  const arc = await api('GET', '/api/archivos').catch(() => ({ archivos: [] }));
+  $('totalClientes').textContent = cli.clientes.length;
+  $('totalRapidas').textContent = rap.rapidas.length;
+  $('totalArchivos').textContent = arc.archivos.length;
+}
+
+// ---------- Conversaciones (canales) ----------
+async function cargarCanales() {
+  const r = await api('GET', '/api/canales').catch(e => ({ motivo: e.message }));
+  $('avisoCanales').textContent = r.motivo || 'Sin conexión.';
+}
+
+// ---------- Plantillas ----------
+document.querySelectorAll('#tabsPl button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#tabsPl button').forEach(x => x.classList.toggle('on', x === b));
+  $('p-rapidas').classList.toggle('on', b.dataset.p === 'rapidas');
+  $('p-whatsapp').classList.toggle('on', b.dataset.p === 'whatsapp');
+}));
+async function cargarRapidas() {
+  const r = await api('GET', '/api/rapidas').catch(() => ({ rapidas: [] }));
+  $('listaRapidas').innerHTML = r.rapidas.map(x => `
+    <div class="fila"><div><b>${esc(x.titulo)}</b><br><small>${esc(x.texto)}</small></div>
+      <div style="display:flex;gap:6px"><button class="btn" data-usar="${x.id}">Usar en chat</button><button class="btn peligro" data-quitar="${x.id}">Quitar</button></div></div>`).join('') || '<div class="aviso">Todavía no hay respuestas rápidas.</div>';
+  document.querySelectorAll('[data-usar]').forEach(b => b.addEventListener('click', () => {
+    const t = r.rapidas.find(x => String(x.id) === b.dataset.usar).texto;
+    $('entradaKaizen').value = t; mostrar('kaizen'); avisar('Respuesta puesta en el chat. Revisa y envía.');
+  }));
+  document.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', '/api/rapidas/' + b.dataset.quitar); cargarRapidas();
+  }));
+}
+$('btnRapida').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/rapidas', { titulo: $('rapTitulo').value, texto: $('rapTexto').value });
+    $('rapTitulo').value = ''; $('rapTexto').value = ''; cargarRapidas(); avisar('Respuesta rápida guardada');
+  } catch (e) { avisar(e.message); }
+});
+async function cargarPlantillas() {
+  const r = await api('GET', '/api/plantillas').catch(() => ({ plantillas: [] }));
+  const clase = e => e === 'Aprobada' ? 'e-verde' : e === 'Rechazada' ? 'e-rojo' : 'e-ambar';
+  $('listaPlantillas').innerHTML = r.plantillas.map(p => `
+    <div class="fila" style="display:block">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b>${esc(p.nombre)}</b> <small>· ${esc(p.tipo)}</small></div><span class="estado ${clase(p.estado)}">${esc(p.estado)}</span></div>
+      <div class="plantilla">${esc(p.texto)}</div>
+      ${p.motivo ? `<div class="aviso" style="color:var(--rojo)">${esc(p.motivo)}</div>` : ''}
+    </div>`).join('') || '<div class="aviso">Todavía no hay plantillas.</div>';
+}
+$('btnNuevaPlantilla').addEventListener('click', () => avisar('Las plantillas se envían a Meta para revisión cuando el canal esté aprobado.'));
+
 // ---------- Chat con Kaizen ----------
-function pintarKaizen() {
+async function cargarChat() {
+  const r = await api('GET', '/api/chat').catch(e => ({ mensajes: [], kaizen_conectado: false, error: e.message }));
+  kaizenConectado = !!r.kaizen_conectado;
   $('presencia').classList.toggle('fuera', !kaizenConectado);
   $('presenciaTexto').textContent = kaizenConectado ? 'Kaizen está conectado' : 'Kaizen no está conectado. Te responde en cuanto entre.';
-  $('mensajesKaizen').innerHTML = chatKaizen.map(m => {
+  $('mensajesKaizen').innerHTML = r.mensajes.map(m => {
     const clase = m.de === 'cliente' ? 'cliente' : 'kaizen';
-    const quien = m.de === 'cliente' ? 'Tú' : 'Kaizen';
-    return `<div class="m ${clase}"><small>${quien}</small>${esc(m.t)}</div>`;
-  }).join('');
+    return `<div class="m ${clase}"><small>${m.de === 'cliente' ? 'Tú' : 'Kaizen'} · ${esc(fecha(m.creado))}</small>${esc(m.texto)}</div>`;
+  }).join('') || '<div class="aviso">Escribe a Kaizen cuando necesites ayuda.</div>';
   $('mensajesKaizen').scrollTop = $('mensajesKaizen').scrollHeight;
 }
-function enviarKaizen() {
+async function enviarKaizen() {
   const t = $('entradaKaizen').value.trim(); if (!t) return;
-  chatKaizen.push({ de: 'cliente', t }); $('entradaKaizen').value = ''; pintarKaizen();
-  avisar(kaizenConectado ? 'Enviado a Kaizen.' : 'Enviado. Kaizen te responde cuando esté conectado.');
+  try {
+    await api('POST', '/api/chat', { texto: t });
+    $('entradaKaizen').value = ''; cargarChat();
+    avisar(kaizenConectado ? 'Enviado a Kaizen.' : 'Enviado. Kaizen te responde cuando esté conectado.');
+  } catch (e) { avisar(e.message); }
 }
 $('btnEnviarKaizen').addEventListener('click', enviarKaizen);
 $('entradaKaizen').addEventListener('keydown', e => { if (e.key === 'Enter') enviarKaizen(); });
 
-// ---------- Conversaciones de los canales ----------
-function pintarConversaciones() {
-  $('listaConv').innerHTML = conversaciones.map(c => `
-    <div class="conv ${c.id === convActiva ? 'on' : ''}" data-id="${c.id}">
-      ${c.sinLeer ? `<span class="sin">${c.sinLeer}</span>` : ''}
-      <b>${esc(c.nombre)}</b><small>${esc(c.canal)} · ${c.ia ? 'con IA' : 'con asesor'}</small>
-    </div>`).join('');
-  document.querySelectorAll('.conv').forEach(d => d.addEventListener('click', () => { convActiva = Number(d.dataset.id); conversaciones.find(x => x.id === convActiva).sinLeer = 0; pintarChat(); pintarCuentas(); }));
-}
-function pintarChat() {
-  pintarConversaciones();
-  const c = conversaciones.find(x => x.id === convActiva);
-  $('cabeConv').textContent = c.nombre + ' · ' + c.canal;
-  $('mensajes').innerHTML = c.msgs.map(m => {
-    const clase = m.de === 'cliente' ? 'cliente' : m.de === 'ia' ? 'ia' : 'humano';
-    const quien = m.de === 'cliente' ? 'Cliente' : m.de === 'ia' ? 'IA' : 'Tu equipo';
-    return `<div class="m ${clase}"><small>${quien}</small>${esc(m.t)}</div>`;
-  }).join('');
-  $('mensajes').scrollTop = $('mensajes').scrollHeight;
-}
-function pintarCuentas() {
-  const sin = conversaciones.reduce((s, c) => s + c.sinLeer, 0);
-  $('cuentaNotif').textContent = sin; $('sinResponder').textContent = sin;
-}
-$('btnEnviarMsj').addEventListener('click', enviarConv);
-$('entradaMsj').addEventListener('keydown', e => { if (e.key === 'Enter') enviarConv(); });
-function enviarConv() {
-  const t = $('entradaMsj').value.trim(); if (!t) return;
-  const c = conversaciones.find(x => x.id === convActiva);
-  c.msgs.push({ de: 'humano', t }); c.ia = false; $('entradaMsj').value = '';
-  pintarChat(); avisar('Enviado. La IA queda pausada en esta conversación.');
-}
-
 // ---------- CRM ----------
-function pintarClientes() {
-  const q = $('buscarCli').value.trim().toLowerCase();
-  const lista = clientes.filter(c => !q || c.nombre.toLowerCase().includes(q) || c.tel.replace(/\s/g, '').includes(q.replace(/\s/g, '')));
-  $('listaCli').innerHTML = lista.map(c => `
-    <div class="fila-cli ${c.id === clienteActivo ? 'on' : ''}" data-id="${c.id}"><b>${esc(c.nombre)}</b><small>${esc(c.tel)}</small></div>`).join('') || '<div class="aviso">Sin resultados.</div>';
-  document.querySelectorAll('.fila-cli').forEach(d => d.addEventListener('click', () => { clienteActivo = Number(d.dataset.id); pintarClientes(); pintarFicha(); }));
-  $('totalClientes').textContent = clientes.length;
+let clienteActivo = null;
+async function cargarClientes() {
+  const q = $('buscarCli').value.trim();
+  const r = await api('GET', '/api/clientes?q=' + encodeURIComponent(q)).catch(() => ({ clientes: [] }));
+  $('listaCli').innerHTML = r.clientes.map(c => `
+    <div class="fila-cli ${c.id === clienteActivo ? 'on' : ''}" data-id="${c.id}"><b>${esc(c.nombre)}</b><small>${esc(c.telefono)}</small></div>`).join('') || '<div class="aviso">Sin resultados.</div>';
+  document.querySelectorAll('.fila-cli').forEach(d => d.addEventListener('click', () => { clienteActivo = Number(d.dataset.id); cargarClientes(); cargarFicha(); }));
+  $('totalClientes').textContent = r.clientes.length;
+  if (!clienteActivo && r.clientes.length) { clienteActivo = r.clientes[0].id; cargarClientes(); cargarFicha(); }
+  if (!r.clientes.length) $('fichaCli').innerHTML = '<div class="aviso">Todavía no hay clientes. Crea el primero.</div>';
 }
-function pintarFicha() {
-  const c = clientes.find(x => x.id === clienteActivo);
-  if (!c) { $('fichaCli').innerHTML = '<div class="aviso">Elige un cliente o crea uno nuevo.</div>'; return; }
+async function cargarFicha() {
+  if (!clienteActivo) return;
+  const r = await api('GET', '/api/clientes/' + clienteActivo).catch(() => null);
+  if (!r) { $('fichaCli').innerHTML = '<div class="aviso">Cliente no encontrado.</div>'; return; }
+  const c = r.cliente;
   $('fichaCli').innerHTML = `
     <h2>${esc(c.nombre)}</h2>
-    <div class="aviso">${esc(c.tel)}${c.correo ? ' · ' + esc(c.correo) : ''}</div>
+    <div class="aviso">${esc(c.telefono)}${c.correo ? ' · ' + esc(c.correo) : ''}</div>
     <div style="margin:14px 0"><label>Etiquetas</label>
-      ${c.etiquetas.map((t, i) => `<span class="chip">${esc(t)}<button data-q="${i}" title="Quitar">×</button></span>`).join('')}
+      ${r.etiquetas.map(t => `<span class="chip">${esc(t.texto)}<button data-et="${t.id}" title="Quitar">×</button></span>`).join('') || '<div class="aviso">Sin etiquetas.</div>'}
       <div style="display:flex;gap:8px;margin-top:8px"><input id="nuevaEtiqueta" placeholder="Nueva etiqueta"><button class="btn" id="btnEtiqueta">Agregar</button></div>
     </div>
     <div style="margin:14px 0"><label>Notas</label>
-      ${c.notas.map(n => `<div class="nota">${esc(n)}</div>`).join('') || '<div class="aviso">Sin notas todavía.</div>'}
+      ${r.notas.map(n => `<div class="nota">${esc(n.texto)}<br><small>${esc(fecha(n.creada))}</small></div>`).join('') || '<div class="aviso">Sin notas todavía.</div>'}
       <div style="display:flex;gap:8px;margin-top:8px"><input id="nuevaNota" placeholder="Escribe una nota para este cliente"><button class="btn" id="btnNota">Guardar nota</button></div>
     </div>`;
-  $('btnEtiqueta').addEventListener('click', () => { const t = $('nuevaEtiqueta').value.trim(); if (!t) return; c.etiquetas.push(t); pintarFicha(); avisar('Etiqueta agregada'); });
-  $('btnNota').addEventListener('click', () => { const t = $('nuevaNota').value.trim(); if (!t) return; c.notas.push(t); pintarFicha(); avisar('Nota guardada'); });
-  document.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { c.etiquetas.splice(Number(b.dataset.q), 1); pintarFicha(); }));
+  $('btnEtiqueta').addEventListener('click', async () => {
+    try { await api('POST', `/api/clientes/${c.id}/etiquetas`, { texto: $('nuevaEtiqueta').value }); cargarFicha(); } catch (e) { avisar(e.message); }
+  });
+  $('btnNota').addEventListener('click', async () => {
+    try { await api('POST', `/api/clientes/${c.id}/notas`, { texto: $('nuevaNota').value }); cargarFicha(); } catch (e) { avisar(e.message); }
+  });
+  document.querySelectorAll('[data-et]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', `/api/clientes/${c.id}/etiquetas/${b.dataset.et}`); cargarFicha();
+  }));
 }
-$('buscarCli').addEventListener('input', pintarClientes);
-$('btnNuevoCli').addEventListener('click', () => {
+$('buscarCli').addEventListener('input', cargarClientes);
+$('btnNuevoCli').addEventListener('click', async () => {
   const nombre = prompt('Nombre del cliente'); if (!nombre) return;
-  const tel = prompt('Número de WhatsApp o teléfono (con código de país)') || '';
-  const id = Math.max(...clientes.map(c => c.id)) + 1;
-  clientes.push({ id, nombre, tel, correo: '', etiquetas: [], notas: [] });
-  clienteActivo = id; pintarClientes(); pintarFicha(); avisar('Cliente guardado');
+  const telefono = prompt('Número de WhatsApp o teléfono (con código de país)') || '';
+  try {
+    const r = await api('POST', '/api/clientes', { nombre, telefono });
+    clienteActivo = r.cliente.id; cargarClientes(); cargarFicha(); avisar('Cliente guardado');
+  } catch (e) { avisar(e.message); }
 });
 
 // ---------- Entrenar la IA ----------
@@ -549,91 +601,128 @@ document.querySelectorAll('#tabsEntreno button').forEach(b => b.addEventListener
   document.querySelectorAll('#tabsEntreno button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.panel-t').forEach(p => p.classList.toggle('on', p.id === 't-' + b.dataset.t));
 }));
-function pintarArchivos() {
-  $('listaArchivos').innerHTML = archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${esc(a.tam)} · ${esc(a.fecha)}</small></span><button class="btn peligro">Quitar</button></div>`).join('');
+async function cargarPrompt() {
+  const r = await api('GET', '/api/prompt').catch(() => ({ prompt: '', bienvenida: '' }));
+  $('prompt').value = r.prompt; $('bienvenida').value = r.bienvenida;
+}
+$('btnGuardarPrompt').addEventListener('click', async () => {
+  try { await api('POST', '/api/prompt', { prompt: $('prompt').value, bienvenida: $('bienvenida').value }); avisar('Cambios guardados'); cargarVersiones(); }
+  catch (e) { avisar(e.message); }
+});
+async function cargarVersiones() {
+  const r = await api('GET', '/api/prompt/versiones').catch(() => ({ versiones: [] }));
+  $('listaVersiones').innerHTML = r.versiones.map(v => `<div class="fila"><span>Versión del ${esc(fecha(v.creada))}</span><button class="btn" data-ver="${v.id}">Volver a esta</button></div>`).join('') || '<div class="aviso">Todavía no hay versiones.</div>';
+  document.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', async () => {
+    await api('POST', '/api/prompt/restaurar', { id: Number(b.dataset.ver) }); cargarPrompt(); cargarVersiones(); avisar('Versión restaurada');
+  }));
+}
+async function cargarArchivos() {
+  const r = await api('GET', '/api/archivos').catch(() => ({ archivos: [] }));
+  $('listaArchivos').innerHTML = r.archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${Math.round(a.tamano / 1024)} KB · ${esc(fecha(a.creado))}</small></span><button class="btn peligro" data-borrar="${a.id}">Quitar</button></div>`).join('') || '<div class="aviso">Todavía no hay archivos.</div>';
+  document.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
+    await api('DELETE', '/api/archivos/' + b.dataset.borrar); cargarArchivos();
+  }));
 }
 $('subirArchivo').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
-  archivos.unshift({ nombre: f.name, tam: Math.max(1, Math.round(f.size / 1024)) + ' KB', fecha: 'ahora' });
-  e.target.value = ''; pintarArchivos(); avisar('Archivo cargado. La IA lo usará en sus próximas respuestas.');
+  if (f.size > 6 * 1024 * 1024) { avisar('El archivo es muy grande (máximo 6 MB).'); e.target.value = ''; return; }
+  const lector = new FileReader();
+  lector.onload = async () => {
+    try { await api('POST', '/api/archivos', { nombre: f.name, datos: lector.result }); cargarArchivos(); avisar('Archivo cargado. La IA lo usará en sus próximas respuestas.'); }
+    catch (err) { avisar(err.message); }
+    e.target.value = '';
+  };
+  lector.readAsDataURL(f);
 });
-$('btnGuardarPrompt').addEventListener('click', () => avisar('Cambios guardados (vista de prueba)'));
-function pintarPrueba() {
+function pintarPrueba(respuesta) {
   $('interruptorPrueba').classList.toggle('off', !pruebaActiva);
   $('textoPrueba').textContent = pruebaActiva ? 'IA de prueba encendida' : 'IA de prueba apagada';
   $('btnPrueba').textContent = pruebaActiva ? 'Apagar' : 'Encender';
-  $('pruebaMsj').innerHTML = pruebaMsj.map(m => `<div class="m ${m.de === 'cliente' ? 'cliente' : 'ia'}"><small>${m.de === 'cliente' ? 'Tú (cliente de prueba)' : 'IA (prueba)'}</small>${esc(m.t)}</div>`).join('') || '<div class="aviso">Escribe un mensaje para ver cómo responde.</div>';
+  if (respuesta) $('pruebaMsj').insertAdjacentHTML('beforeend', `<div class="m ia"><small>IA (prueba)</small>${esc(respuesta)}</div>`);
 }
-$('btnPrueba').addEventListener('click', () => { pruebaActiva = !pruebaActiva; pintarPrueba(); });
-function enviarPrueba() {
+async function cargarPrueba() {
+  const r = await api('POST', '/api/prueba', {}).catch(() => ({ prueba_activa: false }));
+  pruebaActiva = !!r.prueba_activa; pintarPrueba();
+}
+$('btnPrueba').addEventListener('click', async () => {
+  try { const r = await api('POST', '/api/prueba', { encender: !pruebaActiva }); pruebaActiva = !!r.prueba_activa; pintarPrueba(); }
+  catch (e) { avisar(e.message); }
+});
+async function enviarPrueba() {
   const t = $('entradaPrueba').value.trim(); if (!t) return;
   $('entradaPrueba').value = '';
-  pruebaMsj.push({ de: 'cliente', t });
-  if (!pruebaActiva) { pruebaMsj.push({ de: 'ia', t: 'La IA de prueba está apagada. Enciéndela para ver la respuesta.' }); }
-  else { pruebaMsj.push({ de: 'ia', t: 'Respuesta de ejemplo: aquí aparecerá la respuesta real de la IA con tus instrucciones y archivos.' }); }
-  pintarPrueba();
+  $('pruebaMsj').insertAdjacentHTML('beforeend', `<div class="m cliente"><small>Tú (cliente de prueba)</small>${esc(t)}</div>`);
+  try { const r = await api('POST', '/api/prueba', { texto: t }); pintarPrueba(r.respuesta); }
+  catch (e) { avisar(e.message); }
 }
 $('btnPruebaEnviar').addEventListener('click', enviarPrueba);
 $('entradaPrueba').addEventListener('keydown', e => { if (e.key === 'Enter') enviarPrueba(); });
 
-// ---------- Ajustes: logo, banner, marca ----------
+// ---------- Pagos ----------
+async function cargarRecibos() {
+  const r = await api('GET', '/api/recibos').catch(() => ({ recibos: [] }));
+  $('ultimoRecibo').textContent = r.recibos[0] ? soles(r.recibos[0].monto_centavos) : '—';
+  $('listaRecibos').innerHTML = r.recibos.map(x => {
+    const clase = x.estado === 'Pagado' ? 'e-verde' : 'e-ambar';
+    return `<div class="fila"><div><b>${esc(x.periodo)}</b><br><small>Servicio mensual · ${x.vence ? 'vence ' + esc(String(x.vence).slice(0, 10)) : ''} · ${soles(x.monto_centavos)}</small></div><span class="estado ${clase}">${esc(x.estado)}</span></div>`;
+  }).join('') || '<div class="aviso">Todavía no hay recibos.</div>';
+}
+
+// ---------- Ajustes ----------
 function leerImagen(input, destino, cb) {
   const f = input.files[0]; if (!f) return;
+  if (f.size > 1.5 * 1024 * 1024) { avisar('La imagen es muy grande (máximo 1.5 MB).'); input.value = ''; return; }
   const r = new FileReader();
-  r.onload = () => { destino.innerHTML = `<img src="${r.result}" alt="">`; cb && cb(r.result); };
+  r.onload = () => { destino.innerHTML = `<img src="${r.result}" alt="">`; cb(r.result); };
   r.readAsDataURL(f);
 }
-$('subirLogo').addEventListener('change', e => leerImagen(e.target, $('vistaLogo'), url => { $('logoMenu').innerHTML = `<img src="${url}" alt="">`; }));
-$('subirBanner').addEventListener('change', e => leerImagen(e.target, $('vistaBanner'), url => { const b = $('bannerInicio'); b.style.backgroundImage = `url(${url})`; b.textContent = ''; }));
-$('btnGuardarMarca').addEventListener('click', () => { $('nombreEmpresa').textContent = $('nombreCampo').value || 'Mi empresa'; avisar('Marca guardada'); });
-$('btnClave').addEventListener('click', () => avisar('Vista de prueba: la contraseña se cambia desde la versión conectada.'));
-
-// ---------- Correo ----------
-$('btnConectarCorreo').addEventListener('click', () => { $('bloqueCorreo').hidden = false; avisar('Vista de prueba: el correo se conecta en solo lectura.'); });
-
-// ---------- Plantillas ----------
-const rapidas = [
-  { t: 'Horario', x: 'Abrimos de lunes a sábado, de 9:00 a 18:00.' },
-  { t: 'Saludo de espera', x: 'Gracias por escribir. En unos minutos te respondemos.' },
-  { t: 'Pedir datos', x: '¿Me compartes tu nombre y el número de mascota para ayudarte mejor?' }
-];
-const plantillasWA = [
-  { nombre: 'recordatorio_cita', tipo: 'Recordatorio', texto: 'Hola {{1}}, te recordamos tu cita el {{2}} a las {{3}}.', estado: 'En revisión de Meta' },
-  { nombre: 'bienvenida_cliente', tipo: 'Bienvenida', texto: 'Hola {{1}}, gracias por escribirnos a PEX Solution. ¿En qué te ayudamos?', estado: 'Aprobada' },
-  { nombre: 'promo_vacunas', tipo: 'Promoción', texto: 'Vacunas con 10% de descuento este mes. Responde SÍ para reservar.', estado: 'Rechazada', motivo: 'Promoción sin opción para dejar de recibir mensajes. Corregir y enviar de nuevo.' }
-];
-document.querySelectorAll('#tabsPl button').forEach(b => b.addEventListener('click', () => {
-  document.querySelectorAll('#tabsPl button').forEach(x => x.classList.toggle('on', x === b));
-  document.getElementById('p-rapidas').classList.toggle('on', b.dataset.p === 'rapidas');
-  document.getElementById('p-whatsapp').classList.toggle('on', b.dataset.p === 'whatsapp');
-}));
-function pintarRapidas() {
-  $('listaRapidas').innerHTML = rapidas.map((r, i) => `
-    <div class="fila"><div><b>${esc(r.t)}</b><br><small>${esc(r.x)}</small></div>
-      <div style="display:flex;gap:6px"><button class="btn" data-usar="${i}">Usar en chat</button><button class="btn peligro" data-quitar="${i}">Quitar</button></div></div>`).join('') || '<div class="aviso">Todavía no hay respuestas rápidas.</div>';
-  document.querySelectorAll('[data-usar]').forEach(b => b.addEventListener('click', () => {
-    $('entradaMsj').value = rapidas[Number(b.dataset.usar)].x; mostrar('conv'); avisar('Respuesta puesta en el chat. Revisa y envía.');
-  }));
-  document.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', () => { rapidas.splice(Number(b.dataset.quitar), 1); pintarRapidas(); }));
-}
-function pintarPlantillas() {
-  const clase = e => e === 'Aprobada' ? 'e-verde' : e === 'Rechazada' ? 'e-rojo' : 'e-ambar';
-  $('listaPlantillas').innerHTML = plantillasWA.map(p => `
-    <div class="fila" style="display:block">
-      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b>${esc(p.nombre)}</b> <small>· ${esc(p.tipo)}</small></div><span class="estado ${clase(p.estado)}">${esc(p.estado)}</span></div>
-      <div class="plantilla">${esc(p.texto)}</div>
-      ${p.motivo ? `<div class="aviso" style="color:var(--rojo)">${esc(p.motivo)}</div>` : ''}
-    </div>`).join('');
-}
-$('btnRapida').addEventListener('click', () => {
-  const t = $('rapTitulo').value.trim(), x = $('rapTexto').value.trim();
-  if (!t || !x) { avisar('Escribe el nombre y el texto.'); return; }
-  rapidas.push({ t, x }); $('rapTitulo').value = ''; $('rapTexto').value = ''; pintarRapidas(); avisar('Respuesta rápida guardada');
+let logoNuevo = null, bannerNuevo = null;
+$('subirLogo').addEventListener('change', e => leerImagen(e.target, $('vistaLogo'), u => { logoNuevo = u; }));
+$('subirBanner').addEventListener('change', e => leerImagen(e.target, $('vistaBanner'), u => { bannerNuevo = u; }));
+$('btnGuardarMarca').addEventListener('click', async () => {
+  try {
+    const cuerpo = { nombre: $('nombreCampo').value };
+    if (logoNuevo) cuerpo.logo = logoNuevo;
+    if (bannerNuevo) cuerpo.banner = bannerNuevo;
+    const r = await api('POST', '/api/marca', cuerpo);
+    logoNuevo = null; bannerNuevo = null;
+    $('nombreEmpresa').textContent = r.nombre;
+    avisar('Marca guardada');
+    cargarMarca();
+  } catch (e) { avisar(e.message); }
 });
-$('btnNuevaPlantilla').addEventListener('click', () => avisar('Vista de prueba: la plantilla se envía a Meta para revisión desde la versión conectada.'));
+$('btnClave').addEventListener('click', async () => {
+  try { await api('POST', '/api/clave', { actual: $('claveActual').value, nueva: $('claveNueva').value }); $('claveActual').value = ''; $('claveNueva').value = ''; avisar('Contraseña cambiada'); }
+  catch (e) { avisar(e.message); }
+});
+document.querySelectorAll('[data-ayuda]').forEach(b => b.addEventListener('click', () => avisar('La guía se publica con la versión final.')));
+
+async function cargarMarca() {
+  const y = await api('GET', '/api/yo').catch(() => null);
+  if (!y) return;
+  $('nombreEmpresa').textContent = y.cuenta.nombre;
+  $('nombreCampo').value = y.cuenta.nombre;
+  if (y.ajustes.logo) { $('logoMenu').innerHTML = `<img src="${y.ajustes.logo}" alt="">`; $('vistaLogo').innerHTML = `<img src="${y.ajustes.logo}" alt="">`; }
+  if (y.ajustes.banner) { $('bannerInicio').style.backgroundImage = `url(${y.ajustes.banner})`; $('bannerInicio').textContent = ''; $('vistaBanner').innerHTML = `<img src="${y.ajustes.banner}" alt="">`; }
+  iaActiva = y.ajustes.ia_activa; pintarIA();
+  kaizenConectado = y.kaizen_conectado;
+  $('cuentaNotif').textContent = y.notificaciones_sin_leer;
+}
 
 // ---------- Arranque ----------
-pintarIA(); pintarRapidas(); pintarPlantillas(); pintarKaizen(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos(); pintarPrueba();
+async function arrancar() {
+  let y;
+  try { y = await fetch('/api/yo', { credentials: 'same-origin' }); } catch (e) { y = { status: 0 }; }
+  if (y.status === 401) { entrar(false); return; }
+  if (y.status === 403) { const d = await y.json(); suspender(d.error); return; }
+  entrar(true);
+  await cargarMarca();
+  await cargarInicio();
+  pintarIA();
+  timerChat = setInterval(() => { if ($('v-kaizen').classList.contains('on')) cargarChat(); }, 15000);
+  timerNotif = setInterval(async () => { const y2 = await api('GET', '/api/yo').catch(() => null); if (y2) $('cuentaNotif').textContent = y2.notificaciones_sin_leer; }, 60000);
+}
+arrancar();
 </script>
 </body>
 </html>
