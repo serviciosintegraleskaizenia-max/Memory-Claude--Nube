@@ -954,7 +954,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
 
 <script>
 const ESTADOS = [
-  ['pendiente de transcribir', 'Pendiente de transcribir'],
+  ['pendiente de transcribir', 'Pendiente por registrar'],
   ['registrada', 'Registrada'],
   ['revisar', 'Para revisar'],
   ['actualizada', 'Actualizada – revisar'],
@@ -2039,7 +2039,7 @@ const COLUMNAS_SIMPLE = [
   { k: 'hotel', t: 'Hotel', peso: 14 }, { k: 'estado', t: 'Estado', peso: 13 }
 ];
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const ESTADO_CORTO = { 'pendiente de transcribir': 'Pendiente', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', 'sin accion': 'Sin acción', historico: 'Histórico', transcrita: 'Transcrita' };
+const ESTADO_CORTO = { 'pendiente de transcribir': 'Pendiente por registrar', revisar: 'Revisar', actualizada: 'Actualizada', registrada: 'Registrada', 'sin accion': 'Sin acción', historico: 'Histórico', transcrita: 'Transcrita' };
 // En Histórico se muestra el estado que tenía antes de pasar al archivo (no todo como "Histórico").
 const estadoMostrado = r => r.estado === 'historico' && r.estado_antes ? r.estado_antes : r.estado;
 function iconoTipo(t) { return t === 'OTRO' ? '📋' : TIPOS_SRV[t].split(' ')[0]; }
@@ -2111,7 +2111,10 @@ function estadoSimple(g) {
   const real = estadoReserva(g);
   // En Histórico se muestra el estado que tenía antes (registrada, revisar…), no solo "Histórico".
   const antes = real === 'historico' ? (g.map(s => s.estado_antes).find(Boolean) || '') : '';
-  const e = antes || real;
+  let e = antes || real;
+  // Una reserva sin día, nombre o hotel no está "pendiente por registrar": le falta revisar.
+  const completa = g.some(s => s.fecha_servicio) && g.some(s => String(s.nombre_cliente || '').trim()) && g.some(s => s.hotel || s.punto_llegada || s.punto_partida);
+  if (e === 'pendiente de transcribir' && !completa) e = 'revisar';
   const clases = { 'pendiente de transcribir': 'etq-pendiente', registrada: 'etq-registrada', revisar: 'etq-revisar', actualizada: 'etq-actualizada', historico: 'etq-historico' };
   // Correo importado del historial que la IA todavía no analiza: no tiene estado real aún, así que no se muestra como "Histórico".
   const sinAnalizar = !antes && real === 'historico' && g.some(s => /^Histórico: pendiente/.test(s.motivo || ''));
