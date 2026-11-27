@@ -60,5 +60,5 @@ Decisiones:
 - [x] R3 Monedas: lista editable; cobro en moneda del cliente; «llegó en US$» al pagar; caja en US$.
 - [x] R4 Recibos para compartir: PDF, WhatsApp, correo, enlace en línea (token).
 - [x] R5 Administración: pestañas General (antes Todo) + cuadrito Socios · Clientes · Gastos · Socios · Creación de sistema · Resumen; quitar el menú «Caja» aparte, «Cobro, gastos y reparto» y «Gastos del negocio» (queda dentro de Gastos).
-- [ ] R6 Ficha del cliente: Datos de la empresa (con contacto, teléfono, correo) · Programas (planes, mensualidad total, paquete, moneda) · Configuración (claves, correo de lectura) · Estado de cuenta; quitar «Cerrado» si tiene mensualidad.
-- [ ] R7 Pruebas con los números reales (cobrado 1,890; gastos 1,088.20; adelantos 765; reparto 801.80 → 481.08/320.72; libres 22.08/14.72; caja 36.80) y paquete.
+- [x] R6 Ficha del cliente: Datos de la empresa (con contacto, teléfono, correo) · Programas (planes, mensualidad total, paquete, moneda) · Configuración (claves, correo de lectura) · Estado de cuenta; quitar «Cerrado» si tiene mensualidad.
+- [x] R7 Pruebas con los números reales (cobrado 1,890; gastos 1,088.20; adelantos 765; reparto 801.80 → 481.08/320.72; libres 22.08/14.72; caja 36.80) y paquete.

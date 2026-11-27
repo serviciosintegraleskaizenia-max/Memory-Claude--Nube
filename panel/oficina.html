@@ -934,7 +934,7 @@ function vClientes() {
         <td class="n"><b>${cuota ? dinero(Math.round((cuota - gasto) * 100) / 100, e.pago.moneda || 'US$') : '—'}</b></td>
         <td>${e.usuarios ?? '—'}</td>
         <td class="envolver">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ') || '—')}</td>
-        <td><button class="btn-mini" data-datos-cliente="${e.id}">Datos y plan</button> <button class="btn-mini" data-estado-cliente="${e.id}">Estado de cuenta</button> <button class="btn-mini" data-editar-cliente="${e.id}">Editar</button> <button class="btn-mini" data-usuarios-cliente="${e.id}">Usuarios</button></td></tr>`; }).join('')}
+        <td><button class="btn-mini" data-datos-cliente="${e.id}">Datos de la empresa</button> <button class="btn-mini" data-programas-cliente="${e.id}">Programas</button> <button class="btn-mini" data-estado-cliente="${e.id}">Estado de cuenta</button> <button class="btn-mini" data-editar-cliente="${e.id}">Editar</button> <button class="btn-mini" data-usuarios-cliente="${e.id}">Usuarios</button></td></tr>`; }).join('')}
     </tbody></table>` : '<div class="vacio">Todavía no hay clientes. Créalos en <b>Empresas y demo</b>.</div>'}
   </div>
   <div class="caja"><div class="cab"><div><h2>🧾 Cobros</h2><p class="sub">Las mensualidades se crean solas cada mes · al marcar Pagado ✔ se quita el aviso en el panel del cliente</p></div>
@@ -1136,7 +1136,7 @@ function clientesCompactos() {
     const pagado = sumar(cs.filter(p => p.pagado_el));
     const precio = programasDe(e.id).reduce((t, p) => t + (Number(p.precio_total) || 0), 0) || sumar(cs);
     const resta = redondo(precio - pagado), pct = precio ? Math.min(100, Math.round(100 * pagado / precio)) : 0;
-    const estado = !cs.length ? ['Sin cobros', 'chip'] : cs.some(p => !p.pagado_el) ? ['Por cerrar', 'chip ambar'] : ['Cerrado', 'chip verde'];
+    const estado = !cs.length ? (mensualDe(e) > 0 ? ['Activo · mensualidad', 'chip verde'] : ['Sin cobros', 'chip']) : cs.some(p => !p.pagado_el) ? ['Por cerrar', 'chip ambar'] : (mensualDe(e) > 0 ? ['Activo · mensualidad', 'chip verde'] : ['Cerrado', 'chip verde']);
     return { e, resta, pct, estado };
   });
   const cobradoMes = sumar((D.pagos || []).filter(p => p.pagado_el && String(p.pagado_el).slice(0, 7) === mes && empresas.some(x => x.id === p.empresa_id)));
@@ -2944,8 +2944,8 @@ function formCajaRetiro(k) {
     cerrarModal(); aviso('Retiro anotado con su recibo.'); await ir(vista); abrirRecibo(r.data.recibo_id);
   };
 }
-function formCajaPlan(id) {
-  const pl = (CAJA.planes || []).find(x => x.id === id) || { empresa_id: (CAJA.empresas[0] || {}).id, dia_cobro: 5, activo: true };
+function formCajaPlan(id, empresaId) {
+  const pl = (CAJA.planes || []).find(x => x.id === id) || { empresa_id: empresaId || (CAJA.empresas[0] || {}).id, dia_cobro: 5, activo: true };
   const emp = id => CAJA.empresas.find(x => x.id === Number(id)) || {};
   const gastosSin = CAJA.movimientos.filter(m => m.tipo.startsWith('gasto') && !m.plan_id);
   const lista = (titulo, filas) => filas.length ? `<div class="campo"><label>${titulo}</label><div style="max-height:150px;overflow:auto;border:1px solid var(--borde);border-radius:8px;padding:6px 8px">${filas.join('')}</div></div>` : '';
@@ -3293,7 +3293,9 @@ function formDatosCliente(e) {
   const paisActual = PAISES[e.pais] ? e.pais : (e.pais ? 'Otro' : 'Perú');
   let metodos = metodosDe(e);
   const pintarMetodos = (lista) => { document.getElementById('fMetodos').innerHTML = lista.map(m => `<label class="chip-check" style="display:inline-flex;gap:4px;margin:0 8px 6px 0"><input type="checkbox" value="${esc(m)}" ${metodos.includes(m) ? 'checked' : ''}> ${esc(m)}</label>`).join(''); };
-  abrirModal(`<h2>Datos y plan de ${esc(e.nombre)}</h2>
+  abrirModal(`<h2>Datos de la empresa · ${esc(e.nombre)}</h2>
+    <div class="fila2">${campo('fContD', 'Persona de contacto', `<input id="fContD" value="${esc(e.contacto || '')}" placeholder="Ej.: Juan Pérez (gerente)">`)}${campo('fTelD', 'Teléfono / WhatsApp', `<input id="fTelD" value="${esc(e.telefono || '')}" placeholder="+1 809…">`)}</div>
+    ${campo('fMailD', 'Correo de contacto', `<input id="fMailD" value="${esc(e.correo_contacto || '')}">`)}
     <div class="fila2">${campo('fPais', 'País', `<select id="fPais">${Object.keys(PAISES).map(x => `<option ${x === paisActual ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`)}${campo('fDoc', 'Documento fiscal (obligatorio)', `<input id="fDoc" value="${esc(e.documento || '')}" placeholder="${esc(PAISES[paisActual])}">`, 'Según el país: RUC, RNC, cédula, CUIT, RFC, NIT o RUT.')}</div>
     ${campo('fAdminC', 'Administración a la que pertenece', `<select id="fAdminC">${permitidasAdmin().map(c => `<option value="${c}" ${c === (e.administracion || 'kaizen') ? 'selected' : ''}>${esc(admin(c).nombre)}</option>`).join('')}</select>`)}
     <div class="fila2">${campo('fNomO', 'Nombre que se muestra en Oficina', `<input id="fNomO" value="${esc(e.nombre_oficina || '')}" placeholder="${esc(e.nombre)}">`, 'Así sale en el listado y en la ficha.')}${campo('fRazon', 'Razón social (sale en los recibos)', `<input id="fRazon" value="${esc(e.razon_social || '')}">`)}</div>
@@ -3331,7 +3333,7 @@ function formDatosCliente(e) {
       if (arch.size > 150 * 1024) { document.getElementById('errForm').textContent = 'El logo pesa más de 150 KB. Usa una imagen más pequeña.'; return; }
       logo = await leerComoDataURL(arch);
     }
-    const r = await api('/api/oficina/cliente/datos', { empresa_id: e.id, documento: v('fDoc'), pais: v('fPais'), administracion: v('fAdminC'), direccion: v('fDir'), web: v('fWeb'), redes: v('fRedes'), metodos_pago: [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value), logo, nombre_oficina: v('fNomO'), razon_social: v('fRazon') });
+    const r = await api('/api/oficina/cliente/datos', { empresa_id: e.id, contacto: v('fContD'), telefono: v('fTelD'), correo_contacto: v('fMailD'), documento: v('fDoc'), pais: v('fPais'), administracion: v('fAdminC'), direccion: v('fDir'), web: v('fWeb'), redes: v('fRedes'), metodos_pago: [...document.querySelectorAll('#fMetodos input:checked')].map(i => i.value), logo, nombre_oficina: v('fNomO'), razon_social: v('fRazon') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     const tipo = (document.querySelector('input[name="fPlan"]:checked') || {}).value;
     if (!e.plan_cobro && tipo) {
@@ -3653,6 +3655,8 @@ function vAdministracion() {
 // ---------- Clientes (rediseño): listado, ficha y estado de cuenta expandible ----------
 let estadoAbierto = false;   // el estado de cuenta de la ficha está expandido
 const nombreCliente = e => (e.nombre_oficina || e.nombre || '');
+// Mensualidad de un cliente: la suma de sus programas activos (Programas).
+const mensualDe = e => (CAJA && CAJA.planes ? CAJA.planes.filter(pl => pl.empresa_id === e.id && pl.activo).reduce((t, pl) => t + pl.mensualidad, 0) : 0);
 function programasDe(empresaId) {
   return P && P.proyectos ? P.proyectos.filter(p => p.empresa_id === empresaId) : [];
 }
@@ -3665,10 +3669,10 @@ function vClientesAdm() {
     const cs = cobrosDe(e), precio = programasDe(e.id).reduce((t, p) => t + (Number(p.precio_total) || 0), 0) || sumar(cs);
     const pagado = sumar(cs.filter(p => p.pagado_el));
     const pendientes = cs.filter(p => !p.pagado_el).sort((x, y) => String(x.vence).localeCompare(String(y.vence)));
-    const cuota = programasDe(e.id).reduce((t, p) => t + (Number(p.cuota_mensual) || 0) + (p.extras || []).reduce((x, y) => x + (Number(y.monto) || 0), 0), 0);
+    const cuota = mensualDe(e) || programasDe(e.id).reduce((t, p) => t + (Number(p.cuota_mensual) || 0) + (p.extras || []).reduce((x, y) => x + (Number(y.monto) || 0), 0), 0);
     const pct = precio ? Math.min(100, Math.round(100 * pagado / precio)) : 0;
     const resta = Math.round((precio - pagado) * 100) / 100;
-    const estado = !cs.length ? ['Sin cobros', 'chip'] : pendientes.length ? ['Por cerrar', 'chip ambar'] : ['Cerrado', 'chip verde'];
+    const estado = !cs.length ? (mensualDe(e) > 0 ? ['Activo · mensualidad', 'chip verde'] : ['Sin cobros', 'chip']) : pendientes.length ? ['Por cerrar', 'chip ambar'] : (mensualDe(e) > 0 ? ['Activo · mensualidad', 'chip verde'] : ['Cerrado', 'chip verde']);
     return { cs, precio, pagado, pendientes, cuota, pct, resta, estado, proximo: pendientes[0] ? pendientes[0].vence : '' };
   };
   const cobradoMes = sumar((D.pagos || []).filter(p => p.pagado_el && String(p.pagado_el).slice(0, 7) === mes && empresas.some(e => e.id === p.empresa_id)));
@@ -3700,7 +3704,7 @@ function vClientesAdm() {
         <div><div style="font-size:12px;opacity:.85">${esc(a.nombre)}${p0.fecha_inicio ? ' · cliente desde ' + fechaCorta(p0.fecha_inicio) : ''}</div>
           <div style="font-size:22px;font-weight:700">${esc(nombreCliente(sel))}</div>
           <div style="font-size:12px;margin-top:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px"><span>${esc(sel.documento || 'Sin documento')}</span><span>${esc(sel.direccion || '—')}</span><span>${esc(sel.web || '—')}</span></div></div>
-        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn-mini" data-datos-cliente="${sel.id}">Datos y plan</button><button class="btn-mini" data-editar-cliente="${sel.id}">Editar</button><button class="btn-mini" data-toggle-estado="1">${estadoAbierto ? '▴' : '▾'} Estado de cuenta</button></div>
+        <div style="display:flex;flex-direction:column;gap:6px"><button class="btn-mini" data-datos-cliente="${sel.id}">Datos de la empresa</button><button class="btn-mini" data-programas-cliente="${sel.id}">Programas</button><button class="btn-mini" data-editar-cliente="${sel.id}">Configuración</button><button class="btn-mini" data-toggle-estado="1">${estadoAbierto ? '▴' : '▾'} Estado de cuenta</button></div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:12px 18px 0">
         <div class="in"><small style="color:var(--suave)">Plan</small><br><b>${esc(p0.nombre || 'Sin programa')}</b></div>
@@ -3710,7 +3714,7 @@ function vClientesAdm() {
       ${estadoAbierto ? `<div class="exp" style="margin:12px 18px 0;border:2px solid #0b5cad;border-radius:14px;padding:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:16px">Estado de cuenta</b><button class="btn-mini" data-imprimir-estado="${sel.id}">Imprimir hoja A4</button></div>
         ${r.cs.length ? `<table><thead><tr><th>Concepto</th><th>Fecha de pago</th><th>Método · referencia</th><th class="n">Monto</th><th>Estado</th><th></th></tr></thead><tbody>${cuadro}</tbody></table>
-        <div style="display:flex;justify-content:flex-end;gap:24px;margin-top:10px;font-size:13px"><span>Cobrado <b>${dinero(r.pagado)}</b></span><span>Saldo <b style="color:#8a5a00">${dinero(r.resta)}</b></span></div>` : '<div class="vacio">Sin cobros todavía. Crea el plan de cobro en «Datos y plan».</div>'}
+        <div style="display:flex;justify-content:flex-end;gap:24px;margin-top:10px;font-size:13px"><span>Cobrado <b>${dinero(r.pagado)}</b></span><span>Saldo <b style="color:#8a5a00">${dinero(r.resta)}</b></span></div>` : '<div class="vacio">Sin cobros todavía. Crea sus programas en «Programas».</div>'}
       </div>` : ''}
       ${(() => { const marc = r.pendientes.filter(p => selCobros.has(p.id)); return marc.length ? `<div style="margin:12px 18px 0;background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px"><div><small style="opacity:.9">${marc.length} cobro(s) marcados · se pagan juntos</small><br><b>${dinero(sumar(marc))}</b></div><button class="btn" data-pagar-varios="1" style="background:#fff;color:#0b5cad;font-weight:700">Registrar pago y generar recibos</button></div>` : (r.pendientes.length ? `<div style="margin:12px 18px 0;font-size:12px;color:var(--suave)">Marca los cobros pendientes con la casilla para pagarlos juntos.</div>` : ''); })()}
     </div>`;
@@ -3892,15 +3896,28 @@ function formEnlace(x = {}) {
   document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/enlaces', { id: x.id, nombre: v('fNom'), icono: v('fIco'), url: v('fUrl'), grupo: v('fGru'), nota: v('fNota'), vigilar: document.getElementById('fVig').checked }, 'Enlace guardado.');
   conBorrar('enlaces', x.id, '¿Borrar este enlace?');
 }
+function formProgramasCliente(e) {
+  if (!CAJA || CAJA.administracion !== (e.administracion || 'kaizen')) { cajaAdm = e.administracion || 'kaizen'; return cargarCaja().then(() => formProgramasCliente(e)); }
+  const planes = (CAJA.planes || []).filter(pl => pl.empresa_id === e.id);
+  const total = planes.filter(pl => pl.activo).reduce((t, pl) => t + pl.mensualidad, 0);
+  const pago = e.pago || {};
+  abrirModal(`<h2>Programas · ${esc(e.nombre)}</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-bottom:10px">${planes.map(pl => `<div class="caja" data-caja-plan="${pl.id}" style="cursor:pointer;padding:8px 10px;margin:0"><b>${esc(pl.nombre)}</b><div class="ay" style="font-size:12px">Setup ${dinero(pl.precio_creacion, pl.moneda)} · cobrado ${dinero(pl.cobrado)}<br>Mensualidad <b>${dinero(pl.mensualidad, pl.moneda)}</b> · día ${pl.dia_cobro}${pl.activo ? '' : ' · inactivo'}<br>costó ${dinero(pl.creacion + pl.mensuales)} · deja ${dinero(pl.deja)}</div></div>`).join('')}
+      <div class="caja" data-caja-plan-nuevo="${e.id}" style="cursor:pointer;padding:8px 10px;margin:0;border-style:dashed;display:grid;place-items:center;color:var(--suave)">+ Programa</div></div>
+    <p><b>Mensualidad total: ${dinero(total, (planes[0] || {}).moneda || 'US$')}</b> <span class="ay">· se cobra solo cuando la paguen con voucher; mientras tanto queda en «Por cobrar».</span></p>
+    <div class="campo chk"><label><input type="checkbox" id="fRecordar" ${pago.activo ? 'checked' : ''}> Recordar el pago en su panel (aviso antes del día de cobro)</label></div>
+    ${campo('fDiaR', 'Día del recordatorio (1 a 28)', `<input id="fDiaR" type="number" min="1" max="28" value="${pago.dia || (planes[0] || {}).dia_cobro || 5}">`)}
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api(`/api/central/empresas/${e.id}/pago`, { ...pago, activo: document.getElementById('fRecordar').checked, monto: String(total), dia: Math.min(28, Number(v('fDiaR')) || 5), moneda: (planes[0] || {}).moneda || 'US$', diasAntes: pago.diasAntes ?? 3 });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    cerrarModal(); aviso('Programas guardados.'); ir(vista);
+  };
+}
 function formCliente(e) {
   const p = e.pago || {};
-  abrirModal(`<h2>${esc(e.nombre)}</h2>
-    ${campo('fPlan', 'Plan', `<input id="fPlan" value="${esc(e.plan || '')}" placeholder="Ej.: Completo, Básico">`)}
-    <div class="campo chk"><label><input type="checkbox" id="fCobrar" ${p.activo ? 'checked' : ''}> Cobrar una mensualidad (con recordatorio en su panel)</label></div>
-    <div class="fila2">${campo('fCuota', 'Cuota mensual', `<input id="fCuota" type="number" step="0.01" min="0" value="${esc(String(p.monto || '').replace(/[^0-9.]/g, ''))}" placeholder="150">`)}${campo('fDia', 'Día de cobro (1 a 28)', `<input id="fDia" type="number" min="1" max="28" value="${p.dia || 5}">`)}</div>
-    ${campo('fMone', 'Moneda', `<select id="fMone">${opcionesMoneda(p.moneda || 'US$')}</select>`, 'El recordatorio en su panel, los días de aviso y los textos se ajustan en Empresas y demo → Cobro y recordatorio.')}
-    <div class="fila2">${campo('fCont', 'Persona de contacto', `<input id="fCont" value="${esc(e.contacto || '')}" placeholder="Ej.: Juan Pérez (gerente)">`)}${campo('fTel', 'Teléfono / WhatsApp', `<input id="fTel" value="${esc(e.telefono || '')}" placeholder="+1 809 000 0000">`)}</div>
-    ${campo('fMail', 'Correo de contacto', `<input id="fMail" value="${esc(e.correo_contacto || '')}">`)}
+  abrirModal(`<h2>Configuración · ${esc(e.nombre)}</h2>
+    <p class="sub">Claves y conexiones de la empresa. El contacto está en «Datos de la empresa» y las mensualidades en «Programas».</p>
     ${campo('fIa', 'Clave de OpenRouter de este cliente (para medir su gasto de IA)', `<input id="fIa" type="password" autocomplete="off" placeholder="${e.tieneClaveIA ? '•••• guardada · déjalo vacío para no cambiarla' : 'sk-or-v1-…'}">`,
       e.externa ? 'Es la misma que está en su config.js. Créala en openrouter.ai → Keys (una por cliente) y ponle un límite.' : (e.tieneClaveIA && !e.claveIAPropia ? 'Se está usando la clave de su config.js. Solo pon una aquí si quieres medir con otra.' : 'Crea una en openrouter.ai → Keys (una por cliente) y ponle un límite.'))}
     ${e.claveIAPropia ? '<div class="campo chk"><label><input type="checkbox" id="fBorrarIa"> Quitar la clave guardada aquí</label></div>' : ''}
@@ -3912,13 +3929,8 @@ function formCliente(e) {
     ${campo('fNotas', 'Notas', `<textarea id="fNotas" rows="3">${esc(e.notas || '')}</textarea>`)}
     ${pieModal(false)}`);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/empresa/' + e.id, { plan: v('fPlan'), contacto: v('fCont'), telefono: v('fTel'), correo_contacto: v('fMail'), notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked, n8n_clave: v('fN8n'), borrarN8n: !!(document.getElementById('fBorrarN8n') || {}).checked, correo_usuario: v('fCorreoUsuario'), correo_host: v('fCorreoHost'), correo_clave: v('fCorreoClave'), borrarCorreo: !!(document.getElementById('fBorrarCorreo') || {}).checked });
+    const r = await api('/api/oficina/empresa/' + e.id, { plan: e.plan || '', contacto: e.contacto || '', telefono: e.telefono || '', correo_contacto: e.correo_contacto || '', notas: v('fNotas'), ia_clave: v('fIa'), borrarClave: !!(document.getElementById('fBorrarIa') || {}).checked, n8n_clave: v('fN8n'), borrarN8n: !!(document.getElementById('fBorrarN8n') || {}).checked, correo_usuario: v('fCorreoUsuario'), correo_host: v('fCorreoHost'), correo_clave: v('fCorreoClave'), borrarCorreo: !!(document.getElementById('fBorrarCorreo') || {}).checked });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
-    const cambioCobro = !!p.activo !== document.getElementById('fCobrar').checked || String(p.monto || '') !== v('fCuota') || Number(p.dia || 5) !== Number(v('fDia')) || (p.moneda || 'US$') !== v('fMone');
-    if (cambioCobro) {
-      const r2 = await api(`/api/central/empresas/${e.id}/pago`, { ...p, activo: document.getElementById('fCobrar').checked, monto: v('fCuota'), dia: Number(v('fDia')), moneda: v('fMone'), diasAntes: p.diasAntes ?? 3 });
-      if (!r2.ok) { document.getElementById('errForm').textContent = r2.data.error || 'No se pudo guardar la cuota.'; return; }
-    }
     cerrarModal(); aviso(r.data.aviso || 'Cliente guardado.', !r.data.aviso); ir(vista);
   };
 }
@@ -3926,7 +3938,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-caja-cubrir],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-programas-cliente],[data-caja-plan-nuevo],[data-caja-cubrir],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer && t.dataset.cajaPlan === undefined) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
@@ -3958,6 +3970,8 @@ document.addEventListener('click', async ev => {
   if (d.editarEnlace) { const x = buscar(D.enlaces, d.editarEnlace); return x && formEnlace(x); }
   if (d.editarCliente) { const e = buscar(D.empresas, d.editarCliente); return e && formCliente(e); }
   if (d.datosCliente) { const e = buscar(D.empresas, d.datosCliente); return e && formDatosCliente(e); }
+  if (d.programasCliente) { const e = buscar(D.empresas, d.programasCliente); return e && formProgramasCliente(e); }
+  if (d.cajaPlanNuevo) { cerrarModal(); return formCajaPlan(0, Number(d.cajaPlanNuevo)); }
   if (d.estadoCliente) { const e = buscar(D.empresas, d.estadoCliente); return e && formEstado(e); }
   if (d.pagarCobro) return formPagar(d.pagarCobro);
   if (d.recibo) return abrirRecibo(d.recibo);

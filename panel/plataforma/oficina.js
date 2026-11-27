@@ -402,6 +402,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS plan_id INTEGER');
       await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS lineas JSONB NOT NULL DEFAULT '[]'::jsonb");
       await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibido_usd NUMERIC(12,2)');
+      await client.query('ALTER TABLE oficina_planes ADD COLUMN IF NOT EXISTS proyecto_id INTEGER');
+      await client.query('CREATE UNIQUE INDEX IF NOT EXISTS oficina_planes_proyecto ON oficina_planes (proyecto_id) WHERE proyecto_id IS NOT NULL');
       if ((await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'caja_v1'")).rowCount) return;
       // Creación de sistema y Gastos del negocio se mantienen al día solos (sincronizarFuentes). Aquí solo los retiros viejos con recibo.
       const retiros = (await client.query(`SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS f FROM oficina_recibos r WHERE r.tipo = 'socio' ORDER BY r.fecha, r.id`)).rows;
@@ -440,8 +442,20 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // si se agrega, cambia o borra allá, aquí también. Los adelantos de ganancia son retiros del socio con su recibo.
   async function sincronizarFuentes(adm) {
     const admRow = (await client.query('SELECT socio_nombre FROM oficina_administraciones WHERE clave = $1', [adm])).rows[0] || {};
+    // Cada sistema de Creación de sistema es un programa del cliente (precio, mensualidad y día), con sus cobros y gastos.
+    const sistemas = (await client.query(`SELECT id, nombre, empresa_id, precio_total::float AS precio, cuota_mensual::float AS cuota, dia_cobro FROM oficina_proyectos WHERE administracion = $1 AND empresa_id IS NOT NULL`, [adm]).catch(() => ({ rows: [] }))).rows;
+    const planDe = new Map();
+    for (const sis of sistemas) {
+      const ya = (await client.query('SELECT id FROM oficina_planes WHERE proyecto_id = $1', [sis.id])).rows[0];
+      const dia = Math.min(31, Math.max(1, Number(sis.dia_cobro) || 5));
+      const id = ya ? ya.id : (await client.query('INSERT INTO oficina_planes (empresa_id, nombre, precio_creacion, mensualidad, dia_cobro, proyecto_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        [sis.empresa_id, sis.nombre, sis.precio || 0, sis.cuota || 0, dia, sis.id])).rows[0].id;
+      if (ya) await client.query('UPDATE oficina_planes SET nombre = $2, precio_creacion = $3, mensualidad = $4, dia_cobro = $5, empresa_id = $6 WHERE id = $1', [id, sis.nombre, sis.precio || 0, sis.cuota || 0, dia, sis.empresa_id]);
+      planDe.set(sis.id, id);
+      await client.query('UPDATE oficina_pagos SET plan_id = $1 WHERE proyecto_id = $2 AND plan_id IS NULL', [id, sis.id]).catch(() => {});
+    }
     const fuentes = new Map();
-    const creacion = (await client.query(`SELECT g.id, g.concepto, g.categoria, g.monto::float AS monto, g.para_socio, TO_CHAR(COALESCE(g.fecha, p.creado::date), 'YYYY-MM-DD') AS f, p.socios, p.nombre AS sistema
+    const creacion = (await client.query(`SELECT g.id, g.proyecto_id, g.concepto, g.categoria, g.monto::float AS monto, g.para_socio, TO_CHAR(COALESCE(g.fecha, p.creado::date), 'YYYY-MM-DD') AS f, p.socios, p.nombre AS sistema
       FROM oficina_proyecto_gastos g JOIN oficina_proyectos p ON p.id = g.proyecto_id WHERE p.administracion = $1`, [adm]).catch(() => ({ rows: [] }))).rows;
     for (const g of creacion) {
       if (!(g.monto > 0)) continue;
@@ -450,7 +464,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const quien = nombre && admRow.socio_nombre && nombreN(nombre) === nombreN(admRow.socio_nombre) ? 'socio' : 'dueno';
         fuentes.set('creacion:' + g.id, { origen: 'creacion', id: g.id, tipo: 'retiro', socio: quien, fecha: g.f, concepto: `${g.concepto}${nombre ? ' · ' + nombre : ''}`, monto: g.monto });
       } else {
-        fuentes.set('creacion:' + g.id, { origen: 'creacion', id: g.id, tipo: 'gasto_creacion', socio: '', fecha: g.f, concepto: `${g.concepto} · ${g.sistema}`, monto: g.monto });
+        fuentes.set('creacion:' + g.id, { origen: 'creacion', id: g.id, tipo: 'gasto_creacion', socio: '', fecha: g.f, concepto: `${g.concepto} · ${g.sistema}`, monto: g.monto, plan: planDe.get(g.proyecto_id) || null });
       }
     }
     // Gastos del negocio ya pagados (y los de una sola vez con su fecha). Los de «plataforma» se reparten por el % de quién lo paga.
@@ -470,7 +484,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
       if (parte > 0) fuentes.set(`negocio:${g.f}:${g.id}`, { origen: 'negocio:' + g.f, id: g.id, tipo: 'gasto_negocio', socio: '', fecha: g.f, concepto: g.nombre + (g.administracion === 'plataforma' ? ' (parte de la plataforma)' : ''), monto: parte });
     }
-    const actuales = (await client.query("SELECT id, origen, origen_id, tipo, socio, monto::float AS monto, concepto, TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha, recibo_id, detalle FROM caja_movimientos WHERE administracion = $1 AND origen IS NOT NULL AND (origen = 'creacion' OR origen LIKE 'negocio:%')", [adm])).rows;
+    const actuales = (await client.query("SELECT id, origen, origen_id, tipo, socio, monto::float AS monto, concepto, TO_CHAR(fecha, 'YYYY-MM-DD') AS fecha, recibo_id, detalle, plan_id FROM caja_movimientos WHERE administracion = $1 AND origen IS NOT NULL AND (origen = 'creacion' OR origen LIKE 'negocio:%')", [adm])).rows;
     const vistos = new Set();
     for (const a of actuales) {
       const k = a.origen === 'creacion' ? 'creacion:' + a.origen_id : `negocio:${a.origen.slice(8)}:${a.origen_id}`;
@@ -483,14 +497,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       vistos.add(k);
       // Si lo reclasificaste en Gastos (ej. de creación a mensual), se respeta tu tipo.
       const tipo = (a.detalle || {}).tipo_manual && f.tipo !== 'retiro' && a.tipo !== 'retiro' ? a.tipo : f.tipo;
-      if (a.monto !== f.monto || a.fecha !== f.fecha || a.concepto !== f.concepto || a.tipo !== tipo || a.socio !== f.socio) {
-        await client.query('UPDATE caja_movimientos SET monto = $2, fecha = $3, concepto = $4, tipo = $5, socio = $6 WHERE id = $1', [a.id, f.monto, f.fecha, f.concepto, tipo, f.socio]);
+      // El programa del gasto viene de su sistema, salvo que lo hayas cargado a mano a otro.
+      const plan = (a.detalle || {}).plan_manual ? a.plan_id : (f.plan || null);
+      if (a.monto !== f.monto || a.fecha !== f.fecha || a.concepto !== f.concepto || a.tipo !== tipo || a.socio !== f.socio || a.plan_id !== plan) {
+        await client.query('UPDATE caja_movimientos SET monto = $2, fecha = $3, concepto = $4, tipo = $5, socio = $6, plan_id = $7 WHERE id = $1', [a.id, f.monto, f.fecha, f.concepto, tipo, f.socio, plan]);
       }
     }
     for (const [k, f] of fuentes) {
       if (vistos.has(k)) continue;
-      await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, origen, origen_id, detalle) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT DO NOTHING`, [adm, f.fecha, f.tipo, f.concepto, f.monto, f.socio, f.origen, f.id, { origen: f.origen.split(':')[0] }]);
+      await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, socio, origen, origen_id, detalle, plan_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT DO NOTHING`, [adm, f.fecha, f.tipo, f.concepto, f.monto, f.socio, f.origen, f.id, { origen: f.origen.split(':')[0] }, f.plan || null]);
     }
     // Cada adelanto de ganancia (retiro) lleva su recibo de socio.
     const sinRecibo = (await client.query("SELECT id, socio, monto::float AS monto, concepto, TO_CHAR(fecha, 'YYYY-MM-DD') AS f FROM caja_movimientos WHERE administracion = $1 AND tipo = 'retiro' AND recibo_id IS NULL ORDER BY fecha, id", [adm])).rows;
@@ -1086,6 +1102,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (logo && logo.length > 200000) return json(res, 400, { error: 'El logo pesa demasiado. Usa una imagen de menos de 150 KB.' });
         if (logo !== null) await client.query('UPDATE empresas SET logo = $2 WHERE id = $1', [e.id, logo]);
         const metodos = Array.isArray(f.metodos_pago) ? f.metodos_pago.map(m => texto(m, 40)).filter(Boolean).slice(0, 20) : [];
+        // Contacto, teléfono y correo viven en «Datos de la empresa» (solo se cambian si vienen en el formulario).
+        if (f.contacto !== undefined) await client.query('UPDATE empresas SET contacto = $2, telefono = $3, correo_contacto = $4 WHERE id = $1', [e.id, texto(f.contacto, 200), texto(f.telefono, 60), texto(f.correo_contacto, 200)]);
         await client.query('UPDATE empresas SET documento=$2, pais=$3, direccion=$4, web=$5, redes=$6, metodos_pago=$7, administracion=$8, nombre_oficina=COALESCE($9, nombre_oficina), razon_social=COALESCE($10, razon_social) WHERE id=$1',
           [e.id, doc, texto(f.pais, 60), texto(f.direccion, 300), texto(f.web, 200), texto(f.redes, 400), JSON.stringify(metodos), admin, f.nombre_oficina === undefined ? null : texto(f.nombre_oficina, 120), f.razon_social === undefined ? null : texto(f.razon_social, 160)]);
         await registrar(u, 'cliente_datos', 'empresa', e.id, '', '', doc);
@@ -1368,7 +1386,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const tipo = ['gasto_creacion', 'gasto_mensual', 'gasto_negocio'].includes(f.tipo) ? f.tipo : m.tipo;
           let plan = f.plan_id === undefined ? m.plan_id : (Number(f.plan_id) || null);
           if (plan && !(await client.query("SELECT 1 FROM oficina_planes pl JOIN empresas e ON e.id = pl.empresa_id WHERE pl.id = $1 AND COALESCE(e.administracion, 'kaizen') = $2", [plan, adm])).rowCount) plan = null;
-          await client.query("UPDATE caja_movimientos SET tipo = $2, plan_id = $3, detalle = detalle || $4::jsonb WHERE id = $1", [m.id, tipo, plan, JSON.stringify(tipo !== m.tipo ? { tipo_manual: true } : {})]);
+          await client.query("UPDATE caja_movimientos SET tipo = $2, plan_id = $3, detalle = detalle || $4::jsonb WHERE id = $1", [m.id, tipo, plan, JSON.stringify({ ...(tipo !== m.tipo ? { tipo_manual: true } : {}), ...(plan !== m.plan_id ? { plan_manual: true } : {}) })]);
           await registrar(u, 'caja_clasificar', 'caja', m.id, m.tipo, tipo, m.concepto);
           return json(res, 200, { ok: true });
         }
