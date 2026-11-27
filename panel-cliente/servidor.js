@@ -150,7 +150,7 @@ ruta('GET', '/api/yo', async (req, res) => {
   await pool.query('UPDATE cuentas SET visto = now() WHERE id = $1', [c.id]);
   const a = await ajustesDe(c.id);
   const n = (await pool.query('SELECT count(*)::int AS n FROM notificaciones WHERE cuenta_id = $1 AND leida = FALSE', [c.id])).rows[0].n;
-  const recibos = (await pool.query(`SELECT id, periodo, monto_centavos, vence, mensaje, enlace_pago FROM recibos
+  const recibos = (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, mensaje, enlace_pago FROM recibos
     WHERE cuenta_id = $1 AND estado <> 'Pagado' ORDER BY id DESC LIMIT 3`, [c.id])).rows;
   const anuncios = (await pool.query('SELECT id, titulo, texto, creado FROM anuncios WHERE cuenta_id = $1 AND cerrado IS NULL ORDER BY id DESC LIMIT 3', [c.id])).rows;
   json(res, 200, {
@@ -401,7 +401,7 @@ function enviarArchivo(res, m) {
 // Recibos y avisos
 ruta('GET', '/api/recibos', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;
-  json(res, 200, { recibos: (await pool.query('SELECT id, periodo, monto_centavos, vence, estado, mensaje, enlace_pago, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC', [c.id])).rows });
+  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC`, [c.id])).rows });
 });
 ruta('GET', '/api/notificaciones', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;

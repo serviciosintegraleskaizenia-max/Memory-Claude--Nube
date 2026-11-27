@@ -109,6 +109,14 @@
   .vista-logo img { width:100%; height:100%; object-fit:contain; }
   .vista-banner { width:100%; height:110px; border-radius:12px; border:1px dashed var(--borde); overflow:hidden; background:#fff; display:grid; place-items:center; color:var(--suave); font-size:13px; }
   .vista-banner img { width:100%; height:100%; object-fit:cover; }
+  .franja { border-radius:10px; padding:10px 14px; margin-bottom:10px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:14px; border:1px solid; border-left-width:6px; }
+  .franja .btn { margin-left:auto; text-decoration:none; }
+  .franja-pago { background:#fffbeb; color:#78350f; border-color:#fcd34d; border-left-color:#f59e0b; }
+  .franja-anuncio { background:#ede9fe; color:#4c1d95; border-color:#c4b5fd; }
+  .franja-pausa { background:#f1f5f9; color:#334155; border-color:#cbd5e1; }
+  .base-ia { background:#f8fafc; border:1px dashed var(--borde); border-radius:10px; padding:10px 12px; font-size:13px; white-space:pre-wrap; color:#334155; margin-bottom:12px; }
+  .adjunto { display:inline-block; margin-top:6px; font-size:13px; text-decoration:underline; color:inherit; }
+  a.btn { text-decoration:none; display:inline-block; }
   .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; max-width:90vw; text-align:center; }
   .toast.on { opacity:1; }
   /* Inicio de sesión */
@@ -177,6 +185,7 @@
         </div>
       </div>
     </header>
+    <div id="franjas"></div>
 
     <!-- INICIO -->
     <section class="vista on" id="v-inicio">
@@ -189,10 +198,7 @@
       </div>
       <div class="bloque">
         <h3>Canales</h3>
-        <div class="fila"><span>Chat de la página web</span><span class="estado e-ambar">Pendiente de conexión</span></div>
-        <div class="fila"><span>WhatsApp</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
-        <div class="fila"><span>Facebook e Instagram</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
-        <div class="fila"><span>Correo</span><span class="estado e-gris">Sin conectar</span></div>
+        <div id="canalesInicio"></div>
       </div>
     </section>
 
@@ -200,11 +206,7 @@
     <section class="vista" id="v-redes">
       <div class="bloque">
         <h3>Redes sociales y mensajes</h3>
-        <div class="fila"><div><b>WhatsApp</b><br><small>Mensajes de tus clientes. El número sigue en tu celular.</small></div><span class="estado e-ambar">En revisión de Meta</span></div>
-        <div class="fila"><div><b>Facebook (Messenger)</b><br><small>Mensajes de tu página.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
-        <div class="fila"><div><b>Instagram (mensajes directos)</b><br><small>Mensajes de tu cuenta profesional.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
-        <div class="fila"><div><b>Cuenta publicitaria de Meta</b><br><small>Ver tus anuncios y su gasto.</small></div><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
-        <div class="fila"><div><b>Chat de la página web</b><br><small>Cuadro de chat en tu sitio. Responde la IA.</small></div><span class="estado e-ambar">Pendiente de conexión</span></div>
+        <div id="listaRedes"></div>
       </div>
       <div class="aviso">Cada canal aparece con su estado real. Los mensajes de WhatsApp, Facebook e Instagram solo llegan cuando Meta apruebe la aplicación y tu empresa esté verificada.</div>
     </section>
@@ -240,7 +242,14 @@
           <h3>Plantillas de WhatsApp</h3>
           <div class="aviso" style="margin-top:0;margin-bottom:8px">WhatsApp revisa cada plantilla antes de usarla para escribir a un cliente que no te ha escrito en las últimas 24 horas. Se envía a Meta cuando el canal esté aprobado.</div>
           <div id="listaPlantillas"></div>
-          <button class="btn" style="margin-top:12px" id="btnNuevaPlantilla">+ Nueva plantilla</button>
+          <h3 style="margin-top:18px">Crear una plantilla</h3>
+          <div class="dos">
+            <div class="campo"><label for="plNombre">Nombre (minúsculas, números y _)</label><input id="plNombre" placeholder="promo_diciembre"></div>
+            <div class="campo"><label for="plTipo">Tipo</label><select id="plTipo"><option>Marketing</option><option>Utilidad</option></select></div>
+          </div>
+          <div class="campo"><label for="plTexto">Texto (usa {{1}} para el nombre del cliente)</label><textarea id="plTexto" style="min-height:110px"></textarea></div>
+          <button class="btn primario" id="btnCrearPlantilla">Enviar a Kaizen para aprobar</button>
+          <div class="aviso">Kaizen la revisa antes de enviarla a Meta. Te avisamos cuando la apruebe o si hay que corregir algo.</div>
         </div>
       </div>
     </section>
@@ -260,6 +269,7 @@
           </div>
           <div class="mensajes" id="mensajesKaizen"></div>
           <div class="redactar">
+            <label class="btn" style="margin:0;cursor:pointer" title="Adjuntar documento">📎<input type="file" id="adjuntoKaizen" hidden></label>
             <input id="entradaKaizen" placeholder="Escribe a Kaizen">
             <button class="btn primario" id="btnEnviarKaizen">Enviar</button>
           </div>
@@ -291,7 +301,9 @@
       <div class="panel-t on" id="t-prompt">
         <div class="bloque">
           <h3>Cómo responde tu asistente</h3>
-          <div class="campo"><label for="prompt">Instrucciones</label><textarea id="prompt"></textarea></div>
+          <label>Base que puso Kaizen (no se borra)</label>
+          <div class="base-ia" id="baseIA">Kaizen todavía no cargó la base.</div>
+          <div class="campo"><label for="prompt">Tus ajustes (se suman a la base)</label><textarea id="prompt"></textarea></div>
           <div class="campo"><label for="bienvenida">Mensaje de bienvenida</label><input id="bienvenida"></div>
           <button class="btn primario" id="btnGuardarPrompt">Guardar cambios</button>
           <div class="aviso" id="avisoPrompt">Cada cambio queda en el historial. Puedes volver a una versión anterior.</div>
@@ -304,6 +316,7 @@
             <h3>Encender la IA para probar</h3>
             <div class="interruptor" id="interruptorPrueba"><span id="textoPrueba">IA de prueba apagada</span><button id="btnPrueba">Encender</button></div>
             <div class="aviso">Prueba cómo responde tu asistente antes de dejarlo activo con clientes. Lo que escribas aquí no llega a nadie.</div>
+            <div class="aviso" id="estadoIA"></div>
           </div>
           <div class="bloque">
             <h3>Chat de prueba</h3>
@@ -390,6 +403,7 @@ const $ = id => document.getElementById(id);
 const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2600); }
 function fecha(f) { if (!f) return ''; const d = new Date(f); return isNaN(d) ? String(f) : d.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+function dia(f) { const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : String(f || ''); }
 function soles(c) { return 'US$ ' + (Number(c || 0) / 100).toFixed(2); }
 
 // Llamada a la API. Si la sesión venció, vuelve a la pantalla de entrada.
@@ -515,15 +529,20 @@ $('btnRapida').addEventListener('click', async () => {
 });
 async function cargarPlantillas() {
   const r = await api('GET', '/api/plantillas').catch(() => ({ plantillas: [] }));
-  const clase = e => e === 'Aprobada' ? 'e-verde' : e === 'Rechazada' ? 'e-rojo' : 'e-ambar';
+  const clase = e => /^Aprobada/.test(e) ? 'e-verde' : /^Rechazada/.test(e) ? 'e-rojo' : 'e-ambar';
   $('listaPlantillas').innerHTML = r.plantillas.map(p => `
     <div class="fila" style="display:block">
-      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b>${esc(p.nombre)}</b> <small>· ${esc(p.tipo)}</small></div><span class="estado ${clase(p.estado)}">${esc(p.estado)}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><b>${esc(p.nombre)}</b> <small>· ${esc(p.tipo)}${p.origen === 'cliente' ? ' · creada por ti' : ''}</small></div><span class="estado ${clase(p.estado)}">${esc(p.estado)}</span></div>
       <div class="plantilla">${esc(p.texto)}</div>
       ${p.motivo ? `<div class="aviso" style="color:var(--rojo)">${esc(p.motivo)}</div>` : ''}
     </div>`).join('') || '<div class="aviso">Todavía no hay plantillas.</div>';
 }
-$('btnNuevaPlantilla').addEventListener('click', () => avisar('Las plantillas se envían a Meta para revisión cuando el canal esté aprobado.'));
+$('btnCrearPlantilla').addEventListener('click', async () => {
+  try {
+    await api('POST', '/api/plantillas', { nombre: $('plNombre').value, tipo: $('plTipo').value, texto: $('plTexto').value });
+    $('plNombre').value = ''; $('plTexto').value = ''; cargarPlantillas(); avisar('Enviada a Kaizen. Te avisamos cuando la revise.');
+  } catch (e) { avisar(e.message); }
+});
 
 // ---------- Chat con Kaizen ----------
 async function cargarChat() {
@@ -533,15 +552,23 @@ async function cargarChat() {
   $('presenciaTexto').textContent = kaizenConectado ? 'Kaizen está conectado' : 'Kaizen no está conectado. Te responde en cuanto entre.';
   $('mensajesKaizen').innerHTML = r.mensajes.map(m => {
     const clase = m.de === 'cliente' ? 'cliente' : 'kaizen';
-    return `<div class="m ${clase}"><small>${m.de === 'cliente' ? 'Tú' : 'Kaizen'} · ${esc(fecha(m.creado))}</small>${esc(m.texto)}</div>`;
+    return `<div class="m ${clase}"><small>${m.de === 'cliente' ? 'Tú' : 'Kaizen'} · ${esc(fecha(m.creado))}</small>${esc(m.texto)}${m.archivo_nombre ? `<br><a class="adjunto" href="/api/chat/archivo/${m.id}">📄 ${esc(m.archivo_nombre)}</a>` : ''}</div>`;
   }).join('') || '<div class="aviso">Escribe a Kaizen cuando necesites ayuda.</div>';
   $('mensajesKaizen').scrollTop = $('mensajesKaizen').scrollHeight;
 }
+let adjuntoKaizen = null;
+$('adjuntoKaizen').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 6 * 1024 * 1024) { avisar('El documento es muy grande (máximo 6 MB).'); e.target.value = ''; return; }
+  const lector = new FileReader();
+  lector.onload = () => { adjuntoKaizen = { nombre: f.name, datos: lector.result }; $('entradaKaizen').placeholder = 'Documento listo: ' + f.name + '. Escribe un mensaje y envía.'; avisar('Documento listo: ' + f.name); };
+  lector.readAsDataURL(f);
+});
 async function enviarKaizen() {
-  const t = $('entradaKaizen').value.trim(); if (!t) return;
+  const t = $('entradaKaizen').value.trim(); if (!t && !adjuntoKaizen) return;
   try {
-    await api('POST', '/api/chat', { texto: t });
-    $('entradaKaizen').value = ''; cargarChat();
+    await api('POST', '/api/chat', adjuntoKaizen ? { texto: t, archivo: adjuntoKaizen } : { texto: t });
+    $('entradaKaizen').value = ''; adjuntoKaizen = null; $('adjuntoKaizen').value = ''; $('entradaKaizen').placeholder = 'Escribe a Kaizen'; cargarChat();
     avisar(kaizenConectado ? 'Enviado a Kaizen.' : 'Enviado. Kaizen te responde cuando esté conectado.');
   } catch (e) { avisar(e.message); }
 }
@@ -603,7 +630,8 @@ document.querySelectorAll('#tabsEntreno button').forEach(b => b.addEventListener
 }));
 async function cargarPrompt() {
   const r = await api('GET', '/api/prompt').catch(() => ({ prompt: '', bienvenida: '' }));
-  $('prompt').value = r.prompt; $('bienvenida').value = r.bienvenida;
+  $('prompt').value = r.prompt || ''; $('bienvenida').value = r.bienvenida || '';
+  $('baseIA').textContent = [r.prompt_base, r.bienvenida_base ? 'Bienvenida: ' + r.bienvenida_base : ''].filter(Boolean).join('\n\n') || 'Kaizen todavía no cargó la base.';
 }
 $('btnGuardarPrompt').addEventListener('click', async () => {
   try { await api('POST', '/api/prompt', { prompt: $('prompt').value, bienvenida: $('bienvenida').value }); avisar('Cambios guardados'); cargarVersiones(); }
@@ -643,6 +671,7 @@ function pintarPrueba(respuesta) {
 async function cargarPrueba() {
   const r = await api('POST', '/api/prueba', {}).catch(() => ({ prueba_activa: false }));
   pruebaActiva = !!r.prueba_activa; pintarPrueba();
+  $('estadoIA').textContent = r.ia_conectada ? 'IA conectada por Kaizen: las respuestas son reales.' : 'Kaizen todavía no conecta la IA: verás un aviso en vez de la respuesta.';
 }
 $('btnPrueba').addEventListener('click', async () => {
   try { const r = await api('POST', '/api/prueba', { encender: !pruebaActiva }); pruebaActiva = !!r.prueba_activa; pintarPrueba(); }
@@ -664,7 +693,7 @@ async function cargarRecibos() {
   $('ultimoRecibo').textContent = r.recibos[0] ? soles(r.recibos[0].monto_centavos) : '—';
   $('listaRecibos').innerHTML = r.recibos.map(x => {
     const clase = x.estado === 'Pagado' ? 'e-verde' : 'e-ambar';
-    return `<div class="fila"><div><b>${esc(x.periodo)}</b><br><small>Servicio mensual · ${x.vence ? 'vence ' + esc(String(x.vence).slice(0, 10)) : ''} · ${soles(x.monto_centavos)}</small></div><span class="estado ${clase}">${esc(x.estado)}</span></div>`;
+    return `<div class="fila"><div><b>${esc(x.periodo)}</b><br><small>Servicio mensual · ${x.vence ? 'vence ' + esc(dia(x.vence)) + ' · ' : ''}${soles(x.monto_centavos)}</small>${x.mensaje ? `<div class="aviso">${esc(x.mensaje)}</div>` : ''}</div><div style="display:flex;gap:8px;align-items:center">${x.enlace_pago && x.estado !== 'Pagado' ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : ''}<span class="estado ${clase}">${esc(x.estado)}</span></div></div>`;
   }).join('') || '<div class="aviso">Todavía no hay recibos.</div>';
 }
 
@@ -697,6 +726,36 @@ $('btnClave').addEventListener('click', async () => {
 });
 document.querySelectorAll('[data-ayuda]').forEach(b => b.addEventListener('click', () => avisar('La guía se publica con la versión final.')));
 
+const SECCION_MODULO = { redes: 'redes', conv: 'conversaciones', plantillas: 'plantillas', kaizen: 'chat', crm: 'crm', entreno: 'entreno', pagos: 'pagos', correo: 'correo' };
+const NOMBRE_CANAL = { whatsapp: ['WhatsApp', 'numero', 'Mensajes de tus clientes. El número sigue en tu celular.'], facebook: ['Facebook (Messenger)', 'pagina', 'Mensajes de tu página.'],
+  instagram: ['Instagram (mensajes directos)', 'usuario', 'Mensajes de tu cuenta profesional.'], tiktok: ['TikTok', 'cuenta', 'Mensajes de tu cuenta.'],
+  publicidad: ['Cuenta publicitaria de Meta', 'cuenta', 'Tus anuncios y su gasto.'], web: ['Chat de la página web', 'dominio', 'Cuadro de chat en tu sitio. Responde la IA.'] };
+function claseEstado(t) { return /activ|conectad|listo|aprobad/i.test(t) ? 'e-verde' : /pendiente|revisi|espera/i.test(t) ? 'e-ambar' : 'e-gris'; }
+function pintarRedes(redes) {
+  const filas = Object.entries(NOMBRE_CANAL).map(([k, [nombre, campo, ayuda]]) => {
+    const x = (redes || {})[k] || {};
+    const estado = x.estado || 'Sin conectar';
+    const dato = x[campo] ? ' · ' + esc(x[campo]) : '';
+    return { largo: `<div class="fila"><div><b>${nombre}</b>${dato}<br><small>${ayuda}</small></div><span class="estado ${claseEstado(estado)}">${esc(estado)}</span></div>`,
+      corto: `<div class="fila"><span>${nombre}${dato}</span><span class="estado ${claseEstado(estado)}">${esc(estado)}</span></div>` };
+  });
+  $('listaRedes').innerHTML = filas.map(f => f.largo).join('');
+  $('canalesInicio').innerHTML = filas.map(f => f.corto).join('');
+}
+function pintarEstado(y) {
+  const m = y.modulos || {};
+  document.querySelectorAll('nav button').forEach(b => { const mod = SECCION_MODULO[b.dataset.v]; b.hidden = !!mod && m[mod] === false; });
+  const activa = document.querySelector('nav button.on');
+  if (activa && activa.hidden) mostrar('inicio');
+  pintarRedes(y.redes);
+  const fr = [];
+  if (y.cuenta.estado === 'pausada') fr.push(`<div class="franja franja-pausa">⏸️ <span><b>Servicio en pausa.</b> ${esc(y.cuenta.motivo || '')}</span></div>`);
+  for (const x of y.recibos_pendientes || []) fr.push(`<div class="franja franja-pago">💳 <span><b>Pago de ${esc(x.periodo)}: ${soles(x.monto_centavos)}${x.vence ? ' · vence el ' + esc(dia(x.vence)) : ''}.</b>${x.mensaje ? '<br>' + esc(x.mensaje) : ''}</span>${x.enlace_pago ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : `<button class="btn" data-ir="pagos">Ver recibo</button>`}</div>`);
+  for (const a of y.anuncios || []) fr.push(`<div class="franja franja-anuncio">📣 <span><b>${esc(a.titulo)}</b><br>${esc(a.texto)}</span><button class="btn" data-cerrar-anuncio="${a.id}">Entendido</button></div>`);
+  $('franjas').innerHTML = fr.join('');
+  document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => mostrar(b.dataset.ir)));
+  document.querySelectorAll('[data-cerrar-anuncio]').forEach(b => b.addEventListener('click', async () => { await api('POST', `/api/anuncios/${b.dataset.cerrarAnuncio}/cerrar`).catch(() => {}); cargarMarca(); }));
+}
 async function cargarMarca() {
   const y = await api('GET', '/api/yo').catch(() => null);
   if (!y) return;
@@ -707,6 +766,7 @@ async function cargarMarca() {
   iaActiva = y.ajustes.ia_activa; pintarIA();
   kaizenConectado = y.kaizen_conectado;
   $('cuentaNotif').textContent = y.notificaciones_sin_leer;
+  pintarEstado(y);
 }
 
 // ---------- Arranque ----------
@@ -720,7 +780,7 @@ async function arrancar() {
   await cargarInicio();
   pintarIA();
   timerChat = setInterval(() => { if ($('v-kaizen').classList.contains('on')) cargarChat(); }, 15000);
-  timerNotif = setInterval(async () => { const y2 = await api('GET', '/api/yo').catch(() => null); if (y2) $('cuentaNotif').textContent = y2.notificaciones_sin_leer; }, 60000);
+  timerNotif = setInterval(async () => { const y2 = await api('GET', '/api/yo').catch(() => null); if (y2) { $('cuentaNotif').textContent = y2.notificaciones_sin_leer; pintarEstado(y2); } }, 60000);
 }
 arrancar();
 </script>

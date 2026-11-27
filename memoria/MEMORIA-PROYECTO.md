@@ -136,6 +136,11 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Lo que hace el cliente en su panel:** usa su CRM, chatea con Kaizen (puede mandar documentos) y ve sus recibos, plantillas y redes. Puede crear plantillas, pero quedan "por aprobar" hasta que el dueño las apruebe; al crearlas, el dueño recibe un aviso en Oficina.
 - **Chat:** los mensajes y documentos del cliente llegan a Oficina; el dueño responde desde Oficina.
 
+## PUENTE OFICINA → PANEL DEL CLIENTE · ESTADO (27 nov)
+- **Hecho del lado del panel (panel-cliente/servidor.js e index.html):** API interna /api/interno/* protegida con la clave interna. Oficina puede: crear la cuenta y su clave, encender o apagar secciones (el panel las oculta y además las bloquea en el servidor), pausar o suspender con motivo, mandar las redes, poner la base de la IA y la clave de OpenRouter (se guarda cifrada y nunca llega al navegador), cargar plantillas, aprobar o rechazar con motivo las que crea el cliente, enviar recibos con mensaje propio y enlace de pago (solo https), marcarlos pagados, mandar anuncios, leer el chat y descargar documentos, responder y ver si el cliente está en línea. Los avisos para Oficina (plantillas nuevas, mensajes y documentos) quedan en /api/interno/avisos.
+- **Probado:** 40 pasos del puente, 39 de la prueba anterior y la prueba en navegador, sin fallos, contra PostgreSQL local. La respuesta real de la IA no se pudo probar aquí (sin clave real ni salida a OpenRouter).
+- **Falta:** la pestaña en Oficina que use ese puente (maqueta enviada al dueño, pendiente de su visto bueno) y empaquetar todo junto para el servidor.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
