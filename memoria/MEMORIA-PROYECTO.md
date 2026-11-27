@@ -79,6 +79,14 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Pendiente de confirmar: el cliente se escribió "PEX Solution" aquí y "Pet Solution" en el pedido. Asumido que es el mismo.
 - Decisiones abiertas del 27 nov: dónde vive la página de entrenamiento de PEX (Oficina o subdominio propio), qué se entrega hoy, nombre del cliente, respuestas públicas de Kaizen.
 
+## DECISIÓN 27 nov · PANEL COMPLETO DEL CLIENTE (PEX)
+- Construir ya el panel del cliente en su subdominio (pex-solution.kaizenia.app): entrenamiento de la IA (instrucciones), redes (estado por canal), CRM, chat y botón de apagar/encender la IA.
+- Automatización que funciona HOY sin Meta: chat del sitio web (canal Website de Chatwoot con el mismo flujo de n8n) y respuesta de correo. Nada de eso depende de la revisión de Meta.
+- WhatsApp, Facebook, Instagram y respuestas a comentarios de publicaciones/estados: dependen de la aprobación de Meta. La verificación de la empresa del cliente NO basta: también hace falta la aprobación de la app. Comentarios e Instagram/Facebook requieren permisos que hoy no están solicitados.
+- Mensaje exacto al cliente: el chat del sitio y el correo funcionan desde hoy; WhatsApp, Facebook, Instagram y comentarios se activan cuando Meta apruebe la app y su empresa esté verificada. No decir "funciona cuando verifique".
+- Interruptor de la IA: se aplica en el servidor (el flujo consulta el estado antes de responder), no solo en la pantalla.
+- Lo que necesita el dueño: ruta pex-solution en el túnel de Cloudflare; acceso a Chatwoot para crear el canal Website (credencial por formulario seguro, nunca en el chat); plataforma del sitio de PEX para instalar el cuadro de chat.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
