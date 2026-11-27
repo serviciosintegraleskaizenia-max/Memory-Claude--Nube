@@ -776,7 +776,13 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal #mTiles { grid-column: 1; grid-row: 2; min-height: 0; overflow: auto; margin: 0; grid-template-columns: repeat(10, minmax(0, 1fr)); align-content: start; }
   #fondoModal #mDatos { grid-column: 1; grid-row: 2; min-height: 0; overflow: auto; }
   #fondoModal #mHistDetalle { grid-column: 1; grid-row: 3; max-height: 30vh; overflow: auto; margin: 0; border-top: 1px solid var(--borde); }
-  #fondoModal #mCorreo { grid-column: 2; grid-row: 1 / span 2; height: 100%; max-height: none; min-height: 0; overflow: auto; margin: 0; }
+  #fondoModal #mColCorreo { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; min-height: 0; margin: 0; }
+  #fondoModal #mCorreo { flex: 1; height: auto; max-height: none; min-height: 0; overflow: auto; margin: 0; }
+  #fondoModal .correo-cabecera { flex: 0 0 auto; background: #ffffff; border: 1px solid #d3deeb; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; color: #334155; line-height: 1.5; }
+  #fondoModal .correo-cabecera .cab-fila { display: flex; gap: 10px; align-items: baseline; }
+  #fondoModal .correo-cabecera .cab-etq { flex: 0 0 62px; color: #64748b; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  #fondoModal .correo-cabecera .cab-valor { min-width: 0; overflow-wrap: anywhere; color: #0f1f38; }
+  #fondoModal .correo-cabecera .cab-asunto { font-size: 15px; font-weight: 700; }
   #fondoModal #mCompleto { grid-column: 2; grid-row: 1 / span 2; min-height: 0; overflow: auto; }
   #fondoModal .modal-cuerpo > .titulo-seccion:not(.seccion-datos) { display: none; }
   #fondoModal .mbanner { grid-column: span 10; gap: 6px; padding: 6px; }
@@ -792,7 +798,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .mt.linea { grid-column: span 10; padding: 6px 10px; }
   #fondoModal .mt.linea .mv { font-size: 13px; }
   #fondoModal .mt.aviso.linea .mv { font-size: 13px; }
-  @media (max-width: 900px) { #fondoModal .modal-cuerpo { grid-template-columns: 1fr; grid-template-rows: auto; overflow: auto; } #fondoModal #mCorreo, #fondoModal #mTiles, #fondoModal #mHistDetalle { grid-column: 1; grid-row: auto; } }
+  @media (max-width: 900px) { #fondoModal .modal-cuerpo { grid-template-columns: 1fr; grid-template-rows: auto; overflow: auto; } #fondoModal #mColCorreo, #fondoModal #mTiles, #fondoModal #mHistDetalle { grid-column: 1; grid-row: auto; } }
   #fondoModal .srow small { margin-left: 5px; font-size: 11px; }
   #fondoModal .srow { font-size: 14px; padding: 6px 8px; }
   #fondoModal .srow .sdato { font-size: 14px; }
@@ -1006,6 +1012,8 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
       <div class="mtiles" id="mTiles"></div>
       <table class="datos" id="mDatos" hidden></table>
       <div class="titulo-seccion" style="margin-top:18px">Correo</div>
+      <div class="col-correo" id="mColCorreo">
+      <div class="correo-cabecera" id="mCabeceraCorreo"></div>
       <div id="mCompleto" style="display:none;">
         <div class="correo-barra">
           <span id="mOrigen"></span>
@@ -1017,6 +1025,7 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
         <div class="adjuntos" id="mAdjuntos"></div>
       </div>
       <div class="correo-texto" id="mCorreo"></div>
+      </div>
       <details class="hist-plegado" id="mHistDetalle"><summary>Historial de la reserva</summary><div id="mHistorial"></div></details>
     </div>
     <div class="modal-cuerpo" id="mRespuesta" style="display:none; border-top:1px solid var(--borde);">
@@ -2760,6 +2769,12 @@ async function abrirModal(id) {
   document.getElementById('mAsunto').textContent = (r.asunto || '(sin asunto)') + ' · #' + r.id + (agenciaDe(r) ? ' · ' + agenciaDe(r) : '');
   document.getElementById('mMeta').innerHTML =
     `Reserva <strong>#${r.id}</strong> · De: ${esc(r.remitente)}${r.buzon ? ' · Llegó a: ' + esc(r.buzon) : ''}<br>Recibido: ${esc(r.fecha)}<br>Intención: <strong>${esc(r.categoria)}</strong>` + cajaViator(r.viator);
+  const recibido = isNaN(new Date(r.fecha)) ? esc(r.fecha) : new Date(r.fecha).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  document.getElementById('mCabeceraCorreo').innerHTML =
+    `<div class="cab-fila"><span class="cab-etq">De</span><span class="cab-valor">${esc(r.remitente || '(sin remitente)')}</span></div>` +
+    `<div class="cab-fila"><span class="cab-etq">Asunto</span><span class="cab-valor cab-asunto">${esc(r.asunto || '(sin asunto)')}</span></div>` +
+    `<div class="cab-fila"><span class="cab-etq">Recibido</span><span class="cab-valor">${recibido}</span></div>` +
+    (r.buzon ? `<div class="cab-fila"><span class="cab-etq">Llegó a</span><span class="cab-valor">${esc(r.buzon)}</span></div>` : '');
   pintarRevision(r);
   const cajaCorreo = document.getElementById('mCorreo');
   cajaCorreo.textContent = 'Cargando el correo...';
