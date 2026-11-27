@@ -42,6 +42,11 @@ if [ ! -f "$ENV" ]; then
 fi
 chown -R zentralia:zentralia "$APP"
 chown zentralia:zentralia "$ENV"
+# Oficina (zentralia-central) lee la clave interna de este archivo. Si corre con otro usuario, se le da solo lectura.
+UOF=$(systemctl show -p User --value zentralia-central 2>/dev/null || true)
+if [ -n "$UOF" ] && [ "$UOF" != zentralia ] && [ "$UOF" != root ] && id "$UOF" >/dev/null 2>&1; then
+  chgrp "$(id -gn "$UOF")" "$ENV" && chmod 640 "$ENV"
+fi
 chmod +x "$APP/crear-cuenta.sh"
 echo "    OK  copiado"
 
