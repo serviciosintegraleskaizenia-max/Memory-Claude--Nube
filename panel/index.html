@@ -4694,6 +4694,7 @@ function pintarEmpresas() {
     ${cuerpo}`;
   if (vistaEmpresas === 'demo') cargarDemo();
   actualizarCamposCorreo(box);
+  if (vistaEmpresas === 'auto' && AUTO_AREA === 'clientes' && AUTO_PESTANA.clientes === 'panel' && AUTO_EDIT) cargarPanelCliente();
 }
 
 function chipEstado(e) {
@@ -4944,7 +4945,7 @@ let AUTO_CLAVE_GENERAL = false;
 let AUTO_AREA = 'clientes';
 const AUTO_PESTANA = { clientes: 'datos', general: 'meta' };
 const AUTO_PESTANAS = {
-  clientes: [['datos', 'Datos del negocio'], ['conexiones', 'Conexiones'], ['ia', 'Configuración de IA'], ['crm', 'CRM']],
+  clientes: [['datos', 'Datos del negocio'], ['conexiones', 'Conexiones'], ['ia', 'Configuración de IA'], ['crm', 'CRM'], ['panel', 'Panel del cliente']],
   general: [['meta', 'Meta y números'], ['plantillas', 'Plantillas WhatsApp'], ['ia', 'IA: reglas y tipos'], ['prueba', 'Prueba de envío (Kaizen)']]
 };
 function areasAuto() {
@@ -4962,6 +4963,7 @@ function elegirPestanaAuto(grupo, id) {
   AUTO_PESTANA[grupo] = id;
   document.querySelectorAll(`[data-grupo="${grupo}"][data-sec]`).forEach(el => { el.style.display = el.dataset.sec === id ? 'block' : 'none'; });
   document.querySelectorAll(`[data-accion="emp-auto-pestana"][data-grupo="${grupo}"]`).forEach(b => { b.className = b.dataset.pestana === id ? 'btn' : 'btn-sec'; });
+  if (grupo === 'clientes' && id === 'panel') cargarPanelCliente();
 }
 function vistaGeneralAuto() {
   return `<div class="emp-form">
@@ -4983,6 +4985,7 @@ async function cargarAutomatizacion() {
   AUTO_WA = w.ok ? w.data : {};
   AUTO_WA_ESTADO = e.ok ? e.data : { numeros: [], alertas: [] };
   pintarEmpresas();
+  iniciarAvisosClientes();
 }
 async function revisarWaUI() {
   const r = await api('/api/central/whatsapp/revisar', {});
@@ -5216,6 +5219,176 @@ async function guardarPromptUI(clave) {
   await cargarAutomatizacion();
   mostrarAviso('Prompt guardado. Cada cliente usa la versión nueva al armar su IA.', true);
 }
+// ---------- Panel del cliente: lo que Oficina manda al panel de cada cliente ----------
+const PC_MODULOS = [['redes', 'Redes sociales', 'Estado de WhatsApp, Facebook e Instagram'], ['conversaciones', 'Conversaciones', 'Mensajes de sus canales'],
+  ['plantillas', 'Plantillas', 'Las nuevas pasan por tu aprobación'], ['chat', 'Chat con Kaizen', 'Mensajes y documentos contigo'], ['crm', 'CRM', 'Clientes, etiquetas y notas'],
+  ['entreno', 'Entrenar la IA', 'Tu base + ajustes del cliente'], ['pagos', 'Pagos y recibos', 'Ve sus recibos y paga'], ['correo', 'Correo (solo lectura)', 'Ver su bandeja']];
+let PC = null;
+function pcMonto(c) { return 'US$ ' + (Number(c || 0) / 100).toFixed(2); }
+function pcDia(f) { const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+function pcHora(f) { const d = new Date(f); return isNaN(d) ? '' : d.toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+async function cargarPanelCliente() {
+  const caja = document.getElementById('panelClienteCaja');
+  if (!caja || !AUTO_EDIT) return;
+  const r = await api('/api/central/panel-cliente/estado?slug=' + encodeURIComponent(AUTO_EDIT.slug));
+  if (!r.ok) { caja.innerHTML = `<p class="etiqueta-sec" style="color:#dc2626">${esc(r.data.error || 'No se pudo leer el panel del cliente.')}</p>`; return; }
+  PC = r.data;
+  caja.innerHTML = pintarPanelCliente(PC);
+  if (PC.existe) cargarChatPanelCliente();
+}
+function pintarPanelCliente(d) {
+  if (!d.existe) return `
+    <div class="titulo-seccion">Acceso al panel</div>
+    <p class="etiqueta-sec">Este cliente todavía no tiene cuenta en su panel (<b>https://${esc(d.dominio)}</b>). Créala aquí: su usuario será <b>${esc(d.usuario)}</b>.</p>
+    <div class="form-fila"><label>Contraseña para el cliente (mínimo 8)<input id="pcClave" type="password" autocomplete="new-password"></label></div>
+    <div class="pie-acciones"><button class="btn" data-accion="pc-cuenta">Crear cuenta del panel</button></div>`;
+  const e = d.estado;
+  const chipEst = { activa: ['Activo', 'chip-verde'], pausada: ['En pausa', 'chip-amarillo'], suspendida: ['Suspendido', 'chip-rojo'] }[e.estado] || [e.estado, 'chip-gris'];
+  const porAprobar = d.plantillas.filter(p => p.estado === 'Por aprobar (Kaizen)');
+  const otras = d.plantillas.filter(p => p.estado !== 'Por aprobar (Kaizen)');
+  return `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px">
+      <span class="chip ${chipEst[1]}">${chipEst[0]}</span>
+      <span class="chip ${e.en_linea ? 'chip-verde' : 'chip-gris'}">● ${e.en_linea ? 'Panel en línea' : 'Fuera de línea'}</span>
+      ${e.recibos_por_pagar ? `<span class="chip chip-amarillo">${e.recibos_por_pagar} recibo(s) por pagar</span>` : ''}
+      ${porAprobar.length ? `<span class="chip chip-amarillo">${porAprobar.length} plantilla(s) por aprobar</span>` : ''}
+      ${e.mensajes_sin_leer ? `<span class="chip chip-amarillo" id="pcChipMsj">${e.mensajes_sin_leer} mensaje(s) sin leer</span>` : ''}
+      <a href="https://${esc(d.dominio)}" target="_blank" rel="noopener">https://${esc(d.dominio)}</a>
+    </div>
+    <div style="font-size:13px;color:#64748b;margin:2px 0 8px">Usuario: <strong>${esc(d.usuario)}</strong> · Último ingreso: ${esc(e.visto ? pcHora(e.visto) : 'nunca')}${e.motivo ? ' · Motivo: ' + esc(e.motivo) : ''}</div>
+
+    <div class="titulo-seccion">Programas que ve en su panel</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin:6px 0 10px">${PC_MODULOS.map(([k, n, ayuda]) => `<label style="display:flex;flex-direction:row;gap:10px;align-items:flex-start;border:1px solid #cbd5e1;border-radius:10px;padding:9px 11px;cursor:pointer;text-align:left;margin:0"><input type="checkbox" id="pcMod-${k}" style="width:auto;margin:3px 0 0;flex:0 0 auto" ${e.modulos[k] !== false ? 'checked' : ''}><span style="display:block;font-size:13.5px"><strong>${n}</strong><br><span style="font-size:12px;color:#64748b">${ayuda}</span></span></label>`).join('')}</div>
+    <div class="pie-acciones">
+      <button class="btn" data-accion="pc-enviar">Guardar y enviar a su panel</button>
+      ${e.estado !== 'pausada' ? '<button class="btn-sec" data-accion="pc-servicio" data-estado="pausada">Pausar servicio</button>' : ''}
+      ${e.estado !== 'suspendida' ? '<button class="btn-sec" data-accion="pc-servicio" data-estado="suspendida" style="color:#dc2626">Apagar por falta de pago</button>' : ''}
+      ${e.estado !== 'activa' ? '<button class="btn-sec" data-accion="pc-servicio" data-estado="activa">Reactivar</button>' : ''}
+    </div>
+    <p class="etiqueta-sec">«Guardar y enviar» también manda sus redes (de Conexiones), la base de la IA (de Configuración de IA) y la clave de OpenRouter. Si cambiaste algo en esas pestañas, guarda primero el cliente.</p>
+
+    <div class="titulo-seccion">Plantillas por aprobar</div>
+    ${porAprobar.length ? porAprobar.map(p => `
+      <div style="border:1px solid #f0c36d;border-radius:10px;padding:10px;margin:6px 0">
+        <b>${esc(p.nombre)}</b> <small class="etiqueta-sec">${esc(p.tipo)} · creada por el cliente</small>
+        <pre style="white-space:pre-wrap;margin:6px 0;font-family:inherit">${esc(p.texto)}</pre>
+        <div class="pie-acciones"><button class="btn" data-accion="pc-pl-aprobar" data-id="${p.id}">Aprobar</button><button class="btn-sec" data-accion="pc-pl-rechazar" data-id="${p.id}" style="color:#dc2626">Rechazar con motivo</button></div>
+      </div>`).join('') : '<p class="etiqueta-sec">No hay plantillas esperando tu aprobación.</p>'}
+    ${otras.length ? `<details><summary class="etiqueta-sec">Todas sus plantillas (${otras.length})</summary>${otras.map(p => `<p class="etiqueta-sec"><b>${esc(p.nombre)}</b> · ${esc(p.estado)}${p.motivo ? ' · ' + esc(p.motivo) : ''}</p>`).join('')}</details>` : ''}
+
+    <div class="titulo-seccion">Recibo y aviso de pago</div>
+    <div class="form-fila">
+      <label>Mes o periodo<input id="pcPeriodo" maxlength="60" placeholder="Diciembre 2026"></label>
+      <label>Monto (US$)<input id="pcMonto" inputmode="decimal" placeholder="150"></label>
+      <label>Vence<input id="pcVence" type="date"></label>
+    </div>
+    <div class="form-fila">
+      <label>Mensaje personalizado<textarea id="pcMensaje" rows="2" maxlength="600" placeholder="Hola, tu mensualidad ya está disponible. Gracias por confiar en Kaizen IA."></textarea></label>
+      <label>Enlace de pago (opcional, empieza con https://)<input id="pcEnlace" maxlength="300" placeholder="https://..."></label>
+    </div>
+    <div class="pie-acciones"><button class="btn" data-accion="pc-recibo">Enviar recibo y aviso</button></div>
+    ${d.recibos.length ? d.recibos.map(x => `<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;border-bottom:1px solid #cbd5e1;padding:6px 0">
+      <span><b>${esc(x.periodo)}</b> · ${pcMonto(x.monto_centavos)}${x.vence ? ' · vence ' + pcDia(x.vence) : ''}</span>
+      ${x.estado === 'Pagado' ? '<span class="chip chip-verde">Pagado</span>' : `<button class="btn-sec" data-accion="pc-pagado" data-id="${x.id}">Marcar como pagado</button>`}</div>`).join('') : '<p class="etiqueta-sec">Todavía no le enviaste recibos.</p>'}
+
+    <div class="titulo-seccion">Anuncio</div>
+    <div class="form-fila"><label>Título<input id="pcAnTitulo" maxlength="120" value="Aviso de Kaizen IA"></label></div>
+    <div class="form-fila"><label>Mensaje<textarea id="pcAnTexto" rows="2" maxlength="1000"></textarea></label></div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="pc-anuncio">Enviar anuncio</button></div>
+
+    <div class="titulo-seccion">Chat con el cliente</div>
+    <div id="pcChat" style="max-height:320px;overflow:auto;border:1px solid #cbd5e1;border-radius:10px;padding:8px">Cargando…</div>
+    <div class="form-fila"><label>Responder<input id="pcChatTexto" maxlength="1000" placeholder="Escribe tu respuesta"></label></div>
+    <div class="pie-acciones"><button class="btn" data-accion="pc-chat">Enviar</button><button class="btn-sec" data-accion="pc-recargar">Actualizar</button></div>
+
+    <div class="titulo-seccion">Cambiar su contraseña</div>
+    <div class="form-fila"><label>Contraseña nueva (mínimo 8)<input id="pcClave" type="password" autocomplete="new-password"></label></div>
+    <div class="pie-acciones"><button class="btn-sec" data-accion="pc-cuenta">Cambiar contraseña</button></div>`;
+}
+async function cargarChatPanelCliente() {
+  const caja = document.getElementById('pcChat');
+  if (!caja || !AUTO_EDIT) return;
+  const r = await api('/api/central/panel-cliente/chat?slug=' + encodeURIComponent(AUTO_EDIT.slug));
+  if (!r.ok) { caja.textContent = r.data.error || 'No se pudo leer el chat.'; return; }
+  caja.innerHTML = r.data.mensajes.map(m => `<div style="margin:6px 0;text-align:${m.de === 'kaizen' ? 'right' : 'left'}"><small class="etiqueta-sec">${m.de === 'kaizen' ? 'Tú' : esc(AUTO_EDIT.nombre)} · ${esc(pcHora(m.creado))}</small><br>
+    <span style="display:inline-block;padding:6px 10px;border-radius:10px;text-align:left;background:${m.de === 'kaizen' ? '#1d4ed8' : '#e2e8f0'};color:${m.de === 'kaizen' ? '#fff' : '#0f172a'};white-space:pre-wrap">${esc(m.texto)}${m.archivo_nombre ? `<br><a href="/api/central/panel-cliente/archivo?slug=${encodeURIComponent(AUTO_EDIT.slug)}&id=${m.id}" style="color:inherit">📄 ${esc(m.archivo_nombre)}</a>` : ''}</span></div>`).join('') || '<p class="etiqueta-sec">Todavía no hay mensajes.</p>';
+  caja.scrollTop = caja.scrollHeight;
+  const chip = document.getElementById('pcChipMsj');
+  if (chip) chip.remove();
+}
+async function accionPanelCliente(a, b) {
+  const slug = AUTO_EDIT && AUTO_EDIT.slug;
+  if (!slug) return;
+  const v = id => (document.getElementById(id) || {}).value || '';
+  let r;
+  if (a === 'pc-recargar') return cargarPanelCliente();
+  if (a === 'pc-cuenta') r = await api('/api/central/panel-cliente/cuenta', { slug, clave: v('pcClave') });
+  else if (a === 'pc-enviar') r = await api('/api/central/panel-cliente/enviar', { slug, modulos: Object.fromEntries(PC_MODULOS.map(([k]) => [k, document.getElementById('pcMod-' + k).checked])) });
+  else if (a === 'pc-servicio') {
+    const estado = b.dataset.estado;
+    let motivo = '';
+    if (estado !== 'activa') {
+      motivo = prompt(estado === 'suspendida' ? 'Motivo que verá el cliente al entrar (por ejemplo: Pago de diciembre pendiente):' : 'Motivo de la pausa que verá el cliente:') || '';
+      if (!motivo.trim()) return;
+    }
+    r = await api('/api/central/panel-cliente/servicio', { slug, estado, motivo });
+  }
+  else if (a === 'pc-pl-aprobar') r = await api('/api/central/panel-cliente/plantilla', { slug, id: Number(b.dataset.id), aprobar: true });
+  else if (a === 'pc-pl-rechazar') { const motivo = prompt('¿Qué debe corregir el cliente?') || ''; if (!motivo.trim()) return; r = await api('/api/central/panel-cliente/plantilla', { slug, id: Number(b.dataset.id), aprobar: false, motivo }); }
+  else if (a === 'pc-recibo') r = await api('/api/central/panel-cliente/recibo', { slug, periodo: v('pcPeriodo'), monto: v('pcMonto'), vence: v('pcVence'), mensaje: v('pcMensaje'), enlace_pago: v('pcEnlace').trim() });
+  else if (a === 'pc-pagado') { if (!confirm('¿Marcar este recibo como pagado? El cliente recibe un aviso.')) return; r = await api('/api/central/panel-cliente/recibo-pagado', { slug, id: Number(b.dataset.id) }); }
+  else if (a === 'pc-anuncio') r = await api('/api/central/panel-cliente/anuncio', { slug, titulo: v('pcAnTitulo'), texto: v('pcAnTexto') });
+  else if (a === 'pc-chat') { if (!v('pcChatTexto').trim()) return; r = await api('/api/central/panel-cliente/chat', { slug, texto: v('pcChatTexto') }); }
+  else return;
+  if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo completar la acción.', false);
+  const mensajes = { 'pc-cuenta': r.data.creada ? 'Cuenta del panel creada. Ahora marca sus programas y envía.' : 'Contraseña del cliente cambiada. Se cerró su sesión.',
+    'pc-enviar': 'Enviado a su panel.' + (r.data.ia_con_clave ? '' : ' Ojo: no hay clave de OpenRouter, la IA no responde todavía.'),
+    'pc-servicio': 'Estado del servicio actualizado.', 'pc-pl-aprobar': 'Plantilla aprobada. El cliente recibe el aviso.', 'pc-pl-rechazar': 'Plantilla rechazada. El cliente ve el motivo.',
+    'pc-recibo': 'Recibo enviado. El cliente ve la franja de pago y el aviso.', 'pc-pagado': 'Recibo marcado como pagado.', 'pc-anuncio': 'Anuncio enviado.' };
+  if (mensajes[a]) mostrarAviso(mensajes[a], true);
+  if (a === 'pc-chat') { document.getElementById('pcChatTexto').value = ''; return cargarChatPanelCliente(); }
+  await cargarPanelCliente();
+}
+// Avisos de los clientes (plantillas por aprobar, mensajes y documentos): campanita fija mientras Oficina está abierta.
+// Mientras está abierta, sus clientes ven a Kaizen "conectado" en el chat.
+let PC_AVISOS = [], PC_TIMER = null;
+function iniciarAvisosClientes() {
+  if (PC_TIMER) return;
+  if (!document.getElementById('pcCampana')) {
+    const d = document.createElement('div');
+    d.innerHTML = `<button id="pcCampana" type="button" style="position:fixed;right:18px;bottom:18px;z-index:60;border:0;border-radius:999px;padding:10px 16px;background:#0b2a4a;color:#fff;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer">🔔 Avisos de clientes <span id="pcCampanaN" style="background:#dc2626;border-radius:999px;padding:1px 8px;margin-left:4px">0</span></button>
+      <div id="pcCampanaLista" hidden style="position:fixed;right:18px;bottom:70px;z-index:60;width:min(420px,92vw);max-height:60vh;overflow:auto;background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:12px;box-shadow:0 14px 32px rgba(0,0,0,.25);padding:8px"></div>`;
+    document.body.appendChild(d);
+    document.getElementById('pcCampana').addEventListener('click', () => { const l = document.getElementById('pcCampanaLista'); l.hidden = !l.hidden; if (!l.hidden) pintarAvisosClientes(); });
+  }
+  revisarAvisosClientes();
+  PC_TIMER = setInterval(revisarAvisosClientes, 60000);
+}
+async function revisarAvisosClientes() {
+  const r = await api('/api/central/panel-cliente/avisos');
+  const n = document.getElementById('pcCampanaN');
+  if (!r.ok) { if (n) { n.textContent = '!'; n.parentElement.title = r.data.error || ''; } return; }
+  const nuevos = r.data.avisos.filter(a => !PC_AVISOS.some(x => x.id === a.id));
+  if (PC_AVISOS.length && nuevos.length) mostrarAviso('Aviso de cliente: ' + nuevos[0].texto, true);
+  PC_AVISOS = r.data.avisos;
+  if (n) { n.textContent = PC_AVISOS.length; n.parentElement.title = ''; }
+  const l = document.getElementById('pcCampanaLista');
+  if (l && !l.hidden) pintarAvisosClientes();
+}
+function pintarAvisosClientes() {
+  const l = document.getElementById('pcCampanaLista');
+  l.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 6px"><b>Avisos de tus clientes</b>${PC_AVISOS.length ? '<button class="btn-sec" id="pcLeerTodo" type="button">Marcar todo leído</button>' : ''}</div>` +
+    (PC_AVISOS.map(a => `<div style="padding:8px;border-top:1px solid #e2e8f0;font-size:13px"><b>${esc(a.nombre_empresa)}</b> · ${esc(pcHora(a.creado))}<br>${esc(a.texto)}<br><button class="btn-sec" type="button" data-pc-ir="${esc(a.usuario)}" data-pc-aviso="${a.id}" style="margin-top:4px">Abrir</button></div>`).join('') || '<p style="padding:8px;color:#64748b">No hay avisos nuevos.</p>');
+  const todo = document.getElementById('pcLeerTodo');
+  if (todo) todo.onclick = async () => { await api('/api/central/panel-cliente/avisos/leidos', { ids: PC_AVISOS.map(a => a.id) }); PC_AVISOS = []; revisarAvisosClientes(); };
+  l.querySelectorAll('[data-pc-ir]').forEach(b => b.onclick = async () => {
+    await api('/api/central/panel-cliente/avisos/leidos', { ids: [Number(b.dataset.pcAviso)] });
+    const c = AUTO_CLIENTES.find(x => x.slug === b.dataset.pcIr);
+    l.hidden = true;
+    if (c) { vistaEmpresas = 'auto'; AUTO_AREA = 'clientes'; AUTO_EDIT = c; AUTO_PESTANA.clientes = 'panel'; pintarEmpresas(); }
+    revisarAvisosClientes();
+  });
+}
 function formAutomatizacion() {
   if (AUTO_AREA === 'general') return vistaGeneralAuto();
   const e = AUTO_EDIT || {};
@@ -5329,6 +5502,7 @@ function formAutomatizacion() {
     <pre id="autoClaveN8n" style="display:none;white-space:pre-wrap;background:#0b1424;color:#e7edf6;padding:10px;border-radius:8px"></pre>
 
     `)}
+    ${seccionAuto('clientes', 'panel', e.id ? '<div id="panelClienteCaja"><p class="etiqueta-sec">Cargando el panel del cliente…</p></div>' : '<p class="etiqueta-sec">Guarda primero el cliente; después aquí manejas su panel.</p>')}
     ${seccionAuto('clientes', 'crm', `
     <div class="titulo-seccion">6 · CRM</div>
     ${marca('aCrm', 'Activar el CRM para este cliente (servicio aparte)', crm.activo, 'Solo tú lo ves y lo activas. Después le das permiso al cliente desde su panel.')}
@@ -6283,6 +6457,7 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'reinicio-correo') return abrirReinicioCorreo();
   if (a === 'tab-empresas') return abrirHerramientas('empresas');
   if (a.startsWith('emp-')) return accionEmpresas(a, b);
+  if (a.startsWith('pc-')) return accionPanelCliente(a, b);
   if (a === 'salud-revisar') return cargarEstadoSistema(true);
   if (a === 'motor-recuperar') {
     const d = document.getElementById('rDesde').value, h = document.getElementById('rHasta').value;

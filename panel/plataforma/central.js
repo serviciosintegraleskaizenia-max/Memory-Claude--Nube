@@ -17,6 +17,7 @@ const { Client } = require('pg');
 const bcrypt = require('bcryptjs');
 const { MODULOS, TEXTOS_PAGO, etapaPago, hoyLocal } = require('./cuenta');
 const { sembrarDemo, GRUPOS } = require('./demo');
+const { crearPuente } = require('./puente-cliente');
 
 // Modelo de IA por defecto (el mismo de Somos Viajes). Debe leer imágenes: el motor manda las capturas.
 const MODELO_DEFECTO = 'anthropic/claude-haiku-5.5';
@@ -66,6 +67,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   const activo = !!aj.activo;
   const CARPETA_EMPRESAS = path.resolve(aj.carpeta);
   const fallos = new Map();
+  const puente = crearPuente(config);
 
   // Plantillas base para empezar. Son borradores: nadie las usa hasta que una persona las marque como buenas.
   const PLANTILLAS_BASE = [
@@ -1118,6 +1120,115 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     }
   }
 
+  // ---------- Panel del cliente (pestaña "Panel del cliente" en la ficha de automatización) ----------
+  // Oficina manda al panel del cliente lo que decide el dueño; el cliente nunca entra a Oficina.
+  const MODULOS_PANEL = ['redes', 'conversaciones', 'plantillas', 'chat', 'crm', 'entreno', 'pagos', 'correo'];
+  async function clienteAuto(slug) {
+    const fila = (await client.query('SELECT id, slug, nombre, perfil FROM automatizacion_clientes WHERE slug = $1', [texto(slug, 30).toLowerCase()])).rows[0];
+    if (!fila) throw Object.assign(new Error('No existe ese cliente de automatización.'), { codigo: 404 });
+    return fila;
+  }
+  // El estado de cada red sale de lo que ya marcaste en Conexiones: sin dato = sin conectar; con permisos de Meta y activo asignado = activo.
+  function redesParaPanel(perfil) {
+    const r = perfil.redes || {}, m = perfil.meta || {};
+    const estado = (tiene, listo) => !tiene ? 'Sin conectar' : (m.permisos_aprobados && listo ? 'Activo' : 'Pendiente de aprobación de Meta');
+    const wa = r.whatsapp || {}, ig = r.instagram || {}, fb = r.facebook || {}, tk = r.tiktok || {};
+    return {
+      whatsapp: { numero: wa.numero_visible || '', estado: estado(wa.numero_id || wa.numero_visible, m.whatsapp_verificado) },
+      instagram: { usuario: ig.usuario || '', estado: estado(ig.cuenta_id || ig.usuario, m.instagram_asignado) },
+      facebook: { pagina: fb.nombre || '', estado: estado(fb.pagina_id || fb.nombre, m.pagina_asignada) },
+      tiktok: { cuenta: tk.cuenta || '', estado: tk.cuenta ? 'Pendiente de aprobación de TikTok' : 'Sin conectar' },
+      publicidad: { cuenta: m.cuenta_publicitaria || '', estado: estado(m.cuenta_publicitaria, false) }
+    };
+  }
+  async function manejarPanelCliente(req, res, url, u, { json, leerCuerpo }) {
+    const q = new URL(req.url, 'http://x').searchParams;
+    const accion = url.slice('/api/central/panel-cliente/'.length);
+    const dominioDe = slug => `${slug}.${aj.dominio || 'kaizenia.app'}`;
+
+    if (req.method === 'GET' && accion === 'avisos') {
+      await puente.presenciaTodos().catch(() => {});
+      return json(res, 200, await puente.avisos());
+    }
+    if (req.method === 'POST' && accion === 'avisos/leidos') {
+      const f = await leerCuerpo(req);
+      return json(res, 200, await puente.avisosLeidos(Array.isArray(f.ids) ? f.ids : []));
+    }
+    if (req.method === 'GET' && accion === 'estado') {
+      const c = await clienteAuto(q.get('slug'));
+      let estado = null;
+      try { estado = await puente.estado(c.slug); } catch (e) { if (e.codigo !== 404) throw e; }
+      if (!estado) return json(res, 200, { existe: false, usuario: c.slug, dominio: dominioDe(c.slug) });
+      const [pl, rc] = await Promise.all([puente.plantillas(c.slug), puente.recibos(c.slug)]);
+      return json(res, 200, { existe: true, usuario: c.slug, dominio: dominioDe(c.slug), estado, plantillas: pl.plantillas, recibos: rc.recibos });
+    }
+    if (req.method === 'GET' && accion === 'chat') {
+      const c = await clienteAuto(q.get('slug'));
+      return json(res, 200, await puente.mensajes(c.slug));
+    }
+    if (req.method === 'GET' && accion === 'archivo') {
+      const c = await clienteAuto(q.get('slug'));
+      const a = await puente.archivo(c.slug, q.get('id'));
+      res.writeHead(200, { 'Content-Type': a.tipo, 'Content-Disposition': a.disposicion || 'attachment', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
+      return res.end(a.datos);
+    }
+    if (req.method !== 'POST') return json(res, 404, { error: 'No encontrado' });
+    const f = await leerCuerpo(req);
+    const c = await clienteAuto(f.slug);
+
+    if (accion === 'cuenta') {
+      const clave = String(f.clave || '');
+      if (clave.length < 8) return json(res, 400, { error: 'La contraseña del cliente debe tener al menos 8 caracteres.' });
+      const r = await puente.crearCuenta(c.slug, clave, c.nombre);
+      await registrar(u, 'panel_cliente_cuenta', 'automatizacion', c.slug, '', '', r.creada ? 'cuenta creada' : 'contraseña cambiada');
+      return json(res, 200, { ok: true, creada: r.creada });
+    }
+    if (accion === 'enviar') {
+      const perfil = c.perfil || {}, ia = perfil.ia || {};
+      const modulos = Object.fromEntries(MODULOS_PANEL.map(k => [k, !!(f.modulos && f.modulos[k])]));
+      const clave = descifrarAuto(ia.clave_openrouter_enc) || await claveIAGeneral();
+      const r = await puente.configurar({
+        usuario: c.slug, nombre: c.nombre, modulos, redes: redesParaPanel(perfil),
+        ia: { prompt_base: armarPrompt(perfil, c.nombre, await promptsList()), modelo: /sonnet/i.test(ia.modelo || '') ? 'anthropic/claude-sonnet-5.5' : 'anthropic/claude-haiku-5.5', ...(clave ? { clave } : {}) }
+      });
+      await registrar(u, 'panel_cliente_enviar', 'automatizacion', c.slug, '', JSON.stringify(modulos), clave ? 'con clave de IA' : 'sin clave de IA');
+      return json(res, 200, { ok: true, estado: r.estado, ia_con_clave: Boolean(clave) });
+    }
+    if (accion === 'servicio') {
+      if (!['activa', 'pausada', 'suspendida'].includes(f.estado)) return json(res, 400, { error: 'El estado debe ser activa, pausada o suspendida.' });
+      const r = await puente.configurar({ usuario: c.slug, estado: f.estado, motivo: texto(f.motivo, 300) });
+      await registrar(u, 'panel_cliente_servicio', 'automatizacion', c.slug, '', f.estado, texto(f.motivo, 200));
+      return json(res, 200, { ok: true, estado: r.estado });
+    }
+    if (accion === 'plantilla') {
+      await puente.decidirPlantilla(c.slug, Number(f.id), f.aprobar === true, texto(f.motivo, 300));
+      await registrar(u, 'panel_cliente_plantilla', 'automatizacion', c.slug, '', f.aprobar === true ? 'aprobada' : 'rechazada', texto(f.motivo, 200));
+      return json(res, 200, { ok: true });
+    }
+    if (accion === 'recibo') {
+      const monto = Number(String(f.monto || '').replace(',', '.'));
+      if (!Number.isFinite(monto) || monto <= 0) return json(res, 400, { error: 'Escribe el monto del recibo.' });
+      const r = await puente.crearRecibo({ usuario: c.slug, periodo: texto(f.periodo, 60), monto_centavos: Math.round(monto * 100), vence: texto(f.vence, 10), mensaje: texto(f.mensaje, 600), enlace_pago: texto(f.enlace_pago, 300) });
+      await registrar(u, 'panel_cliente_recibo', 'automatizacion', c.slug, '', texto(f.periodo, 60), String(monto));
+      return json(res, 200, { ok: true, id: r.id });
+    }
+    if (accion === 'recibo-pagado') {
+      await puente.reciboPagado(c.slug, Number(f.id));
+      await registrar(u, 'panel_cliente_pagado', 'automatizacion', c.slug, '', String(f.id), '');
+      return json(res, 200, { ok: true });
+    }
+    if (accion === 'anuncio') {
+      await puente.anuncio(c.slug, texto(f.titulo, 120), texto(f.texto, 1000));
+      await registrar(u, 'panel_cliente_anuncio', 'automatizacion', c.slug, '', texto(f.titulo, 120), texto(f.texto, 200));
+      return json(res, 200, { ok: true });
+    }
+    if (accion === 'chat') {
+      await puente.responder(c.slug, texto(f.texto, 1000));
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 404, { error: 'No encontrado' });
+  }
+
   // ---------- Rutas ----------
 
   async function manejar(req, res, url, u, { json, leerCuerpo, permisos = {} }) {
@@ -1200,6 +1311,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'POST' && url === '/api/central/automatizacion/guardar') {
         return json(res, 200, await guardarAutomatizacion(u, await leerCuerpo(req)));
       }
+      if (url.startsWith('/api/central/panel-cliente/')) return await manejarPanelCliente(req, res, url, u, { json, leerCuerpo });
 
       // Agregar una empresa que ya funciona (ej. Somos Viajes) para administrarla desde aquí.
       if (req.method === 'POST' && url === '/api/central/existente') {

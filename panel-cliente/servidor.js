@@ -550,6 +550,10 @@ ruta('POST', '/api/interno/recibo', async (req, res) => {
   await pool.query('INSERT INTO notificaciones (cuenta_id, texto) VALUES ($1, $2)', [c.id, `Nuevo recibo: ${periodo} · US$ ${(monto / 100).toFixed(2)}`]);
   json(res, 200, { ok: true, id: r.rows[0].id });
 });
+ruta('GET', '/api/interno/recibos', async (req, res, _p, url) => {
+  const c = await cuentaInterna(req, res, url.searchParams.get('usuario')); if (!c) return;
+  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, creado, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC LIMIT 24`, [c.id])).rows });
+});
 ruta('POST', '/api/interno/recibo/pagado', async (req, res) => {
   const f = await leerCuerpo(req);
   const c = await cuentaInterna(req, res, f.usuario); if (!c) return;
@@ -571,6 +575,12 @@ ruta('POST', '/api/interno/presencia', async (req, res) => {
   const f = await leerCuerpo(req);
   const c = await cuentaInterna(req, res, f.usuario); if (!c) return;
   await pool.query('UPDATE cuentas SET kaizen_visto = now() WHERE id = $1', [c.id]);
+  json(res, 200, { ok: true });
+});
+// Mientras Kaizen tiene Oficina abierta, todos sus clientes lo ven conectado.
+ruta('POST', '/api/interno/presencia-todos', async (req, res) => {
+  if (!internoOk(req, res)) return;
+  await pool.query('UPDATE cuentas SET kaizen_visto = now()');
   json(res, 200, { ok: true });
 });
 ruta('GET', '/api/interno/mensajes', async (req, res, _p, url) => {
