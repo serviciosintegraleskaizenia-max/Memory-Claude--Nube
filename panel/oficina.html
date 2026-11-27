@@ -3147,10 +3147,16 @@ function formPagado(p) {
   abrirModal(`<h2>Registrar pago</h2><p style="margin-top:-6px;color:var(--suave);font-size:13px">${esc(p.empresa || '')} · ${esc(p.concepto)} · <b>${dinero(p.monto, p.moneda)}</b></p>
     ${campo('fFec', '¿Qué día te pagaron?', `<input id="fFec" type="date" value="${hoy()}">`)}
     ${campo('fFor', 'Forma de pago', `<select id="fFor">${['Transferencia', 'PayPal', 'Efectivo', 'Depósito', 'Otro'].map(x => `<option>${x}</option>`).join('')}</select>`)}
+    ${campo('fRefQ', 'Número de referencia', '<input id="fRefQ">')}
+    ${campo('fVou', 'Voucher (obligatorio · PDF o imagen, menos de 2 MB)', '<input id="fVou" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">', 'Sin voucher no se registra el pago ni suma a la caja.')}
+    ${p.moneda && p.moneda !== 'US$' ? campo('fUsdQ', `¿Cuánto llegó en US$? (cobro en ${esc(p.moneda)})`, '<input id="fUsdQ" type="number" min="0" step="0.01">') : ''}
     ${p.auto_mes ? '<div class="ay" style="font-size:12px;color:var(--suave)">Al guardar, en el panel del cliente se quita el aviso de pago de ese mes.</div>' : ''}
     ${pieModal(false)}`);
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/pagado', { id: p.id, fecha: v('fFec'), forma: v('fFor') });
+    const vou = document.getElementById('fVou').files[0];
+    if (!vou) { document.getElementById('errForm').textContent = 'Sube el voucher del pago. Sin voucher no se registra.'; return; }
+    if (vou.size > 2 * 1024 * 1024) { document.getElementById('errForm').textContent = 'El voucher pesa más de 2 MB.'; return; }
+    const r = await api('/api/oficina/pagado', { id: p.id, fecha: v('fFec'), forma: v('fFor'), referencia: v('fRefQ'), comprobante: await leerComoDataURL(vou), comprobante_nombre: vou.name, recibido_usd: v('fUsdQ') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     cerrarModal(); aviso(r.data.avisoQuitado ? 'Pago registrado con su recibo. Se quitó el aviso en el panel del cliente.' : 'Pago registrado con su recibo.');
     await ir(vista); if (r.data.recibo_id) abrirRecibo(r.data.recibo_id);
@@ -3324,7 +3330,8 @@ function formPagar(id) {
       <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px"><span>Total descontado</span><b id="descTotal">US$ 0.00</b></div>
       <div id="descCuadre" style="font-size:12.5px;margin-top:6px"></div>
     </div>
-    ${campo('fArch', 'Comprobante (PDF, PNG, JPG o WEBP, menos de 2 MB)', `<input id="fArch" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">`, 'Se guarda con el cobro.')}
+    ${campo('fArch', 'Voucher (obligatorio · PDF, PNG, JPG o WEBP, menos de 2 MB)', `<input id="fArch" type="file" accept="application/pdf,image/png,image/jpeg,image/webp">`, 'Sin voucher no se registra el pago ni suma a la caja.')}
+    ${p.moneda && p.moneda !== 'US$' ? campo('fUsd', `¿Cuánto llegó en US$? (cobro en ${esc(p.moneda)})`, '<input id="fUsd" type="number" min="0" step="0.01">', 'La caja y el reparto van en US$.') : ''}
     <div class="error-form" id="errForm"></div><div class="pie"><button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Confirmar y generar recibo</button></div>`);
   document.querySelectorAll('[data-desc-add]').forEach(b => b.onclick = () => { DESC.push({ nombre: b.dataset.descAdd, monto: '' }); pintarDesc(); });
   const lista = document.getElementById('descLista');
@@ -3343,7 +3350,7 @@ function formPagar(id) {
       if (arch.size > 2 * 1024 * 1024) { document.getElementById('errForm').textContent = 'El comprobante pesa más de 2 MB.'; return; }
       comprobante = await leerComoDataURL(arch); nombre = arch.name;
     }
-    const r = await api('/api/oficina/cobro/pagar', { pago_id: p.id, fecha: v('fFechaP'), metodo: v('fMetodoP'), referencia: v('fRefP'), recibido: v('fRecibido'), descuentos: DESC, comprobante, comprobante_nombre: nombre });
+    const r = await api('/api/oficina/cobro/pagar', { pago_id: p.id, fecha: v('fFechaP'), metodo: v('fMetodoP'), referencia: v('fRefP'), recibido: v('fRecibido'), descuentos: DESC, comprobante, comprobante_nombre: nombre, recibido_usd: v('fUsd') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo registrar el pago.'; return; }
     cerrarModal(); aviso('Pago registrado. Se generó el recibo.'); await ir(vista); abrirRecibo(r.data.recibo_id);
   };

@@ -164,6 +164,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS proyecto_id INTEGER');
     await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibido NUMERIC(12,2)');
     await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS descuentos JSONB NOT NULL DEFAULT '[]'::jsonb");
+    // Cobro en otra moneda: cuánto llegó en US$. Programa (plan) y líneas del recibo.
+    await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibido_usd NUMERIC(12,2)');
+    await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS plan_id INTEGER');
+    await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS lineas JSONB NOT NULL DEFAULT '[]'::jsonb");
     // Los gastos que estaban en Kaizen IA son de la plataforma (los usan todos los sistemas). Se pasan una sola vez.
     await client.query("CREATE TABLE IF NOT EXISTS oficina_migraciones (clave TEXT PRIMARY KEY, hecho TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     if (!(await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'gastos_plataforma'")).rowCount) {
@@ -397,6 +401,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS dia_paquete INTEGER NOT NULL DEFAULT 5');
       await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS plan_id INTEGER');
       await client.query("ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS lineas JSONB NOT NULL DEFAULT '[]'::jsonb");
+      await client.query('ALTER TABLE oficina_pagos ADD COLUMN IF NOT EXISTS recibido_usd NUMERIC(12,2)');
       if ((await client.query("SELECT 1 FROM oficina_migraciones WHERE clave = 'caja_v1'")).rowCount) return;
       // Creación de sistema y Gastos del negocio se mantienen al día solos (sincronizarFuentes). Aquí solo los retiros viejos con recibo.
       const retiros = (await client.query(`SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS f FROM oficina_recibos r WHERE r.tipo = 'socio' ORDER BY r.fecha, r.id`)).rows;
@@ -415,9 +420,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       AND NOT EXISTS (SELECT 1 FROM oficina_pagos p WHERE p.id = c.pago_id AND p.pagado_el IS NOT NULL)`, [adm]);
     await client.query(`UPDATE caja_movimientos c SET plan_id = p.plan_id FROM oficina_pagos p
       WHERE c.pago_id = p.id AND c.administracion = $1 AND c.plan_id IS DISTINCT FROM p.plan_id`, [adm]);
-    const pagos = (await client.query(`SELECT p.id, p.monto, p.concepto, p.empresa_id, p.descuentos, p.recibo_id, p.plan_id, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS f, e.nombre
+    const pagos = (await client.query(`SELECT p.id, CASE WHEN p.moneda = 'US$' THEN p.monto ELSE p.recibido_usd END AS monto, p.concepto, p.empresa_id, p.descuentos, p.recibo_id, p.plan_id, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS f, e.nombre
       FROM oficina_pagos p JOIN empresas e ON e.id = p.empresa_id
-      WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.pagado_el IS NOT NULL AND p.moneda = 'US$'
+      WHERE COALESCE(e.administracion, 'kaizen') = $1 AND p.pagado_el IS NOT NULL AND (p.moneda = 'US$' OR p.recibido_usd > 0)
         AND NOT EXISTS (SELECT 1 FROM caja_movimientos c WHERE c.pago_id = p.id) ORDER BY p.pagado_el, p.id`, [adm])).rows;
     for (const p of pagos) {
       await client.query(`INSERT INTO caja_movimientos (administracion, fecha, tipo, concepto, monto, empresa_id, pago_id, recibo_id, plan_id) VALUES ($1,$2,'entrada',$3,$4,$5,$6,$7,$8)`,
@@ -1126,6 +1131,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
         const metodo = texto(f.metodo, 60);
         let comprobante = '';
+        // Un cobro solo cuenta (y suma a la caja) cuando está pagado con su voucher.
+        if (!f.comprobante) return json(res, 400, { error: 'Sube el voucher del pago (PDF o imagen). Sin voucher no se registra el pago.' });
+        if (p.moneda !== 'US$' && !(monto(f.recibido_usd) > 0)) return json(res, 400, { error: `Este cobro es en ${p.moneda}: escribe cuánto llegó en US$.` });
         if (f.comprobante) {
           comprobante = String(f.comprobante);
           if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comprobante)) return json(res, 400, { error: 'El comprobante debe ser PDF, PNG, JPG o WEBP.' });
@@ -1145,6 +1153,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
           VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
           [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, metodo, texto(f.referencia, 120), fecha, JSON.stringify({ comprobante_nombre: nombreC, descuentos, recibido, lineas: p.lineas || [] })])).rows[0];
+        if (p.moneda !== 'US$') await client.query('UPDATE oficina_pagos SET recibido_usd = $2 WHERE id = $1', [p.id, monto(f.recibido_usd)]);
         await client.query('UPDATE oficina_pagos SET pagado_el = $2, forma = $3, comprobante = $4, comprobante_nombre = $5, recibo_id = $6, referencia = $7, recibido = $8, descuentos = $9::jsonb WHERE id = $1', [p.id, fecha, metodo, comprobante, nombreC, rec.id, texto(f.referencia, 120), recibido, JSON.stringify(descuentos)]);
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
@@ -1172,6 +1181,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
         const metodo = texto(f.metodo, 60), referencia = texto(f.referencia, 120), nombreC = texto(f.comprobante_nombre, 200);
         let comprobante = '';
+        if (!f.comprobante) return json(res, 400, { error: 'Sube el voucher del pago (PDF o imagen). Sin voucher no se registra el pago.' });
+        if (filas.some(x => x.moneda !== 'US$')) return json(res, 400, { error: 'Los cobros en otra moneda se registran uno por uno (para anotar cuánto llegó en US$).' });
         if (f.comprobante) {
           comprobante = String(f.comprobante);
           if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comprobante)) return json(res, 400, { error: 'El comprobante debe ser PDF, PNG, JPG o WEBP.' });
@@ -1450,7 +1461,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           return json(res, 200, { ok: true });
         }
         const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
-        await client.query('UPDATE oficina_pagos SET pagado_el = $1, forma = $2 WHERE id = $3', [fecha, texto(f.forma, 60), pago.id]);
+        const comp = String(f.comprobante || '');
+        if (!comp) return json(res, 400, { error: 'Sube el voucher del pago (PDF o imagen). Sin voucher no se registra el pago.' });
+        if (!/^data:(application\/pdf|image\/(png|jpeg|webp));base64,[A-Za-z0-9+\/=]+$/.test(comp)) return json(res, 400, { error: 'El voucher debe ser PDF, PNG, JPG o WEBP.' });
+        if (comp.length > 2800000) return json(res, 400, { error: 'El voucher pesa más de 2 MB.' });
+        const usd = pago.moneda === 'US$' ? null : monto(f.recibido_usd);
+        if (pago.moneda !== 'US$' && !(usd > 0)) return json(res, 400, { error: `Este cobro es en ${pago.moneda}: escribe cuánto llegó en US$.` });
+        await client.query('UPDATE oficina_pagos SET pagado_el = $1, forma = $2, comprobante = $4, comprobante_nombre = $5, referencia = $6, recibido_usd = $7 WHERE id = $3',
+          [fecha, texto(f.forma, 60), pago.id, comp, texto(f.comprobante_nombre, 200), texto(f.referencia, 120), usd]);
         // Todo cobro pagado lleva su recibo al cliente.
         const recibo = await reciboDeCobro(pago.id);
         // Si es la mensualidad automática, el panel del cliente también la da por pagada y quita el aviso.
