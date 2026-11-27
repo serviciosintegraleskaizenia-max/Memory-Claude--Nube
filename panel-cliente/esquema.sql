@@ -111,3 +111,29 @@ CREATE TABLE IF NOT EXISTS notificaciones (
   creada TIMESTAMPTZ NOT NULL DEFAULT now(),
   leida BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- Lo que Oficina controla de cada cliente (se agrega sin borrar nada de lo anterior).
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS modulos JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS estado TEXT NOT NULL DEFAULT 'activa';
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS redes JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS ia_clave TEXT NOT NULL DEFAULT '';
+ALTER TABLE ajustes ADD COLUMN IF NOT EXISTS ia_modelo TEXT NOT NULL DEFAULT '';
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS mensaje TEXT NOT NULL DEFAULT '';
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS enlace_pago TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS anuncios (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL DEFAULT '',
+  texto TEXT NOT NULL,
+  creado TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cerrado TIMESTAMPTZ
+);
+
+-- Enlaces que Oficina pone en el panel (chat de Kaizen, soporte, lo que haga falta).
+CREATE TABLE IF NOT EXISTS enlaces (
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  clave TEXT NOT NULL,
+  valor TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (cuenta_id, clave)
+);
