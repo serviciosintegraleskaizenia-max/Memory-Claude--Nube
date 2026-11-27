@@ -95,6 +95,26 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Control total:** Oficina debe ver y administrar el subdominio, las redes, la IA y los avisos de cada cliente, de forma exacta.
 - **Estado:** pendiente. No se empieza hasta terminar el panel de PEX.
 
+## PANEL DEL CLIENTE · PRIMERA VERSIÓN LISTA (27 nov) Y SEGUNDA ETAPA
+- Primera versión visual con datos de ejemplo: panel-cliente/index.html (commit ecd1abd). Se abre en el navegador con doble clic. Todavía no está conectada al servidor ni a Chatwoot, n8n u Oficina.
+- Incluye: inicio con resumen y canales, redes (estado real por canal), conversaciones de canales, chat con Kaizen (con presencia), CRM (buscar, guardar, etiquetas, notas), entrenar la IA (prompt, prueba con interruptor, archivos, historial), pagos y recibos mensuales (sin consumo), correo solo lectura, ajustes (logo, banner, nombre, contraseña, ayuda).
+- **Segunda etapa (pendiente, en orden):**
+  1. Conectar el chat con Kaizen a Oficina en tiempo real, y la presencia de Kaizen.
+  2. Conectar Conversaciones con Chatwoot (canal de la página web primero).
+  3. Conectar el CRM a la base de clientes.
+  4. Conectar Entrenar la IA a la configuración real del asistente (instrucciones, archivos y prueba).
+  5. Pagos y recibos: generados desde Oficina, con descarga.
+  6. Correo solo lectura conectado (Google puede pedir su propia revisión).
+  7. Paso a humano, horario de atención y mensaje fuera de horario.
+  8. Respuestas rápidas y exportar el CRM a Excel.
+  9. Reportes sencillos: conversaciones, tiempo de respuesta y preguntas frecuentes.
+  10. Resumen de inicio con datos reales y notificaciones por correo.
+  11. Seguridad de la cuenta: sesiones abiertas y verificación en dos pasos.
+  12. Ayuda dentro del panel con capturas.
+  13. Cuenta publicitaria de Meta (requiere permiso de anuncios, no solicitado).
+- Decisiones abiertas: cómo se cobra al cliente (solo se muestran recibos por ahora); si el cliente puede editar el prompt sin aprobación (decisión 26 nov: sí, con historial y prueba).
+- Lo que el cliente no ve nunca: n8n, claves, consumo de la IA (eso se queda en Oficina), otros clientes.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
