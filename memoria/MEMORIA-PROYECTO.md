@@ -173,6 +173,7 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Planes por cliente** (ej. Somos Viajes: Plan de panel de correo 750/mes, Plan de reservas y operaciones 350/mes): cada plan con precio de creación, mensualidad y día de cobro; opción de cobrar en un solo paquete. Gastos cargables a un plan o a General; se ve cuánto costó y cuánto deja cada plan.
 - **Recibo al cliente con detalle por línea** (cada plan, consumo extra de IA/tokens, etc.) y guardado en la base como historial.
 - Mismo repositorio; esta parte va en su propio paquete de instalación.
+- **Ejemplo acordado para el gasto de emergencia (para probar el cálculo):** mes 1 quedan 1,000 (Cristian 600 / José 400). José retira 400; emergencia 300 pagada con lo de Cristian → la empresa le debe 300 a Cristian. Mes 2: entra 750, gastos mensuales 250 → quedan 500; primero se le devuelven 300 a Cristian, quedan 200 → Cristian 120 + 300 = 420, José 80. Total de los dos meses: Cristian 300 (que quedó en caja) + 420 = 720 (60 %), José 400 + 80 = 480 (40 %); utilidad real 1,000 − 300 + 500 = 1,200. Si el mes siguiente no alcanza, la deuda pasa al otro mes y José no retira hasta que se cubra.
 
 ## EMPRESAS UNIFICADAS · HECHO (27 nov, etapas 1-3)
 - Una sola cuenta por empresa: cada automatización va dentro de su empresa (automatizacion_clientes.empresa_id). Empresas sin panel de reservas (sin_panel, sin base ni puerto; estado/programas/pagado en empresas.cuenta_central).
