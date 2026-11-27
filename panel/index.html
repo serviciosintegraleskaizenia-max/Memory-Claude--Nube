@@ -831,6 +831,8 @@ body.oscuro .k-card{background:linear-gradient(155deg,#16284a,#0f1c33)}
   #fondoModal .mbanner .mt .mv { font-size: 13px; line-height: 1.2; }
   #fondoModal .mbanner .mt .ms { font-size: 10.5px; }
   /* Aviso: a todo el ancho, cada punto en su línea y el texto completo (sin recortes). */
+  /* En modo edición se ocultan las tarjetas y la tabla de datos gana el espacio; hidden debe ganar a display:grid. */
+  #fondoModal #mTiles[hidden], #fondoModal #mDatos[hidden] { display: none !important; }
   #fondoModal .aviso-fila { grid-column: 1 / -1; display: block; width: 100%; }
   #fondoModal .aviso-fila .mt.aviso { display: flex; flex-direction: column; align-items: stretch; gap: 4px; height: auto; min-height: 0; padding: 8px 12px; background: #fff8e6; border-color: #e8cf96; }
   #fondoModal .mt.aviso .ml { color: #7a4b06; }
