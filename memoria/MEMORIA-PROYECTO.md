@@ -28,9 +28,10 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Administrador alternativo: añadido.
 - Autenticación en dos pasos: Christian Guerra (Facebook) activada. La cuenta de Instagram @kaizenconsultor.ia (Christian Jose Mundaray Guerra) no se confirmó. El contador del Centro de seguridad sigue en 0 de 2 (pendiente).
 - Configuración básica de la app: política de privacidad, términos, eliminación de datos, dominio kaizenia.app, correo soporte@kaizenia.app, icono Zentralia, categoría "Empresa y páginas". Todo cargado en la app.
-- **Revisión de la aplicación:** 4 permisos **sin enviar**: whatsapp_business_messaging, whatsapp_business_management, business_management, public_profile.
+- **Revisión de la aplicación (27 nov, captura de Meta):** EN CURSO. Enviados 3 permisos: whatsapp_business_messaging, business_management y whatsapp_business_management. Meta muestra "Revisión en curso" y dice que la mayoría se revisa en un plazo de hasta 20 días. public_profile no aparece en la lista de envío.
 - **Pruebas (Tests):** whatsapp_business_messaging COMPLETADA. whatsapp_business_management COMPLETADA. business_management: llamada hecha (me/businesses) con respuesta, puede tardar 24 h en reflejarse. public_profile: llamada hecha (me?fields=id,name) con respuesta.
-- **Lo que NO está hecho:** envío de la revisión, videos de demostración, cuenta fija de prueba para el revisor, publicación de la app. Los mensajes reales de clientes no llegan mientras la app no esté publicada (aviso de Meta).
+- **Lo que NO está hecho:** cuenta fija de prueba para el revisor y publicación de la app. Los videos de demostración los envió el dueño según él mismo; confirmar en Meta que están adjuntos. Los mensajes reales de clientes no llegan mientras la app no esté publicada (aviso de Meta).
+- **Consecuencia para PEX y Kaizen:** la IA atiende WhatsApp real solo después de la aprobación de Meta (hasta 20 días) y de la verificación de cada empresa. Hasta entonces, panel, prompt y pruebas en nota privada con el número de prueba.
 - Textos para la revisión: memoria/documentos/textos-permisos-meta.md y Guia-revision-Meta-Zentralia-WB.docx.
 - **Decisión pendiente:** el revisor de Meta vería datos reales de clientes si entra a Somos Viajes. Recomendado: empresa demo con datos ficticios. El dueño no respondió; no crear la cuenta del revisor hasta decidirlo.
 - Certificaciones para la web: "Certificado personal por Meta" y "Certificado en Workana" son las que indicó el dueño; falta confirmar el nombre exacto de cada certificado y tener el documento.
