@@ -122,6 +122,11 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Oficina ya tiene: indicador En línea, cobro y recordatorio de pago (hoy apagado), Pausar servicio y Apagar. Son la base para suspender el servicio si no paga.
 - **Modelo de acceso decidido por el dueño (27 nov):** el cliente NO entra a Oficina. Tiene un usuario y contraseña creados por el dueño, válidos solo para su panel. Sin pago, se suspende la cuenta. El dueño ve si está en línea, le escribe y le envía recibos desde Oficina.
 
+## DECISIÓN DE SUBDOMINIO · PEX (27 nov)
+- Subdominio elegido por el dueño: **pexsolutions.kaizenia.app** (sin guion). Es el nombre a usar en el túnel, en Oficina y en el panel del cliente.
+- Pendiente: corregir en Oficina la URL de la empresa PEX SOLUTIONS (hoy dice pex-solutions.kaizenia.app) para que coincida.
+- Pendiente: no crear la ruta en el túnel hasta que el panel del cliente corra en su propio puerto. Apuntarla al puerto de Oficina (3090) expondría Oficina al cliente.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
