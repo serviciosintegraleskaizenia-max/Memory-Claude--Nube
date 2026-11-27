@@ -1099,7 +1099,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (e.plan_cobro) return json(res, 400, { error: 'Este cliente ya tiene su plan de cobro creado.' });
         const tipo = ['unico', 'abono', 'mensual'].includes(f.plan) ? f.plan : null;
         if (!tipo) return json(res, 400, { error: 'Elige el plan: pago único, setup con abono o solo mensualidad.' });
-        const moneda = ['US$', 'RD$', '€'].includes(f.moneda) ? f.moneda : 'US$';
+        const moneda = texto(f.moneda, 5) || 'US$';
         const fechaCobro = fechaValida(f.fecha) ? f.fecha : hoyLocal();
         if (tipo !== 'mensual') {
           const total = monto(f.monto);
@@ -1276,12 +1276,12 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const nombre = texto(f.nombre, 120);
           if (!nombre) return json(res, 400, { error: 'Escribe el nombre del plan (ej.: Plan de panel de correo).' });
           const dia = Math.min(31, Math.max(1, Number(f.dia_cobro) || 5));
-          const vals = [empresaId, nombre, monto(f.precio_creacion), monto(f.mensualidad), dia, f.activo !== false];
+          const vals = [empresaId, nombre, monto(f.precio_creacion), monto(f.mensualidad), dia, f.activo !== false, texto(f.moneda, 5) || 'US$'];
           let id = Number(f.id) || 0;
           if (id) {
-            const r = await client.query('UPDATE oficina_planes SET empresa_id=$1, nombre=$2, precio_creacion=$3, mensualidad=$4, dia_cobro=$5, activo=$6 WHERE id=$7 RETURNING id', [...vals, id]);
+            const r = await client.query('UPDATE oficina_planes SET empresa_id=$1, nombre=$2, precio_creacion=$3, mensualidad=$4, dia_cobro=$5, activo=$6, moneda=$7 WHERE id=$8 RETURNING id', [...vals, id]);
             if (!r.rowCount) return json(res, 404, { error: 'Ese plan ya no existe.' });
-          } else id = (await client.query('INSERT INTO oficina_planes (empresa_id, nombre, precio_creacion, mensualidad, dia_cobro, activo) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', vals)).rows[0].id;
+          } else id = (await client.query('INSERT INTO oficina_planes (empresa_id, nombre, precio_creacion, mensualidad, dia_cobro, activo, moneda) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', vals)).rows[0].id;
           // Cobros ya pagados y gastos sin plan que son de este plan.
           for (const pid of (Array.isArray(f.cobros) ? f.cobros : []).map(Number).filter(Boolean)) {
             await client.query('UPDATE oficina_pagos SET plan_id = $1 WHERE id = $2 AND empresa_id = $3 AND plan_id IS NULL', [id, pid, empresaId]);
@@ -1310,21 +1310,23 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           const dia = d => `${mes}-${String(Math.min(ultimo, Math.max(1, Number(d) || 5))).padStart(2, '0')}`;
           const ya = async (planId, concepto) => (await client.query("SELECT 1 FROM oficina_pagos WHERE empresa_id = $1 AND TO_CHAR(vence, 'YYYY-MM') = $2 AND (plan_id = $3 OR concepto = $4)", [empresaId, mes, planId, concepto])).rowCount > 0;
           const creados = [];
-          const crear = async (concepto, lineas, vence, planId) => {
+          const crear = async (concepto, lineas, vence, planId, moneda = 'US$') => {
             const total = Math.round(lineas.reduce((t, l) => t + l.monto, 0) * 100) / 100;
-            const r = await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence, plan_id, lineas) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [empresaId, concepto, total, 'US$', vence, planId, JSON.stringify(lineas)]);
+            const r = await client.query('INSERT INTO oficina_pagos (empresa_id, concepto, monto, moneda, vence, plan_id, lineas) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [empresaId, concepto, total, moneda, vence, planId, JSON.stringify(lineas)]);
             creados.push({ id: r.rows[0].id, concepto, total, vence });
           };
           const lineaPlan = pl => ({ concepto: `Mensualidad ${nombreMes} · ${pl.nombre}`, monto: Number(pl.mensualidad), plan_id: pl.id });
           if (e.cobro_paquete) {
             const concepto = `Mensualidad ${nombreMes} · paquete`;
             if (await ya(null, concepto)) return json(res, 400, { error: `Ya está creado el cobro de ${nombreMes}.` });
-            await crear(concepto, [...planes.map(lineaPlan), ...extras], dia(e.dia_paquete), planes.length === 1 ? planes[0].id : null);
+            const monedas = [...new Set(planes.map(pl => pl.moneda || 'US$'))];
+            if (monedas.length > 1) return json(res, 400, { error: `Los programas de este cliente están en varias monedas (${monedas.join(', ')}): en paquete deben tener la misma.` });
+            await crear(concepto, [...planes.map(lineaPlan), ...extras], dia(e.dia_paquete), planes.length === 1 ? planes[0].id : null, monedas[0] || 'US$');
           } else {
             for (const pl of planes) {
               const l = lineaPlan(pl);
               if (await ya(pl.id, l.concepto)) continue;
-              await crear(l.concepto, [l, ...(pl === planes[0] ? extras : [])], dia(pl.dia_cobro), pl.id);
+              await crear(l.concepto, [l, ...(pl === planes[0] ? extras : [])], dia(pl.dia_cobro), pl.id, pl.moneda || 'US$');
             }
             if (!planes.length && extras.length) await crear(`Extras ${nombreMes}`, extras, dia(5), null);
             if (!creados.length) return json(res, 400, { error: `Ya están creados los cobros de ${nombreMes}.` });

@@ -2838,7 +2838,7 @@ function vCaja() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">${socio('dueno')}${CAJA.pct > 0 ? socio('socio') : ''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button class="btn" data-caja-gasto>+ Gasto</button><button class="btn-sec" data-caja-reparto ${e.fondo > 0 ? '' : 'disabled'}>Repartir ${dinero(Math.max(0, e.fondo))}</button></div>
     <div class="caja" style="margin-bottom:12px"><h2 style="display:flex;justify-content:space-between">Planes de los clientes <a href="#" data-caja-plan="0" style="font-size:13px">+ Plan</a></h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px">${(CAJA.planes || []).map(pl => `<div class="caja" data-caja-plan="${pl.id}" style="cursor:pointer;padding:8px 10px;margin:0"><b>${esc(pl.empresa)} · ${esc(pl.nombre)}</b><div class="ay" style="font-size:12px">${dinero(pl.mensualidad)}/mes · día ${pl.cobro_paquete ? pl.dia_paquete + ' (paquete)' : pl.dia_cobro}${pl.activo ? '' : ' · inactivo'}<br>cobrado ${dinero(pl.cobrado)} · costó ${dinero(pl.creacion + pl.mensuales)} · <b>deja ${dinero(pl.deja)}</b></div></div>`).join('') || '<div class="ay">Todavía no hay planes. Crea el primero con «+ Plan».</div>'}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px">${(CAJA.planes || []).map(pl => `<div class="caja" data-caja-plan="${pl.id}" style="cursor:pointer;padding:8px 10px;margin:0"><b>${esc(pl.empresa)} · ${esc(pl.nombre)}</b><div class="ay" style="font-size:12px">${dinero(pl.mensualidad, pl.moneda)}/mes · día ${pl.cobro_paquete ? pl.dia_paquete + ' (paquete)' : pl.dia_cobro}${pl.activo ? '' : ' · inactivo'}<br>cobrado ${dinero(pl.cobrado)} · costó ${dinero(pl.creacion + pl.mensuales)} · <b>deja ${dinero(pl.deja)}</b></div></div>`).join('') || '<div class="ay">Todavía no hay planes. Crea el primero con «+ Plan».</div>'}</div></div>
     <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px">
       <div class="caja"><h2 style="display:flex;justify-content:space-between">Recibos <a href="#" data-caja-ver="recibos" style="font-size:13px">Ver todos ›</a></h2>
         <table><thead><tr><th>Fecha</th><th>N.º</th><th>A</th><th class="n">Monto</th></tr></thead><tbody>${recibos || '<tr><td colspan="4" class="vacio">Sin recibos todavía.</td></tr>'}</tbody></table></div>
@@ -2905,6 +2905,7 @@ function formCajaPlan(id) {
   abrirModal(`<h2>${pl.id ? esc(pl.empresa + ' · ' + pl.nombre) : 'Nuevo plan'}</h2>
     <div class="fila2">${campo('cpEmp', 'Cliente', `<select id="cpEmp">${CAJA.empresas.map(e => `<option value="${e.id}" ${e.id === pl.empresa_id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>`)}${campo('cpNom', 'Nombre del plan', `<input id="cpNom" value="${esc(pl.nombre || '')}" placeholder="Ej.: Plan de panel de correo">`)}</div>
     <div class="fila2">${campo('cpPre', 'Precio de creación (US$)', `<input id="cpPre" type="number" min="0" step="0.01" value="${pl.precio_creacion || ''}">`)}${campo('cpMen', 'Mensualidad (US$)', `<input id="cpMen" type="number" min="0" step="0.01" value="${pl.mensualidad || ''}">`)}</div>
+    ${campo('cpMoneda', 'Moneda del cliente (el cobro y el recibo salen en esta moneda; la caja en US$)', `<select id="cpMoneda">${opcionesMoneda(pl.moneda || 'US$')}</select>`)}
     <div class="fila2">${campo('cpDia', 'Día de cobro (1 a 31; en meses cortos, el último día)', `<input id="cpDia" type="number" min="1" max="31" value="${pl.dia_cobro || 5}">`)}${campo('cpAct', 'Estado', `<select id="cpAct"><option value="1">Activo</option><option value="0" ${pl.activo ? '' : 'selected'}>Inactivo</option></select>`)}</div>
     <label style="display:flex;gap:6px;align-items:center;margin:6px 0"><input type="checkbox" id="cpPaq" ${emp(pl.empresa_id).cobro_paquete ? 'checked' : ''} style="width:auto"> Cobrar todos los planes de este cliente en un solo paquete, el día <input id="cpDiaPaq" type="number" min="1" max="31" value="${emp(pl.empresa_id).dia_paquete || 5}" style="width:64px"></label>
     ${lista('Cobros ya pagados de este cliente que son de este plan', CAJA.cobrosSinPlan.filter(c => c.empresa_id === pl.empresa_id).map(c => `<label style="display:flex;gap:6px"><input type="checkbox" class="cpCob" value="${c.id}" style="width:auto"> ${fechaCorta(c.fecha)} · ${esc(c.concepto)} · ${dinero(c.monto)}</label>`))}
@@ -2917,7 +2918,7 @@ function formCajaPlan(id) {
   document.getElementById('modal').classList.add('grande');
   const marcados = cls => [...document.querySelectorAll('#modal .' + cls + ':checked')].map(x => Number(x.value));
   document.getElementById('fGuardar').onclick = async () => {
-    const r = await api('/api/oficina/caja/plan', { administracion: cajaAdm, id: pl.id || 0, empresa_id: Number(v('cpEmp')), nombre: v('cpNom'), precio_creacion: v('cpPre'), mensualidad: v('cpMen'), dia_cobro: v('cpDia'), activo: v('cpAct') === '1',
+    const r = await api('/api/oficina/caja/plan', { administracion: cajaAdm, id: pl.id || 0, empresa_id: Number(v('cpEmp')), nombre: v('cpNom'), precio_creacion: v('cpPre'), mensualidad: v('cpMen'), moneda: v('cpMoneda'), dia_cobro: v('cpDia'), activo: v('cpAct') === '1',
       paquete: document.getElementById('cpPaq').checked, dia_paquete: v('cpDiaPaq'), cobros: marcados('cpCob'), gastos: marcados('cpGas') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     cerrarModal(); aviso('Plan guardado.'); ir('caja');
@@ -2940,6 +2941,19 @@ function verCaja(que) {
   document.getElementById('modal').classList.add('grande');
 }
 
+// Monedas: las más usadas y las que ya se hayan usado; «Otra…» permite escribir cualquiera (hasta 5 letras, ej. PEN, BOB).
+const MONEDAS = ['US$', 'RD$', 'S/', 'CLP', 'MXN', 'COP', 'ARS', '€'];
+function opcionesMoneda(actual = 'US$') {
+  const lista = MONEDAS.includes(actual) || !actual ? MONEDAS : [...MONEDAS, actual];
+  return lista.map(m => `<option ${m === (actual || 'US$') ? 'selected' : ''}>${esc(m)}</option>`).join('') + '<option value="__otra">Otra…</option>';
+}
+document.addEventListener('change', ev => {
+  const sel = ev.target;
+  if (sel.tagName !== 'SELECT' || sel.value !== '__otra') return;
+  const m = (prompt('Escribe la moneda (ej. PEN, BOB, Bs):') || '').trim().slice(0, 5);
+  if (!m) { sel.value = 'US$'; return; }
+  const o = document.createElement('option'); o.textContent = m; o.selected = true; sel.insertBefore(o, sel.lastElementChild);
+});
 function campo(id, etiqueta, control, ayuda = '') { return `<div class="campo"><label for="${id}">${etiqueta}</label>${control}${ayuda ? `<div class="ay">${ayuda}</div>` : ''}</div>`; }
 const v = id => (document.getElementById(id) || {}).value || '';
 // Toda ventana lleva arriba a la derecha: minimizar, agrandar y cerrar (X). Nada de botones "Cerrar".
@@ -3136,7 +3150,7 @@ function formPago(p = {}) {
   abrirModal(`<h2>${p.id ? 'Editar cobro' : 'Nuevo cobro'}</h2>
     ${campo('fEmp', 'Cliente', `<select id="fEmp">${opcionesEmpresa(p.empresa_id, 'Sin cliente')}</select>`)}
     ${campo('fCon', 'Concepto', `<input id="fCon" value="${esc(p.concepto || '')}" placeholder="Ej.: Instalación del sistema">`, 'Lo que estás cobrando. Las mensualidades se crean solas.')}
-    <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${p.monto ?? ''}" placeholder="150">`)}${campo('fMone', 'Moneda', `<select id="fMone">${['US$', 'RD$', '€'].map(m => `<option ${m === (p.moneda || 'US$') ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}</div>
+    <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${p.monto ?? ''}" placeholder="150">`)}${campo('fMone', 'Moneda', `<select id="fMone">${opcionesMoneda(p.moneda || 'US$')}</select>`)}</div>
     ${campo('fVen', 'Vence', `<input id="fVen" type="date" value="${esc(p.vence || hoy())}">`)}
     ${campo('fNota', 'Nota (opcional)', `<input id="fNota" value="${esc(p.nota || '')}" placeholder="Ej.: 50 % al empezar">`)}
     ${pieModal(p.id)}`);
@@ -3167,7 +3181,7 @@ function formGasto(g = {}) {
   abrirModal(`<h2>${g.id ? 'Editar gasto' : 'Nuevo gasto'}</h2>
     ${campo('fNom', 'Nombre', `<input id="fNom" value="${esc(g.nombre || '')}" placeholder="Ej.: Servidor Hostinger KVM 4">`)}
     <div class="fila2">${campo('fCat', 'Categoría', `<select id="fCat">${opciones(D.categorias, g.categoria || 'servidor')}</select>`)}${campo('fFrec', '¿Cada cuánto?', `<select id="fFrec">${opciones(D.frecuencias, frec)}</select>`)}</div>
-    <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}" placeholder="41.29">`)}${campo('fMone', 'Moneda', `<select id="fMone">${['US$', 'RD$', '€'].map(m => `<option ${m === (g.moneda || 'US$') ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}</div>
+    <div class="fila2">${campo('fMon', 'Monto', `<input id="fMon" type="number" step="0.01" min="0" value="${g.monto ?? ''}" placeholder="41.29">`)}${campo('fMone', 'Moneda', `<select id="fMone">${opcionesMoneda(g.moneda || 'US$')}</select>`)}</div>
     <div id="fCuando">${campo('fDia', 'Día del mes en que se paga', `<input id="fDia" type="number" min="1" max="28" value="${g.dia || 1}">`)}${campo('fFec', 'Fecha del pago (o de la próxima renovación)', `<input id="fFec" type="date" value="${esc(g.fecha || hoy())}">`)}</div>
     ${campo('fAdmin', 'Administración a la que pertenece', `<select id="fAdmin">${opciones({ kaizen: admin('kaizen').nombre, centralia: admin('centralia').nombre, plataforma: 'Plataforma (compartido)' }, g.administracion || adminVista)}</select>`)}
     <div id="fPagBox"></div>
@@ -3256,7 +3270,7 @@ function formDatosCliente(e) {
   const pintarPlan = () => {
     const el = document.getElementById('fPlanCampos'); if (!el) return;
     const tipo = (document.querySelector('input[name="fPlan"]:checked') || {}).value;
-    const moneda = `${campo('fMoneP', 'Moneda', `<select id="fMoneP">${['US$', 'RD$', '€'].map(m => `<option>${m}</option>`).join('')}</select>`)}`;
+    const moneda = `${campo('fMoneP', 'Moneda', `<select id="fMoneP">${opcionesMoneda()}</select>`)}`;
     if (tipo === 'unico') el.innerHTML = `<div class="fila2">${campo('fTotal', 'Monto total', `<input id="fTotal" type="number" step="0.01" min="0">`)}${moneda}</div><div class="fila2">${campo('fFechaC', 'Fecha de cobro', `<input id="fFechaC" type="date" value="${hoy()}">`)}</div>`;
     else if (tipo === 'abono') el.innerHTML = `<div class="fila2">${campo('fTotal', 'Monto total del setup', `<input id="fTotal" type="number" step="0.01" min="0">`)}${campo('fAbonoPct', '% de abono', `<input id="fAbonoPct" type="number" min="1" max="99" value="60">`)}${moneda}</div><div class="fila2">${campo('fFechaC', 'Fecha del abono', `<input id="fFechaC" type="date" value="${hoy()}">`)}${campo('fFechaS', 'Fecha del saldo (al entregar)', `<input id="fFechaS" type="date" value="${hoy()}">`)}</div>`;
     else el.innerHTML = '';
@@ -3805,7 +3819,7 @@ function formCliente(e) {
     ${campo('fPlan', 'Plan', `<input id="fPlan" value="${esc(e.plan || '')}" placeholder="Ej.: Completo, Básico">`)}
     <div class="campo chk"><label><input type="checkbox" id="fCobrar" ${p.activo ? 'checked' : ''}> Cobrar una mensualidad (con recordatorio en su panel)</label></div>
     <div class="fila2">${campo('fCuota', 'Cuota mensual', `<input id="fCuota" type="number" step="0.01" min="0" value="${esc(String(p.monto || '').replace(/[^0-9.]/g, ''))}" placeholder="150">`)}${campo('fDia', 'Día de cobro (1 a 28)', `<input id="fDia" type="number" min="1" max="28" value="${p.dia || 5}">`)}</div>
-    ${campo('fMone', 'Moneda', `<select id="fMone">${['US$', 'RD$', '€'].map(m => `<option ${m === (p.moneda || 'US$') ? 'selected' : ''}>${m}</option>`).join('')}</select>`, 'El recordatorio en su panel, los días de aviso y los textos se ajustan en Empresas y demo → Cobro y recordatorio.')}
+    ${campo('fMone', 'Moneda', `<select id="fMone">${opcionesMoneda(p.moneda || 'US$')}</select>`, 'El recordatorio en su panel, los días de aviso y los textos se ajustan en Empresas y demo → Cobro y recordatorio.')}
     <div class="fila2">${campo('fCont', 'Persona de contacto', `<input id="fCont" value="${esc(e.contacto || '')}" placeholder="Ej.: Juan Pérez (gerente)">`)}${campo('fTel', 'Teléfono / WhatsApp', `<input id="fTel" value="${esc(e.telefono || '')}" placeholder="+1 809 000 0000">`)}</div>
     ${campo('fMail', 'Correo de contacto', `<input id="fMail" value="${esc(e.correo_contacto || '')}">`)}
     ${campo('fIa', 'Clave de OpenRouter de este cliente (para medir su gasto de IA)', `<input id="fIa" type="password" autocomplete="off" placeholder="${e.tieneClaveIA ? '•••• guardada · déjalo vacío para no cambiarla' : 'sk-or-v1-…'}">`,
