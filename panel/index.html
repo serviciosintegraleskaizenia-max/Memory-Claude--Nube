@@ -2852,7 +2852,12 @@ function tarjetasDatos(r, g, celdaAgencia) {
   let base = '';
   const avisoRevision = document.getElementById('mRevision');
   const puntosRevision = avisoRevision ? [...avisoRevision.querySelectorAll('li')].map(li => li.textContent.trim()).filter(Boolean) : [];
-  const avisoRevisionHtml = puntosRevision.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', puntosRevision.map(p => '• ' + esc(p)).join('<br>'), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
+  // Cambio y cancelación van como líneas dentro del mismo aviso: no ocupan una caja aparte ni bajan los servicios.
+  const extrasAviso = [];
+  if (r.cancelada_por) extrasAviso.push('Cancelada (correo #' + esc(r.cancelada_por) + '): cancélala también en el sistema de reservas.');
+  if (r.cambio_id) extrasAviso.push('Cambio recibido (correo #' + esc(r.cambio_id) + '): revisa los datos nuevos antes de seguir.');
+  const avisos = [...puntosRevision.map(p => esc(p)), ...extrasAviso];
+  const avisoRevisionHtml = avisos.length ? cuadro('aviso', ICONOS_TABLERO.aviso, 'Aviso', avisos.map(p => '• ' + p).join('<br>'), 'Son avisos para revisar con calma; no cambian la reserva.', 'linea') : '';
   base += cuadro('r-reserva', ICONOS_TABLERO.reserva, 'Reserva', '#' + r.id, 'Recibido ' + (isNaN(new Date(r.fecha)) ? esc(r.fecha) : new Date(r.fecha).toLocaleString('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })));
   base += cuadro('r-agencia', ICONOS_TABLERO.agencia, 'Agencia', celdaAgencia, '');
   const totalPax = Math.max(0, ...g.map(x => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0)));
@@ -2862,8 +2867,6 @@ function tarjetasDatos(r, g, celdaAgencia) {
   if (r.telefono) base += cuadro('r-tel', ICONOS_TABLERO.tel, 'Teléfono', esc(r.telefono), 'del pasajero');
   html = '<div class="mbanner">' + base + '</div>' + avisoRevisionHtml;
   if (r.error_ia) html += cuadro('aviso', ICONOS_TABLERO.aviso, porAnalizar(r) ? 'Histórico' : enReanalisis(r) ? 'Reanálisis' : 'Error de la IA', porAnalizar(r) ? 'Por analizar' : 'La IA no respondió', porAnalizar(r) ? 'Correo importado del historial: la IA lo analiza en las próximas ejecuciones del flujo.' : esc(r.motivo || 'Sin detalle') + '. Se analiza de nuevo en la próxima ejecución del flujo.', 'd2');
-  else if (r.cancelada_por) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cancelada', 'Correo #' + r.cancelada_por, 'Cancélala también en el sistema de reservas y márcala como corresponde.', 'd2');
-  else if (r.cambio_id) html += cuadro('aviso', ICONOS_TABLERO.aviso, 'Cambio recibido', 'Correo #' + r.cambio_id, 'Revisa los datos nuevos antes de seguir.', 'd2');
   else if (r.categoria === 'MODIFICACION') html += cuadro('', ICONOS_TABLERO.otro, 'Reserva original', r.original_id ? '#' + r.original_id + (r.original_historico ? ' (en el histórico)' : '') : 'No encontrada', '', 'd2');
   const pasajeros = (x) => (Number(x.adultos) || 0) + (Number(x.ninos) || 0) + (Number(x.infantes) || 0);
   const filas = g.map((s, n) => {
