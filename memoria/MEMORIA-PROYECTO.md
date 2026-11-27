@@ -151,6 +151,12 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Lo que ya tiene Somos Viajes (no se duplica):** CRM completo (crm.js, módulo crm + permiso ver_crm), conector de redes por sede con Chatwoot (redes.js: bandejas con canal, sede y modo de IA), Base del asistente por sede, chat con Oficina, anuncios, pausa y recordatorio de pago.
 - **Lo que falta y se propuso (maqueta enviada, esperando visto bueno):** botón «📲 Automatización» en su panel con Redes (estado por sede y modo de la IA), Plantillas de WhatsApp (crear → «Por aprobar (Kaizen)» → aviso en la campana de Oficina) y Recibos (mensaje y enlace de pago); en Oficina, sección «Automatización» dentro de la tarjeta de la empresa (plantillas por aprobar, canales), mensaje y enlace de pago en el cobro, módulos nuevos (plantillas, recibos), y que la pausa por falta de pago también apague la IA de sus redes (hoy redes.js no mira la pausa).
 
+## DECISIONES DEL DUEÑO · EMPRESAS UNIFICADAS Y PAUSA POR PAGO (27 nov)
+- **Pausa por falta de pago (para todos los clientes):** la IA NO se apaga, sigue contestando. Lo que se pausa es el acceso: panel (correo/reservas) y chat, hasta que paguen. Con días de prórroga después del vencimiento. (Se descarta la idea anterior de apagar la IA al pausar.)
+- **Unificar «+ Nueva empresa» y «+ Automatización»:** un solo formulario de empresa que pide todo (datos, programas, correo, conexiones, IA, CRM, panel del cliente, cobro), aunque no se use; se quita «+ Automatización». Una sola lista de empresas.
+- **Lista de empresas compacta:** una franja por empresa (nombre, estado, programas, cobro, enlace) con una flecha; al tocarla se despliega todo (módulos, cobro, anuncio, conexiones, pausar, apagar).
+- Maqueta enviada (maqueta-empresas.png); esperando que marque la lista de opciones antes de construir.
+
 ## CORRECCIÓN · TARJETA «PARA REVISAR» (27 nov)
 - La tarjeta contaba las reservas que alguien tenía abiertas en ese momento (lo mismo que la pestaña «En revisión ahora»), no las que muestran la etiqueta «Revisar». Por eso marcaba 0 con varias en rojo.
 - Ahora «Para revisar» y «Pendientes de transcribir» cuentan lo que muestra la etiqueta de cada reserva: una pendiente sin día, cliente u hotel se ve como «Revisar» y cuenta ahí, no en Pendientes. El filtro de estado usa la misma regla y la tarjeta abre «Todas» filtrada por «Para revisar». La pestaña «En revisión ahora» sigue igual.
