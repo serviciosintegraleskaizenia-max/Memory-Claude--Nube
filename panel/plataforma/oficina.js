@@ -84,7 +84,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   const CLAVE_APIS = { Vuelos: 'api_vuelos', Mapas: 'api_mapas' };
   async function enviarLlaveAEmpresa(empresaId, clave, valor) {
     const e = await A.empresa(empresaId);
-    if (!e || !clave) return;
+    if (!e || !clave || e.sin_panel) return;
     await A.conEmpresa(e, async db => {
       await db.query("CREATE TABLE IF NOT EXISTS zentralia_ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL DEFAULT '')");
       await db.query('INSERT INTO zentralia_ajustes (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor', [clave, valor]);
@@ -516,6 +516,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     return 'Revisa el texto del error. Si se repite, mándame ese texto y lo arreglo.';
   }
   async function estadoNegocio(e) {
+    if (e.sin_panel) {
+      return { id: e.id, nombre: e.nombre, url: A.urlDe(e), es_demo: e.es_demo, externa: false, sin_panel: true, estado: e.estado, vivo: false,
+        revisiones: [{ nombre: 'Panel', estado: 'gris', detalle: 'Sin panel de reservas (solo redes, CRM o panel del cliente)' }] };
+    }
     const vivo = await A.responde(e);
     const r = { id: e.id, nombre: e.nombre, url: A.urlDe(e), es_demo: e.es_demo, externa: e.externa, estado: e.estado, vivo, revisiones: [] };
     const fila = (nombre, estado, detalle) => r.revisiones.push({ nombre, estado, detalle });
@@ -577,7 +581,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   }
 
   async function contactos() {
-    const filas = (await client.query("SELECT * FROM empresas WHERE estado <> 'apagada' ORDER BY es_demo, nombre")).rows;
+    const filas = (await client.query("SELECT * FROM empresas WHERE estado <> 'apagada' AND sin_panel = FALSE ORDER BY es_demo, nombre")).rows;
     return Promise.all(filas.map(async e => {
       try {
         return await A.conEmpresa(e, async db => {
@@ -1114,7 +1118,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (pago.auto_mes && pago.empresa_id) {
           try {
             const e = await A.empresa(pago.empresa_id);
-            await A.conEmpresa(e, db => db.query(`UPDATE cuenta SET pagado = CASE WHEN COALESCE(pagado, '') < $1 THEN $1 ELSE pagado END,
+            // Sin panel de reservas: el último mes pagado se guarda en Oficina.
+            if (e.sin_panel) await client.query(`UPDATE empresas SET cuenta_central = COALESCE(cuenta_central, '{}'::jsonb) ||
+              jsonb_build_object('pagado', GREATEST(COALESCE(cuenta_central->>'pagado', ''), $1::text)) WHERE id = $2`, [pago.auto_mes, e.id]);
+            else await A.conEmpresa(e, db => db.query(`UPDATE cuenta SET pagado = CASE WHEN COALESCE(pagado, '') < $1 THEN $1 ELSE pagado END,
               aviso_pago = '', actualizado = NOW() WHERE id = 1`, [pago.auto_mes]));
             avisoQuitado = true;
           } catch (err) { /* sin conexión con la empresa: queda anotado aquí igual */ }

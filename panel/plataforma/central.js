@@ -226,6 +226,15 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     // (cobro, anuncios, módulos, pausa); no la enciende, no la apaga y nunca borra su base de datos.
     await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS externa BOOLEAN NOT NULL DEFAULT FALSE');
     await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS url_externa TEXT NOT NULL DEFAULT ''");
+    // Una sola cuenta por empresa. Puede no tener panel de reservas (solo redes, CRM o panel del cliente):
+    // entonces no tiene base ni puerto, y su estado, programas y último mes pagado se guardan aquí (cuenta_central).
+    await client.query('ALTER TABLE empresas ADD COLUMN IF NOT EXISTS sin_panel BOOLEAN NOT NULL DEFAULT FALSE');
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS cuenta_central JSONB NOT NULL DEFAULT '{}'::jsonb");
+    await client.query("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'");
+    await client.query('ALTER TABLE empresas ALTER COLUMN base_datos DROP NOT NULL');
+    await client.query('ALTER TABLE empresas ALTER COLUMN puerto DROP NOT NULL');
+    await client.query('ALTER TABLE automatizacion_clientes ADD COLUMN IF NOT EXISTS empresa_id INTEGER');
+    await unirAutomatizacion();
     await client.query(`CREATE TABLE IF NOT EXISTS plantillas_mensaje (
       id SERIAL PRIMARY KEY,
       tipo VARCHAR(20) NOT NULL,
@@ -244,9 +253,43 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     }
   }
 
+  // ---------- Una sola cuenta por empresa ----------
+
+  const nombreNormal = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  // Cada cliente de automatización queda dentro de una empresa. Si ya hay una empresa con el mismo nombre o subdominio
+  // (ej. Kaizen Consulting IA), se juntan; si no, se le crea una empresa sin panel de reservas (ej. PEX Solutions).
+  // Solo toca los que todavía no tienen empresa: se puede correr en cada arranque.
+  async function unirAutomatizacion() {
+    const sueltos = (await client.query('SELECT id, slug, nombre FROM automatizacion_clientes WHERE empresa_id IS NULL ORDER BY id')).rows;
+    if (!sueltos.length) return [];
+    const empresasLista = (await client.query('SELECT id, slug, nombre FROM empresas WHERE es_demo = FALSE')).rows;
+    const ligadas = new Set((await client.query('SELECT empresa_id FROM automatizacion_clientes WHERE empresa_id IS NOT NULL')).rows.map(x => x.empresa_id));
+    const hechos = [];
+    for (const a of sueltos) {
+      let e = empresasLista.find(x => !ligadas.has(x.id) && (nombreNormal(x.nombre) === nombreNormal(a.nombre) || x.slug === a.slug));
+      if (!e) {
+        let slug = a.slug;
+        for (let i = 2; (await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount; i++) slug = a.slug.slice(0, 27) + '-' + i;
+        e = (await client.query("INSERT INTO empresas (slug, nombre, estado, sin_panel, administracion) VALUES ($1, $2, 'activa', TRUE, 'kaizen') RETURNING id, slug, nombre",
+          [slug, String(a.nombre).slice(0, 120)])).rows[0];
+        empresasLista.push(e);
+      }
+      ligadas.add(e.id);
+      await client.query('UPDATE automatizacion_clientes SET empresa_id = $1 WHERE id = $2', [e.id, a.id]);
+      hechos.push({ automatizacion: a.slug, empresa: e.slug });
+    }
+    return hechos;
+  }
+  // Cambia parte del estado guardado aquí de una empresa sin panel (estado, motivo, programas, último mes pagado).
+  async function cambiarCuentaCentral(e, cambios) {
+    await client.query("UPDATE empresas SET cuenta_central = COALESCE(cuenta_central, '{}'::jsonb) || $1::jsonb WHERE id = $2", [cambios, e.id]);
+  }
+  const SIN_PANEL = 'Esta empresa no tiene panel de reservas (solo redes, CRM o panel del cliente).';
+
   // ---------- Conexión y procesos de cada empresa ----------
 
   async function conEmpresa(e, fn) {
+    if (!e.base_datos) throw Object.assign(new Error(SIN_PANEL), { codigo: 400 });
     // Con límite de tiempo: si la base de una empresa no responde, no se queda esperando y bloquea la Oficina.
     const c = new Client({ ...config.db, database: e.base_datos, connectionTimeoutMillis: 4000, query_timeout: 8000 });
     await c.connect();
@@ -256,9 +299,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   const carpetaDe = e => path.join(CARPETA_EMPRESAS, e.slug);
   const archivoDe = e => path.join(carpetaDe(e), 'config.js');
   const urlDe = e => (e.externa && e.url_externa ? e.url_externa
-    : aj.dominio ? `https://${e.slug}.${aj.dominio}` : `http://${ipLocal()}:${e.puerto}`);
+    : aj.dominio ? `https://${e.slug}.${aj.dominio}` : e.puerto ? `http://${ipLocal()}:${e.puerto}` : '');
 
   async function responde(e, ms = 2500) {
+    if (!e.puerto) return false;
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ms);
     try {
@@ -372,8 +416,10 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Borra la base de datos, la carpeta (ajustes y claves) y el registro de una empresa. Primero apaga su panel.
   async function borrarTodo(e) {
-    // Externa: solo se quita de la lista. Su base de datos y su carpeta no se tocan nunca.
-    if (e.externa) {
+    // Su automatización (redes, IA, CRM) va con la empresa: si no, volvería a aparecer como empresa nueva.
+    if (e.id) await client.query('DELETE FROM automatizacion_clientes WHERE empresa_id = $1', [e.id]);
+    // Externa o sin panel: solo se quita de la lista. Una base de datos externa y su carpeta no se tocan nunca.
+    if (e.externa || e.sin_panel) {
       if (e.id) await client.query('DELETE FROM empresas WHERE id = $1', [e.id]);
       return;
     }
@@ -410,7 +456,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
 
   // Cada minuto: si una empresa encendida no responde dos veces seguidas, se vuelve a encender.
   async function supervisar() {
-    const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE")).rows;
+    const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE AND sin_panel = FALSE")).rows;
     for (const e of lista) {
       if (await responde(e)) { fallos.delete(e.id); continue; }
       const n = (fallos.get(e.id) || 0) + 1;
@@ -427,7 +473,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     if (!activo) return;
     // Al encender el central, se encienden las empresas que estaban activas.
     setTimeout(async () => {
-      const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE")).rows;
+      const lista = (await client.query("SELECT * FROM empresas WHERE estado IN ('activa', 'pausada') AND externa = FALSE AND sin_panel = FALSE")).rows;
       for (const e of lista) await encender(e).catch(err => console.log('Empresa', e.slug, err.message));
     }, 3000);
     setInterval(() => supervisar().catch(err => console.log('Supervisión de empresas:', err.message)), 60 * 1000);
@@ -906,8 +952,22 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const id = Number(f.id) || 0;
     const ocupado = (await client.query('SELECT id FROM automatizacion_clientes WHERE slug = $1', [slug])).rows[0];
     if (ocupado && ocupado.id !== id) throw Object.assign(new Error('Ya hay un cliente de automatización con ese subdominio.'), { codigo: 400, campo: 'slug' });
-    if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
-      throw Object.assign(new Error('Ese subdominio ya lo usa una empresa del panel de correo.'), { codigo: 400, campo: 'slug' });
+    // La automatización va dentro de una empresa. Si no se dice cuál, al crearla se le arma una empresa sin panel.
+    const actual = id ? (await client.query('SELECT empresa_id FROM automatizacion_clientes WHERE id = $1', [id])).rows[0] : null;
+    let empresaId = Number(f.empresa_id) || (actual && actual.empresa_id) || null;
+    // Sin empresa dicha: si hay una con el mismo subdominio y sin automatización, va dentro de esa.
+    if (!empresaId) {
+      const misma = (await client.query(`SELECT e.id FROM empresas e WHERE e.slug = $1
+        AND NOT EXISTS (SELECT 1 FROM automatizacion_clientes a WHERE a.empresa_id = e.id AND a.id <> $2)`, [slug, id])).rows[0];
+      if (misma) empresaId = misma.id;
+    }
+    if (empresaId) {
+      if (!(await client.query('SELECT 1 FROM empresas WHERE id = $1', [empresaId])).rowCount) throw Object.assign(new Error('Esa empresa ya no existe.'), { codigo: 404 });
+      const otra = (await client.query('SELECT id FROM automatizacion_clientes WHERE empresa_id = $1 AND id <> $2', [empresaId, id])).rows[0];
+      if (otra) throw Object.assign(new Error('Esa empresa ya tiene su automatización.'), { codigo: 400 });
+    }
+    if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1 AND id IS DISTINCT FROM $2', [slug, empresaId])).rowCount) {
+      throw Object.assign(new Error('Ese subdominio ya lo usa otra empresa.'), { codigo: 400, campo: 'slug' });
     }
     const entrada = f.perfil || {};
     const claveTipo = await resolverTipo(u, (entrada.ia || {}).tipo_nombre);
@@ -918,11 +978,12 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     perfilLimpio.ia.clave_openrouter_enc = claveNueva ? cifrarAuto(claveNueva) : (encPrevio || '');
     const perfil = JSON.stringify(perfilLimpio);
     if (id) {
-      const r = await client.query('UPDATE automatizacion_clientes SET slug = $1, nombre = $2, perfil = $3::jsonb, actualizado = NOW() WHERE id = $4 RETURNING id',
-        [slug, nombre, perfil, id]);
+      const r = await client.query('UPDATE automatizacion_clientes SET slug = $1, nombre = $2, perfil = $3::jsonb, empresa_id = COALESCE($5, empresa_id), actualizado = NOW() WHERE id = $4 RETURNING id',
+        [slug, nombre, perfil, id, empresaId]);
       if (!r.rows[0]) throw Object.assign(new Error('Ese cliente ya no existe.'), { codigo: 404 });
     } else {
-      const r = await client.query('INSERT INTO automatizacion_clientes (slug, nombre, perfil) VALUES ($1, $2, $3::jsonb) RETURNING id', [slug, nombre, perfil]);
+      const r = await client.query('INSERT INTO automatizacion_clientes (slug, nombre, perfil, empresa_id) VALUES ($1, $2, $3::jsonb, $4) RETURNING id', [slug, nombre, perfil, empresaId]);
+      if (!empresaId) await unirAutomatizacion();
       await registrar(u, 'crear_automatizacion', 'cliente', slug, '', '', nombre);
       return { id: r.rows[0].id };
     }
@@ -943,6 +1004,9 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount) {
       throw Object.assign(new Error('Ya existe una empresa con ese subdominio.'), { codigo: 400 });
     }
+    if (!esDemo && (await client.query('SELECT 1 FROM automatizacion_clientes WHERE slug = $1', [slug])).rowCount) {
+      throw Object.assign(new Error('Ese subdominio ya lo usa la automatización de otra empresa.'), { codigo: 400, campo: 'slug' });
+    }
     const admin = esDemo ? null : { usuario: texto(f.admin && f.admin.usuario, 50).toLowerCase(), nombre: texto(f.admin && f.admin.nombre, 100) };
     if (admin && (!/^[a-z0-9._-]{3,50}$/.test(admin.usuario) || !admin.nombre)) {
       throw Object.assign(new Error('El usuario principal necesita nombre y un usuario de 3 a 50 letras o números (sin espacios).'), { codigo: 400 });
@@ -957,7 +1021,8 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     let e = { slug, base_datos: base, puerto };
     try {
       e = (await client.query(
-        "INSERT INTO empresas (slug, nombre, base_datos, puerto, es_demo, estado) VALUES ($1, $2, $3, $4, $5, 'creando') RETURNING *", [slug, nombre, base, puerto, !!esDemo])).rows[0];
+        "INSERT INTO empresas (slug, nombre, base_datos, puerto, es_demo, estado, administracion) VALUES ($1, $2, $3, $4, $5, 'creando', $6) RETURNING *",
+        [slug, nombre, base, puerto, !!esDemo, f.administracion === 'centralia' ? 'centralia' : 'kaizen'])).rows[0];
       const r = await terminarCreacion(u, f, esDemo, e, admin);
       await client.query("UPDATE empresas SET estado = 'activa' WHERE id = $1", [e.id]);
       return r;
@@ -1000,12 +1065,24 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (esDemo) await sembrarDemo(db);
     });
     await registrar(u, esDemo ? 'crear_demo' : 'crear_empresa', 'empresa', slug, '', base, `${nombre} en el puerto ${puerto}`);
-    return { ok: true, url: urlDe(e), puerto, admin: admin ? { usuario: admin.usuario, clave: claveAdmin } : null };
+    return { ok: true, id: e.id, url: urlDe(e), puerto, admin: admin ? { usuario: admin.usuario, clave: claveAdmin } : null };
   }
 
   // ---------- Lista y detalle ----------
 
   async function detalle(e) {
+    if (e.sin_panel) {
+      const c = e.cuenta_central || {};
+      const pago = e.pago || {};
+      return {
+        id: e.id, slug: e.slug, nombre: e.nombre, puerto: null, estado: e.estado, es_demo: e.es_demo, url: urlDe(e),
+        externa: false, sin_panel: true, base_datos: null, administracion: e.administracion || 'kaizen',
+        creado: e.creado, correo: {}, pagoCentral: pago, vivo: false, numeros: {}, usuarios: [], motor: null,
+        cuenta: { estado: c.estado || 'activa', motivo: c.motivo || '', pago, pagado: c.pagado || null },
+        etapaPago: pago.activo ? etapaPago(pago, c.pagado || null) : null,
+        modulos: Object.fromEntries(Object.keys(MODULOS).map(k => [k, Boolean(c.modulos && c.modulos[k])]))
+      };
+    }
     const vivo = await responde(e);
     let info = {};
     try {
@@ -1024,7 +1101,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const etapa = c.pago ? etapaPago({ ...c.pago, activo: c.pago.activo }, c.pagado) : null;
     return {
       id: e.id, slug: e.slug, nombre: e.nombre, puerto: e.puerto, estado: e.estado, es_demo: e.es_demo, url: urlDe(e),
-      externa: e.externa, base_datos: e.base_datos,
+      externa: e.externa, sin_panel: false, base_datos: e.base_datos, administracion: e.administracion || 'kaizen',
       creado: e.creado, correo: e.correo, pagoCentral: e.pago, vivo, ...info, etapaPago: etapa,
       modulos: Object.fromEntries(Object.keys(MODULOS).map(k => [k, c.modulos && typeof c.modulos[k] === 'boolean' ? c.modulos[k] : MODULOS[k].porDefecto]))
     };
@@ -1249,7 +1326,12 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
       if (req.method === 'GET' && url === '/api/central/empresas') {
         const lista = (await client.query('SELECT * FROM empresas ORDER BY es_demo, nombre')).rows;
         const detalles = await Promise.all(lista.map(detalle));
-        return json(res, 200, { empresas: detalles, modulos: MODULOS, ip: ipLocal(), dominio: aj.dominio, hoy: hoyLocal() });
+        let administraciones = [{ clave: 'kaizen', nombre: 'Kaizen IA' }, { clave: 'centralia', nombre: 'Zentralia' }];
+        try {
+          const filas = (await client.query("SELECT clave, nombre FROM oficina_administraciones WHERE clave IN ('kaizen', 'centralia') ORDER BY clave = 'kaizen' DESC")).rows;
+          if (filas.length) administraciones = filas.map(a => ({ clave: a.clave, nombre: a.nombre || (a.clave === 'kaizen' ? 'Kaizen IA' : 'Zentralia') }));
+        } catch (err) { /* sin la tabla de Oficina: nombres por defecto */ }
+        return json(res, 200, { empresas: detalles, modulos: MODULOS, ip: ipLocal(), dominio: aj.dominio, hoy: hoyLocal(), administraciones });
       }
 
       if (req.method === 'POST' && url === '/api/central/empresas') {
@@ -1258,9 +1340,32 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         return json(res, 200, await crearEmpresa(u, f, false));
       }
 
+      if (req.method === 'POST' && url === '/api/central/empresas/sin-panel') {
+        const f = await leerCuerpo(req);
+        const nombre = texto(f.nombre, 120);
+        const slug = texto(f.slug, 30).toLowerCase();
+        const administracion = f.administracion === 'centralia' ? 'centralia' : 'kaizen';
+        if (!nombre) return json(res, 400, { error: 'Falta el nombre de la empresa.', campo: 'nombre' });
+        if (!SLUG.test(slug) || RESERVADOS.has(slug) || slug === 'demo') return json(res, 400, { error: `Subdominio: "${slug}" no sirve o está reservado. Usa de 3 a 30 letras minúsculas, números o guiones.`, campo: 'slug' });
+        if ((await client.query('SELECT 1 FROM empresas WHERE slug = $1', [slug])).rowCount || (await client.query('SELECT 1 FROM automatizacion_clientes WHERE slug = $1', [slug])).rowCount) {
+          return json(res, 400, { error: 'Ese subdominio ya lo usa otra empresa.', campo: 'slug' });
+        }
+        const r = await client.query("INSERT INTO empresas (slug, nombre, estado, sin_panel, administracion) VALUES ($1, $2, 'activa', TRUE, $3) RETURNING id", [slug, nombre, administracion]);
+        await registrar(u, 'crear_empresa_sin_panel', 'empresa', slug, '', administracion, nombre);
+        return json(res, 200, { ok: true, id: r.rows[0].id });
+      }
+      if (req.method === 'POST' && url === '/api/central/empresas/administracion') {
+        const f = await leerCuerpo(req);
+        const e = await empresa(f.id);
+        const administracion = f.administracion === 'centralia' ? 'centralia' : 'kaizen';
+        await client.query('UPDATE empresas SET administracion = $1 WHERE id = $2', [administracion, e.id]);
+        await registrar(u, 'administracion_empresa', 'empresa', e.slug, e.administracion || 'kaizen', administracion, '');
+        return json(res, 200, { ok: true });
+      }
+
       // Clientes de automatización (redes y CRM), separados del motor de correo.
       if (req.method === 'GET' && url === '/api/central/automatizacion') {
-        const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
+        const clientes = (await client.query('SELECT id, slug, nombre, perfil, estado, empresa_id, TO_CHAR(actualizado, \'YYYY-MM-DD HH24:MI\') AS actualizado FROM automatizacion_clientes ORDER BY nombre')).rows;
         const sinClave = [];
         for (const c of clientes) {
           const p = { ...(c.perfil || {}), ia: { ...((c.perfil || {}).ia || {}) } };
@@ -1351,6 +1456,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         if (e.externa && ['encender', 'apagar', 'correo'].includes(accion)) {
           return json(res, 400, { error: 'Esta empresa se maneja en su propia carpeta: la enciende su vigilante y su correo se cambia en su config.js.' });
         }
+        if (e.sin_panel && ['encender', 'apagar', 'correo'].includes(accion)) return json(res, 400, { error: SIN_PANEL });
 
         if (accion === 'encender') {
           await client.query("UPDATE empresas SET estado = CASE WHEN estado = 'apagada' THEN 'activa' ELSE estado END WHERE id = $1", [e.id]);
@@ -1376,14 +1482,16 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         if (accion === 'pausar' || accion === 'reanudar') {
           const pausar = accion === 'pausar';
           const motivo = texto(f.motivo, 300);
-          await conEmpresa(e, db => db.query('UPDATE cuenta SET estado = $1, motivo = $2, actualizado = NOW() WHERE id = 1', [pausar ? 'pausada' : 'activa', pausar ? motivo : '']));
+          if (e.sin_panel) await cambiarCuentaCentral(e, { estado: pausar ? 'pausada' : 'activa', motivo: pausar ? motivo : '' });
+          else await conEmpresa(e, db => db.query('UPDATE cuenta SET estado = $1, motivo = $2, actualizado = NOW() WHERE id = 1', [pausar ? 'pausada' : 'activa', pausar ? motivo : '']));
           await client.query('UPDATE empresas SET estado = $1 WHERE id = $2', [pausar ? 'pausada' : 'activa', e.id]);
           await registrar(u, pausar ? 'pausar_empresa' : 'reanudar_empresa', 'empresa', e.slug, '', '', motivo);
           return json(res, 200, { ok: true });
         }
         if (accion === 'modulos') {
           const modulos = Object.fromEntries(Object.keys(MODULOS).map(k => [k, !!(f.modulos && f.modulos[k])]));
-          await conEmpresa(e, db => db.query('UPDATE cuenta SET modulos = $1, actualizado = NOW() WHERE id = 1', [modulos]));
+          if (e.sin_panel) await cambiarCuentaCentral(e, { modulos });
+          else await conEmpresa(e, db => db.query('UPDATE cuenta SET modulos = $1, actualizado = NOW() WHERE id = 1', [modulos]));
           await registrar(u, 'modulos_empresa', 'empresa', e.slug, '', JSON.stringify(modulos), '');
           return json(res, 200, { ok: true });
         }
@@ -1400,16 +1508,18 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
           };
           e.pago = pago;
           await client.query('UPDATE empresas SET pago = $1 WHERE id = $2', [pago, e.id]);
-          await aplicarPago(e);
+          if (!e.sin_panel) await aplicarPago(e);
           await registrar(u, 'pago_empresa', 'empresa', e.slug, '', JSON.stringify(pago), '');
           return json(res, 200, { ok: true });
         }
         if (accion === 'pagado') {
           // Marca pagado el mes que se está cobrando (o el actual) y apaga el aviso.
-          const info = await conEmpresa(e, async db => (await db.query('SELECT pago, pagado FROM cuenta WHERE id = 1')).rows[0]);
+          const info = e.sin_panel ? { pago: e.pago || {}, pagado: (e.cuenta_central || {}).pagado || null }
+            : await conEmpresa(e, async db => (await db.query('SELECT pago, pagado FROM cuenta WHERE id = 1')).rows[0]);
           const etapa = etapaPago(info.pago, info.pagado);
           const periodo = /^\d{4}-\d{2}$/.test(f.periodo || '') ? f.periodo : (etapa ? etapa.periodo : hoyLocal().slice(0, 7));
-          await conEmpresa(e, db => db.query("UPDATE cuenta SET pagado = $1, aviso_pago = '', actualizado = NOW() WHERE id = 1", [periodo]));
+          if (e.sin_panel) await cambiarCuentaCentral(e, { pagado: periodo });
+          else await conEmpresa(e, db => db.query("UPDATE cuenta SET pagado = $1, aviso_pago = '', actualizado = NOW() WHERE id = 1", [periodo]));
           await registrar(u, 'pago_recibido', 'empresa', e.slug, info.pagado || '', periodo, '');
           return json(res, 200, { ok: true, periodo });
         }
@@ -1420,6 +1530,14 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
             textoAnuncio = p ? p.texto : '';
           }
           if (!textoAnuncio) return json(res, 400, { error: 'Escribe el mensaje o elige uno del banco.' });
+          if (e.sin_panel) {
+            // Sin panel de reservas: el anuncio va a su panel del cliente, si tiene uno.
+            const a = (await client.query('SELECT slug FROM automatizacion_clientes WHERE empresa_id = $1', [e.id])).rows[0];
+            if (!a) return json(res, 400, { error: 'Esta empresa no tiene un panel donde mostrar el anuncio.' });
+            await puente.anuncio(a.slug, texto(f.titulo, 120) || 'Aviso de Kaizen IA', textoAnuncio.replace(/\{usuario\}|\{empresa\}/g, e.nombre));
+            await registrar(u, 'anuncio_empresa', 'empresa', e.slug, '', '1', textoAnuncio.slice(0, 200));
+            return json(res, 200, { ok: true, enviados: 1 });
+          }
           const n = await conEmpresa(e, async db => {
             const destino = f.para === '*'
               ? (await db.query("SELECT usuario, nombre FROM usuarios WHERE activo = TRUE AND grupo <> 'Programador'")).rows
