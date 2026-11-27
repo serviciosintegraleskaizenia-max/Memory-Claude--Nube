@@ -174,7 +174,15 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - **Recibo al cliente con detalle por línea** (cada plan, consumo extra de IA/tokens, etc.) y guardado en la base como historial.
 - Mismo repositorio; esta parte va en su propio paquete de instalación.
 - **Diseño compacto (dueño, 27 nov, maqueta aprobada con este cambio):** que no ocupe espacio. Recibos: lista corta por fecha y número; al tocar uno se abre en grande. Planes: fichitas pequeñas; al tocar una se abre en grande. Movimientos: resumen con total y saldo que va quedando; «ver todo» se abre en grande.
-- **Préstamo de un socio (pendiente de confirmar):** se mantiene lo elegido antes (lo devuelve de su parte el socio que ya había retiró todo); la otra opción era que la empresa lo devuelva antes de repartir. Preguntar solo si hace falta.
+- **REGLAS DE REPARTO DEFINITIVAS (dueño, 27 nov):**
+  1. Todo cobro entra a la caja de su empresa (Zentralia o Kaizen IA) con recibo al cliente (una línea por plan y por extra).
+  2. Primero salen los gastos del sistema: creación y mensuales (nunca mezclados), cargados a un plan o a General.
+  3. De lo que queda, se decide cuánto queda como fondo de la empresa y cuánto se reparte.
+  4. Regla de oro: lo repartido es de cada socio aunque no lo retire; la empresa no lo usa.
+  5. Retiros: solo hasta su parte y solo si está en caja; nada de adelantos del mes siguiente; recibo por cada retiro (también del dueño); sale como «Retiro de socio», no es gasto.
+  6. Emergencias: del fondo de la empresa (gasto común, nadie debe).
+  7. Sin fondo: se usa la parte de un socio solo si él autoriza; Oficina pregunta quién presta (uno, otro o los dos y cuánto) y anota el préstamo. **Lo devuelve el socio que ya había retirado, de su parte de los meses siguientes**; mientras deba, no retira (en rojo). Igual al revés.
+  8. Planes: precio de creación, mensualidad y día propio, o en un solo paquete; se ve cuánto costó y deja cada plan.
 - **REGLA DE ORO (dueño, 27 nov):** cuando se reparte la utilidad, la parte de cada socio es SUYA (cerrada), no de la empresa, aunque no la haya retirado. Ej.: se reparten 1,000 → Cristian 600 / José 400; si Cristian retira 400, sus 200 restantes siguen siendo suyos y los 400 de José también. El dinero de la empresa es solo el que se decide dejar como fondo (ej.: hay 1,200, se dejan 200 en la empresa y se reparten 1,000). Las emergencias salen del fondo de la empresa (gasto común). La parte de un socio solo se usa si ese socio autoriza prestarla; entonces la empresa (o el socio que ya retiró) le queda debiendo.
 - **Regla decidida por el dueño para la emergencia (27 nov):** si un socio ya retiró su parte y luego hay un gasto, ese gasto lo paga **completo el socio que retiró** (no 60/40). Ejemplo para la prueba: mes 1 quedan 1,000 (Cristian 600 / José 400); José retira 400; emergencia 300 pagada con lo de Cristian → José le debe 300 a Cristian. Mes 2: 750 − 250 gastos fijos = 500 → Cristian 300 (60 %) + 300 de la deuda = 600; se lleva los 500 y José queda debiendo 100 para el mes siguiente (José cobra 0). Totales: Cristian 900, José 300. Mientras José deba, no retira.
 
