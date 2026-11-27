@@ -399,6 +399,21 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
     return salida;
   }
+  // Recibo al cliente de un cobro pagado que todavía no tiene recibo. Devuelve { id, numero }.
+  async function reciboDeCobro(pagoId) {
+    const p = (await client.query(`SELECT p.*, TO_CHAR(p.pagado_el, 'YYYY-MM-DD') AS pagado, COALESCE(e.administracion, 'kaizen') AS administracion
+      FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = $1`, [pagoId])).rows[0];
+    if (!p) throw Object.assign(new Error('Cobro no encontrado.'), { codigo: 404 });
+    if (!p.pagado) throw Object.assign(new Error('Ese cobro todavía no está pagado.'), { codigo: 400 });
+    if (p.recibo_id) return { id: p.recibo_id, numero: null, ya: true };
+    const numero = await siguienteNumero(p.administracion);
+    const rec = (await client.query(`INSERT INTO oficina_recibos (administracion, numero, tipo, pago_id, empresa_id, monto, moneda, concepto, metodo, referencia, fecha, detalle)
+      VALUES ($1,$2,'cliente',$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [p.administracion, numero, p.id, p.empresa_id, p.monto, p.moneda, p.concepto, p.forma || '', p.referencia || '', p.pagado,
+        JSON.stringify({ comprobante_nombre: p.comprobante_nombre || '', descuentos: p.descuentos || [], recibido: p.recibido })])).rows[0];
+    await client.query('UPDATE oficina_pagos SET recibo_id = $2 WHERE id = $1', [p.id, rec.id]);
+    return { id: rec.id, numero };
+  }
   // Siguiente número de recibo de cada administración (cada una numera por separado).
   async function siguienteNumero(clave) {
     return Number((await client.query('SELECT COALESCE(MAX(numero), 0) + 1 AS n FROM oficina_recibos WHERE administracion = $1', [clave])).rows[0].n);
@@ -958,6 +973,16 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         await registrar(u, 'cobro_pagado', 'pago', p.id, '', fecha, p.concepto);
         return json(res, 200, { ok: true, recibo_id: rec.id, numero });
       }
+      // Cobro pagado sin recibo (ej. marcado pagado antes de que existieran los recibos): se le genera ahora.
+      if (req.method === 'POST' && url === '/api/oficina/cobro/recibo') {
+        const f = await leerCuerpo(req);
+        const adm = (await client.query("SELECT COALESCE(e.administracion, 'kaizen') AS administracion FROM oficina_pagos p LEFT JOIN empresas e ON e.id = p.empresa_id WHERE p.id = $1", [Number(f.id)])).rows[0];
+        if (!adm) return json(res, 404, { error: 'Cobro no encontrado.' });
+        if (!puedeAdmin(u, permisos, adm.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const r = await reciboDeCobro(Number(f.id));
+        if (!r.ya) await registrar(u, 'recibo_cliente', 'pago', Number(f.id), '', String(r.numero), 'recibo generado');
+        return json(res, 200, { ok: true, recibo_id: r.id, numero: r.numero });
+      }
       // Varios cobros pagados de una sola vez: un recibo por cada cobro, con su número, y un solo comprobante del pago total.
       if (req.method === 'POST' && url === '/api/oficina/cobro/pagar-varios') {
         const f = await leerCuerpo(req);
@@ -1113,6 +1138,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         }
         const fecha = fechaValida(f.fecha) ? f.fecha : hoyLocal();
         await client.query('UPDATE oficina_pagos SET pagado_el = $1, forma = $2 WHERE id = $3', [fecha, texto(f.forma, 60), pago.id]);
+        // Todo cobro pagado lleva su recibo al cliente.
+        const recibo = await reciboDeCobro(pago.id);
         // Si es la mensualidad automática, el panel del cliente también la da por pagada y quita el aviso.
         let avisoQuitado = false;
         if (pago.auto_mes && pago.empresa_id) {
@@ -1127,7 +1154,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           } catch (err) { /* sin conexión con la empresa: queda anotado aquí igual */ }
         }
         await registrar(u, 'oficina_pago_recibido', 'pago', pago.id, '', fecha, `${pago.concepto} · ${pago.moneda} ${pago.monto}`);
-        return json(res, 200, { ok: true, avisoQuitado });
+        return json(res, 200, { ok: true, avisoQuitado, recibo_id: recibo.id });
       }
 
       const ce = url.match(/^\/api\/oficina\/empresa\/(\d+)$/);

@@ -1256,7 +1256,7 @@ function bloqueCobros() {
       <h4>Cobros del cliente <span class="chip ambar" style="font-size:11px">editable · borrable</span></h4>
       <table><thead><tr><th>Concepto</th><th class="n">Monto</th><th></th></tr></thead><tbody>
         ${cobros.map(x => `<tr><td><b>${esc(x.concepto)}</b><br><small style="color:var(--suave)">${x.pagado_el ? 'Pagado ' + fechaCorta(x.pagado_el) : 'Vence ' + fechaCorta(x.vence)}${x.forma ? ' · ' + esc(x.forma) : ''}${x.recibido != null && Math.abs(Number(x.monto) - Number(x.recibido)) >= 1 ? ' · recibí ' + dinero(x.recibido, x.moneda) : ''}</small></td><td class="n">${dinero(x.monto, x.moneda)}</td>
-          <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="3" class="vacio">Sin cobros todavía.</td></tr>'}
+          <td class="acciones">${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : x.pagado_el ? `<button class="btn-mini" data-generar-recibo="${x.id}">Generar recibo</button>` : ''}${x.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${x.id}">Cobrar</button>`}<button class="btn-mini peligro" data-borrar-cobro="${x.id}" data-texto="${esc(x.concepto + ' · ' + dinero(x.monto, x.moneda) + (x.pagado_el ? ' (pagado)' : ' (pendiente)'))}">Borrar</button></td></tr>`).join('') || '<tr><td colspan="3" class="vacio">Sin cobros todavía.</td></tr>'}
       </tbody></table>
     </div>
     <details class="adm-desp" data-campo="co.gastos">
@@ -1304,7 +1304,7 @@ function seccionRecibos(e, cobros) {
   } else if (recTab === 'socio') {
     cuerpo = delSocio.length ? `<table><thead><tr><th>Nº</th><th>Fecha</th><th>Socio</th><th class="n">Monto</th><th></th></tr></thead><tbody>${delSocio.map(r => `<tr><td>${String(r.numero).padStart(4, '0')}</td><td>${fechaCorta(r.fecha)}</td><td>${esc(r.socio || 'Socio')}</td><td class="n">${dinero(r.monto, r.moneda)}</td><td><button class="btn-mini" data-recibo="${r.id}">Ver</button></td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio">Todavía no hay retiros del socio.</div>';
   } else {
-    cuerpo = pagados.length ? `<table><thead><tr><th>Fecha</th><th>Quién pagó</th><th>Medio · referencia</th><th class="n">Monto</th><th class="n">Recibí</th><th></th></tr></thead><tbody>${pagados.map(x => `<tr><td>${fechaCorta(x.pagado_el)}</td><td>${esc(nombreCliente(e))}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td class="n">${dinero(x.monto, x.moneda)}</td><td class="n">${x.recibido != null ? dinero(x.recibido, x.moneda) : '—'}</td><td>${x.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${x.id}">Voucher</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio">Todavía no hay pagos recibidos de este cliente.</div>';
+    cuerpo = pagados.length ? `<table><thead><tr><th>Fecha</th><th>Quién pagó</th><th>Medio · referencia</th><th class="n">Monto</th><th class="n">Recibí</th><th></th></tr></thead><tbody>${pagados.map(x => `<tr><td>${fechaCorta(x.pagado_el)}</td><td>${esc(nombreCliente(e))}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td class="n">${dinero(x.monto, x.moneda)}</td><td class="n">${x.recibido != null ? dinero(x.recibido, x.moneda) : '—'}</td><td>${x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button> ` : `<button class="btn-mini" data-generar-recibo="${x.id}">Generar recibo</button> `}${x.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${x.id}">Voucher</button>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="adm-vacio">Todavía no hay pagos recibidos de este cliente.</div>';
   }
   return `<div class="adm-tarjeta" style="margin-top:12px"><h4>Recibos</h4><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${pestana('pagos', 'Pagos recibidos', pagados.length)}${pestana('cliente', 'Recibos de cliente', delCliente.length)}${pestana('socio', 'Recibos de socio', delSocio.length)}</div>${cuerpo}</div>`;
 }
@@ -3008,7 +3008,8 @@ function formPagado(p) {
   document.getElementById('fGuardar').onclick = async () => {
     const r = await api('/api/oficina/pagado', { id: p.id, fecha: v('fFec'), forma: v('fFor') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
-    cerrarModal(); aviso(r.data.avisoQuitado ? 'Pago registrado. Se quitó el aviso en el panel del cliente.' : 'Pago registrado.'); ir(vista);
+    cerrarModal(); aviso(r.data.avisoQuitado ? 'Pago registrado con su recibo. Se quitó el aviso en el panel del cliente.' : 'Pago registrado con su recibo.');
+    await ir(vista); if (r.data.recibo_id) abrirRecibo(r.data.recibo_id);
   };
 }
 function formGasto(g = {}) {
@@ -3142,7 +3143,7 @@ function formEstado(e) {
     </div>
     ${cobros.length ? `<table><thead><tr><th>Concepto</th><th>Vence</th><th class="n">Monto</th><th>Pagado</th><th>Forma</th><th>Recibo y comprobante</th><th></th></tr></thead><tbody>
       ${cobros.map(p => `<tr><td>${esc(p.concepto)}</td><td>${fechaCorta(p.vence)}</td><td class="n">${dinero(p.monto, p.moneda)}</td><td>${p.pagado_el ? fechaCorta(p.pagado_el) : '<span class="chip ambar">pendiente</span>'}</td><td>${esc(p.forma || '—')}</td>
-        <td>${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">${esc(p.comprobante_nombre)}</button>` : ''}</td>
+        <td>${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : p.pagado_el ? `<button class="btn-mini" data-generar-recibo="${p.id}">Generar recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">${esc(p.comprobante_nombre)}</button>` : ''}</td>
         <td>${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Registrar pago</button>`}</td></tr>`).join('')}
     </tbody></table>` : '<div class="vacio">Este cliente todavía no tiene cobros. Crea su plan de cobro en «Datos y plan».</div>'}
     <div class="pie"><button class="btn-sec" data-cerrar-modal>Cerrar</button></div>`);
@@ -3442,7 +3443,7 @@ function vClientesAdm() {
       <td>${p.pagado_el ? '' : `<input type="checkbox" data-sel-cobro="${p.id}" ${selCobros.has(p.id) ? 'checked' : ''}> `}<b>${esc(p.concepto)}</b></td><td>${p.pagado_el ? 'Pagado ' + fechaCorta(p.pagado_el) : 'Vence ' + fechaCorta(p.vence)}</td>
       <td>${esc([p.forma, p.referencia].filter(Boolean).join(' · ') || '—')}</td><td class="n">${dinero(p.monto, p.moneda)}</td>
       <td>${p.pagado_el ? '<span class="chip verde">Pagado</span>' : '<span class="chip ambar">Pendiente</span>'}</td>
-      <td style="white-space:nowrap">${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">Comprobante</button> ` : ''}${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Cobrar</button> `}<button class="btn-mini" data-borrar-cobro="${p.id}" data-texto="${esc(p.concepto + ' · ' + dinero(p.monto, p.moneda) + (p.pagado_el ? ' (pagado)' : ' (pendiente)'))}" style="color:var(--rojo,#b42318)">Borrar</button></td></tr>`).join('') : '';
+      <td style="white-space:nowrap">${p.recibo_id ? `<button class="btn-mini" data-recibo="${p.recibo_id}">Recibo</button> ` : p.pagado_el ? `<button class="btn-mini" data-generar-recibo="${p.id}">Generar recibo</button> ` : ''}${p.comprobante_nombre ? `<button class="btn-mini" data-ver-comprobante="${p.id}">Comprobante</button> ` : ''}${p.pagado_el ? '' : `<button class="btn-mini" data-pagar-cobro="${p.id}">Cobrar</button> `}<button class="btn-mini" data-borrar-cobro="${p.id}" data-texto="${esc(p.concepto + ' · ' + dinero(p.monto, p.moneda) + (p.pagado_el ? ' (pagado)' : ' (pendiente)'))}" style="color:var(--rojo,#b42318)">Borrar</button></td></tr>`).join('') : '';
     ficha = `<div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid var(--linea,#e5e7eb);padding-bottom:14px">
       <div style="background:linear-gradient(135deg,#0b5cad,#0f7b6c);color:#fff;padding:16px 18px;display:grid;grid-template-columns:100px 1fr auto;gap:14px;align-items:center">
         ${sel.logo ? `<img src="${sel.logo}" alt="Logo" style="width:100px;height:64px;object-fit:contain;border-radius:10px;background:#fff">` : '<div style="width:100px;height:64px;border-radius:10px;background:#fff;color:#5b6676;display:flex;align-items:center;justify-content:center;font-size:11px;text-align:center">Logo del cliente</div>'}
@@ -3564,7 +3565,7 @@ function programaCaja(p) {
   <div style="height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:6px 0 10px"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#0b5cad,#13c08a)"></div></div>
   ${(p.extras || []).length ? `<div style="font-size:13px;margin-bottom:8px">Extras mensuales: ${p.extras.map(x => `${esc(x.nombre)} ${dinero(x.monto)}`).join(' · ')}</div>` : ''}
   <table><thead><tr><th>Cobro</th><th>Vence</th><th class="n">Monto</th><th>Pagado</th><th>Forma · referencia</th><th></th></tr></thead><tbody>
-    ${pagos.length ? pagos.map(x => `<tr><td>${esc(x.concepto)}</td><td>${fechaCorta(x.vence)}</td><td class="n">${dinero(x.monto, x.moneda)}</td><td>${x.pagado_el ? fechaCorta(x.pagado_el) : '<span class="chip ambar">pendiente</span>'}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td>${x.pagado_el ? (x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : '') : `<button class="btn-mini" data-pagar-cobro="${x.id}">Pagar</button>`}</td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Sin cobros todavía. Guarda el sistema con precio y abono, o registra la mensualidad.</td></tr>'}
+    ${pagos.length ? pagos.map(x => `<tr><td>${esc(x.concepto)}</td><td>${fechaCorta(x.vence)}</td><td class="n">${dinero(x.monto, x.moneda)}</td><td>${x.pagado_el ? fechaCorta(x.pagado_el) : '<span class="chip ambar">pendiente</span>'}</td><td>${esc([x.forma, x.referencia].filter(Boolean).join(' · ') || '—')}</td><td>${x.pagado_el ? (x.recibo_id ? `<button class="btn-mini" data-recibo="${x.recibo_id}">Recibo</button>` : `<button class="btn-mini" data-generar-recibo="${x.id}">Generar recibo</button>`) : `<button class="btn-mini" data-pagar-cobro="${x.id}">Pagar</button>`}</td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Sin cobros todavía. Guarda el sistema con precio y abono, o registra la mensualidad.</td></tr>'}
   </tbody></table>`;
 }
 // Cuánto de los gastos de plataforma le toca pagar a un cliente (monto × su porcentaje).
@@ -3689,6 +3690,11 @@ document.addEventListener('click', async ev => {
   if ('nuevoPago' in d) return formPago();
   if (d.editarPago) { const p = buscar(D.pagos, d.editarPago); return p && formPago(p); }
   if (d.pagado) { const p = buscar(D.pagos, d.pagado); return p && formPagado(p); }
+  if (d.generarRecibo) {
+    const r = await api('/api/oficina/cobro/recibo', { id: Number(d.generarRecibo) });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo generar el recibo.', true);
+    aviso('Recibo generado.'); await ir(vista); return abrirRecibo(r.data.recibo_id);
+  }
   if (d.deshacer) { if (!confirm('¿Marcar este cobro como NO pagado?')) return; await api('/api/oficina/pagado', { id: d.deshacer, deshacer: true }); aviso('Listo.'); return ir(vista); }
   if ('nuevoGasto' in d) return formGasto();
   if (d.editarGasto) { const g = buscar(D.gastos, d.editarGasto); return g && formGasto(g); }
