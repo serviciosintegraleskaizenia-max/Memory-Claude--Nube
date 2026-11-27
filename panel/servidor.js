@@ -1949,6 +1949,8 @@ http.createServer(async (req, res) => {
     if (url.startsWith('/api/chatwoot/')) {
       return oficina.redes.manejarPublico(req, res, url, { json, leerCuerpo });
     }
+    // Recibo compartido por enlace (lo abre el cliente o el socio sin entrar a Oficina).
+    if (oficina.activo && req.method === 'GET' && url.startsWith('/r/')) return oficina.servirReciboPublico(req, res, url);
     // Apps de Oficina (instalables): página de instalación, manifiesto e icono; las apps en prueba piden código.
     if (oficina.activo && (url === '/app' || url.startsWith('/app/'))) {
       return oficina.apps.manejarPublico(req, res, url, { json, leerCuerpo });

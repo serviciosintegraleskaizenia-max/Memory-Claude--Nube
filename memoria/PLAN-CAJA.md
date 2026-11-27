@@ -58,7 +58,7 @@ Decisiones:
 - [x] R1 Una sola fuente: la caja se recalcula siempre desde Creación de sistema (gastos y adelantos→retiros con recibo), Gastos del negocio pagados (los de plataforma por % de «quién lo paga») y cobros pagados. Tipo nuevo `gasto_negocio`. Fondo = caja − partes libres (con negativos) para que los adelantos viejos cuadren al repartir.
 - [x] R2 Pendiente no suma; marcar pagado exige voucher; todo cobro pagado recibe su recibo solo (también los de Creación de sistema).
 - [x] R3 Monedas: lista editable; cobro en moneda del cliente; «llegó en US$» al pagar; caja en US$.
-- [ ] R4 Recibos para compartir: PDF, WhatsApp, correo, enlace en línea (token).
+- [x] R4 Recibos para compartir: PDF, WhatsApp, correo, enlace en línea (token).
 - [ ] R5 Administración: pestañas General (antes Todo) + cuadrito Socios · Clientes · Gastos · Socios · Creación de sistema · Resumen; quitar el menú «Caja» aparte, «Cobro, gastos y reparto» y «Gastos del negocio» (queda dentro de Gastos).
 - [ ] R6 Ficha del cliente: Datos de la empresa (con contacto, teléfono, correo) · Programas (planes, mensualidad total, paquete, moneda) · Configuración (claves, correo de lectura) · Estado de cuenta; quitar «Cerrado» si tiene mensualidad.
 - [ ] R7 Pruebas con los números reales (cobrado 1,890; gastos 1,088.20; adelantos 765; reparto 801.80 → 481.08/320.72; libres 22.08/14.72; caja 36.80) y paquete.

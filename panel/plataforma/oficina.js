@@ -870,6 +870,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
     if (url === '/api/oficina/caja' || url.startsWith('/api/oficina/caja/')) return ['gastos'];
     if (url.startsWith('/api/oficina/recibo/socio') || url.startsWith('/api/oficina/socio/')) return ['gastos'];
+    if (url === '/api/oficina/recibo-enlace') return ['clientes', 'gastos'];
     if (url.startsWith('/api/oficina/recibo/') || url.startsWith('/api/oficina/cobro/') || url.startsWith('/api/oficina/cliente/datos')) return ['clientes', 'gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
     if (url.startsWith('/api/oficina/diseno')) return ['clientes'];
@@ -1209,6 +1210,21 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         return json(res, 200, { comprobante: fila.comprobante, nombre: fila.comprobante_nombre });
       }
       // Recibo para imprimir: datos de la administración (logo, RUC), de la empresa y del recibo.
+      // Enlace para compartir un recibo (WhatsApp, correo o copiar): guarda una copia fija y devuelve la dirección.
+      if (req.method === 'POST' && url === '/api/oficina/recibo-enlace') {
+        const f = await leerCuerpo(req);
+        const r = (await client.query('SELECT id, administracion FROM oficina_recibos WHERE id = $1', [Number(f.id)])).rows[0];
+        if (!r) return json(res, 404, { error: 'Recibo no encontrado.' });
+        if (!puedeAdmin(u, permisos, r.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const html = String(f.html || '');
+        if (!/^<!doctype html>/i.test(html) || html.length > 3000000) return json(res, 400, { error: 'No se pudo preparar el recibo para compartir.' });
+        await client.query('CREATE TABLE IF NOT EXISTS oficina_recibo_enlaces (token TEXT PRIMARY KEY, recibo_id INTEGER UNIQUE NOT NULL, html TEXT NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+        const previo = (await client.query('SELECT token FROM oficina_recibo_enlaces WHERE recibo_id = $1', [r.id])).rows[0];
+        const token = previo ? previo.token : crypto.randomBytes(24).toString('base64url');
+        await client.query(`INSERT INTO oficina_recibo_enlaces (token, recibo_id, html) VALUES ($1,$2,$3) ON CONFLICT (recibo_id) DO UPDATE SET html = EXCLUDED.html`, [token, r.id, html]);
+        await registrar(u, 'recibo_enlace', 'recibo', r.id, '', '', previo ? 'enlace actualizado' : 'enlace creado');
+        return json(res, 200, { ok: true, ruta: '/r/' + token });
+      }
       if (req.method === 'GET' && url.startsWith('/api/oficina/recibo/')) {
         const r = (await client.query("SELECT r.*, TO_CHAR(r.fecha, 'YYYY-MM-DD') AS fecha FROM oficina_recibos r WHERE r.id = $1", [Number(url.split('/').pop())])).rows[0];
         if (!r) return json(res, 404, { error: 'Recibo no encontrado.' });
@@ -1573,5 +1589,19 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
   }
 
-  return { activo, preparar, manejar, conocimiento, redes, apps };
+  // Recibo compartido por enlace: copia fija del recibo, sin scripts (página aislada), con un enlace imposible de adivinar.
+  async function servirReciboPublico(req, res, url) {
+    const token = url.slice(3);
+    if (!/^[A-Za-z0-9_-]{30,60}$/.test(token)) { res.writeHead(404); return res.end('No encontrado'); }
+    const fila = (await client.query('SELECT html FROM oficina_recibo_enlaces WHERE token = $1', [token]).catch(() => ({ rows: [] }))).rows[0];
+    if (!fila) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Este recibo no existe o el enlace ya no es válido.'); }
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': "sandbox allow-modals; default-src 'none'; img-src data: https:; style-src 'unsafe-inline'; font-src data: https:",
+      'X-Robots-Tag': 'noindex', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'private, max-age=300'
+    });
+    return res.end(fila.html);
+  }
+
+  return { activo, preparar, manejar, conocimiento, redes, apps, servirReciboPublico };
 };
