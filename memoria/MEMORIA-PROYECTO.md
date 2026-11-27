@@ -165,6 +165,15 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
   7. Lista: franjas cerradas, **una abierta a la vez**, con buscador.
   8. «+ Nueva empresa» con todo en un formulario; se quita «+ Automatización».
 
+## DINERO EN OFICINA · DECISIONES DEL DUEÑO (27 nov, maqueta maqueta-caja.png enviada, esperando visto bueno)
+- **Una sola caja por empresa** (Zentralia y Kaizen IA, cada una la suya). Hoy el dinero está en dos lados: «Clientes y cobros» (hace recibos) y «Creación de sistema» (proyectos.js; ahí están los US$ 1,890 de Somos Viajes y no hace recibos). Se unen sin perder nada.
+- Entradas: cobros de todos los clientes y planes, **con recibo automático al cliente**. Salidas en 3 grupos que no se mezclan: **creación del sistema**, **gastos mensuales** (Claude, IA, servidor, programas) y **retiros de socios**.
+- **Retiros de socios** (también los del dueño): cada uno genera recibo y sale en la lista de salidas como «Retiro de socio»; se descuenta solo de la parte de ese socio (no baja lo que queda para repartir). **Nadie retira más de lo que le toca ni más de lo que hay en caja; no hay adelantos con dinero del mes siguiente.**
+- Si un socio ya retiró todo y luego hay un gasto, se paga con la parte del otro: **la empresa le queda debiendo** ese monto; en el próximo cobro primero se le devuelve y lo que queda se reparte por porcentaje (ej.: gasto 300 → José pone su 40 % = 120).
+- **Planes por cliente** (ej. Somos Viajes: Plan de panel de correo 750/mes, Plan de reservas y operaciones 350/mes): cada plan con precio de creación, mensualidad y día de cobro; opción de cobrar en un solo paquete. Gastos cargables a un plan o a General; se ve cuánto costó y cuánto deja cada plan.
+- **Recibo al cliente con detalle por línea** (cada plan, consumo extra de IA/tokens, etc.) y guardado en la base como historial.
+- Mismo repositorio; esta parte va en su propio paquete de instalación.
+
 ## EMPRESAS UNIFICADAS · HECHO (27 nov, etapas 1-3)
 - Una sola cuenta por empresa: cada automatización va dentro de su empresa (automatizacion_clientes.empresa_id). Empresas sin panel de reservas (sin_panel, sin base ni puerto; estado/programas/pagado en empresas.cuenta_central).
 - Al instalar: PEX y Premios Carrasco pasan a empresas sin panel en Kaizen IA; Kaizen Consulting IA se junta en una ficha (por nombre). Se hace sola al arrancar Oficina.
