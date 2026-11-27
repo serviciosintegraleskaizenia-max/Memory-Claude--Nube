@@ -178,3 +178,12 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - No mandar correos de prueba a operaciones. Para verificar, se revisan los datos que ya existen y el estado del flujo en Executions.
 - Lo importante es que el sistema que recibe la información entienda lo que el panel de correo dice (N/A, crucero, actividad). No que el panel adivine el tipo de servicio.
 - Cada paso del trabajo se deja en el repositorio: esta memoria, los nodos de n8n en `n8n/nodos/` y las pruebas en `panel/`.
+
+
+## VENTANA DEL CORREO EN CUADROS (27 nov)
+- Diseño aprobado por el dueño: ventana D3 (cuadros con icono y etiqueta, avioncitos en IN y OUT, correo grande, estados y botones abajo, historial plegado con "Mostrar").
+- Implementado en `panel/index.html`: datos de la reserva en cuadros (`tarjetasDatos`), estados como botones (`pintarEstadoSeg`), historial plegado (`details`), botones de la ventana en círculo con símbolo (–, □, ✕) y notas al pasar el cursor.
+- La lógica no cambió: editar datos, asignación, factura y los estados siguen con las mismas funciones.
+- Prueba: `panel` cargado en navegador con datos de ejemplo (Maral Turismo, reserva con IN y OUT): 9 cuadros, tabla oculta, historial plegado, 6 estados y el correcto activo. No se probó con la base de datos real.
+- Pendiente: el salto de ventana al pasar a la siguiente reserva (no está en este cambio).
+- Pendiente: la etiqueta "Crucero" y el estado "Pendiente por registrar" en Operaciones y Control siguen como estaban.
