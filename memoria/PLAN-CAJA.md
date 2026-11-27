@@ -41,3 +41,14 @@ Prueba obligatoria (ejemplo del dueño): entra 1,000 → reparto 1,000 (C 600 / 
 - Al instalar: los gastos de «Creación de sistema» y los retiros con recibo pasan solos a la caja (una sola vez); los cobros pagados entran solos.
 - HECHO después: paso 2 y 3 (planes por cliente con precio de creación, mensualidad y día 1-31 o paquete; «Cobrar el mes» con extras; recibo con una línea por plan y por extra; gastos y cobros cargados a un plan; fichas de planes en la Caja con cobrado / costó / deja). Pruebas: planes 8/8, navegador 5/5.
 - FALTA: pausa automática por prórroga (#80), acceso del socio (#81), automatización dentro del panel de Somos Viajes (#76).
+
+## REESTRUCTURA DE ADMINISTRACIÓN (dueño, 27 nov, tras instalar la Caja)
+Problemas vistos en el servidor: la Caja copió «Creación de sistema» una sola vez (693.20 hasta el 12 nov); lo anotado después (Claude 15 nov, recarga 300, contador/abogado 55, adelantos José 109 y 197, adelanto Cristian 459) no llegó → Creación suma 1,088.20 y retiros 0. Hay que tener UNA sola fuente: todo lo que se anote en cualquier pestaña suma/resta/reparte a la vez.
+Decisiones:
+- Sin menú «Caja» aparte: todo dentro de Administración, por empresa (KAIZEN IA / ZENTRALIA).
+- Pestañas: **General** (antes «Todo»; cuadritos movibles como están + cuadrito pequeño de Socios: % y retiros) · **Clientes** · **Gastos** (creación, mensuales y del negocio en un lugar) · **Socios** (reparto, retiros con recibo, deudas; sale de «Cobro, gastos y reparto») · **Creación de sistema** · **Resumen del mes**.
+- Gastos del negocio y mensuales SÍ se restan antes de repartir, en la empresa a la que pertenecen; los de «plataforma» se dividen con el % de «quién lo paga». Los adelantos de ganancia dejan de ser gasto: son retiros del socio con recibo.
+- Monedas: lista editable (US$, S/, RD$, CLP, €…); cobro y recibo en la moneda del cliente; al registrar el pago se anota cuánto llegó en US$; caja y reparto en US$.
+- Recibos: descargar PDF, WhatsApp, correo y enlace para ver en línea.
+- Ficha del cliente: «Datos y plan» → **Datos de la empresa** (con contacto, teléfono, correo); «Editar» → **Configuración** (clave OpenRouter, n8n, correo de lectura, otros); **Programas** (varios por cliente: setup y mensualidad, se suman); **Estado de cuenta**. Somos Viajes no es «Cerrado»: le falta la mensualidad de 750.
+- Creación de sistema: al guardar un abono, recibo automático para compartir.
