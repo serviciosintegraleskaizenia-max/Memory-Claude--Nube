@@ -133,3 +133,48 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - El dueño decidió: respuestas PÚBLICAS desde el inicio, porque por ahora solo él tiene el número +51 989 480 556. Revisar esta decisión antes de compartir el número con clientes.
 - Canal de Messenger "Kaizen Consulting" borrado de la cuenta de Somos Viajes.
 - Pasos de publicación: (1) Publish del flujo en n8n; (2) cambiar el webhook de Chatwoot (cuenta Kaizen) a la URL de producción /webhook/automatizacion/kaizenconsulting-ia/chatwoot; (3) probar con mensaje desde el celular.
+
+## ETAPA: CORREO → OPERACIONES → CONTABILIDAD (27 nov)
+
+**Idea central del dueño:** el panel de correo es la entrada de todo. Lo que se registra ahí alimenta a Operaciones (proforma, factura, boleta y envío al chofer) y al contador (ganancia, caja y cobros). Por eso el dato tiene que ser exacto desde el origen. El panel recibe la información, la guarda, y Operaciones decide cómo filtrarla y registrarla.
+
+**Qué tipos de servicio existen (según el dueño):** crucero, actividad (con tiquete), interhotel, IN-OUT, salida independiente (solo sale del hotel al aeropuerto), IN (solo llegada) y servicio múltiple (una persona llega, hace actividades y se va; cada parte es un servicio).
+
+**Reglas de llenado decididas:**
+- Actividad: vuelo y aeropuerto = N/A. No es "pendiente".
+- Interhotel: vuelo = N/A (viene de un hotel, no de un vuelo).
+- Crucero: aeropuerto = nombre del puerto tal como aparece (por ejemplo "Puerto de Puerto Plata"); vuelo = N/A.
+- Hora: no bloquea la reserva. Si no viene, se muestra "Por confirmar". No se marca como duda.
+- Datos obligatorios de una reserva completa: día, nombre del pasajero y hotel donde se hospeda.
+- Teléfono: no bloquea (decisión tomada por mí; el dueño no lo mencionó. Confirmar).
+- Un servicio múltiple se guarda como varias filas; cada fila tiene sus propios N/A.
+- Vocabulario: IF/OFF = IN/OUT; guagua = bus de 7 a 21 pasajeros; "velero con tortugas" = catamarán con snorkel; las actividades que no estén en el glosario se escriben tal cual vienen en el correo.
+
+**Catálogo de agencias (decidido, sin construir):** tabla en la base `correos`, con país, idioma, tipo y dominios de correo de cada agencia. El flujo lo consulta antes de leer el correo. Solo el Programador lo edita desde Oficina. La carga inicial sale de los tarifarios ya importados (`op_agencias`, `op_tarifarios`, `op_tarifas`). Falta construirlo.
+
+**Supervisor de la IA (decidido en parte):**
+- Si hay error: solo marcar; un asesor lo aprueba. No corregir en silencio.
+- A qué correos: todas las reservas y modificaciones.
+- Dónde vive: en n8n.
+- Formato: fijo desde ya, para que Operaciones y Facturas lo puedan leer.
+- Pendiente de decidir: con qué casos se mide el acierto (correcciones de asesores, 20 correos nuevos, o ambos); cuánta IA supervisora (reglas en código + IA en casos dudosos, o IA en cada reserva); cómo tratar las capturas (clasificar antes o mandar todas).
+- Recomendación de la IA: reglas de código en cada paso (fechas, aeropuertos, pax que sumen, número de vuelo que aparezca literal en el correo) y un juego de correos reales con respuesta correcta antes de cada cambio.
+
+**Estado del código (rama `claude/wonderful-keller-4c8hoe`):**
+- `4add937`: reglas de revisión para actividad, interhotel, crucero, IN/OUT y nombre del pasajero (`panel/revision.js` y `panel/index.html`).
+- `06db1c3`: el panel muestra N/A cuando un campo no aplica, "Por confirmar" para la hora, y "Falta" solo si el dato sí aplica.
+- `panel/revision.test.js`: 5 pruebas de esas reglas (`node --test panel/revision.test.js`).
+- `n8n/nodos/limpiar-texto-v5.js`: nodo "Limpiar texto" v5. Lo guardó el dueño en n8n (glosario, reglas de llenado, texto hasta 30 000 caracteres, 8 000 tokens de salida, memoria de imágenes con versión 2).
+
+**Pendientes de esta etapa:**
+1. Desplegar el panel al servidor con `panel/servidor/actualizar-servidor.ps1` (se entrega paquete). Reinicia los paneles: los usuarios vuelven a entrar.
+2. Confirmar en n8n (Executions) que el flujo corre en verde con el nodo v5.
+3. Etiqueta "Crucero" en la columna de tipo (hoy aparece "Llegada (IN)").
+4. Estado "Pendiente" a nivel de reserva: lo calcula el flujo de n8n (`estado = pendiente de transcribir` cuando hay fecha u hotel). Debe cambiar para que una reserva con día, nombre y hotel no quede pendiente.
+5. Catálogo de agencias en la base `correos` (ver arriba).
+6. Las tres decisiones del supervisor que faltan.
+
+**Reglas de trabajo que quedaron del dueño (27 nov):**
+- No mandar correos de prueba a operaciones. Para verificar, se revisan los datos que ya existen y el estado del flujo en Executions.
+- Lo importante es que el sistema que recibe la información entienda lo que el panel de correo dice (N/A, crucero, actividad). No que el panel adivine el tipo de servicio.
+- Cada paso del trabajo se deja en el repositorio: esta memoria, los nodos de n8n en `n8n/nodos/` y las pruebas en `panel/`.
