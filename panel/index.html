@@ -1994,6 +1994,8 @@ function filtrar(vista = vistaActual) {
   // En el histórico la búsqueda la hace el servidor; en las demás pestañas se filtra aquí mismo.
   const busqueda = vista === 'historico' ? '' : normalizarBusqueda(document.getElementById('buscarHistorico').value);
   const numero = /^#?\d+$/.test(busqueda) ? Number(busqueda.replace('#', '')) : null;
+  // «Pendiente por registrar» y «Para revisar» se filtran por lo que muestra la etiqueta (una pendiente sin datos se ve como Revisar).
+  const visibles = vista !== 'historico' && (estado === 'revisar' || estado === 'pendiente de transcribir') ? estadosVisibles() : null;
 
   const lista = datos.filter(r => {
     if (busqueda && !(numero !== null
@@ -2015,7 +2017,7 @@ function filtrar(vista = vistaActual) {
     // Si se busca por nombre o número, se muestra igual para que nunca se pierda una reserva.
     if (vista === 'todas' && r.estado === 'registrada' && !busqueda && estado !== 'registrada') return false;
     return (!intencion || r.categoria === intencion)
-      && (!estado || r.estado === estado)
+      && (!estado || (visibles ? visibles.get(claveReserva(r)) === estado : r.estado === estado))
       && (!desde || dia >= desde)
       && (!hasta || dia <= hasta)
       && (!soloCompletos || esCompleto(r));
@@ -2051,9 +2053,9 @@ function deltaKpi(id, valores) {
 function pintarKpis() {
   const series = {
     reservas: serieKpi(datos.filter(r => r.categoria === 'RESERVA')),
-    pendientes: serieKpi(datos.filter(r => r.estado === 'pendiente de transcribir')),
+    pendientes: serieKpi(deEstadoVisible('pendiente de transcribir')),
     registradas: serieKpi(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION'))),
-    revisar: serieKpi(datos.filter(r => revisiones.has(r.id))),
+    revisar: serieKpi(deEstadoVisible('revisar')),
     total: serieKpi(datos)
   };
   const colores = { reservas: '#3b82f6', pendientes: '#f59e0b', registradas: '#22c55e', revisar: '#ef4444', total: '#94a3b8' };
@@ -2065,7 +2067,7 @@ function abrirDesdeTarjeta(kpi) {
     reservas: { vista: 'todas', intencion: 'RESERVA', estado: '' },
     pendientes: { vista: 'todas', intencion: '', estado: 'pendiente de transcribir' },
     registradas: { vista: 'registradas', intencion: '', estado: '' },
-    revisar: { vista: 'revision', intencion: '', estado: '' },
+    revisar: { vista: 'todas', intencion: '', estado: 'revisar' },
     total: { vista: 'todas', intencion: '', estado: '' }
   }[kpi];
   if (!ir) return;
@@ -2283,14 +2285,34 @@ function quienSimple(r, g) {
   if (r.asignado_a && (r.asignado_a !== sesionActual.usuario || puede('supervisar'))) return `<div class="s-quien">👤 ${r.asignado_a === sesionActual.usuario ? 'Tú' : esc(r.asignado_nombre || r.asignado_a)}</div>`;
   return '';
 }
-function estadoSimple(g) {
+// Estado que se ve en la etiqueta de una reserva. Las tarjetas de arriba y el filtro de estado usan esta misma regla,
+// para que el número y la lista siempre coincidan con lo que se ve en la tabla.
+function estadoVisible(g) {
   const real = estadoReserva(g);
   // En Histórico se muestra el estado que tenía antes (registrada, revisar…), no solo "Histórico".
   const antes = real === 'historico' ? (g.map(s => s.estado_antes).find(Boolean) || '') : '';
-  let e = antes || real;
+  const e = antes || real;
   // Una reserva sin día, nombre o hotel no está "pendiente por registrar": le falta revisar.
   const completa = g.some(s => s.fecha_servicio) && g.some(s => String(s.nombre_cliente || '').trim()) && g.some(s => s.hotel || s.punto_llegada || s.punto_partida);
-  if (e === 'pendiente de transcribir' && !completa) e = 'revisar';
+  return e === 'pendiente de transcribir' && !completa ? 'revisar' : e;
+}
+// Estado visible de cada reserva de la lista cargada (clave de la reserva → estado), calculado una sola vez.
+function estadosVisibles() {
+  const grupos = new Map();
+  for (const r of datos) { const k = claveReserva(r); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r); }
+  const m = new Map();
+  for (const [k, g] of grupos) m.set(k, estadoVisible(g));
+  return m;
+}
+// Filas de la lista cargada cuya reserva se ve con ese estado.
+function deEstadoVisible(estado) {
+  const m = estadosVisibles();
+  return datos.filter(r => m.get(claveReserva(r)) === estado);
+}
+function estadoSimple(g) {
+  const real = estadoReserva(g);
+  const antes = real === 'historico' ? (g.map(s => s.estado_antes).find(Boolean) || '') : '';
+  const e = estadoVisible(g);
   const clases = { 'pendiente de transcribir': 'etq-pendiente', registrada: 'etq-registrada', revisar: 'etq-revisar', actualizada: 'etq-actualizada', historico: 'etq-historico' };
   // Correo importado del historial que la IA todavía no analiza: no tiene estado real aún, así que no se muestra como "Histórico".
   const sinAnalizar = !antes && real === 'historico' && g.some(s => /^Histórico: pendiente/.test(s.motivo || ''));
@@ -2516,10 +2538,11 @@ function pintar() {
   const unaPor = l => agruparReservas(l).length;
   const completos = datos.filter(esCompleto);
   document.getElementById('n-reservas').textContent = unaPor(completos.filter(r => r.categoria === 'RESERVA'));
-  document.getElementById('n-pendientes').textContent = unaPor(datos.filter(r => r.estado === 'pendiente de transcribir'));
+  // Pendientes y Para revisar cuentan lo que muestra la etiqueta de cada reserva (la misma regla del filtro de estado).
+  document.getElementById('n-pendientes').textContent = unaPor(deEstadoVisible('pendiente de transcribir'));
   // Las tarjetas usan las mismas reglas que las pestañas, para que nunca den números distintos.
   document.getElementById('n-registradas').textContent = unaPor(datos.filter(r => r.estado === 'registrada' && (r.categoria === 'RESERVA' || r.categoria === 'MODIFICACION')));
-  document.getElementById('n-revisar').textContent = agruparReservas(datos.filter(r => revisiones.has(r.id))).length;
+  document.getElementById('n-revisar').textContent = unaPor(deEstadoVisible('revisar'));
   document.getElementById('n-total').textContent = unaPor(datos);
   pintarKpis();
   actualizarContadores();
