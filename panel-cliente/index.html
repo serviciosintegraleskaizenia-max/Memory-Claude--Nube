@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel del cliente · PEX Solution</title>
+<style>
+  :root { --azul:#1d4ed8; --azul2:#1e3a8a; --fondo:#f4f6fb; --tarjeta:#ffffff; --texto:#0f172a; --suave:#64748b; --borde:#dbe3ef; --verde:#15803d; --ambar:#b45309; --rojo:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:var(--fondo); color:var(--texto); }
+  .app { display:grid; grid-template-columns: 230px 1fr; min-height:100vh; }
+  .menu { background:#0b1f4d; color:#e2e8f0; padding:18px 14px; display:flex; flex-direction:column; gap:14px; }
+  .marca { display:flex; align-items:center; gap:10px; padding:4px 6px 12px; border-bottom:1px solid #1e3a8a; }
+  .logo { width:40px; height:40px; border-radius:10px; background:#fff; color:#0b1f4d; display:grid; place-items:center; font-weight:800; font-size:12px; overflow:hidden; }
+  .logo img { width:100%; height:100%; object-fit:contain; }
+  .marca b { display:block; font-size:15px; }
+  .marca small { color:#94a3b8; font-size:12px; }
+  nav { display:flex; flex-direction:column; gap:4px; }
+  nav button { background:transparent; border:0; color:#cbd5e1; text-align:left; padding:10px 12px; border-radius:8px; font:inherit; font-size:14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
+  nav button:hover { background:#13326f; color:#fff; }
+  nav button.on { background:var(--azul); color:#fff; }
+  .cuenta { background:#f97316; color:#fff; border-radius:999px; font-size:11px; padding:2px 7px; font-weight:700; }
+  .ayuda { margin-top:auto; font-size:12px; color:#94a3b8; line-height:1.4; border-top:1px solid #1e3a8a; padding-top:12px; }
+  main { padding:0 22px 26px; min-width:0; }
+  .top { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:18px 0 14px; flex-wrap:wrap; }
+  .top h1 { font-size:22px; margin:0; }
+  .acciones { display:flex; align-items:center; gap:10px; position:relative; }
+  .ia { display:flex; align-items:center; gap:8px; background:var(--tarjeta); border:1px solid var(--borde); border-radius:999px; padding:6px 6px 6px 12px; font-size:13px; font-weight:600; }
+  .punto { width:9px; height:9px; border-radius:50%; background:var(--verde); }
+  .ia.pausada .punto { background:var(--ambar); }
+  .ia button { border:0; border-radius:999px; padding:6px 12px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; background:#0f172a; color:#fff; }
+  .ia.pausada button { background:var(--verde); }
+  .campana { background:var(--tarjeta); border:1px solid var(--borde); border-radius:999px; padding:7px 12px; font:inherit; cursor:pointer; }
+  .notif { position:absolute; right:0; top:46px; width:320px; background:#fff; border:1px solid var(--borde); border-radius:12px; box-shadow:0 12px 30px rgba(15,23,42,.15); padding:10px; z-index:10; }
+  .notif h4 { margin:4px 6px 8px; font-size:13px; color:var(--suave); }
+  .notif div { padding:9px 8px; border-radius:8px; font-size:13px; border-bottom:1px solid #f1f5f9; }
+  .banner { height:120px; border-radius:14px; background:linear-gradient(120deg,#1d4ed8,#0b1f4d); background-size:cover; background-position:center; margin-bottom:16px; display:flex; align-items:flex-end; padding:14px 18px; color:#fff; font-weight:700; font-size:18px; }
+  .banner.con-imagen { background-color:#0b1f4d; }
+  .vista { display:none; }
+  .vista.on { display:block; }
+  .tarjetas { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap:12px; margin-bottom:16px; }
+  .tarjeta { background:var(--tarjeta); border:1px solid var(--borde); border-radius:12px; padding:14px; }
+  .tarjeta small { color:var(--suave); font-size:12px; text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+  .tarjeta b { display:block; font-size:24px; margin-top:6px; }
+  .tarjeta span { color:var(--suave); font-size:12px; }
+  .bloque { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:16px; margin-bottom:16px; }
+  .bloque h3 { margin:0 0 10px; font-size:15px; }
+  .fila { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #eef2f7; flex-wrap:wrap; }
+  .fila:last-child { border-bottom:0; }
+  .estado { font-size:12px; font-weight:700; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+  .e-verde { background:#dcfce7; color:var(--verde); }
+  .e-ambar { background:#fef3c7; color:var(--ambar); }
+  .e-gris { background:#e2e8f0; color:#334155; }
+  .e-azul { background:#dbeafe; color:var(--azul2); }
+  .btn { border:1px solid var(--borde); background:#fff; color:var(--texto); border-radius:8px; padding:8px 12px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn.primario { background:var(--azul); border-color:var(--azul); color:#fff; }
+  .btn.peligro { color:var(--rojo); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  input, select, textarea { font:inherit; font-size:14px; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; width:100%; background:#fff; color:var(--texto); }
+  textarea { min-height:160px; resize:vertical; line-height:1.5; }
+  label { font-size:13px; font-weight:600; color:#334155; display:block; margin-bottom:6px; }
+  .campo { margin-bottom:12px; }
+  .dos { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .tres { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; }
+  .aviso { font-size:12px; color:var(--suave); margin-top:6px; line-height:1.4; }
+  .chip { display:inline-block; background:#eff6ff; color:var(--azul2); border-radius:999px; padding:3px 9px; font-size:12px; font-weight:600; margin:2px 4px 2px 0; }
+  .chip button { border:0; background:none; color:var(--azul2); cursor:pointer; padding:0 0 0 4px; font-size:13px; }
+  /* Chat */
+  .chat { display:grid; grid-template-columns: 300px 1fr; gap:14px; height:calc(100vh - 150px); min-height:520px; }
+  .lista-chat, .hilo { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+  .lista-chat .cabeza, .hilo .cabeza { padding:12px 14px; border-bottom:1px solid var(--borde); font-weight:700; font-size:14px; }
+  .conv { padding:11px 14px; border-bottom:1px solid #f1f5f9; cursor:pointer; }
+  .conv.on { background:#eff6ff; }
+  .conv b { font-size:14px; display:block; }
+  .conv small { color:var(--suave); font-size:12px; }
+  .conv .sin { float:right; background:#f97316; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px; font-weight:700; }
+  .mensajes { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
+  .m { max-width:70%; padding:9px 12px; border-radius:12px; font-size:14px; line-height:1.4; }
+  .m.cliente { background:#fff; border:1px solid var(--borde); align-self:flex-start; }
+  .m.ia { background:#dbeafe; align-self:flex-end; }
+  .m.humano { background:#0f172a; color:#fff; align-self:flex-end; }
+  .m small { display:block; font-size:11px; color:var(--suave); margin-bottom:3px; }
+  .m.humano small { color:#cbd5e1; }
+  .redactar { display:flex; gap:8px; padding:12px; border-top:1px solid var(--borde); }
+  .redactar input { flex:1; }
+  .sello { font-size:12px; color:var(--ambar); background:#fef3c7; padding:6px 10px; margin:10px 14px 0; border-radius:8px; }
+  /* CRM */
+  .crm { display:grid; grid-template-columns: 340px 1fr; gap:14px; }
+  .lista-cli { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:12px; }
+  .fila-cli { padding:10px 8px; border-radius:8px; cursor:pointer; border-bottom:1px solid #f1f5f9; }
+  .fila-cli.on { background:#eff6ff; }
+  .fila-cli b { font-size:14px; display:block; }
+  .fila-cli small { color:var(--suave); font-size:12px; }
+  .ficha { background:var(--tarjeta); border:1px solid var(--borde); border-radius:14px; padding:18px; }
+  .ficha h2 { margin:0 0 4px; font-size:19px; }
+  .nota { background:#f8fafc; border:1px solid var(--borde); border-radius:8px; padding:9px 11px; font-size:13px; margin-bottom:8px; }
+  .nota small { color:var(--suave); display:block; font-size:11px; }
+  /* Entrenamiento */
+  .archivo { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #eef2f7; font-size:14px; gap:10px; }
+  .archivo small { color:var(--suave); }
+  /* Ajustes */
+  .vista-logo { width:86px; height:86px; border-radius:14px; border:1px dashed var(--borde); display:grid; place-items:center; overflow:hidden; background:#fff; }
+  .vista-logo img { width:100%; height:100%; object-fit:contain; }
+  .vista-banner { width:100%; height:110px; border-radius:12px; border:1px dashed var(--borde); overflow:hidden; background:#fff; display:grid; place-items:center; color:var(--suave); font-size:13px; }
+  .vista-banner img { width:100%; height:100%; object-fit:cover; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.on { opacity:1; }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .menu { flex-direction:row; flex-wrap:wrap; }
+    nav { flex-direction:row; flex-wrap:wrap; }
+    .chat, .crm, .dos, .tres { grid-template-columns: 1fr; }
+    .ayuda { display:none; }
+    .m { max-width:90%; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="menu">
+    <div class="marca">
+      <div class="logo" id="logoMenu">PEX</div>
+      <div><b id="nombreEmpresa">PEX Solution</b><small>Panel del cliente</small></div>
+    </div>
+    <nav>
+      <button data-v="inicio" class="on">Inicio</button>
+      <button data-v="redes">Redes sociales</button>
+      <button data-v="chat">Chat <span class="cuenta" id="cuentaChat">2</span></button>
+      <button data-v="crm">Clientes (CRM)</button>
+      <button data-v="entreno">Entrenar la IA</button>
+      <button data-v="factura">Consumo y recibos</button>
+      <button data-v="correo">Correo (solo lectura)</button>
+      <button data-v="ajustes">Ajustes</button>
+    </nav>
+    <div class="ayuda">Esta es una vista de prueba con datos de ejemplo. Lo que está marcado como pendiente de Meta se activa cuando Meta lo apruebe.</div>
+  </aside>
+
+  <main>
+    <header class="top">
+      <h1 id="tituloVista">Inicio</h1>
+      <div class="acciones">
+        <div class="ia" id="ia"><span class="punto"></span><span id="iaTexto">IA activa</span><button id="btnIA">Pausar IA</button></div>
+        <button class="campana" id="btnCampana" aria-label="Notificaciones">🔔 <span id="cuentaNotif">3</span></button>
+        <div class="notif" id="panelNotif" hidden>
+          <h4>Notificaciones</h4>
+          <div>Nuevo mensaje en el chat del sitio web · hace 4 min</div>
+          <div>Factura de noviembre disponible · ayer</div>
+          <div>Permiso de Meta en revisión · sin cambios</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- INICIO -->
+    <section class="vista on" id="v-inicio">
+      <div class="banner" id="bannerInicio">PEX Solution · Tu asistente de atención</div>
+      <div class="tarjetas">
+        <div class="tarjeta"><small>Conversaciones hoy</small><b>12</b><span>5 con la IA, 7 con asesor</span></div>
+        <div class="tarjeta"><small>Sin responder</small><b id="sinResponder">2</b><span>Esperando respuesta</span></div>
+        <div class="tarjeta"><small>Clientes en CRM</small><b id="totalClientes">3</b><span>Guardados</span></div>
+        <div class="tarjeta"><small>IA</small><b id="iaResumen">Activa</b><span>Puedes pausarla cuando quieras</span></div>
+      </div>
+      <div class="bloque">
+        <h3>Canales</h3>
+        <div class="fila"><span>Chat de la página web</span><span class="estado e-verde">Activo</span></div>
+        <div class="fila"><span>WhatsApp</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
+        <div class="fila"><span>Facebook e Instagram</span><span class="estado e-ambar">Pendiente de aprobación de Meta</span></div>
+        <div class="fila"><span>Correo</span><span class="estado e-gris">Sin conectar</span></div>
+      </div>
+    </section>
+
+    <!-- REDES -->
+    <section class="vista" id="v-redes">
+      <div class="bloque">
+        <h3>Redes sociales y mensajes</h3>
+        <div class="fila"><div><b>WhatsApp</b><br><small>Mensajes de tus clientes. El número sigue en tu celular.</small></div><span class="estado e-ambar">En revisión de Meta</span></div>
+        <div class="fila"><div><b>Facebook (Messenger)</b><br><small>Mensajes de tu página.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
+        <div class="fila"><div><b>Instagram (mensajes directos)</b><br><small>Mensajes de tu cuenta profesional.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
+        <div class="fila"><div><b>Cuenta publicitaria de Meta</b><br><small>Ver tus anuncios y su gasto.</small></div><span class="estado e-ambar">Permiso aún no solicitado a Meta</span></div>
+        <div class="fila"><div><b>Chat de la página web</b><br><small>Cuadro de chat en tu sitio. Responde la IA.</small></div><span class="estado e-verde">Listo para instalar</span></div>
+      </div>
+      <div class="aviso">Cada canal aparece con su estado real. Los mensajes de WhatsApp, Facebook e Instagram solo llegan cuando Meta apruebe la aplicación y tu empresa esté verificada.</div>
+    </section>
+
+    <!-- CHAT -->
+    <section class="vista" id="v-chat">
+      <div class="sello">Vista de prueba: las conversaciones son de ejemplo.</div>
+      <div class="chat" style="margin-top:10px">
+        <div class="lista-chat">
+          <div class="cabeza">Conversaciones</div>
+          <div id="listaConv"></div>
+        </div>
+        <div class="hilo">
+          <div class="cabeza" id="cabeConv">Selecciona una conversación</div>
+          <div class="mensajes" id="mensajes"></div>
+          <div class="redactar">
+            <input id="entradaMsj" placeholder="Escribe una respuesta (la IA queda pausada en esta conversación)">
+            <button class="btn primario" id="btnEnviarMsj">Enviar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CRM -->
+    <section class="vista" id="v-crm">
+      <div class="crm">
+        <div class="lista-cli">
+          <div class="campo"><input id="buscarCli" placeholder="Buscar por nombre o número"></div>
+          <div id="listaCli"></div>
+          <div class="campo" style="margin-top:10px"><button class="btn primario" id="btnNuevoCli" style="width:100%">+ Nuevo cliente</button></div>
+        </div>
+        <div class="ficha" id="fichaCli"></div>
+      </div>
+    </section>
+
+    <!-- ENTRENAMIENTO -->
+    <section class="vista" id="v-entreno">
+      <div class="dos">
+        <div class="bloque">
+          <h3>Instrucciones de la IA</h3>
+          <div class="campo"><label for="prompt">Cómo debe responder tu asistente</label>
+            <textarea id="prompt">Eres el asistente de PEX Solution. Responde en español, con tono amable y breve. Si no sabes un dato, dilo y ofrece hablar con un asesor. No inventes precios: usa solo los que aparecen en los archivos de entrenamiento.</textarea>
+          </div>
+          <div class="campo"><label for="bienvenida">Mensaje de bienvenida</label>
+            <input id="bienvenida" value="Hola, soy el asistente de PEX Solution. ¿En qué te puedo ayudar?"></div>
+          <div class="acciones-fila"><button class="btn primario" id="btnGuardarPrompt">Guardar cambios</button>
+          <button class="btn" id="btnProbarPrompt">Probar en el chat de prueba</button></div>
+          <div class="aviso">Cada cambio queda en el historial. Puedes volver a una versión anterior.</div>
+        </div>
+        <div class="bloque">
+          <h3>Archivos de entrenamiento</h3>
+          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel o Word)</label>
+            <input type="file" id="subirArchivo" accept=".pdf,.xlsx,.xls,.docx,.txt,.csv"></div>
+          <div id="listaArchivos"></div>
+          <div class="aviso">Los archivos sirven para que la IA responda con tu información: precios, servicios, horarios y preguntas frecuentes.</div>
+          <h3 style="margin-top:16px">Historial de cambios</h3>
+          <div class="fila"><span>Versión 3 · hoy 09:40</span><button class="btn">Volver a esta</button></div>
+          <div class="fila"><span>Versión 2 · ayer 17:15</span><button class="btn">Volver a esta</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FACTURA -->
+    <section class="vista" id="v-factura">
+      <div class="tarjetas">
+        <div class="tarjeta"><small>Consumo de IA este mes</small><b>US$ 18.50</b><span>Monto de ejemplo</span></div>
+        <div class="tarjeta"><small>Mensajes atendidos</small><b>842</b><span>Este mes (ejemplo)</span></div>
+        <div class="tarjeta"><small>Próximo recibo</small><b>1 dic</b><span>Se genera automáticamente</span></div>
+      </div>
+      <div class="bloque">
+        <h3>Recibos</h3>
+        <div class="fila"><div><b>Noviembre 2026</b><br><small>Consumo de IA · monto de ejemplo</small></div><div><span class="estado e-ambar">Pendiente</span> <button class="btn">Descargar</button></div></div>
+        <div class="fila"><div><b>Octubre 2026</b><br><small>Consumo de IA · monto de ejemplo</small></div><div><span class="estado e-verde">Pagado</span> <button class="btn">Descargar</button></div></div>
+      </div>
+      <div class="aviso">Solo puedes ver tu consumo y tus recibos. Los datos de pago los maneja Kaizen.</div>
+    </section>
+
+    <!-- CORREO -->
+    <section class="vista" id="v-correo">
+      <div class="bloque">
+        <div class="fila"><div><b>Correo conectado</b><br><small>Solo lectura: puedes ver los correos, no responder ni usar la IA.</small></div><button class="btn primario" id="btnConectarCorreo">Conectar mi correo</button></div>
+      </div>
+      <div class="bloque" id="bloqueCorreo" hidden>
+        <h3>Últimos correos (ejemplo)</h3>
+        <div class="fila"><div><b>Reserva confirmada</b><br><small>Juan Pérez · hoy 08:12</small></div></div>
+        <div class="fila"><div><b>Consulta de precios</b><br><small>Ana Torres · ayer 16:40</small></div></div>
+      </div>
+    </section>
+
+    <!-- AJUSTES -->
+    <section class="vista" id="v-ajustes">
+      <div class="dos">
+        <div class="bloque">
+          <h3>Marca</h3>
+          <div class="dos">
+            <div><label>Logo</label><div class="vista-logo" id="vistaLogo">Sin logo</div>
+              <input type="file" id="subirLogo" accept="image/*" style="margin-top:8px"></div>
+            <div><label>Banner de inicio</label><div class="vista-banner" id="vistaBanner">Sin banner</div>
+              <input type="file" id="subirBanner" accept="image/*" style="margin-top:8px"></div>
+          </div>
+          <div class="campo" style="margin-top:12px"><label for="nombreCampo">Nombre de tu empresa</label><input id="nombreCampo" value="PEX Solution"></div>
+          <button class="btn primario" id="btnGuardarMarca">Guardar marca</button>
+        </div>
+        <div class="bloque">
+          <h3>Cuenta</h3>
+          <div class="campo"><label for="claveActual">Contraseña actual</label><input type="password" id="claveActual"></div>
+          <div class="campo"><label for="claveNueva">Contraseña nueva</label><input type="password" id="claveNueva"></div>
+          <button class="btn" id="btnClave">Cambiar contraseña</button>
+          <h3 style="margin-top:18px">Ayuda</h3>
+          <div class="fila"><span>Cómo usar el chat</span><button class="btn">Ver</button></div>
+          <div class="fila"><span>Cómo cargar archivos de entrenamiento</span><button class="btn">Ver</button></div>
+          <div class="fila"><span>Hablar con Kaizen</span><button class="btn" id="btnSoporte">Escribir</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------- Datos de ejemplo (no son reales) ----------
+const clientes = [
+  { id: 1, nombre: 'María Gómez', tel: '+51 999 111 222', correo: 'maria@ejemplo.com', etiquetas: ['Frecuente', 'Gato'], notas: ['Pidió cita para el martes.'] },
+  { id: 2, nombre: 'Carlos Ruiz', tel: '+51 988 333 444', correo: 'carlos@ejemplo.com', etiquetas: ['Perro senior'], notas: [] },
+  { id: 3, nombre: 'Lucía Salas', tel: '+51 977 555 666', correo: '', etiquetas: ['Nuevo'], notas: ['Preguntó por vacunas.'] }
+];
+const conversaciones = [
+  { id: 1, canal: 'Web', nombre: 'Visitante del sitio', sinLeer: 1, ia: true, msgs: [
+      { de: 'cliente', t: 'Hola, ¿tienen alimento para perro senior?' },
+      { de: 'ia', t: 'Sí. Manejamos marcas para perros senior. ¿Cuál es el peso aproximado de tu perro?' },
+      { de: 'cliente', t: 'Unos 14 kilos.' } ] },
+  { id: 2, canal: 'WhatsApp', nombre: 'Carlos Ruiz (ejemplo)', sinLeer: 1, ia: true, msgs: [
+      { de: 'cliente', t: '¿A qué hora abren mañana?' },
+      { de: 'ia', t: 'Mañana abrimos de 9:00 a 18:00. ¿Necesitas una cita?' } ] },
+  { id: 3, canal: 'Facebook', nombre: 'Lucía Salas (ejemplo)', sinLeer: 0, ia: false, msgs: [
+      { de: 'cliente', t: 'Quiero saber precios de vacunas.' },
+      { de: 'humano', t: 'Hola Lucía, te envío la lista en un momento.' } ] }
+];
+const archivos = [
+  { nombre: 'Lista-de-precios.xlsx', tam: '48 KB', fecha: 'hoy' },
+  { nombre: 'Preguntas-frecuentes.pdf', tam: '212 KB', fecha: 'ayer' }
+];
+let clienteActivo = 1;
+let convActiva = 1;
+let iaActiva = true;
+
+// ---------- Utilidades ----------
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function avisar(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(avisar._t); avisar._t = setTimeout(() => e.classList.remove('on'), 2200); }
+
+// ---------- Navegación ----------
+const titulos = { inicio: 'Inicio', redes: 'Redes sociales', chat: 'Chat', crm: 'Clientes (CRM)', entreno: 'Entrenar la IA', factura: 'Consumo y recibos', correo: 'Correo (solo lectura)', ajustes: 'Ajustes' };
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => mostrar(b.dataset.v)));
+function mostrar(v) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('.vista').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  $('tituloVista').textContent = titulos[v] || '';
+  $('panelNotif').hidden = true;
+}
+
+// ---------- IA on/off ----------
+function pintarIA() {
+  $('ia').classList.toggle('pausada', !iaActiva);
+  $('iaTexto').textContent = iaActiva ? 'IA activa' : 'IA pausada';
+  $('btnIA').textContent = iaActiva ? 'Pausar IA' : 'Encender IA';
+  $('iaResumen').textContent = iaActiva ? 'Activa' : 'Pausada';
+}
+$('btnIA').addEventListener('click', () => {
+  iaActiva = !iaActiva; pintarIA();
+  avisar(iaActiva ? 'IA encendida. Responde en todos los canales listos.' : 'IA pausada. Los mensajes quedan para tu equipo.');
+});
+
+// ---------- Notificaciones ----------
+$('btnCampana').addEventListener('click', e => { e.stopPropagation(); $('panelNotif').hidden = !$('panelNotif').hidden; });
+document.addEventListener('click', () => { $('panelNotif').hidden = true; });
+$('panelNotif').addEventListener('click', e => e.stopPropagation());
+
+// ---------- Chat ----------
+function pintarConversaciones() {
+  $('listaConv').innerHTML = conversaciones.map(c => `
+    <div class="conv ${c.id === convActiva ? 'on' : ''}" data-id="${c.id}">
+      ${c.sinLeer ? `<span class="sin">${c.sinLeer}</span>` : ''}
+      <b>${esc(c.nombre)}</b><small>${esc(c.canal)} · ${c.ia ? 'con IA' : 'con asesor'}</small>
+    </div>`).join('');
+  document.querySelectorAll('.conv').forEach(d => d.addEventListener('click', () => { convActiva = Number(d.dataset.id); const c = conversaciones.find(x => x.id === convActiva); c.sinLeer = 0; pintarChat(); pintarCuentas(); }));
+}
+function pintarChat() {
+  pintarConversaciones();
+  const c = conversaciones.find(x => x.id === convActiva);
+  $('cabeConv').textContent = c.nombre + ' · ' + c.canal;
+  $('mensajes').innerHTML = c.msgs.map(m => {
+    const clase = m.de === 'cliente' ? 'cliente' : m.de === 'ia' ? 'ia' : 'humano';
+    const quien = m.de === 'cliente' ? 'Cliente' : m.de === 'ia' ? 'IA' : 'Tu equipo';
+    return `<div class="m ${clase}"><small>${quien}</small>${esc(m.t)}</div>`;
+  }).join('');
+  $('mensajes').scrollTop = $('mensajes').scrollHeight;
+}
+function pintarCuentas() {
+  const sin = conversaciones.reduce((s, c) => s + c.sinLeer, 0);
+  $('cuentaChat').textContent = sin; $('cuentaNotif').textContent = sin; $('sinResponder').textContent = sin;
+}
+$('btnEnviarMsj').addEventListener('click', enviar);
+$('entradaMsj').addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
+function enviar() {
+  const t = $('entradaMsj').value.trim(); if (!t) return;
+  const c = conversaciones.find(x => x.id === convActiva);
+  c.msgs.push({ de: 'humano', t }); c.ia = false; $('entradaMsj').value = '';
+  pintarChat(); avisar('Enviado. La IA queda pausada en esta conversación.');
+}
+
+// ---------- CRM ----------
+function pintarClientes() {
+  const q = $('buscarCli').value.trim().toLowerCase();
+  const lista = clientes.filter(c => !q || c.nombre.toLowerCase().includes(q) || c.tel.replace(/\s/g, '').includes(q.replace(/\s/g, '')));
+  $('listaCli').innerHTML = lista.map(c => `
+    <div class="fila-cli ${c.id === clienteActivo ? 'on' : ''}" data-id="${c.id}"><b>${esc(c.nombre)}</b><small>${esc(c.tel)}</small></div>`).join('') || '<div class="aviso">Sin resultados.</div>';
+  document.querySelectorAll('.fila-cli').forEach(d => d.addEventListener('click', () => { clienteActivo = Number(d.dataset.id); pintarClientes(); pintarFicha(); }));
+  $('totalClientes').textContent = clientes.length;
+}
+function pintarFicha() {
+  const c = clientes.find(x => x.id === clienteActivo);
+  if (!c) { $('fichaCli').innerHTML = '<div class="aviso">Elige un cliente o crea uno nuevo.</div>'; return; }
+  $('fichaCli').innerHTML = `
+    <h2>${esc(c.nombre)}</h2>
+    <div class="aviso">${esc(c.tel)}${c.correo ? ' · ' + esc(c.correo) : ''}</div>
+    <div style="margin:14px 0"><label>Etiquetas</label>
+      ${c.etiquetas.map((t, i) => `<span class="chip">${esc(t)}<button data-q="${i}" title="Quitar">×</button></span>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="nuevaEtiqueta" placeholder="Nueva etiqueta"><button class="btn" id="btnEtiqueta">Agregar</button></div>
+    </div>
+    <div style="margin:14px 0"><label>Notas</label>
+      ${c.notas.map(n => `<div class="nota">${esc(n)}</div>`).join('') || '<div class="aviso">Sin notas todavía.</div>'}
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="nuevaNota" placeholder="Escribe una nota para este cliente"><button class="btn" id="btnNota">Guardar nota</button></div>
+    </div>`;
+  $('btnEtiqueta').addEventListener('click', () => { const t = $('nuevaEtiqueta').value.trim(); if (!t) return; c.etiquetas.push(t); pintarFicha(); avisar('Etiqueta agregada'); });
+  $('btnNota').addEventListener('click', () => { const t = $('nuevaNota').value.trim(); if (!t) return; c.notas.push(t); pintarFicha(); avisar('Nota guardada'); });
+  document.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { c.etiquetas.splice(Number(b.dataset.q), 1); pintarFicha(); }));
+}
+$('buscarCli').addEventListener('input', pintarClientes);
+$('btnNuevoCli').addEventListener('click', () => {
+  const nombre = prompt('Nombre del cliente'); if (!nombre) return;
+  const tel = prompt('Número de WhatsApp o teléfono (con código de país)') || '';
+  const id = Math.max(...clientes.map(c => c.id)) + 1;
+  clientes.push({ id, nombre, tel, correo: '', etiquetas: [], notas: [] });
+  clienteActivo = id; pintarClientes(); pintarFicha(); avisar('Cliente guardado');
+});
+
+// ---------- Entrenamiento ----------
+function pintarArchivos() {
+  $('listaArchivos').innerHTML = archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${esc(a.tam)} · ${esc(a.fecha)}</small></span><button class="btn peligro">Quitar</button></div>`).join('');
+}
+$('subirArchivo').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  archivos.unshift({ nombre: f.name, tam: Math.max(1, Math.round(f.size / 1024)) + ' KB', fecha: 'ahora' });
+  e.target.value = ''; pintarArchivos(); avisar('Archivo cargado. La IA lo usará en sus próximas respuestas.');
+});
+$('btnGuardarPrompt').addEventListener('click', () => avisar('Cambios guardados (vista de prueba)'));
+$('btnProbarPrompt').addEventListener('click', () => { mostrar('chat'); avisar('Aquí se probaría la IA con tus cambios, sin publicarlos.'); });
+
+// ---------- Factura y correo ----------
+$('btnConectarCorreo').addEventListener('click', () => { $('bloqueCorreo').hidden = false; avisar('Vista de prueba: el correo se conecta en solo lectura.'); });
+
+// ---------- Ajustes: logo, banner, marca ----------
+function leerImagen(input, destino, cb) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { destino.innerHTML = `<img src="${r.result}" alt="">`; cb && cb(r.result); };
+  r.readAsDataURL(f);
+}
+$('subirLogo').addEventListener('change', e => leerImagen(e.target, $('vistaLogo'), url => { $('logoMenu').innerHTML = `<img src="${url}" alt="">`; }));
+$('subirBanner').addEventListener('change', e => leerImagen(e.target, $('vistaBanner'), url => { const b = $('bannerInicio'); b.style.backgroundImage = `url(${url})`; b.textContent = ''; }));
+$('btnGuardarMarca').addEventListener('click', () => { $('nombreEmpresa').textContent = $('nombreCampo').value || 'Mi empresa'; avisar('Marca guardada'); });
+$('btnClave').addEventListener('click', () => avisar('Vista de prueba: la contraseña se cambia desde la versión conectada.'));
+$('btnSoporte').addEventListener('click', () => avisar('Vista de prueba: aquí se abre el chat con Kaizen.'));
+
+// ---------- Arranque ----------
+pintarIA(); pintarChat(); pintarCuentas(); pintarClientes(); pintarFicha(); pintarArchivos();
+</script>
+</body>
+</html>
