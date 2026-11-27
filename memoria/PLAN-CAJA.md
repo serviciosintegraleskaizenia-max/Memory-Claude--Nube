@@ -35,3 +35,8 @@ Cálculos:
 - Reparto de R (por defecto todo el fondo; se puede dejar parte como fondo): dueño R·(1−p), socio R·p. Antes de entregar, cada deuda se cobra de la parte del que debe y pasa al que prestó; lo que no alcance sigue debiéndose.
 - Retiro: hasta su parte libre y hasta la caja; el que debe no retira.
 Prueba obligatoria (ejemplo del dueño): entra 1,000 → reparto 1,000 (C 600 / J 400) → J retira 400 → gasto 300 prestado por C (debe J) → entra 750 → gasto mensual 250 (del fondo) → reparto 500 → C 300 + 200 cobrados a J = 500; J 0; J sigue debiendo 100; C libre 800; J libre 0; caja 800.
+
+## Estado (27 nov)
+- HECHO y entregado en el paquete 6bbf0cb: paso 1 (recibos que faltan), pasos 4-6 (caja, reparto, retiros con recibo, préstamos, deshacer el último) y la pantalla «💰 Caja» (Zentralia / Kaizen IA). Pruebas: reglas 5/5, API 17/17, recibos 5/5, navegador 6/6.
+- Al instalar: los gastos de «Creación de sistema» y los retiros con recibo pasan solos a la caja (una sola vez); los cobros pagados entran solos.
+- FALTA: paso 2 (planes por cliente con día propio o paquete y recibo con líneas), paso 3 (cargar gastos a un plan), ficha de planes en la Caja.
