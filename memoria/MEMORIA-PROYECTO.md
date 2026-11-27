@@ -127,6 +127,15 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - Pendiente: corregir en Oficina la URL de la empresa PEX SOLUTIONS (hoy dice pex-solutions.kaizenia.app) para que coincida.
 - Pendiente: no crear la ruta en el túnel hasta que el panel del cliente corra en su propio puerto. Apuntarla al puerto de Oficina (3090) expondría Oficina al cliente.
 
+## DECISIONES DEL DUEÑO · OFICINA COMO PANEL DE CONTROL (27 nov)
+- **El dueño es dueño del sistema.** Los clientes solo reciben acceso. El dueño crea sus usuarios, claves y permisos, les cobra cada mes y puede apagar su servicio si no pagan.
+- **Un solo tipo de cliente en Oficina.** Hoy "Nueva empresa" (panel de correo) y "Automatización" (redes) son cosas separadas y no se hablan: eso se elimina. Un cliente nuevo tiene todos los programas que el dueño vaya creando (correo, reservas y operaciones, automatización de redes, CRM, panel del cliente...) como módulos que se encienden o apagan. Orden acordado: primero se conecta PEX, después se unifica Oficina.
+- **Dominio de PEX:** https://pexsolutions.kaizenia.app (ruta ya creada por el dueño). La empresa vieja de PEX (pex-solutions) fue eliminada de Oficina.
+- **Puente Oficina → panel del cliente:** el dueño configura en Oficina conexiones de redes, configuración de IA y clave de OpenRouter, plantillas, cobros y recibos con mensaje propio, anuncios, módulos, pausa y suspensión. El panel del cliente lo recibe por dentro del servidor con la clave interna (archivo /srv/zentralia/datos/panel-cliente.env, nunca en el repositorio).
+- **Entrenamiento de la IA:** el dueño pone la base en Oficina; el cliente puede ajustarla desde su panel, con historial. La base de Oficina no la borra el cliente.
+- **Lo que hace el cliente en su panel:** usa su CRM, chatea con Kaizen (puede mandar documentos) y ve sus recibos, plantillas y redes. Puede crear plantillas, pero quedan "por aprobar" hasta que el dueño las apruebe; al crearlas, el dueño recibe un aviso en Oficina.
+- **Chat:** los mensajes y documentos del cliente llegan a Oficina; el dueño responde desde Oficina.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
