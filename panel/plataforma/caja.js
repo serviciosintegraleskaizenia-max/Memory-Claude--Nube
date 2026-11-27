@@ -8,25 +8,27 @@
 // Reglas completas: memoria/MEMORIA-PROYECTO.md y memoria/PLAN-CAJA.md.
 
 const TIPOS = {
-  entrada: 'Entrada', gasto_creacion: 'Creación del sistema', gasto_mensual: 'Gasto mensual',
+  entrada: 'Entrada', gasto_creacion: 'Creación del sistema', gasto_mensual: 'Gasto mensual', gasto_negocio: 'Gasto del negocio',
   reparto: 'Reparto', retiro: 'Retiro de socio'
 };
 const SOCIOS = ['dueno', 'socio'];
-const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const r2 = n => Math.round((Number(n) || 0) * 100) / 100 || 0;
 
 // ---------- Cálculo puro (sin base de datos; se prueba en caja.test.js) ----------
 // movs: [{ tipo, monto, socio, detalle }] en orden. pct: porcentaje del socio (0 a 100).
 function calcular(movs, pct) {
   const e = {
-    entradas: 0, creacion: 0, mensuales: 0, retiros: { dueno: 0, socio: 0 }, repartido: { dueno: 0, socio: 0 },
+    entradas: 0, creacion: 0, mensuales: 0, negocio: 0, retiros: { dueno: 0, socio: 0 }, repartido: { dueno: 0, socio: 0 },
     libre: { dueno: 0, socio: 0 }, caja: 0, deudas: [], prestado: { dueno: 0, socio: 0 }
   };
   for (const m of movs) {
     const monto = r2(m.monto);
     const d = m.detalle || {};
     if (m.tipo === 'entrada') { e.entradas = r2(e.entradas + monto); e.caja = r2(e.caja + monto); }
-    else if (m.tipo === 'gasto_creacion' || m.tipo === 'gasto_mensual') {
-      if (m.tipo === 'gasto_creacion') e.creacion = r2(e.creacion + monto); else e.mensuales = r2(e.mensuales + monto);
+    else if (String(m.tipo).startsWith('gasto_')) {
+      if (m.tipo === 'gasto_creacion') e.creacion = r2(e.creacion + monto);
+      else if (m.tipo === 'gasto_negocio') e.negocio = r2(e.negocio + monto);
+      else e.mensuales = r2(e.mensuales + monto);
       e.caja = r2(e.caja - monto);
       for (const p of d.prestamos || []) {
         const pm = r2(p.monto);
@@ -58,7 +60,8 @@ function calcular(movs, pct) {
   }
   e.deudas = e.deudas.filter(x => x.saldo > 0);
   e.debe = { dueno: r2(e.deudas.filter(x => x.debe === 'dueno').reduce((t, x) => t + x.saldo, 0)), socio: r2(e.deudas.filter(x => x.debe === 'socio').reduce((t, x) => t + x.saldo, 0)) };
-  e.fondo = r2(e.caja - Math.max(0, e.libre.dueno) - Math.max(0, e.libre.socio));
+  e.gastos = r2(e.creacion + e.mensuales + e.negocio);
+  e.fondo = r2(e.caja - e.libre.dueno - e.libre.socio);
   e.puedeRetirar = {
     dueno: e.debe.dueno > 0 ? 0 : r2(Math.max(0, Math.min(e.libre.dueno, e.caja))),
     socio: e.debe.socio > 0 ? 0 : r2(Math.max(0, Math.min(e.libre.socio, e.caja)))
@@ -70,7 +73,7 @@ function calcular(movs, pct) {
 function revisar(e, m) {
   const monto = r2(m.monto);
   if (!(monto > 0)) return 'El monto debe ser mayor que 0.';
-  if (m.tipo === 'gasto_creacion' || m.tipo === 'gasto_mensual') {
+  if (String(m.tipo).startsWith('gasto_')) {
     const prestamos = (m.detalle && m.detalle.prestamos) || [];
     const prestado = r2(prestamos.reduce((t, p) => t + r2(p.monto), 0));
     for (const p of prestamos) {

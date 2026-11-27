@@ -72,3 +72,23 @@ test('un préstamo no puede pasar de lo que el socio tiene libre', () => {
   assert.match(revisar(e, { tipo: 'gasto_mensual', monto: 300, detalle: { prestamos: [{ presta: 'dueno', debe: 'socio', monto: 300 }] } }), /más de lo que tiene libre \(100.00\)/);
   assert.strictEqual(revisar(e, { tipo: 'gasto_mensual', monto: 300, detalle: { prestamos: [{ presta: 'socio', debe: 'dueno', monto: 300 }] } }), '');
 });
+
+test('números reales de Zentralia: adelantos anotados antes del reparto', () => {
+  const movs = [
+    { tipo: 'entrada', monto: 1890 },
+    { tipo: 'gasto_creacion', monto: 978.20 }, { tipo: 'gasto_mensual', monto: 55 }, { tipo: 'gasto_negocio', monto: 55 },
+    { tipo: 'retiro', socio: 'socio', monto: 109 }, { tipo: 'retiro', socio: 'socio', monto: 197 }, { tipo: 'retiro', socio: 'dueno', monto: 459 }
+  ];
+  let e = calcular(movs, 40);
+  assert.strictEqual(e.gastos, 1088.20);
+  assert.strictEqual(e.caja, 36.80);
+  assert.strictEqual(e.fondo, 801.80, 'lo que queda para repartir, aunque ya hubo adelantos');
+  movs.push({ tipo: 'reparto', monto: 801.80 });
+  e = calcular(movs, 40);
+  assert.strictEqual(e.repartido.dueno, 481.08);
+  assert.strictEqual(e.repartido.socio, 320.72);
+  assert.strictEqual(e.libre.dueno, 22.08);
+  assert.strictEqual(e.libre.socio, 14.72);
+  assert.strictEqual(e.fondo, 0);
+  assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 555 }), /Solo puede retirar 14.72/);
+});

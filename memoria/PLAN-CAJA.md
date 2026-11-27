@@ -55,7 +55,7 @@ Decisiones:
 - **Regla del dueño (27 nov):** una mensualidad o cobro pendiente (ej. 750 de Somos Viajes) NUNCA se suma a lo cobrado, a la caja ni a la utilidad. Solo cuenta cuando está pagado con su voucher. «Por cobrar» se muestra aparte y no entra en ningún total.
 
 ## CONSTRUCCIÓN DE LA REESTRUCTURA (aprobada 27 nov) · lista de pasos
-- [ ] R1 Una sola fuente: la caja se recalcula siempre desde Creación de sistema (gastos y adelantos→retiros con recibo), Gastos del negocio pagados (los de plataforma por % de «quién lo paga») y cobros pagados. Tipo nuevo `gasto_negocio`. Fondo = caja − partes libres (con negativos) para que los adelantos viejos cuadren al repartir.
+- [x] R1 Una sola fuente: la caja se recalcula siempre desde Creación de sistema (gastos y adelantos→retiros con recibo), Gastos del negocio pagados (los de plataforma por % de «quién lo paga») y cobros pagados. Tipo nuevo `gasto_negocio`. Fondo = caja − partes libres (con negativos) para que los adelantos viejos cuadren al repartir.
 - [ ] R2 Pendiente no suma; marcar pagado exige voucher; todo cobro pagado recibe su recibo solo (también los de Creación de sistema).
 - [ ] R3 Monedas: lista editable; cobro en moneda del cliente; «llegó en US$» al pagar; caja en US$.
 - [ ] R4 Recibos para compartir: PDF, WhatsApp, correo, enlace en línea (token).
