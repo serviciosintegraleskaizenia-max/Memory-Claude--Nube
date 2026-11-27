@@ -405,6 +405,7 @@
   <div class="marca"><div class="logo">Z</div><div><b>Zentralia App</b><small>Oficina · Kaizen IA</small></div></div>
   <button class="nav" data-ir="inicio"><b>🏠 Inicio</b><small>Resumen del día</small></button>
   <button class="nav" data-ir="negocios"><b>🩺 Estado de cada negocio</b><small>Salud de cada negocio</small><span class="num" id="numNegocios" style="display:none"></span></button>
+  <button class="nav" data-ir="caja"><b>💰 Caja</b><small>Entradas, gastos, reparto y retiros</small></button>
   <button class="nav" data-ir="administracion"><b>🏛️ Administración</b><small>Clientes, cobros, gastos y reparto</small><span class="num" id="numCobros" style="display:none"></span></button>
   <button class="nav" data-ir="calendario"><b>📅 Calendario</b><small>Servicios del mes</small></button>
   <button class="nav" data-ir="chat"><b>💬 Chat con los negocios</b><small>Mensajes de gerentes</small><span class="num" id="numChat" style="display:none"></span></button>
@@ -610,7 +611,7 @@ async function cargarChatContactos() {
 async function cargarProyectos() { const r = await api('/api/oficina/proyectos'); if (r.ok) P = r.data; }
 // Permisos de la Oficina para quien no es Programador (Herramientas → Grupos / Usuarios → "Oficina").
 let YO = null;
-const PERMISO_SEC = { inicio: 'oficina_inicio', negocios: 'oficina_negocios', administracion: ['oficina_clientes', 'oficina_gastos'], clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
+const PERMISO_SEC = { caja: 'oficina_gastos', inicio: 'oficina_inicio', negocios: 'oficina_negocios', administracion: ['oficina_clientes', 'oficina_gastos'], clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
   enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos' };
 function puedeSec(v) {
   if (!YO || YO.grupo === 'Programador') return true;
@@ -644,6 +645,7 @@ async function cargarSeccion(v) {
   if (v === 'administracion') tareas.push(cargarDisenoAdm());
   if (v === 'inicio' || v === 'enlaces') tareas.push(cargarServicios());
   if (v === 'apis') tareas.push(cargarApis());
+  if (v === 'caja') tareas.push(cargarCaja());
   if (v === 'apps') tareas.push(cargarApps());
   if (v === 'integraciones') tareas.push(cargarIntegraciones());
   if (v === 'chat') tareas.push(cargarChatContactos());
@@ -655,7 +657,7 @@ async function cargarSeccion(v) {
   if (v === 'conocimiento' && kTab === 'config' && R && R.tieneToken && R.cuenta && !rProbe) { const r = await api('/api/oficina/redes/probar', { empresa_id: kEmpresa }); if (r.ok) rProbe = r.data; }
 }
 function pintar() {
-  const f = { inicio: vInicio, negocios: vNegocios, clientes: vAdministracion, gastos: vAdministracion, administracion: vAdministracion, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
+  const f = { caja: vCaja, inicio: vInicio, negocios: vNegocios, clientes: vAdministracion, gastos: vAdministracion, administracion: vAdministracion, calendario: vCalendario, chat: vChat, enlaces: vEnlaces, apis: vApis, apps: vApps, integraciones: vIntegraciones, conocimiento: vConocimiento, redes: vRedes, respaldos: vRespaldos, empresas: vEmpresas, herramientas: vHerramientas }[vista];
   if ((['inicio', 'clientes', 'gastos', 'administracion', 'calendario', 'enlaces'].includes(vista) && !D)) { document.getElementById('vista').innerHTML = `<div class="vacio">${ERR_DATOS ? esc(ERR_DATOS) : 'Cargando…'}</div>`; return; }
   if ((vista === 'conocimiento' || vista === 'redes') && !K) { document.getElementById('vista').innerHTML = '<div class="vacio">Cargando…</div>'; return; }
   document.getElementById('vista').innerHTML = cajaAlarmas() + f();
@@ -2796,6 +2798,111 @@ function opcionesEmpresa(elegida, vacio = 'Ninguno (general)') {
   return [`<option value="">${vacio}</option>`].concat(D.empresas.map(e => `<option value="${e.id}" ${Number(elegida) === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`)).join('');
 }
 function opciones(obj, elegida) { return Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === elegida ? 'selected' : ''}>${esc(v)}</option>`).join(''); }
+// ---------- Caja (Kaizen IA / Zentralia): entradas, gastos, reparto, retiros con recibo y préstamos entre socios ----------
+let CAJA = null, cajaAdm = (() => { try { return localStorage.getItem('oficinaCajaAdm') || 'centralia'; } catch (e) { return 'centralia'; } })();
+async function cargarCaja() {
+  const r = await api('/api/oficina/caja?administracion=' + encodeURIComponent(cajaAdm));
+  CAJA = r.ok ? r.data : { error: r.data.error || 'No se pudo cargar la caja.' };
+}
+const TIPO_CAJA = { entrada: ['Entrada', 'ok'], gasto_creacion: ['Creación del sistema', 'az'], gasto_mensual: ['Gasto mensual', 'ojo'], reparto: ['Reparto', 'gris'], retiro: ['Retiro de socio', 'mal'] };
+function filaMov(m) {
+  const [t, c] = TIPO_CAJA[m.tipo] || [m.tipo, 'gris'];
+  const signo = m.tipo === 'entrada' ? '+' : m.tipo === 'reparto' ? '' : '−';
+  const color = m.tipo === 'entrada' ? 'var(--verde,#1d7a3e)' : m.tipo === 'reparto' ? 'inherit' : 'var(--rojo,#b42318)';
+  const prest = ((m.detalle || {}).prestamos || []).map(x => `prestó ${CAJA.nombres[x.presta]} ${dinero(x.monto)}`).join(' · ');
+  return `<tr><td>${fechaCorta(m.fecha)}</td><td>${esc(m.concepto)}${prest ? `<div class="ay" style="font-size:12px">${esc(prest)}</div>` : ''}</td><td><span class="chip ${c}">${t}</span></td>
+    <td class="n" style="color:${color}">${signo}${dinero(m.monto)}</td><td class="n">${m.tipo === 'reparto' ? '—' : dinero(m.queda)}</td>
+    <td>${m.recibo_id ? `<button class="btn-mini" data-recibo="${m.recibo_id}">Recibo</button>` : ''}</td></tr>`;
+}
+function vCaja() {
+  const adms = [['centralia', 'Zentralia'], ['kaizen', 'Kaizen IA']];
+  const tabs = `<div style="display:flex;gap:8px;margin-bottom:12px">${adms.map(([k, n]) => `<button class="${cajaAdm === k ? 'btn' : 'btn-sec'}" data-caja-adm="${k}">${n}</button>`).join('')}</div>`;
+  if (!CAJA) return `<h1>💰 Caja</h1>${tabs}<div class="vacio">Cargando…</div>`;
+  if (CAJA.error) return `<h1>💰 Caja</h1>${tabs}<div class="vacio">${esc(CAJA.error)}</div>`;
+  const e = CAJA.estado, n = CAJA.nombres;
+  const kpi = (t, v, c, sub = '') => `<div class="caja" style="border-left:4px solid ${c};padding:10px 12px"><div class="sub" style="text-transform:uppercase;font-size:11px">${t}</div><b style="font-size:20px">${dinero(v)}</b>${sub ? `<div class="ay" style="font-size:12px">${sub}</div>` : ''}</div>`;
+  const socio = k => {
+    const debe = e.debe[k] > 0 ? ` · <span class="chip mal">debe ${dinero(e.debe[k])} a ${esc(n[k === 'dueno' ? 'socio' : 'dueno'])}</span>` : '';
+    const pct = k === 'socio' ? CAJA.pct : 100 - CAJA.pct;
+    return `<div class="caja" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px"><span><b>${esc(n[k])}</b> ${pct} % · le tocó ${dinero(e.repartido[k])} · retiró ${dinero(e.retiros[k])}${e.prestado[k] ? ` · prestó ${dinero(e.prestado[k])}` : ''} · <b style="color:var(--verde,#1d7a3e)">puede retirar ${dinero(e.puedeRetirar[k])}</b>${debe}</span>
+      <button class="btn-sec" data-caja-retiro="${k}" ${e.puedeRetirar[k] > 0 ? '' : 'disabled'}>Retirar</button></div>`;
+  };
+  const recibos = CAJA.recibos.slice(0, 5).map(r => `<tr data-recibo="${r.id}" style="cursor:pointer"><td>${fechaCorta(r.fecha)}</td><td>${r.tipo === 'socio' ? 'R-S' : 'R-C'} ${String(r.numero).padStart(4, '0')}</td><td>${esc(r.tipo === 'socio' ? r.socio : (r.empresa || ''))}${/ANULADO/.test(r.concepto) ? ' <span class="chip mal">anulado</span>' : ''}</td><td class="n">${dinero(r.monto, r.moneda)}</td></tr>`).join('');
+  return `<h1>💰 Caja</h1><p class="sub">Todo lo que entra y sale. Lo repartido es de cada socio; los gastos salen del fondo de la empresa.</p>${tabs}
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      ${kpi('Entró', e.entradas, '#1b6fd1', 'Cobros pagados de los clientes')}
+      ${kpi('Gastos', e.creacion + e.mensuales, '#c62828', `Creación ${dinero(e.creacion)} · mensuales ${dinero(e.mensuales)}`)}
+      ${kpi('Retiros de socios', e.retiros.dueno + e.retiros.socio, '#6b3fa0', `${esc(n.dueno)} ${dinero(e.retiros.dueno)} · ${esc(n.socio)} ${dinero(e.retiros.socio)}`)}
+      ${kpi('En caja', e.caja, '#1d7a3e', `Fondo de la empresa sin repartir: <b>${dinero(e.fondo)}</b>`)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">${socio('dueno')}${CAJA.pct > 0 ? socio('socio') : ''}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><button class="btn" data-caja-gasto>+ Gasto</button><button class="btn-sec" data-caja-reparto ${e.fondo > 0 ? '' : 'disabled'}>Repartir ${dinero(Math.max(0, e.fondo))}</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:12px">
+      <div class="caja"><h2 style="display:flex;justify-content:space-between">Recibos <a href="#" data-caja-ver="recibos" style="font-size:13px">Ver todos ›</a></h2>
+        <table><thead><tr><th>Fecha</th><th>N.º</th><th>A</th><th class="n">Monto</th></tr></thead><tbody>${recibos || '<tr><td colspan="4" class="vacio">Sin recibos todavía.</td></tr>'}</tbody></table></div>
+      <div class="caja"><h2 style="display:flex;justify-content:space-between">Movimientos <a href="#" data-caja-ver="movimientos" style="font-size:13px">Ver todo ›</a></h2>
+        <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th class="n">Monto</th><th class="n">Queda</th><th></th></tr></thead><tbody>${CAJA.movimientos.slice(0, 6).map(filaMov).join('') || '<tr><td colspan="6" class="vacio">Sin movimientos todavía.</td></tr>'}</tbody></table></div>
+    </div>`;
+}
+function formCajaGasto() {
+  const e = CAJA.estado, n = CAJA.nombres;
+  abrirModal(`<h2>Nuevo gasto · ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'}</h2>
+    <div class="fila2">${campo('cgCon', '¿Qué se pagó?', '<input id="cgCon" placeholder="Ej.: Recarga de tokens OpenRouter">')}${campo('cgMon', 'Monto (US$)', '<input id="cgMon" type="number" min="0" step="0.01">')}</div>
+    <div class="fila2">${campo('cgTipo', 'Tipo', '<select id="cgTipo"><option value="gasto_mensual">Gasto mensual (Claude, IA, servidor, programas)</option><option value="gasto_creacion">Creación del sistema</option></select>')}${campo('cgFec', 'Fecha', `<input id="cgFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
+    <div class="ay">Fondo de la empresa: <b>${dinero(Math.max(0, e.fondo))}</b>. Si el gasto es mayor, lo que falta lo presta un socio de su parte (con su autorización) y el otro le queda debiendo.</div>
+    <div class="fila2" id="cgPresta" style="display:none">${campo('cgQuien', 'Lo que falta lo presta', `<select id="cgQuien">${['dueno', 'socio'].filter(k => k === 'dueno' || CAJA.pct > 0).map(k => `<option value="${k}">${esc(n[k])} (tiene ${dinero(Math.max(0, e.libre[k]))})</option>`).join('')}</select>`)}${campo('cgFalta', 'Monto del préstamo', '<input id="cgFalta" type="number" min="0" step="0.01" readonly>')}</div>
+    ${campo('cgNota', 'Nota (opcional)', '<input id="cgNota">')}
+    ${pieModal(false)}`);
+  const recalcular = () => { const m = Number(v('cgMon')) || 0, falta = Math.round(Math.max(0, m - Math.max(0, e.fondo)) * 100) / 100; document.getElementById('cgPresta').style.display = falta > 0 ? '' : 'none'; document.getElementById('cgFalta').value = falta || ''; };
+  document.getElementById('cgMon').oninput = recalcular;
+  document.getElementById('fGuardar').onclick = async () => {
+    const falta = Number(v('cgFalta')) || 0, presta = v('cgQuien');
+    const prestamos = falta > 0 ? [{ presta, debe: presta === 'dueno' ? 'socio' : 'dueno', monto: falta }] : [];
+    if (falta > 0 && !confirm(`${n[presta]} presta ${dinero(falta)} de su parte y ${n[presta === 'dueno' ? 'socio' : 'dueno']} se los queda debiendo. ¿Lo autoriza?`)) return;
+    const r = await api('/api/oficina/caja/gasto', { administracion: cajaAdm, concepto: v('cgCon'), monto: v('cgMon'), tipo: v('cgTipo'), fecha: v('cgFec'), nota: v('cgNota'), prestamos });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    cerrarModal(); aviso('Gasto anotado.'); ir('caja');
+  };
+}
+function formCajaReparto() {
+  const e = CAJA.estado, n = CAJA.nombres;
+  abrirModal(`<h2>Repartir la utilidad</h2>
+    <p class="sub">En el fondo de la empresa hay <b>${dinero(e.fondo)}</b>. Puedes repartir todo o dejar una parte como fondo para emergencias.</p>
+    <div class="fila2">${campo('crMon', 'Monto a repartir (US$)', `<input id="crMon" type="number" min="0" step="0.01" value="${Math.max(0, e.fondo)}">`)}${campo('crFec', 'Fecha', `<input id="crFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
+    <div class="ay" id="crVista"></div>
+    ${pieModal(false)}`);
+  const vista = () => { const m = Number(v('crMon')) || 0, s = Math.round(m * CAJA.pct) / 100; const deudas = e.debe.socio || e.debe.dueno ? ` Antes de entregar, se cobra primero lo que se debe (${e.debe.socio ? `${n.socio} debe ${dinero(e.debe.socio)}` : `${n.dueno} debe ${dinero(e.debe.dueno)}`}).` : ''; document.getElementById('crVista').innerHTML = `${esc(n.dueno)}: <b>${dinero(m - s)}</b>${CAJA.pct > 0 ? ` · ${esc(n.socio)}: <b>${dinero(s)}</b>` : ''} · queda de fondo ${dinero(Math.max(0, e.fondo - m))}.${deudas}`; };
+  document.getElementById('crMon').oninput = vista; vista();
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/caja/reparto', { administracion: cajaAdm, monto: v('crMon'), fecha: v('crFec') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo repartir.'; return; }
+    cerrarModal(); aviso('Reparto anotado.'); ir('caja');
+  };
+}
+function formCajaRetiro(k) {
+  const e = CAJA.estado, n = CAJA.nombres;
+  abrirModal(`<h2>Retiro · ${esc(n[k])}</h2>
+    <p class="sub">Puede retirar hasta <b>${dinero(e.puedeRetirar[k])}</b> (su parte libre y lo que hay en caja). Se genera su recibo.</p>
+    <div class="fila2">${campo('ctMon', 'Monto (US$)', `<input id="ctMon" type="number" min="0" step="0.01" value="${e.puedeRetirar[k]}">`)}${campo('ctFec', 'Fecha', `<input id="ctFec" type="date" value="${new Date().toISOString().slice(0, 10)}">`)}</div>
+    <div class="fila2">${campo('ctMet', 'Método', `<select id="ctMet">${['Transferencia', 'PayPal', 'Efectivo', 'Otro'].map(x => `<option>${x}</option>`).join('')}</select>`)}${campo('ctRef', 'Referencia', '<input id="ctRef">')}</div>
+    ${campo('ctNota', 'Nota (opcional)', '<input id="ctNota">')}
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/caja/retiro', { administracion: cajaAdm, socio: k, monto: v('ctMon'), fecha: v('ctFec'), metodo: v('ctMet'), referencia: v('ctRef'), nota: v('ctNota') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    cerrarModal(); aviso('Retiro anotado con su recibo.'); await ir('caja'); abrirRecibo(r.data.recibo_id);
+  };
+}
+function verCaja(que) {
+  const ultimoManual = CAJA.movimientos.find(m => m.tipo !== 'entrada' && !(m.detalle || {}).origen);
+  const cuerpo = que === 'recibos'
+    ? `<table><thead><tr><th>Fecha</th><th>N.º</th><th>Tipo</th><th>A</th><th>Concepto</th><th class="n">Monto</th></tr></thead><tbody>${CAJA.recibos.map(r => `<tr data-recibo="${r.id}" style="cursor:pointer"><td>${fechaCorta(r.fecha)}</td><td>${r.tipo === 'socio' ? 'R-S' : 'R-C'} ${String(r.numero).padStart(4, '0')}</td><td>${r.tipo === 'socio' ? 'Socio' : 'Cliente'}</td><td>${esc(r.tipo === 'socio' ? r.socio : (r.empresa || ''))}</td><td>${esc(r.concepto)}</td><td class="n">${dinero(r.monto, r.moneda)}</td></tr>`).join('') || '<tr><td colspan="6" class="vacio">Sin recibos.</td></tr>'}</tbody></table>`
+    : `<table><thead><tr><th>Fecha</th><th>Concepto</th><th>Tipo</th><th class="n">Monto</th><th class="n">Queda</th><th></th></tr></thead><tbody>${CAJA.movimientos.map(filaMov).join('') || '<tr><td colspan="6" class="vacio">Sin movimientos.</td></tr>'}</tbody></table>
+      ${ultimoManual ? `<div class="pie"><button class="btn-sec izq" data-caja-deshacer="${ultimoManual.id}" style="color:var(--rojo)">Deshacer el último: ${esc(ultimoManual.concepto)} (${dinero(ultimoManual.monto)})</button></div>` : ''}`;
+  abrirModal(`<h2>${que === 'recibos' ? 'Todos los recibos' : 'Todos los movimientos'} · ${cajaAdm === 'kaizen' ? 'Kaizen IA' : 'Zentralia'}</h2>${cuerpo}`);
+  document.getElementById('modal').classList.add('grande');
+}
+
 function campo(id, etiqueta, control, ayuda = '') { return `<div class="campo"><label for="${id}">${etiqueta}</label>${control}${ayuda ? `<div class="ay">${ayuda}</div>` : ''}</div>`; }
 const v = id => (document.getElementById(id) || {}).value || '';
 // Toda ventana lleva arriba a la derecha: minimizar, agrandar y cerrar (X). Nada de botones "Cerrar".
@@ -3676,9 +3783,9 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-caja-adm],[data-caja-gasto],[data-caja-reparto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
-  if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente) return;
+  if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
   if (t.hasAttribute('data-editar-api')) return formApi(APIS.find(x => String(x.id) === t.dataset.editarApi) || {});
   ev.preventDefault();
@@ -3711,6 +3818,17 @@ document.addEventListener('click', async ev => {
   if (d.estadoCliente) { const e = buscar(D.empresas, d.estadoCliente); return e && formEstado(e); }
   if (d.pagarCobro) return formPagar(d.pagarCobro);
   if (d.recibo) return abrirRecibo(d.recibo);
+  if (d.cajaAdm) { cajaAdm = d.cajaAdm; try { localStorage.setItem('oficinaCajaAdm', cajaAdm); } catch (e) {} CAJA = null; return ir('caja'); }
+  if ('cajaGasto' in d) return formCajaGasto();
+  if ('cajaReparto' in d) return formCajaReparto();
+  if (d.cajaRetiro) return formCajaRetiro(d.cajaRetiro);
+  if (d.cajaVer) return verCaja(d.cajaVer);
+  if (d.cajaDeshacer) {
+    if (!confirm('¿Deshacer este movimiento? Si era un retiro, su recibo queda anulado.')) return;
+    const r = await api('/api/oficina/caja/deshacer', { administracion: cajaAdm, id: Number(d.cajaDeshacer) });
+    if (!r.ok) return aviso(r.data.error || 'No se pudo deshacer.');
+    cerrarModal(); aviso('Listo, se deshizo.'); return ir('caja');
+  }
   if ('retiroSocio' in d) return formRetiro();
   if (d.verComprobante) return verComprobante(d.verComprobante);
   if (d.filtroPagos) { filtroPagos = d.filtroPagos; return pintar(); }
