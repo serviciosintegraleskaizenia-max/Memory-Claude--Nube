@@ -2842,7 +2842,7 @@ function tarjetasDatos(r, g, celdaAgencia) {
     const celda = (etiqueta, contenido) => contenido ? `<span class="scel"><small>${etiqueta}</small>${contenido}</span>` : '';
     const actividad = (t !== 'IN' && t !== 'OUT' && s.actividad) ? ' <span class="sact">' + esc(s.actividad) + '</span>' : '';
     const numero = g.length > 1 ? ' ' + (n + 1) : '';
-    return `<div class="srow ${clase}"><div class="stop"><span class="sicono">${icono}</span><b>${etiquetaTipo(s).replace(/^\S+\s/, '')}${numero}</b>${actividad}</div><div class="sgrid">${celda('Vuelo', vueloTxt)}${celda('Aerolínea', esc(aerolinea))}${celda('Aeropuerto', aeroTxt)}${celda('Fecha', fecha)}${celda('Hora', hora)}${celda('Hotel / destino', hotel ? esc(hotel) : '')}${celda('Pax', pax)}</div>${nota ? `<div class="snota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</div>` : ''}</div>`;
+    return `<div class="srow ${clase}"><div class="stop"><span class="sicono">${icono}</span><b>${etiquetaTipo(s).replace(/^\S+\s/, '')}${numero}</b>${actividad}</div><div class="sgrid">${celda('Vuelo', vueloTxt)}${celda('Aerolínea', esc(aerolinea))}${celda('Aeropuerto', aeroTxt)}${celda('Fecha', fecha)}${celda(t === 'ACTIVIDAD' ? 'Hora de salida' : 'Hora', hora)}${celda(t === 'ACTIVIDAD' ? 'Sale de' : 'Hotel / destino', hotel ? esc(hotel) : '')}${celda('Pax', pax)}</div>${nota ? `<div class="snota${claseNota(nota)}">${iconoNota(nota)} ${esc(nota)}</div>` : ''}</div>`;
   });
   if (filas.length) html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
   const personas = [...new Set(g.flatMap(x => String(x.nombre_cliente || '').split(/\s*,\s*/)).map(x => x.trim()).filter(Boolean))];
