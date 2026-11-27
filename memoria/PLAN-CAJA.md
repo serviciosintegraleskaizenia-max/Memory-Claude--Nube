@@ -22,3 +22,16 @@ Maquetas aprobadas: maqueta-caja.png (detalle) y maqueta-caja-compacta.png (dise
 6. **Préstamos:** sin fondo, Oficina pregunta quién presta y cuánto; tabla `oficina_prestamos`; lo devuelve de su parte el socio que ya había retirado; mientras deba, no retira (en rojo).
 7. **Pantalla compacta** (maqueta compacta) y prueba con los ejemplos de la memoria (1,000 / 300 / 750-250 = 500 → Cristian 500, José debe 100).
 8. Paquete propio con su comando.
+
+## Diseño de la caja (libro de movimientos) · plataforma/caja.js
+Tabla `caja_movimientos` (administracion, fecha, tipo, concepto, monto > 0, plan_id, empresa_id, socio, pago_id único, recibo_id, detalle JSONB, usuario).
+Tipos: `entrada` (cobro pagado; se crea solo desde oficina_pagos, usa lo recibido), `gasto_creacion`, `gasto_mensual`, `reparto` (detalle: parte de cada socio y deudas cobradas), `retiro` (con recibo de socio), `prestamo` (detalle: presta, debe).
+Socios de una administración: `dueno` (Cristian, «Mi parte») y `socio` (socio_nombre, socio_porcentaje de oficina_administraciones).
+Cálculos:
+- caja = Σ entradas − Σ gastos − Σ retiros.
+- parte libre de cada socio = Σ lo que le tocó en repartos (ya con deudas cobradas) − Σ sus retiros − Σ lo que prestó.
+- fondo de la empresa (sin repartir) = caja − Σ partes libres de los socios.
+- Gasto: si el fondo alcanza, sale del fondo. Si no, el que falta lo presta un socio (con su autorización, hasta su parte libre) y queda la deuda «debe» (por defecto el otro socio).
+- Reparto de R (por defecto todo el fondo; se puede dejar parte como fondo): dueño R·(1−p), socio R·p. Antes de entregar, cada deuda se cobra de la parte del que debe y pasa al que prestó; lo que no alcance sigue debiéndose.
+- Retiro: hasta su parte libre y hasta la caja; el que debe no retira.
+Prueba obligatoria (ejemplo del dueño): entra 1,000 → reparto 1,000 (C 600 / J 400) → J retira 400 → gasto 300 prestado por C (debe J) → entra 750 → gasto mensual 250 (del fondo) → reparto 500 → C 300 + 200 cobrados a J = 500; J 0; J sigue debiendo 100; C libre 800; J libre 0; caja 800.
