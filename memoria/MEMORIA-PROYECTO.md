@@ -72,6 +72,11 @@ Documento vivo. Se actualiza en cada avance. **No contiene contraseñas, tokens 
 - memoria/documentos/Guia-revision-Meta-Zentralia-WB.docx: estado de la revisión de Meta, pasos y textos en inglés con traducción.
 - memoria/documentos/textos-permisos-meta.md: mismos textos en Markdown (de respaldo).
 
+## LISTA CONSOLIDADA (27 nov)
+- Todos los pendientes juntos, con prioridad: PEX Solution primero (entrega de hoy), luego Kaizen, panel de correo y Oficina. Documento: memoria/documentos/PENDIENTES-consolidados-27-nov.docx.
+- Pendiente de confirmar: el cliente se escribió "PEX Solution" aquí y "Pet Solution" en el pedido. Asumido que es el mismo.
+- Decisiones abiertas del 27 nov: dónde vive la página de entrenamiento de PEX (Oficina o subdominio propio), qué se entrega hoy, nombre del cliente, respuestas públicas de Kaizen.
+
 ## Pendientes (en orden)
 1. Confirmar la URL de Chatwoot y la URL de n8n.
 2. Crear las rutas de los tres subdominios en el túnel pc-kaizen (kaizenconsulting-ia, pex-solution, premios-carrasco).
