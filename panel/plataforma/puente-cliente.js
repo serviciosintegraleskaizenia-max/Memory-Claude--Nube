@@ -13,7 +13,14 @@ function crearPuente(config = {}) {
     if (process.env.PANEL_CLIENTE_INTERNO) return process.env.PANEL_CLIENTE_INTERNO;
     let contenido = '';
     try { contenido = fs.readFileSync(archivoClave, 'utf8'); }
-    catch (e) { throw Object.assign(new Error('No encuentro la clave del panel del cliente. ¿Está instalado el panel del cliente en este servidor?'), { codigo: 503 }); }
+    catch (e) {
+      // Se dice exactamente qué pasa: el archivo no existe, u Oficina no tiene permiso para leerlo.
+      const msg = e.code === 'EACCES' || e.code === 'EPERM'
+        ? `Oficina no tiene permiso para leer ${archivoClave}. Vuelve a instalar el paquete: el instalador le da permiso de lectura.`
+        : e.code === 'ENOENT' ? `No existe ${archivoClave}: el panel del cliente no está instalado en este servidor. Instala el paquete que trae la carpeta panel-cliente.`
+        : `No pude leer ${archivoClave} (${e.code || e.message}).`;
+      throw Object.assign(new Error(msg), { codigo: 503 });
+    }
     const m = contenido.match(/^PANEL_CLIENTE_INTERNO=(.+)$/m);
     if (!m || !m[1].trim()) throw Object.assign(new Error('El archivo del panel del cliente no trae la clave interna. Reinstala el panel del cliente.'), { codigo: 503 });
     return m[1].trim();

@@ -96,6 +96,7 @@ Decisiones (respuestas del dueño):
 Pasos:
 - [x] D1 Recibos nuevos: numeración RC/RS + renumerar (migración `recibos_series` al arrancar; índice único por administración+tipo+número); diseño del cliente (verde, enmarcado) y del socio (azul marino); datos para pagar y condiciones en Administración → Recibos → «⚙️ Datos para pagar y condiciones» (`oficina_administraciones.recibo_banco` y `recibo_condiciones`).
 - [x] D6 Contraseñas de cualquier empresa (pedido por PEX): Empresas → «🔑 Contraseñas» en cada empresa; elige gerente/usuario del panel de reservas o la cuenta principal del panel del cliente; pide la contraseña del Programador. Rutas `/api/central/empresas/:id/accesos` y `/clave`.
+Respuestas del 28 nov: proforma con programas + precios (creación, mensualidad, qué incluye, validez 15 días, forma de pago, cuenta; PF-0001; se convierte en cliente con un clic). Aviso de pago 5 días antes, aparece en Inicio y Administración como «Avisos por enviar». Usuario «jose» lo creo yo con clave temporal (debe cambiarla). Calendario: cita con cliente (hora, lugar/enlace, asignado), recordatorio/tarea (responsable, hecho, avisa en Inicio), cobro del día (pagó / no pagó, marcar pagado con voucher), seguimiento de proforma (se crea solo al enviarla).
 - [ ] D2 Avisos de pago (AP) automáticos antes del día de cobro, para revisar y enviar.
 - [ ] D3 Proformas (PF) para interesados.
 - [ ] D4 Usuario socio solo-Zentralia en toda Oficina.

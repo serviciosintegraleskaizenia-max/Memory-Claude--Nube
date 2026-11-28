@@ -25,6 +25,19 @@ for app in panel-correos kaizen-pruebas; do
   chown -R zentralia:zentralia "$APPS/$app"
   echo "    OK  $app"
 done
+# Oficina habla con el panel del cliente con una clave interna guardada en el servidor: se asegura que pueda leerla.
+ENVPC=/srv/zentralia/datos/panel-cliente.env
+UOF=$(systemctl show -p User --value zentralia-central 2>/dev/null || true); [ -n "$UOF" ] || UOF=root
+if [ -f "$ENVPC" ]; then
+  if [ "$UOF" != root ] && ! runuser -u "$UOF" -- test -r "$ENVPC" 2>/dev/null; then
+    chgrp "$(id -gn "$UOF")" "$ENVPC" && chmod 640 "$ENVPC"
+    echo "    OK  Oficina ($UOF) ya puede leer la clave del panel del cliente"
+  fi
+  if [ "$UOF" = root ] || runuser -u "$UOF" -- test -r "$ENVPC" 2>/dev/null; then echo "    OK  clave del panel del cliente: Oficina la lee"
+  else echo "    AVISO: Oficina ($UOF) sigue sin poder leer $ENVPC. Mándame: ls -l $ENVPC"; fi
+else
+  echo "    AVISO: no existe $ENVPC (el panel del cliente no está instalado). Lo de PEX desde Oficina no funcionará hasta instalarlo."
+fi
 echo "== 3/3 Reiniciando los paneles"
 systemctl restart zentralia-somosviajes zentralia-central
 sleep 10
