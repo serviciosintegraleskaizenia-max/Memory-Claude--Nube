@@ -11,12 +11,12 @@ const { Pool } = require('pg');
 const PUERTO = Number(process.env.PANEL_CLIENTE_PUERTO || 3110);
 const SEGURO = process.env.PANEL_CLIENTE_SEGURO === '1';
 const INTERNO = process.env.PANEL_CLIENTE_INTERNO || '';
-const MAX_CUERPO = 9 * 1024 * 1024;
-const MAX_ARCHIVO = 6 * 1024 * 1024;
+const MAX_CUERPO = 34 * 1024 * 1024;   // un archivo de 24 MB viaja en base64 (≈32 MB)
+const MAX_ARCHIVO = 24 * 1024 * 1024;
 const MAX_IMAGEN = 1.5 * 1024 * 1024;
 const DURACION_SESION_MS = 12 * 60 * 60 * 1000;
 const EN_LINEA_MS = 2 * 60 * 1000;
-const OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER = process.env.PANEL_CLIENTE_OPENROUTER || 'https://openrouter.ai/api/v1/chat/completions';   // solo las pruebas lo cambian
 const MODELO_POR_DEFECTO = 'anthropic/claude-haiku-5.5';
 const pool = new Pool({ connectionString: process.env.PANEL_CLIENTE_DB || 'postgres://localhost/panel_cliente' });
 const intentos = new Map();
@@ -24,7 +24,7 @@ const intentos = new Map();
 // Secciones del panel que Oficina enciende o apaga. Si Oficina no dijo nada, están encendidas.
 const MODULOS = ['redes', 'conversaciones', 'plantillas', 'chat', 'crm', 'entreno', 'pagos', 'correo'];
 const RUTA_MODULO = [['/api/clientes', 'crm'], ['/api/rapidas', 'plantillas'], ['/api/plantillas', 'plantillas'], ['/api/chat', 'chat'],
-  ['/api/prompt', 'entreno'], ['/api/archivos', 'entreno'], ['/api/prueba', 'entreno'], ['/api/recibos', 'pagos'], ['/api/canales', 'conversaciones']];
+  ['/api/prompt', 'entreno'], ['/api/archivos', 'entreno'], ['/api/prueba', 'entreno'], ['/api/memoria', 'entreno'], ['/api/recibos', 'pagos'], ['/api/canales', 'conversaciones']];
 const CANALES = ['whatsapp', 'instagram', 'facebook', 'tiktok', 'publicidad', 'web'];
 
 // ---------- Utilidades ----------
@@ -88,6 +88,16 @@ function descifrar(t) {
 async function prepararBase() {
   const sql = fs.readFileSync(path.join(__dirname, 'esquema.sql'), 'utf8');
   await pool.query(sql);
+  // Los archivos subidos antes de que la IA los leyera: se les saca el texto una vez (en segundo plano).
+  setTimeout(async () => {
+    try {
+      const viejos = (await pool.query("SELECT id, nombre, tipo, datos FROM archivos_entrenamiento WHERE texto = '' AND datos <> '' AND tipo = '' LIMIT 200")).rows;
+      for (const x of viejos) {
+        const t = texto(await textoDeArchivo(x.nombre, x.tipo, x.datos), 400000);
+        await pool.query("UPDATE archivos_entrenamiento SET texto = $2, tipo = 'revisado' WHERE id = $1", [x.id, t]);
+      }
+    } catch (e) { console.error('No pude leer los archivos de entrenamiento viejos:', e.message); }
+  }, 2000);
 }
 async function sesionDe(req) {
   const token = cookies(req).pc_sesion;
@@ -150,7 +160,7 @@ ruta('GET', '/api/yo', async (req, res) => {
   await pool.query('UPDATE cuentas SET visto = now() WHERE id = $1', [c.id]);
   const a = await ajustesDe(c.id);
   const n = (await pool.query('SELECT count(*)::int AS n FROM notificaciones WHERE cuenta_id = $1 AND leida = FALSE', [c.id])).rows[0].n;
-  const recibos = (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, mensaje, enlace_pago FROM recibos
+  const recibos = (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, mensaje, enlace_pago, documento_url FROM recibos
     WHERE cuenta_id = $1 AND estado <> 'Pagado' ORDER BY id DESC LIMIT 3`, [c.id])).rows;
   const anuncios = (await pool.query('SELECT id, titulo, texto, creado FROM anuncios WHERE cuenta_id = $1 AND cerrado IS NULL ORDER BY id DESC LIMIT 3', [c.id])).rows;
   json(res, 200, {
@@ -232,7 +242,7 @@ ruta('POST', '/api/prompt/restaurar', async (req, res) => {
 });
 ruta('GET', '/api/archivos', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;
-  const r = await pool.query('SELECT id, nombre, tamano, creado FROM archivos_entrenamiento WHERE cuenta_id = $1 ORDER BY id DESC', [c.id]);
+  const r = await pool.query("SELECT id, nombre, tamano, creado, (texto <> '') AS leido, LENGTH(texto) AS caracteres FROM archivos_entrenamiento WHERE cuenta_id = $1 ORDER BY id DESC", [c.id]);
   json(res, 200, { archivos: r.rows });
 });
 ruta('POST', '/api/archivos', async (req, res) => {
@@ -240,9 +250,11 @@ ruta('POST', '/api/archivos', async (req, res) => {
   const f = await leerCuerpo(req);
   const nombre = texto(f.nombre, 200), a = archivoDeDataUrl(f.datos);
   if (!nombre || !a) return json(res, 400, { error: 'Archivo no válido.' });
-  if (a.tamano > MAX_ARCHIVO) return json(res, 400, { error: 'El archivo es muy grande (máximo 6 MB).' });
-  const r = await pool.query('INSERT INTO archivos_entrenamiento (cuenta_id, nombre, tamano, datos) VALUES ($1, $2, $3, $4) RETURNING id, nombre, tamano, creado', [c.id, nombre, a.tamano, a.base64]);
-  json(res, 200, { ok: true, archivo: r.rows[0] });
+  if (a.tamano > MAX_ARCHIVO) return json(res, 400, { error: 'El archivo es muy grande (máximo 24 MB).' });
+  // Se saca el texto (PDF, Word, Excel, texto) para que la IA lo lea al responder.
+  const textoA = texto(await textoDeArchivo(nombre, a.tipo, a.base64), 400000);
+  const r = await pool.query('INSERT INTO archivos_entrenamiento (cuenta_id, nombre, tamano, datos, tipo, texto) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nombre, tamano, creado, (texto <> \'\') AS leido', [c.id, nombre, a.tamano, a.base64, a.tipo, textoA]);
+  json(res, 200, { ok: true, archivo: r.rows[0], aviso: textoA ? '' : 'Se guardó, pero no pude sacar texto de este archivo (¿es una imagen o un PDF escaneado?). Los planos e imágenes mándalos en el chat de prueba para que la IA los vea.' });
 });
 ruta('DELETE', '/api/archivos/:id', async (req, res, [id]) => {
   const c = await cuentaDe(req, res); if (!c) return;
@@ -266,6 +278,198 @@ async function responderIA(a, pregunta) {
     return String(t || '').trim() || 'La IA respondió vacío. Intenta de nuevo.';
   } catch (e) { return 'La IA tardó demasiado o no se pudo conectar. Intenta de nuevo.'; } finally { clearTimeout(reloj); }
 }
+// ---------- Entrenar la IA: conversaciones, memoria 👍/👎, archivos y planos ----------
+// La IA arma sus instrucciones con: la base de Kaizen + los ajustes del cliente + su memoria (lo que aprobó o corrigió)
+// + el texto de sus archivos de entrenamiento. Lo mismo se usa en la prueba y en las respuestas reales (Oficina lo pide).
+const MODELO_VISION = 'anthropic/claude-sonnet-5.5';
+const MAX_TEXTO_ARCHIVOS = 80000;   // lo que entra de los archivos en cada respuesta (caracteres)
+const { leerExcel, abrirZip } = require('./lector-xlsx');
+async function textoDeArchivo(nombre, tipo, base64) {
+  const buf = Buffer.from(base64, 'base64');
+  const ext = String(nombre).toLowerCase().split('.').pop();
+  try {
+    if (['txt', 'csv', 'md'].includes(ext) || /^text\//.test(tipo)) return buf.toString('utf8');
+    if (ext === 'xlsx') {
+      return leerExcel(buf).map(h => `Hoja ${h.nombre}:\n` + (h.filas || []).map(f => Object.values(f.celdas || f).map(c => (c && c.v !== undefined ? c.v : c)).filter(x => x !== '' && x != null).join(' | ')).filter(Boolean).join('\n')).join('\n\n');
+    }
+    if (ext === 'docx') {
+      const s = abrirZip(buf)('word/document.xml') || '';
+      return s.replace(/<\/w:p>/g, '\n').replace(/<w:tab\/>/g, '\t').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+    }
+    if (ext === 'pdf') {
+      let pdfParse = null;
+      try { pdfParse = require('pdf-parse/lib/pdf-parse.js'); } catch (e) { return ''; }
+      const r = await pdfParse(buf);
+      return String(r.text || '');
+    }
+  } catch (e) { return ''; }
+  return '';
+}
+const esVisual = (nombre, tipo) => /^image\//.test(tipo) || /\.(png|jpe?g|webp|gif)$/i.test(nombre) || /\.pdf$/i.test(nombre) || tipo === 'application/pdf';
+// Lo que el cliente fue enseñando (sin la base de Kaizen): ajustes, bienvenida, memoria y archivos.
+async function contextoAprendido(cuentaId, a) {
+  const memoria = (await pool.query('SELECT tipo, pregunta, respuesta FROM ia_memoria WHERE cuenta_id = $1 AND activo ORDER BY id DESC LIMIT 80', [cuentaId])).rows.reverse();
+  const archivos = (await pool.query("SELECT nombre, texto FROM archivos_entrenamiento WHERE cuenta_id = $1 AND texto <> '' ORDER BY id", [cuentaId])).rows;
+  let resto = MAX_TEXTO_ARCHIVOS;
+  const docs = [];
+  for (const x of archivos) {
+    if (resto <= 0) break;
+    const t = x.texto.slice(0, resto); resto -= t.length;
+    docs.push(`### ${x.nombre}\n${t}`);
+  }
+  const partes = [
+    a.prompt ? 'Ajustes del cliente:\n' + a.prompt : '',
+    (a.bienvenida || a.bienvenida_base) ? 'Mensaje de bienvenida: ' + (a.bienvenida || a.bienvenida_base) : '',
+    memoria.length ? 'Memoria (lo que el cliente aprobó 👍 o corrigió 👎; síguelo siempre):\n' + memoria.map(m => m.tipo === 'correccion'
+      ? `- Cuando pregunten algo como «${m.pregunta}», la respuesta correcta es: ${m.respuesta}`
+      : `- Buena respuesta a «${m.pregunta}»: ${m.respuesta}`).join('\n') : '',
+    docs.length ? 'Información del negocio (archivos de entrenamiento). Usa SOLO estos datos para precios y productos:\n' + docs.join('\n\n') : ''
+  ];
+  return partes.filter(Boolean).join('\n\n');
+}
+async function sistemaDe(c, a) {
+  return [a.prompt_base || 'Eres un asistente amable y breve.', await contextoAprendido(c.id, a),
+    'Si te mandan un plano, foto o documento, míralo con cuidado: describe lo que ves, saca medidas y cantidades, y si te piden cotizar, cotiza con los precios de los archivos del negocio (si falta un precio, dilo).'].filter(Boolean).join('\n\n');
+}
+async function llamarIA(a, sistema, mensajes, visual) {
+  const clave = descifrar(a.ia_clave);
+  if (!clave) return { texto: 'Todavía no hay IA conectada. Kaizen la conecta desde Oficina; mientras tanto no hay respuesta real.', modelo: '' };
+  const modelo = visual ? MODELO_VISION : (a.ia_modelo || MODELO_POR_DEFECTO);
+  const control = new AbortController(); const reloj = setTimeout(() => control.abort(), 90000);
+  try {
+    const r = await fetch(OPENROUTER, { method: 'POST', signal: control.signal, headers: { Authorization: 'Bearer ' + clave, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelo, max_tokens: 2000, messages: [{ role: 'system', content: sistema }, ...mensajes] }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401 || r.status === 403) return { texto: 'La clave de IA no es válida. Avísale a Kaizen.', modelo };
+    if (!r.ok) return { texto: 'La IA no respondió (código ' + r.status + (d.error && d.error.message ? ': ' + String(d.error.message).slice(0, 160) : '') + '). Intenta de nuevo.', modelo };
+    const ch = d.choices && d.choices[0];
+    let t = String((ch && ch.message && ch.message.content) || '').trim();
+    if (ch && ch.finish_reason === 'length') t += '\n\n(La respuesta era muy larga y se cortó: pídele «continúa».)';
+    return { texto: t || 'La IA respondió vacío. Intenta de nuevo.', modelo };
+  } catch (e) { return { texto: 'La IA tardó demasiado o no se pudo conectar. Intenta de nuevo.', modelo }; } finally { clearTimeout(reloj); }
+}
+// El mensaje para la IA: el texto y, si trae plano/foto/PDF, el archivo para que lo vea.
+function contenidoDe(m, conArchivo) {
+  if (!m.archivo_nombre) return m.texto || '';
+  if (!conArchivo || !m.archivo_datos) return `${m.texto || ''}\n(Adjuntó: ${m.archivo_nombre})`.trim();
+  const url = `data:${m.archivo_tipo || 'application/octet-stream'};base64,${m.archivo_datos}`;
+  const partes = [{ type: 'text', text: m.texto || 'Revisa este archivo.' }];
+  if (/^image\//.test(m.archivo_tipo)) partes.push({ type: 'image_url', image_url: { url } });
+  else if (/pdf/.test(m.archivo_tipo) || /\.pdf$/i.test(m.archivo_nombre)) partes.push({ type: 'file', file: { filename: m.archivo_nombre, file_data: url } });
+  else partes[0].text += `\n\nContenido de ${m.archivo_nombre}:\n` + (m.texto_archivo || '');
+  return partes;
+}
+async function conversacionDe(c, id) {
+  return (await pool.query('SELECT * FROM prueba_conversaciones WHERE id = $1 AND cuenta_id = $2', [Number(id) || 0, c.id])).rows[0] || null;
+}
+ruta('GET', '/api/prueba/conversaciones', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const r = await pool.query(`SELECT p.id, p.titulo, p.creado, p.actualizado, (SELECT COUNT(*)::int FROM prueba_mensajes m WHERE m.conversacion_id = p.id) AS mensajes,
+      (SELECT COUNT(*)::int FROM prueba_mensajes m WHERE m.conversacion_id = p.id AND m.voto = 'bien') AS buenas
+    FROM prueba_conversaciones p WHERE p.cuenta_id = $1 ORDER BY p.actualizado DESC LIMIT 200`, [c.id]);
+  const a = await ajustesDe(c.id);
+  json(res, 200, { conversaciones: r.rows, ia_conectada: !!descifrar(a.ia_clave) });
+});
+ruta('POST', '/api/prueba/conversaciones', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const r = await pool.query('INSERT INTO prueba_conversaciones (cuenta_id) VALUES ($1) RETURNING id, titulo, creado, actualizado', [c.id]);
+  json(res, 200, { ok: true, conversacion: r.rows[0] });
+});
+ruta('GET', '/api/prueba/conversaciones/:id', async (req, res, [id]) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const conv = await conversacionDe(c, id); if (!conv) return json(res, 404, { error: 'Conversación no encontrada.' });
+  const m = (await pool.query('SELECT id, rol, texto, archivo_nombre, archivo_tipo, voto, modelo, creado FROM prueba_mensajes WHERE conversacion_id = $1 ORDER BY id', [conv.id])).rows;
+  json(res, 200, { conversacion: conv, mensajes: m });
+});
+ruta('DELETE', '/api/prueba/conversaciones/:id', async (req, res, [id]) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  await pool.query('DELETE FROM prueba_conversaciones WHERE id = $1 AND cuenta_id = $2', [Number(id) || 0, c.id]);
+  json(res, 200, { ok: true });
+});
+ruta('GET', '/api/prueba/archivo/:id', async (req, res, [id]) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const m = (await pool.query(`SELECT m.archivo_nombre, m.archivo_tipo, m.archivo_datos FROM prueba_mensajes m JOIN prueba_conversaciones p ON p.id = m.conversacion_id
+    WHERE m.id = $1 AND p.cuenta_id = $2 AND m.archivo_nombre <> ''`, [Number(id) || 0, c.id])).rows[0];
+  if (!m) return json(res, 404, { error: 'Archivo no encontrado.' });
+  res.writeHead(200, { 'Content-Type': m.archivo_tipo || 'application/octet-stream', 'Content-Disposition': 'inline; filename="' + encodeURIComponent(m.archivo_nombre) + '"', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'" });
+  res.end(Buffer.from(m.archivo_datos, 'base64'));
+});
+// Enviar un mensaje de prueba (con emojis y, si quieres, un plano o documento): la IA ve toda la conversación.
+ruta('POST', '/api/prueba/enviar', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const f = await leerCuerpo(req);
+  let conv = await conversacionDe(c, f.conversacion_id);
+  if (!conv) conv = (await pool.query('INSERT INTO prueba_conversaciones (cuenta_id) VALUES ($1) RETURNING *', [c.id])).rows[0];
+  const t = texto(f.texto, 4000);
+  let archivo = null;
+  if (f.archivo) {
+    archivo = archivoDeDataUrl(f.archivo.datos);
+    if (!archivo || !texto(f.archivo.nombre, 200)) return json(res, 400, { error: 'Archivo no válido.' });
+    if (archivo.tamano > MAX_ARCHIVO) return json(res, 400, { error: 'El archivo es muy grande (máximo 24 MB).' });
+    archivo.nombre = texto(f.archivo.nombre, 200);
+  }
+  if (!t && !archivo) return json(res, 400, { error: 'Escribe el mensaje o adjunta un archivo.' });
+  const yo = (await pool.query(`INSERT INTO prueba_mensajes (conversacion_id, rol, texto, archivo_nombre, archivo_tipo, archivo_datos) VALUES ($1, 'cliente', $2, $3, $4, $5) RETURNING id, rol, texto, archivo_nombre, archivo_tipo, voto, creado`,
+    [conv.id, t, archivo ? archivo.nombre : '', archivo ? archivo.tipo : '', archivo ? archivo.base64 : ''])).rows[0];
+  if (conv.titulo === 'Conversación nueva') await pool.query('UPDATE prueba_conversaciones SET titulo = $2 WHERE id = $1', [conv.id, (t || archivo.nombre).slice(0, 60)]);
+  await pool.query('UPDATE ajustes SET prueba_activa = TRUE WHERE cuenta_id = $1', [c.id]);
+  const a = await ajustesDe(c.id);
+  const hist = (await pool.query('SELECT id, rol, texto, archivo_nombre, archivo_tipo, archivo_datos FROM prueba_mensajes WHERE conversacion_id = $1 ORDER BY id DESC LIMIT 30', [conv.id])).rows.reverse();
+  const ultimo = hist[hist.length - 1];
+  if (ultimo && ultimo.archivo_nombre && !esVisual(ultimo.archivo_nombre, ultimo.archivo_tipo)) ultimo.texto_archivo = await textoDeArchivo(ultimo.archivo_nombre, ultimo.archivo_tipo, ultimo.archivo_datos);
+  const mensajes = hist.map(m => ({ role: m.rol === 'ia' ? 'assistant' : 'user', content: m.rol === 'ia' ? m.texto : contenidoDe(m, m === ultimo) }));
+  const visual = !!(ultimo && ultimo.archivo_nombre && esVisual(ultimo.archivo_nombre, ultimo.archivo_tipo));
+  const r = await llamarIA(a, await sistemaDe(c, a), mensajes, visual);
+  const ia = (await pool.query("INSERT INTO prueba_mensajes (conversacion_id, rol, texto, modelo) VALUES ($1, 'ia', $2, $3) RETURNING id, rol, texto, archivo_nombre, archivo_tipo, voto, modelo, creado", [conv.id, r.texto, r.modelo])).rows[0];
+  await pool.query('UPDATE prueba_conversaciones SET actualizado = now() WHERE id = $1', [conv.id]);
+  json(res, 200, { ok: true, conversacion_id: conv.id, mensajes: [yo, ia] });
+});
+// 👍 guarda la respuesta como ejemplo bueno; 👎 guarda cómo debió responder. Ambas quedan en la memoria de la IA.
+ruta('POST', '/api/prueba/voto', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const f = await leerCuerpo(req);
+  const m = (await pool.query(`SELECT m.* FROM prueba_mensajes m JOIN prueba_conversaciones p ON p.id = m.conversacion_id WHERE m.id = $1 AND p.cuenta_id = $2 AND m.rol = 'ia'`, [Number(f.mensaje_id) || 0, c.id])).rows[0];
+  if (!m) return json(res, 404, { error: 'Respuesta no encontrada.' });
+  const voto = f.voto === 'bien' ? 'bien' : f.voto === 'mal' ? 'mal' : '';
+  const antes = (await pool.query("SELECT texto, archivo_nombre FROM prueba_mensajes WHERE conversacion_id = $1 AND id < $2 AND rol = 'cliente' ORDER BY id DESC LIMIT 1", [m.conversacion_id, m.id])).rows[0] || {};
+  const pregunta = texto(antes.texto || (antes.archivo_nombre ? 'Archivo: ' + antes.archivo_nombre : ''), 1000);
+  await pool.query('DELETE FROM ia_memoria WHERE cuenta_id = $1 AND mensaje_id = $2', [c.id, m.id]);
+  if (voto === 'bien') await pool.query("INSERT INTO ia_memoria (cuenta_id, tipo, pregunta, respuesta, mensaje_id) VALUES ($1, 'bien', $2, $3, $4)", [c.id, pregunta, texto(m.texto, 4000), m.id]);
+  if (voto === 'mal') {
+    const correccion = texto(f.correccion, 4000);
+    if (!correccion) return json(res, 400, { error: 'Escribe cómo debió responder: eso es lo que aprende.' });
+    await pool.query("INSERT INTO ia_memoria (cuenta_id, tipo, pregunta, respuesta, mensaje_id) VALUES ($1, 'correccion', $2, $3, $4)", [c.id, pregunta, correccion, m.id]);
+  }
+  await pool.query('UPDATE prueba_mensajes SET voto = $2 WHERE id = $1', [m.id, voto]);
+  json(res, 200, { ok: true });
+});
+// Memoria: ver, editar, apagar o borrar lo aprendido.
+ruta('GET', '/api/memoria', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const r = await pool.query(`SELECT i.id, i.tipo, i.pregunta, i.respuesta, i.activo, i.creado, i.mensaje_id, m.conversacion_id FROM ia_memoria i LEFT JOIN prueba_mensajes m ON m.id = i.mensaje_id
+    WHERE i.cuenta_id = $1 ORDER BY i.id DESC`, [c.id]);
+  json(res, 200, { memoria: r.rows });
+});
+ruta('POST', '/api/memoria', async (req, res) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  const f = await leerCuerpo(req);
+  const pregunta = texto(f.pregunta, 1000), respuesta = texto(f.respuesta, 4000);
+  if (!respuesta) return json(res, 400, { error: 'Escribe lo que debe recordar.' });
+  if (f.id) await pool.query('UPDATE ia_memoria SET pregunta = $3, respuesta = $4, activo = $5 WHERE id = $1 AND cuenta_id = $2', [Number(f.id), c.id, pregunta, respuesta, f.activo !== false]);
+  else await pool.query("INSERT INTO ia_memoria (cuenta_id, tipo, pregunta, respuesta) VALUES ($1, 'correccion', $2, $3)", [c.id, pregunta, respuesta]);
+  json(res, 200, { ok: true });
+});
+ruta('DELETE', '/api/memoria/:id', async (req, res, [id]) => {
+  const c = await cuentaDe(req, res); if (!c) return;
+  await pool.query('DELETE FROM ia_memoria WHERE id = $1 AND cuenta_id = $2', [Number(id) || 0, c.id]);
+  json(res, 200, { ok: true });
+});
+// Oficina (respuestas reales por WhatsApp) pide lo aprendido para sumarlo a la base.
+ruta('GET', '/api/interno/ia-contexto', async (req, res, _p, url) => {
+  const c = await cuentaInterna(req, res, url.searchParams.get('usuario')); if (!c) return;
+  json(res, 200, { contexto: await contextoAprendido(c.id, await ajustesDe(c.id)) });
+});
+
 ruta('POST', '/api/prueba', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;
   const f = await leerCuerpo(req);
@@ -377,7 +581,7 @@ ruta('POST', '/api/chat', async (req, res) => {
   if (f.archivo) {
     archivo = archivoDeDataUrl(f.archivo.datos);
     if (!archivo || !texto(f.archivo.nombre, 200)) return json(res, 400, { error: 'Documento no válido.' });
-    if (archivo.tamano > MAX_ARCHIVO) return json(res, 400, { error: 'El documento es muy grande (máximo 6 MB).' });
+    if (archivo.tamano > MAX_ARCHIVO) return json(res, 400, { error: 'El documento es muy grande (máximo 24 MB).' });
     archivo.nombre = texto(f.archivo.nombre, 200);
   }
   if (!t && !archivo) return json(res, 400, { error: 'Escribe el mensaje o adjunta un documento.' });
@@ -401,7 +605,7 @@ function enviarArchivo(res, m) {
 // Recibos y avisos
 ruta('GET', '/api/recibos', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;
-  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC`, [c.id])).rows });
+  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, documento_url, recibo_url, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC`, [c.id])).rows });
 });
 ruta('GET', '/api/notificaciones', async (req, res) => {
   const c = await cuentaDe(req, res); if (!c) return;
@@ -545,19 +749,23 @@ ruta('POST', '/api/interno/recibo', async (req, res) => {
   const vence = /^\d{4}-\d{2}-\d{2}$/.test(String(f.vence || '')) ? f.vence : null;
   const enlace = texto(f.enlace_pago, 300);
   if (enlace && !/^https:\/\/\S+$/i.test(enlace)) return json(res, 400, { error: 'El enlace de pago debe empezar con https://' });
-  const r = await pool.query(`INSERT INTO recibos (cuenta_id, periodo, monto_centavos, vence, estado, mensaje, enlace_pago) VALUES ($1, $2, $3, $4, 'Por pagar', $5, $6) RETURNING id`,
-    [c.id, periodo, monto, vence, texto(f.mensaje, 600), enlace]);
+  const doc = texto(f.documento_url, 300);
+  if (doc && !/^https?:\/\/\S+\/r\/[A-Za-z0-9_-]+$/.test(doc)) return json(res, 400, { error: 'El enlace del aviso no es válido.' });
+  const r = await pool.query(`INSERT INTO recibos (cuenta_id, periodo, monto_centavos, vence, estado, mensaje, enlace_pago, documento_url) VALUES ($1, $2, $3, $4, 'Por pagar', $5, $6, $7) RETURNING id`,
+    [c.id, periodo, monto, vence, texto(f.mensaje, 600), enlace, doc]);
   await pool.query('INSERT INTO notificaciones (cuenta_id, texto) VALUES ($1, $2)', [c.id, `Nuevo recibo: ${periodo} · US$ ${(monto / 100).toFixed(2)}`]);
   json(res, 200, { ok: true, id: r.rows[0].id });
 });
 ruta('GET', '/api/interno/recibos', async (req, res, _p, url) => {
   const c = await cuentaInterna(req, res, url.searchParams.get('usuario')); if (!c) return;
-  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, creado, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC LIMIT 24`, [c.id])).rows });
+  json(res, 200, { recibos: (await pool.query(`SELECT id, periodo, monto_centavos, to_char(vence, 'YYYY-MM-DD') AS vence, estado, mensaje, enlace_pago, documento_url, recibo_url, creado, pagado_el FROM recibos WHERE cuenta_id = $1 ORDER BY id DESC LIMIT 24`, [c.id])).rows });
 });
 ruta('POST', '/api/interno/recibo/pagado', async (req, res) => {
   const f = await leerCuerpo(req);
   const c = await cuentaInterna(req, res, f.usuario); if (!c) return;
-  const r = await pool.query("UPDATE recibos SET estado = 'Pagado', pagado_el = now() WHERE id = $1 AND cuenta_id = $2 RETURNING periodo", [Number(f.id) || 0, c.id]);
+  const ru = texto(f.recibo_url, 300);
+  if (ru && !/^https?:\/\/\S+\/r\/[A-Za-z0-9_-]+$/.test(ru)) return json(res, 400, { error: 'El enlace del recibo no es válido.' });
+  const r = await pool.query("UPDATE recibos SET estado = 'Pagado', pagado_el = COALESCE(pagado_el, now()), recibo_url = CASE WHEN $3 <> '' THEN $3 ELSE recibo_url END WHERE id = $1 AND cuenta_id = $2 RETURNING periodo", [Number(f.id) || 0, c.id, ru]);
   if (!r.rowCount) return json(res, 404, { error: 'Ese recibo no existe.' });
   await pool.query('INSERT INTO notificaciones (cuenta_id, texto) VALUES ($1, $2)', [c.id, `Kaizen registró tu pago de ${r.rows[0].periodo}. Gracias.`]);
   json(res, 200, { ok: true });

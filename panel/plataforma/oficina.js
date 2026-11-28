@@ -201,6 +201,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       nota TEXT NOT NULL DEFAULT '', creado_por TEXT NOT NULL DEFAULT '', enviado TIMESTAMPTZ, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (administracion, tipo, numero))`);
     await client.query("CREATE UNIQUE INDEX IF NOT EXISTS oficina_documentos_aviso ON oficina_documentos (pago_id) WHERE tipo = 'aviso'");
+    await client.query('ALTER TABLE oficina_documentos ADD COLUMN IF NOT EXISTS panel_recibo_id INTEGER');   // el recibo que se creó en el panel del cliente
     await client.query('CREATE TABLE IF NOT EXISTS oficina_doc_enlaces (token TEXT PRIMARY KEY, documento_id INTEGER UNIQUE NOT NULL, html TEXT NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())');
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_eventos (
       id SERIAL PRIMARY KEY, titulo TEXT NOT NULL, fecha DATE NOT NULL, hora VARCHAR(5) NOT NULL DEFAULT '',
@@ -708,7 +709,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   }
   async function documentosDe(adm) {
     await prepararAvisos(adm);
-    return (await client.query(`SELECT d.*, d.total::float AS total, d.mensual::float AS mensual, TO_CHAR(d.fecha, 'YYYY-MM-DD') AS fecha, TO_CHAR(d.vence, 'YYYY-MM-DD') AS vence
+    return (await client.query(`SELECT d.*, d.total::float AS total, d.mensual::float AS mensual, TO_CHAR(d.fecha, 'YYYY-MM-DD') AS fecha, TO_CHAR(d.vence, 'YYYY-MM-DD') AS vence,
+        EXISTS (SELECT 1 FROM automatizacion_clientes a WHERE a.empresa_id = d.empresa_id) AS panel_cliente
       FROM oficina_documentos d WHERE d.administracion = $1 ORDER BY (d.estado = 'por_enviar') DESC, d.fecha DESC, d.id DESC LIMIT 300`, [adm])).rows;
   }
   // Cada administración numera aparte los recibos de clientes (RC-0001…) y los comprobantes de socios (RS-0001…).
@@ -1018,7 +1020,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
     if (url === '/api/oficina/caja' || url.startsWith('/api/oficina/caja/')) return ['gastos'];
     if (url.startsWith('/api/oficina/recibo/socio') || url.startsWith('/api/oficina/socio/')) return ['gastos'];
-    if (url === '/api/oficina/recibo-enlace' || url === '/api/oficina/recibo-voucher' || url === '/api/oficina/recibo-ajustes') return ['clientes', 'gastos'];
+    if (url === '/api/oficina/recibo-enlace' || url === '/api/oficina/recibo-voucher' || url === '/api/oficina/recibo-ajustes' || url === '/api/oficina/recibo-al-panel') return ['clientes', 'gastos'];
     if (url === '/api/oficina/documentos' || url.startsWith('/api/oficina/documentos/')) return ['clientes', 'gastos'];
     if (url.startsWith('/api/oficina/recibo/') || url.startsWith('/api/oficina/cobro/') || url.startsWith('/api/oficina/cliente/datos')) return ['clientes', 'gastos'];
     if (url === '/api/oficina/pagado' || url === '/api/oficina/editar-cliente') return ['clientes'];
@@ -1492,7 +1494,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           cuenta = (await client.query(`SELECT COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NOT NULL), 0)::float AS pagado, COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NULL), 0)::float AS pendiente
             FROM oficina_pagos WHERE empresa_id = $1`, [r.empresa_id])).rows[0];
         }
-        return json(res, 200, { recibo: r, administracion: adm, empresa: emp, planes, cuenta });
+        const panelCliente = r.tipo === 'cliente' && r.empresa_id ? !!(await slugPanelCliente(r.empresa_id)) : false;
+        return json(res, 200, { recibo: r, administracion: adm, empresa: emp, planes, cuenta, panel_cliente: panelCliente });
       }
       // Corregir un recibo (de cliente o de socio): datos del pago, programa, dirección corta, nota y voucher.
       // El monto no se cambia aquí: viene del cobro o del retiro, para que la caja siempre cuadre.
@@ -1588,6 +1591,26 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           await registrar(u, 'proforma_convertir', 'documento', doc.id, '', e.nombre, `planes ${(doc.lineas || []).length}`);
           return json(res, 200, { ok: true, pago_id: pagoId });
         }
+        if (url === '/api/oficina/documentos/al-panel') {
+          // El aviso llega a «Pagos y recibos» del panel del cliente, con el enlace al aviso (cuenta bancaria y condiciones).
+          if (doc.tipo !== 'aviso') return json(res, 400, { error: 'Solo los avisos de pago se mandan al panel.' });
+          const slug = await slugPanelCliente(doc.empresa_id);
+          if (!slug || !A.puente) return json(res, 400, { error: 'Este cliente no tiene panel del cliente.' });
+          const origen = String(f.origen || '');
+          const html = String(f.html || '');
+          if (!/^https?:\/\/[^/\s]+$/.test(origen) || !/^<!doctype html>/i.test(html)) return json(res, 400, { error: 'No se pudo preparar el aviso.' });
+          const previo = (await client.query('SELECT token FROM oficina_doc_enlaces WHERE documento_id = $1', [doc.id])).rows[0];
+          const token = previo ? previo.token : crypto.randomBytes(24).toString('base64url');
+          await client.query('INSERT INTO oficina_doc_enlaces (token, documento_id, html) VALUES ($1,$2,$3) ON CONFLICT (documento_id) DO UPDATE SET html = EXCLUDED.html', [token, doc.id, html]);
+          if (!doc.panel_recibo_id) {
+            const periodo = ((doc.lineas || []).map(l => l.concepto).join(' · ') || 'Mensualidad').slice(0, 60);
+            const r = await A.puente.crearRecibo({ usuario: slug, periodo, monto_centavos: Math.round(doc.total * 100), vence: doc.vence, mensaje: `Aviso de pago AP-${String(doc.numero).padStart(4, '0')}: se paga por adelantado.`, documento_url: origen + '/r/' + token });
+            await client.query('UPDATE oficina_documentos SET panel_recibo_id = $2 WHERE id = $1', [doc.id, r.id]);
+          }
+          await client.query("UPDATE oficina_documentos SET estado = CASE WHEN estado = 'por_enviar' THEN 'enviado' ELSE estado END, enviado = COALESCE(enviado, NOW()) WHERE id = $1", [doc.id]);
+          await registrar(u, 'aviso_al_panel', 'documento', doc.id, '', slug, `AP-${doc.numero}`);
+          return json(res, 200, { ok: true });
+        }
         if (url === '/api/oficina/documentos/borrar') {
           if (doc.tipo !== 'proforma') return json(res, 400, { error: 'Los avisos no se borran: márcalo como descartado.' });
           await client.query('DELETE FROM oficina_documentos WHERE id = $1', [doc.id]);
@@ -1604,6 +1627,27 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           return json(res, 200, { ok: true, ruta: '/r/' + token });
         }
         return json(res, 404, { error: 'No encontrado.' });
+      }
+      if (req.method === 'POST' && url === '/api/oficina/recibo-al-panel') {
+        const f = await leerCuerpo(req);
+        const r = (await client.query('SELECT * FROM oficina_recibos WHERE id = $1', [Number(f.id)])).rows[0];
+        if (!r || r.tipo !== 'cliente') return json(res, 404, { error: 'Recibo no encontrado.' });
+        if (!puedeAdmin(u, permisos, r.administracion)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
+        const slug = await slugPanelCliente(r.empresa_id);
+        if (!slug || !A.puente) return json(res, 400, { error: 'Este cliente no tiene panel del cliente.' });
+        const origen = String(f.origen || ''), html = String(f.html || '');
+        if (!/^https?:\/\/[^/\s]+$/.test(origen) || !/^<!doctype html>/i.test(html)) return json(res, 400, { error: 'No se pudo preparar el recibo.' });
+        await client.query('CREATE TABLE IF NOT EXISTS oficina_recibo_enlaces (token TEXT PRIMARY KEY, recibo_id INTEGER UNIQUE NOT NULL, html TEXT NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+        const previo = (await client.query('SELECT token FROM oficina_recibo_enlaces WHERE recibo_id = $1', [r.id])).rows[0];
+        const token = previo ? previo.token : crypto.randomBytes(24).toString('base64url');
+        await client.query('INSERT INTO oficina_recibo_enlaces (token, recibo_id, html) VALUES ($1,$2,$3) ON CONFLICT (recibo_id) DO UPDATE SET html = EXCLUDED.html', [token, r.id, html]);
+        const enlace = origen + '/r/' + token;
+        const aviso = r.pago_id ? (await client.query("SELECT panel_recibo_id FROM oficina_documentos WHERE tipo = 'aviso' AND pago_id = $1 AND panel_recibo_id IS NOT NULL", [r.pago_id]).catch(() => ({ rows: [] }))).rows[0] : null;
+        let panelId = aviso ? aviso.panel_recibo_id : null;
+        if (!panelId) panelId = (await A.puente.crearRecibo({ usuario: slug, periodo: String(r.concepto || 'Pago').slice(0, 60), monto_centavos: Math.round(Number(r.monto) * 100), vence: null, mensaje: `Recibo RC-${String(r.numero).padStart(4, '0')}` })).id;
+        await A.puente.reciboPagado(slug, panelId, enlace);
+        await registrar(u, 'recibo_al_panel', 'recibo', r.id, '', slug, `RC-${r.numero}`);
+        return json(res, 200, { ok: true });
       }
       if (req.method === 'POST' && url === '/api/oficina/recibo-ajustes') {
         const f = await leerCuerpo(req);

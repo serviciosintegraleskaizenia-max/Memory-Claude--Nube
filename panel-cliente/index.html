@@ -100,6 +100,36 @@
   .panel-t.on { display:block; }
   .archivo { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #eef2f7; font-size:14px; gap:10px; }
   .archivo small { color:var(--suave); }
+  .wa { display:grid; grid-template-columns: 270px 1fr; gap:14px; }
+  .wa-lista { background:#fff; border:1px solid var(--borde); border-radius:14px; padding:12px; max-height:640px; overflow:auto; }
+  .wa-hist-t { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#64748b; margin:10px 0 6px; }
+  .wa-conv { display:block; width:100%; text-align:left; border:0; background:none; padding:9px 8px; border-radius:10px; cursor:pointer; font:inherit; }
+  .wa-conv:hover { background:#f1f5f9; } .wa-conv.on { background:#e0f2fe; }
+  .wa-conv b { display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .wa-conv small { color:#64748b; font-size:11.5px; }
+  .wa-chat { display:flex; flex-direction:column; border:1px solid var(--borde); border-radius:14px; overflow:hidden; background:#efeae2; min-height:560px; }
+  .wa-cab { background:#075e54; color:#fff; padding:10px 14px; } .wa-cab b { display:block; } .wa-cab small { opacity:.85; font-size:12px; }
+  .wa-msj { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:6px; max-height:520px; min-height:380px; }
+  .wa-b { max-width:75%; padding:8px 10px 6px; border-radius:10px; font-size:14px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word; box-shadow:0 1px 1px #0000001a; }
+  .wa-b.cliente { background:#d9fdd3; align-self:flex-end; border-top-right-radius:2px; }
+  .wa-b.ia { background:#fff; align-self:flex-start; border-top-left-radius:2px; }
+  .wa-b small { display:block; text-align:right; font-size:10.5px; color:#667781; margin-top:3px; }
+  .wa-b .adj { display:inline-block; margin-bottom:4px; padding:4px 8px; background:#0000000d; border-radius:6px; font-size:12.5px; color:#0f172a; text-decoration:none; }
+  .wa-b img { max-width:240px; max-height:220px; border-radius:8px; display:block; margin-bottom:4px; }
+  .wa-votos { display:flex; gap:6px; align-self:flex-start; margin:-2px 0 6px 4px; }
+  .wa-votos button { border:1px solid #cbd5e1; background:#fff; border-radius:999px; padding:2px 9px; cursor:pointer; font-size:13px; }
+  .wa-votos button.on.bien { background:#dcfce7; border-color:#16a34a; } .wa-votos button.on.mal { background:#fee2e2; border-color:#dc2626; }
+  .wa-votos span { font-size:11.5px; color:#166534; align-self:center; }
+  .wa-escribiendo { align-self:flex-start; background:#fff; border-radius:10px; padding:8px 12px; font-size:13px; color:#667781; }
+  .wa-redactar { display:flex; gap:8px; align-items:flex-end; padding:10px; background:#f0f2f5; }
+  .wa-redactar textarea { flex:1; resize:none; border:0; border-radius:20px; padding:10px 14px; font:inherit; font-size:14px; min-height:42px; height:42px; max-height:140px; }
+  .wa-ic { border:0; background:none; font-size:22px; cursor:pointer; padding:4px; line-height:1; }
+  .wa-emojis { display:flex; flex-wrap:wrap; gap:2px; padding:6px 10px; background:#fff; border-top:1px solid var(--borde); }
+  .wa-emojis button { border:0; background:none; font-size:20px; cursor:pointer; padding:3px; border-radius:6px; } .wa-emojis button:hover { background:#f1f5f9; }
+  .wa-adj { padding:6px 12px; background:#fff; font-size:13px; border-top:1px solid var(--borde); display:flex; justify-content:space-between; align-items:center; }
+  .mem { border:1px solid var(--borde); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:#fff; }
+  .mem.apagado { opacity:.55; } .mem .q { font-size:12.5px; color:#64748b; } .mem textarea { width:100%; margin-top:6px; }
+  .mem .acc { display:flex; gap:6px; margin-top:6px; flex-wrap:wrap; }
+  @media (max-width: 900px) { .wa { grid-template-columns: 1fr; } }
   .prueba { background:#f8fafc; border:1px solid var(--borde); border-radius:12px; height:380px; overflow:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
   .interruptor { display:flex; align-items:center; justify-content:space-between; gap:10px; background:#eff6ff; border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:14px; font-weight:600; }
   .interruptor button { border:0; border-radius:999px; padding:6px 14px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; background:#0f172a; color:#fff; }
@@ -294,6 +324,7 @@
       <div class="tabs" id="tabsEntreno">
         <button data-t="prompt" class="on">Instrucciones (prompt)</button>
         <button data-t="probar">Probar la IA</button>
+        <button data-t="memoria">Memoria 🧠</button>
         <button data-t="archivos">Archivos de entrenamiento</button>
         <button data-t="historial">Historial de cambios</button>
       </div>
@@ -311,29 +342,45 @@
       </div>
 
       <div class="panel-t" id="t-probar">
-        <div class="dos">
-          <div class="bloque">
-            <h3>Encender la IA para probar</h3>
-            <div class="interruptor" id="interruptorPrueba"><span id="textoPrueba">IA de prueba apagada</span><button id="btnPrueba">Encender</button></div>
-            <div class="aviso">Prueba cómo responde tu asistente antes de dejarlo activo con clientes. Lo que escribas aquí no llega a nadie.</div>
-            <div class="aviso" id="estadoIA"></div>
-          </div>
-          <div class="bloque">
-            <h3>Chat de prueba</h3>
-            <div class="prueba" id="pruebaMsj"></div>
-            <div class="redactar" style="padding:10px 0 0;border:0">
-              <input id="entradaPrueba" placeholder="Escribe como si fueras un cliente">
-              <button class="btn primario" id="btnPruebaEnviar">Probar</button>
+        <div class="wa">
+          <aside class="wa-lista">
+            <button class="btn primario" id="btnNuevaConv" style="width:100%">＋ Nueva conversación</button>
+            <div class="aviso" id="estadoIA" style="margin:8px 0"></div>
+            <div class="wa-hist-t">Historial</div>
+            <div id="listaConv"></div>
+          </aside>
+          <div class="wa-chat">
+            <div class="wa-cab"><b id="tituloConv">Conversación nueva</b><small>Escribe como si fueras un cliente. Dale 👍 a lo que te gusta y 👎 para corregir: eso queda en su memoria.</small></div>
+            <div class="wa-msj" id="pruebaMsj"></div>
+            <div class="wa-adj" id="adjPrueba" hidden></div>
+            <div class="wa-emojis" id="emojisPrueba" hidden></div>
+            <div class="wa-redactar">
+              <button type="button" class="wa-ic" id="btnEmojis" title="Emojis">😊</button>
+              <label class="wa-ic" title="Adjuntar plano, foto o documento (hasta 24 MB)">📎<input type="file" id="archivoPrueba" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.docx,.txt,.csv" hidden></label>
+              <textarea id="entradaPrueba" rows="1" placeholder="Escribe un mensaje… (Enter envía, Shift+Enter otra línea)"></textarea>
+              <button class="btn primario" id="btnPruebaEnviar">Enviar</button>
             </div>
           </div>
+        </div>
+        <div class="interruptor" id="interruptorPrueba" hidden><span id="textoPrueba"></span><button id="btnPrueba"></button></div>
+      </div>
+
+      <div class="panel-t" id="t-memoria">
+        <div class="bloque">
+          <h3>Lo que tu IA aprendió</h3>
+          <div class="aviso">Cada 👍 guarda una respuesta buena y cada 👎 guarda cómo debía responder. La IA usa esto en la prueba y con tus clientes reales. Puedes editarlo, apagarlo o borrarlo.</div>
+          <div class="campo" style="margin-top:10px"><label for="memPregunta">Enseñarle algo a mano: cuando pregunten…</label><input id="memPregunta" placeholder="Ej.: ¿Cuánto cuesta el tubo PEX de 1/2?"></div>
+          <div class="campo"><label for="memRespuesta">…debe responder</label><textarea id="memRespuesta" rows="2" placeholder="Ej.: El tubo PEX de 1/2 cuesta US$ 1.20 el metro; vendemos rollos de 100 m."></textarea></div>
+          <button class="btn primario" id="btnMemNueva">Guardar en la memoria</button>
+          <div id="listaMemoria" style="margin-top:14px"></div>
         </div>
       </div>
 
       <div class="panel-t" id="t-archivos">
         <div class="bloque">
           <h3>Archivos de entrenamiento</h3>
-          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel, Word o texto, hasta 6 MB)</label>
-            <input type="file" id="subirArchivo" accept=".pdf,.xlsx,.xls,.docx,.txt,.csv"></div>
+          <div class="campo"><label for="subirArchivo">Subir archivos (PDF, Excel, Word o texto, hasta 24 MB)</label>
+            <input type="file" id="subirArchivo" accept=".pdf,.xlsx,.docx,.txt,.csv"></div>
           <div id="listaArchivos"></div>
           <div class="aviso">Los archivos sirven para que la IA responda con tu información: precios, servicios, horarios y preguntas frecuentes.</div>
         </div>
@@ -452,7 +499,7 @@ function mostrar(v) {
   if (v === 'plantillas') { cargarRapidas(); cargarPlantillas(); }
   if (v === 'pagos') cargarRecibos();
   if (v === 'conv') cargarCanales();
-  if (v === 'entreno') { cargarPrompt(); cargarArchivos(); cargarVersiones(); cargarPrueba(); }
+  if (v === 'entreno') { cargarPrompt(); cargarArchivos(); cargarVersiones(); cargarPrueba(); cargarMemoria(); }
   if (v === 'inicio') cargarInicio();
 }
 
@@ -646,46 +693,133 @@ async function cargarVersiones() {
 }
 async function cargarArchivos() {
   const r = await api('GET', '/api/archivos').catch(() => ({ archivos: [] }));
-  $('listaArchivos').innerHTML = r.archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${Math.round(a.tamano / 1024)} KB · ${esc(fecha(a.creado))}</small></span><button class="btn peligro" data-borrar="${a.id}">Quitar</button></div>`).join('') || '<div class="aviso">Todavía no hay archivos.</div>';
+  $('listaArchivos').innerHTML = r.archivos.map(a => `<div class="archivo"><span>${esc(a.nombre)}<br><small>${Math.round(a.tamano / 1024)} KB · ${esc(fecha(a.creado))} · ${a.leido ? '✅ la IA lo lee' : '⚠️ sin texto para leer (imagen o PDF escaneado: mándalo en el chat de prueba)'}</small></span><button class="btn peligro" data-borrar="${a.id}">Quitar</button></div>`).join('') || '<div class="aviso">Todavía no hay archivos.</div>';
   document.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
     await api('DELETE', '/api/archivos/' + b.dataset.borrar); cargarArchivos();
   }));
 }
 $('subirArchivo').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
-  if (f.size > 6 * 1024 * 1024) { avisar('El archivo es muy grande (máximo 6 MB).'); e.target.value = ''; return; }
+  if (f.size > 24 * 1024 * 1024) { avisar('El archivo es muy grande (máximo 24 MB).'); e.target.value = ''; return; }
   const lector = new FileReader();
   lector.onload = async () => {
-    try { await api('POST', '/api/archivos', { nombre: f.name, datos: lector.result }); cargarArchivos(); avisar('Archivo cargado. La IA lo usará en sus próximas respuestas.'); }
+    try { avisar('Subiendo y leyendo el archivo…'); const r = await api('POST', '/api/archivos', { nombre: f.name, datos: lector.result }); cargarArchivos(); avisar(r.aviso || 'Archivo cargado. La IA ya lo lee en sus respuestas.'); }
     catch (err) { avisar(err.message); }
     e.target.value = '';
   };
   lector.readAsDataURL(f);
 });
-function pintarPrueba(respuesta) {
-  $('interruptorPrueba').classList.toggle('off', !pruebaActiva);
-  $('textoPrueba').textContent = pruebaActiva ? 'IA de prueba encendida' : 'IA de prueba apagada';
-  $('btnPrueba').textContent = pruebaActiva ? 'Apagar' : 'Encender';
-  if (respuesta) $('pruebaMsj').insertAdjacentHTML('beforeend', `<div class="m ia"><small>IA (prueba)</small>${esc(respuesta)}</div>`);
+// ---------- Probar la IA: como WhatsApp, con conversaciones, historial, 👍/👎, emojis y adjuntos ----------
+let convActual = null, adjunto = null, enviando = false;
+const EMOJIS = '😀 😂 😊 😍 🤔 😮 😢 🙏 👍 👎 👏 💪 🔥 ✅ ❌ ⚠️ 💰 📦 🚚 🏗️ 📐 📏 🔧 🛠️ 📄 📎 📞 📅 ⏰ 🙌'.split(' ');
+$('emojisPrueba').innerHTML = EMOJIS.map(e => `<button type="button">${e}</button>`).join('');
+function pintarPrueba() {}
+function horaCorta(f) { const d = new Date(f); return isNaN(d) ? '' : d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }); }
+function burbuja(m) {
+  const img = m.archivo_nombre && /^image\//.test(m.archivo_tipo) && m.id ? `<img src="/api/prueba/archivo/${m.id}" alt="${esc(m.archivo_nombre)}">` : '';
+  const adj = m.archivo_nombre && !img ? `<a class="adj" href="${m.id ? '/api/prueba/archivo/' + m.id : '#'}" target="_blank" rel="noopener">📎 ${esc(m.archivo_nombre)}</a><br>` : '';
+  const votos = m.rol === 'ia' && m.id ? `<div class="wa-votos" data-voto-de="${m.id}"><button type="button" class="bien ${m.voto === 'bien' ? 'on' : ''}" data-voto="bien" title="Me gusta: guardarla en su memoria">👍</button><button type="button" class="mal ${m.voto === 'mal' ? 'on' : ''}" data-voto="mal" title="No me gusta: enseñarle cómo debía responder">👎</button>${m.voto === 'bien' ? '<span>Guardada en su memoria</span>' : m.voto === 'mal' ? '<span style="color:#991b1b">Corrección guardada</span>' : ''}</div>` : '';
+  return `<div class="wa-b ${m.rol === 'ia' ? 'ia' : 'cliente'}">${img}${adj}${esc(m.texto || '')}<small>${m.rol === 'ia' ? 'IA · ' : ''}${horaCorta(m.creado)}</small></div>${votos}`;
 }
 async function cargarPrueba() {
-  const r = await api('POST', '/api/prueba', {}).catch(() => ({ prueba_activa: false }));
-  pruebaActiva = !!r.prueba_activa; pintarPrueba();
-  $('estadoIA').textContent = r.ia_conectada ? 'IA conectada por Kaizen: las respuestas son reales.' : 'Kaizen todavía no conecta la IA: verás un aviso en vez de la respuesta.';
+  const r = await api('GET', '/api/prueba/conversaciones').catch(() => ({ conversaciones: [] }));
+  $('estadoIA').textContent = r.ia_conectada ? '🟢 IA conectada por Kaizen: las respuestas son reales.' : '⚪ Kaizen todavía no conecta la IA: verás un aviso en vez de la respuesta.';
+  $('listaConv').innerHTML = r.conversaciones.map(c => `<button type="button" class="wa-conv ${convActual === c.id ? 'on' : ''}" data-conv="${c.id}"><b>${esc(c.titulo)}</b><small>${esc(fecha(c.actualizado))} · ${c.mensajes} mensajes${c.buenas ? ' · 👍 ' + c.buenas : ''}</small></button>`).join('') || '<div class="aviso">Todavía no hay conversaciones.</div>';
+  if (convActual) abrirConv(convActual, true);
+  else if (!$('pruebaMsj').innerHTML) $('pruebaMsj').innerHTML = '<div class="aviso" style="align-self:center">Empieza a escribir como si fueras un cliente. Puedes mandarle un plano o documento con 📎.</div>';
 }
-$('btnPrueba').addEventListener('click', async () => {
-  try { const r = await api('POST', '/api/prueba', { encender: !pruebaActiva }); pruebaActiva = !!r.prueba_activa; pintarPrueba(); }
-  catch (e) { avisar(e.message); }
+async function abrirConv(id, quieto) {
+  const r = await api('GET', '/api/prueba/conversaciones/' + id).catch(e => { avisar(e.message); return null; });
+  if (!r) return;
+  convActual = r.conversacion.id;
+  $('tituloConv').textContent = r.conversacion.titulo;
+  $('pruebaMsj').innerHTML = r.mensajes.map(burbuja).join('') || '<div class="aviso" style="align-self:center">Conversación vacía.</div>';
+  $('pruebaMsj').scrollTop = $('pruebaMsj').scrollHeight;
+  document.querySelectorAll('.wa-conv').forEach(b => b.classList.toggle('on', Number(b.dataset.conv) === convActual));
+  if (!quieto) $('entradaPrueba').focus();
+}
+$('listaConv').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) abrirConv(Number(b.dataset.conv)); });
+$('btnNuevaConv').addEventListener('click', async () => {
+  const r = await api('POST', '/api/prueba/conversaciones', {}).catch(e => { avisar(e.message); return null; });
+  if (!r) return;
+  convActual = r.conversacion.id; $('pruebaMsj').innerHTML = ''; $('tituloConv').textContent = 'Conversación nueva';
+  await cargarPrueba(); $('entradaPrueba').focus();
+});
+$('btnEmojis').addEventListener('click', () => { $('emojisPrueba').hidden = !$('emojisPrueba').hidden; });
+$('emojisPrueba').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const t = $('entradaPrueba'), i = t.selectionStart ?? t.value.length;
+  t.value = t.value.slice(0, i) + b.textContent + t.value.slice(t.selectionEnd ?? i); t.focus();
+});
+$('archivoPrueba').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (f.size > 24 * 1024 * 1024) { avisar('El archivo es muy grande (máximo 24 MB).'); e.target.value = ''; return; }
+  const lector = new FileReader();
+  lector.onload = () => {
+    adjunto = { nombre: f.name, datos: lector.result };
+    $('adjPrueba').hidden = false;
+    $('adjPrueba').innerHTML = `<span>📎 ${esc(f.name)} · ${Math.round(f.size / 1024)} KB ${/\.(pdf|png|jpe?g|webp)$/i.test(f.name) ? '(la IA lo mira como plano o imagen)' : ''}</span><button type="button" class="btn" id="quitarAdj">Quitar</button>`;
+    $('quitarAdj').onclick = () => { adjunto = null; $('adjPrueba').hidden = true; };
+  };
+  lector.readAsDataURL(f); e.target.value = '';
 });
 async function enviarPrueba() {
-  const t = $('entradaPrueba').value.trim(); if (!t) return;
-  $('entradaPrueba').value = '';
-  $('pruebaMsj').insertAdjacentHTML('beforeend', `<div class="m cliente"><small>Tú (cliente de prueba)</small>${esc(t)}</div>`);
-  try { const r = await api('POST', '/api/prueba', { texto: t }); pintarPrueba(r.respuesta); }
-  catch (e) { avisar(e.message); }
+  if (enviando) return;
+  const t = $('entradaPrueba').value.trim(); if (!t && !adjunto) return;
+  enviando = true; $('btnPruebaEnviar').disabled = true;
+  const caja = $('pruebaMsj');
+  if (caja.querySelector('.aviso')) caja.innerHTML = '';
+  caja.insertAdjacentHTML('beforeend', burbuja({ rol: 'cliente', texto: t, archivo_nombre: adjunto ? adjunto.nombre : '', creado: new Date() }) + '<div class="wa-escribiendo" id="escribiendo">La IA está escribiendo…</div>');
+  caja.scrollTop = caja.scrollHeight;
+  const cuerpo = { conversacion_id: convActual, texto: t, archivo: adjunto };
+  $('entradaPrueba').value = ''; adjunto = null; $('adjPrueba').hidden = true; $('emojisPrueba').hidden = true;
+  try {
+    const r = await api('POST', '/api/prueba/enviar', cuerpo);
+    convActual = r.conversacion_id;
+    await abrirConv(convActual, true);
+    cargarPrueba();
+  } catch (e) { const x = $('escribiendo'); if (x) x.remove(); avisar(e.message); }
+  finally { enviando = false; $('btnPruebaEnviar').disabled = false; }
 }
 $('btnPruebaEnviar').addEventListener('click', enviarPrueba);
-$('entradaPrueba').addEventListener('keydown', e => { if (e.key === 'Enter') enviarPrueba(); });
+$('entradaPrueba').addEventListener('input', e => { e.target.style.height = '42px'; e.target.style.height = Math.min(140, e.target.scrollHeight) + 'px'; });
+$('entradaPrueba').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarPrueba(); } });
+$('pruebaMsj').addEventListener('click', async e => {
+  const b = e.target.closest('[data-voto]'); if (!b) return;
+  const id = Number(b.closest('[data-voto-de]').dataset.votoDe);
+  let correccion = '';
+  if (b.dataset.voto === 'mal') {
+    correccion = prompt('👎 ¿Cómo debió responder? Escríbelo y la IA lo recordará siempre:');
+    if (correccion === null || !correccion.trim()) return;
+  }
+  try { await api('POST', '/api/prueba/voto', { mensaje_id: id, voto: b.dataset.voto, correccion }); avisar(b.dataset.voto === 'bien' ? '👍 Guardada en su memoria.' : '👎 Corrección guardada: ya la usa.'); abrirConv(convActual, true); cargarMemoria(); }
+  catch (err) { avisar(err.message); }
+});
+// ---------- Memoria ----------
+async function cargarMemoria() {
+  const r = await api('GET', '/api/memoria').catch(() => ({ memoria: [] }));
+  $('listaMemoria').innerHTML = r.memoria.map(m => `<div class="mem ${m.activo ? '' : 'apagado'}" data-mem="${m.id}">
+    <div class="q">${m.tipo === 'correccion' ? '👎 Corrección' : '👍 Respuesta buena'}${m.pregunta ? ` · cuando preguntan: «${esc(m.pregunta)}»` : ''}${m.activo ? '' : ' · (apagado)'}</div>
+    <textarea rows="2" data-mem-r>${esc(m.respuesta)}</textarea>
+    <div class="acc"><button class="btn" data-mem-guardar>Guardar</button><button class="btn" data-mem-activo="${m.activo ? '0' : '1'}">${m.activo ? 'Apagar' : 'Encender'}</button>${m.conversacion_id ? `<button class="btn" data-mem-conv="${m.conversacion_id}">Ver la conversación</button>` : ''}<button class="btn peligro" data-mem-borrar>Borrar</button></div></div>`).join('') || '<div class="aviso">Todavía no aprendió nada. Dale 👍 o 👎 a sus respuestas en «Probar la IA».</div>';
+  $('listaMemoria').dataset.lista = JSON.stringify(r.memoria);
+}
+$('listaMemoria').addEventListener('click', async e => {
+  const caja = e.target.closest('[data-mem]'); if (!caja) return;
+  const id = Number(caja.dataset.mem), m = JSON.parse($('listaMemoria').dataset.lista || '[]').find(x => x.id === id) || {};
+  try {
+    if (e.target.closest('[data-mem-guardar]')) { await api('POST', '/api/memoria', { id, pregunta: m.pregunta, respuesta: caja.querySelector('[data-mem-r]').value, activo: m.activo }); avisar('Memoria guardada.'); }
+    else if (e.target.closest('[data-mem-activo]')) { await api('POST', '/api/memoria', { id, pregunta: m.pregunta, respuesta: m.respuesta, activo: e.target.closest('[data-mem-activo]').dataset.memActivo === '1' }); }
+    else if (e.target.closest('[data-mem-borrar]')) { if (!confirm('¿Borrar esto de su memoria?')) return; await api('DELETE', '/api/memoria/' + id); }
+    else if (e.target.closest('[data-mem-conv]')) { document.querySelector('#tabsEntreno [data-t="probar"]').click(); return abrirConv(Number(e.target.closest('[data-mem-conv]').dataset.memConv)); }
+    else return;
+    cargarMemoria();
+  } catch (err) { avisar(err.message); }
+});
+$('btnMemNueva').addEventListener('click', async () => {
+  try { await api('POST', '/api/memoria', { pregunta: $('memPregunta').value, respuesta: $('memRespuesta').value }); $('memPregunta').value = ''; $('memRespuesta').value = ''; avisar('Guardado en su memoria.'); cargarMemoria(); }
+  catch (err) { avisar(err.message); }
+});
 
 // ---------- Pagos ----------
 async function cargarRecibos() {
@@ -693,7 +827,7 @@ async function cargarRecibos() {
   $('ultimoRecibo').textContent = r.recibos[0] ? soles(r.recibos[0].monto_centavos) : '—';
   $('listaRecibos').innerHTML = r.recibos.map(x => {
     const clase = x.estado === 'Pagado' ? 'e-verde' : 'e-ambar';
-    return `<div class="fila"><div><b>${esc(x.periodo)}</b><br><small>Servicio mensual · ${x.vence ? 'vence ' + esc(dia(x.vence)) + ' · ' : ''}${soles(x.monto_centavos)}</small>${x.mensaje ? `<div class="aviso">${esc(x.mensaje)}</div>` : ''}</div><div style="display:flex;gap:8px;align-items:center">${x.enlace_pago && x.estado !== 'Pagado' ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : ''}<span class="estado ${clase}">${esc(x.estado)}</span></div></div>`;
+    return `<div class="fila"><div><b>${esc(x.periodo)}</b><br><small>Servicio mensual · ${x.vence ? 'vence ' + esc(dia(x.vence)) + ' · ' : ''}${soles(x.monto_centavos)}</small>${x.mensaje ? `<div class="aviso">${esc(x.mensaje)}</div>` : ''}</div><div style="display:flex;gap:8px;align-items:center">${x.documento_url && x.estado !== 'Pagado' ? `<a class="btn" href="${esc(x.documento_url)}" target="_blank" rel="noopener noreferrer">📄 Ver aviso y cuenta para pagar</a>` : ''}${x.recibo_url ? `<a class="btn" href="${esc(x.recibo_url)}" target="_blank" rel="noopener noreferrer">🧾 Ver recibo</a>` : ''}${x.enlace_pago && x.estado !== 'Pagado' ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : ''}<span class="estado ${clase}">${esc(x.estado)}</span></div></div>`;
   }).join('') || '<div class="aviso">Todavía no hay recibos.</div>';
 }
 
@@ -750,7 +884,7 @@ function pintarEstado(y) {
   pintarRedes(y.redes);
   const fr = [];
   if (y.cuenta.estado === 'pausada') fr.push(`<div class="franja franja-pausa">⏸️ <span><b>Servicio en pausa.</b> ${esc(y.cuenta.motivo || '')}</span></div>`);
-  for (const x of y.recibos_pendientes || []) fr.push(`<div class="franja franja-pago">💳 <span><b>Pago de ${esc(x.periodo)}: ${soles(x.monto_centavos)}${x.vence ? ' · vence el ' + esc(dia(x.vence)) : ''}.</b>${x.mensaje ? '<br>' + esc(x.mensaje) : ''}</span>${x.enlace_pago ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : `<button class="btn" data-ir="pagos">Ver recibo</button>`}</div>`);
+  for (const x of y.recibos_pendientes || []) fr.push(`<div class="franja franja-pago">💳 <span><b>Pago de ${esc(x.periodo)}: ${soles(x.monto_centavos)}${x.vence ? ' · vence el ' + esc(dia(x.vence)) : ''}.</b>${x.mensaje ? '<br>' + esc(x.mensaje) : ''}</span>${x.documento_url ? `<a class="btn" href="${esc(x.documento_url)}" target="_blank" rel="noopener noreferrer">📄 Ver aviso y cuenta para pagar</a>` : ''}${x.enlace_pago ? `<a class="btn primario" href="${esc(x.enlace_pago)}" target="_blank" rel="noopener noreferrer">Pagar</a>` : x.documento_url ? '' : `<button class="btn" data-ir="pagos">Ver recibo</button>`}</div>`);
   for (const a of y.anuncios || []) fr.push(`<div class="franja franja-anuncio">📣 <span><b>${esc(a.titulo)}</b><br>${esc(a.texto)}</span><button class="btn" data-cerrar-anuncio="${a.id}">Entendido</button></div>`);
   $('franjas').innerHTML = fr.join('');
   document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => mostrar(b.dataset.ir)));

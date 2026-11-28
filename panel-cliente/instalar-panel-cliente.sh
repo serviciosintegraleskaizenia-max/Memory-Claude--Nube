@@ -12,7 +12,7 @@ falla() { echo; echo "    FALLA: $1"; echo "    No sigas: mandame este mensaje."
 id zentralia >/dev/null 2>&1 || falla "no existe el usuario zentralia"
 
 echo "== 1/4 Revisando el código"
-for f in servidor.js crear-cliente.js crear-base.js; do node --check "$D/$f" || falla "$f tiene errores"; done
+for f in servidor.js crear-cliente.js crear-base.js lector-xlsx.js; do node --check "$D/$f" || falla "$f tiene errores"; done
 echo "    OK  sin errores"
 
 echo "== 2/4 Base de datos"
@@ -27,7 +27,7 @@ echo "    OK  base panel_cliente lista"
 
 echo "== 3/4 Copiando el panel"
 mkdir -p "$APP" /srv/zentralia/datos
-cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$D/crear-base.js" "$D/plantillas-pex.json" "$APP/"
+cp "$D/servidor.js" "$D/crear-cliente.js" "$D/index.html" "$D/esquema.sql" "$D/package.json" "$D/LEEME.md" "$D/crear-cuenta.sh" "$D/crear-base.js" "$D/plantillas-pex.json" "$D/lector-xlsx.js" "$APP/"
 if [ ! -d "$APP/node_modules/pg" ]; then
   if [ -d /srv/zentralia/apps/panel-correos/node_modules/pg ]; then
     cp -r /srv/zentralia/apps/panel-correos/node_modules "$APP/"

@@ -832,10 +832,13 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
     const perfil = fila.perfil || {};
     const ia = perfil.ia || {};
     const modelo = /sonnet/i.test(ia.modelo || '') ? 'anthropic/claude-sonnet-5.5' : 'anthropic/claude-haiku-5.5';
+    // Lo que el cliente le enseñó en su panel (ajustes, memoria 👍/👎 y archivos) también va en las respuestas reales.
+    let aprendido = '';
+    try { aprendido = (await puente.iaContexto(fila.slug)).contexto || ''; } catch (err) { /* sin panel del cliente: solo la base */ }
     return json(res, 200, {
       activo: ia.activa === true,
       nombre: fila.nombre, slug: fila.slug, modelo,
-      prompt: armarPrompt(perfil, fila.nombre, await promptsList()),
+      prompt: [armarPrompt(perfil, fila.nombre, await promptsList()), aprendido].filter(Boolean).join('\n\n'),
       openrouter_key: descifrarAuto(ia.clave_openrouter_enc) || await claveIAGeneral()
     });
   }

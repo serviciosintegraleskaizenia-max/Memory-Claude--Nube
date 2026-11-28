@@ -159,3 +159,40 @@ CREATE TABLE IF NOT EXISTS avisos_kaizen (
   creado TIMESTAMPTZ NOT NULL DEFAULT now(),
   leido BOOLEAN NOT NULL DEFAULT FALSE
 );
+
+-- Entrenar la IA: conversaciones de prueba (nueva / historial), memoria aprendida con 👍/👎 y texto de los archivos.
+CREATE TABLE IF NOT EXISTS prueba_conversaciones (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  titulo TEXT NOT NULL DEFAULT 'Conversación nueva',
+  creado TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actualizado TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS prueba_mensajes (
+  id SERIAL PRIMARY KEY,
+  conversacion_id INTEGER NOT NULL REFERENCES prueba_conversaciones(id) ON DELETE CASCADE,
+  rol TEXT NOT NULL,
+  texto TEXT NOT NULL DEFAULT '',
+  archivo_nombre TEXT NOT NULL DEFAULT '',
+  archivo_tipo TEXT NOT NULL DEFAULT '',
+  archivo_datos TEXT NOT NULL DEFAULT '',
+  voto TEXT NOT NULL DEFAULT '',
+  modelo TEXT NOT NULL DEFAULT '',
+  creado TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS ia_memoria (
+  id SERIAL PRIMARY KEY,
+  cuenta_id INTEGER NOT NULL REFERENCES cuentas(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL DEFAULT 'bien',
+  pregunta TEXT NOT NULL DEFAULT '',
+  respuesta TEXT NOT NULL DEFAULT '',
+  activo BOOLEAN NOT NULL DEFAULT TRUE,
+  mensaje_id INTEGER,
+  creado TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE archivos_entrenamiento ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT '';
+ALTER TABLE archivos_entrenamiento ADD COLUMN IF NOT EXISTS texto TEXT NOT NULL DEFAULT '';
+
+-- Aviso de pago (AP) y recibo (RC) de Oficina: el enlace para verlos con la cuenta bancaria y las condiciones.
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS documento_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE recibos ADD COLUMN IF NOT EXISTS recibo_url TEXT NOT NULL DEFAULT '';
