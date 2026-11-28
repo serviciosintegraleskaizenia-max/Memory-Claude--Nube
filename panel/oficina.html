@@ -767,11 +767,12 @@ function alertas() {
     else if (d === 0) lista.push(['💳', `${p.empresa || 'Cobro'}: ${dinero(p.monto, p.moneda)} vence hoy`, p.concepto, `<button class="btn-mini p" data-pagado="${p.id}">Pagado ✔</button>`, 1]);
     else if (d <= 3) lista.push(['🔔', `${p.empresa || 'Cobro'}: ${dinero(p.monto, p.moneda)} vence en ${d} día(s)`, p.concepto + ' · ' + fechaCorta(p.vence), '', 3]);
   }
+  for (const [adm, n] of Object.entries(D.avisos_por_enviar || {})) if (n) lista.push(['📨', `${n} aviso(s) de pago por enviar · ${admin(adm).nombre}`, 'Oficina los preparó antes del día de cobro: revísalos y envíalos', `<button class="btn-mini p" data-ir-docs="${adm}">Revisar y enviar</button>`, 1]);
   for (const n of negocios || []) for (const r of n.revisiones) if (r.estado === 'falla') lista.push(['🩺', `${n.nombre}: ${r.nombre}`, r.detalle, `<button class="btn-mini" data-ir="negocios">Ver</button>`, 0]);
   for (const n of negocios || []) for (const a of n.alertas || []) lista.push(['⚠️', `${n.nombre}: alerta abierta`, a.texto, '', 1]);
   for (const x of D.enlaces) { const s = servicios.get(x.id); if (x.vigilar && s && !s.ok) lista.push(['🔌', `${x.nombre} no responde`, s.error || ('Código ' + s.codigo), `<a class="btn-mini" href="${esc(x.url)}" target="_blank" rel="noopener">Abrir</a>`, 1]); }
   for (const e of D.empresas) if (e.ia && e.ia.restante !== null && e.ia.restante !== undefined && e.ia.restante < 3) lista.push(['🪙', `${e.nombre}: a su clave de IA le quedan ${dinero(e.ia.restante)}`, 'Súbele el límite o recarga en OpenRouter', '', 2]);
-  for (const ev of D.eventos) if (!ev.hecho && ev.fecha <= h) lista.push(['🛠️', `${ev.fecha < h ? 'Pendiente desde ' + fechaCorta(ev.fecha) : 'Hoy'}: ${ev.titulo}`, ev.empresa || ev.nota || '', `<button class="btn-mini" data-hecho="${ev.id}">Hecho ✔</button>`, 2]);
+  for (const ev of D.eventos) if (!ev.hecho && ev.fecha <= h) lista.push([ICONOS_EVENTO[ev.tipo] || '🛠️', `${ev.fecha < h ? 'Pendiente desde ' + fechaCorta(ev.fecha) : 'Hoy'}${ev.hora ? ' ' + ev.hora : ''}: ${ev.titulo}`, [ev.asignado ? 'Para ' + nombrePersona(ev.asignado) : '', ev.empresa, ev.lugar, ev.nota].filter(Boolean).join(' · '), `<button class="btn-mini" data-hecho="${ev.id}">Hecho ✔</button>`, 2]);
   if (RESP && RESP.disponible) {
     const u = RESP.ultimo;
     if (!u) lista.push(['💾', 'Todavía no hay ningún respaldo', 'Haz el primero desde Respaldos', '<button class="btn-mini" data-ir="respaldos">Ver</button>', 1]);
@@ -1586,7 +1587,8 @@ try { if (localStorage.getItem('gastosTab') === 'creacion') gastosTab = 'creacio
 try { adminVista = localStorage.getItem('adminVista') === 'centralia' ? 'centralia' : 'kaizen'; } catch (e) {}
 
 /* ---------- Calendario ---------- */
-const ICONOS_EVENTO = { tarea: '🛠️', demo: '🎯', cita: '📞', cobro: '💳', otro: '📌' };
+const ICONOS_EVENTO = { tarea: '🛠️', demo: '🎯', cita: '🤝', cobro: '💳', seguimiento: '📞', otro: '📌' };
+const nombrePersona = u => ((D.personas || []).find(p => p.usuario === u) || {}).nombre || u || '';
 function itemsCalendario(m) {
   const items = [];
   for (const p of D.pagos) if (p.vence.slice(0, 7) === m) items.push({ fecha: p.vence, icono: p.pagado_el ? '✅' : '💳', titulo: `${p.pagado_el ? 'Pagado' : 'Cobro'} ${p.empresa || ''} ${dinero(p.monto, p.moneda)}`, detalle: p.concepto, clase: p.pagado_el ? 'ok' : p.estado === 'vencido' ? 'mal' : 'az', pago: p.id, listo: !!p.pagado_el });
@@ -1598,14 +1600,14 @@ function itemsCalendario(m) {
     else if (g.frecuencia === 'unico' && g.fecha && g.fecha.slice(0, 7) === m) f = g.fecha;
     if (f) items.push({ fecha: f, icono: '💸', titulo: `${g.nombre} ${dinero(g.monto, g.moneda)}`, detalle: D.categorias[g.categoria], clase: 'ojo', gasto: g.id });
   }
-  for (const ev of D.eventos) if (ev.fecha.slice(0, 7) === m) items.push({ fecha: ev.fecha, hora: ev.hora, icono: ICONOS_EVENTO[ev.tipo] || '📌', titulo: ev.titulo, detalle: [ev.empresa, ev.nota].filter(Boolean).join(' · '), clase: ev.tipo === 'demo' ? 'mor' : 'ok', evento: ev.id, hecho: ev.hecho });
+  for (const ev of D.eventos) if (ev.fecha.slice(0, 7) === m) items.push({ fecha: ev.fecha, hora: ev.hora, icono: ICONOS_EVENTO[ev.tipo] || '📌', titulo: ev.titulo + (ev.asignado ? ` · ${nombrePersona(ev.asignado)}` : ''), detalle: [ev.empresa, ev.lugar, ev.nota].filter(Boolean).join(' · '), clase: ev.tipo === 'demo' ? 'mor' : ev.tipo === 'seguimiento' ? 'az' : 'ok', evento: ev.id, hecho: ev.hecho });
   return items;
 }
 function vCalendario() {
   mesCal = mesCal || hoy().slice(0, 7);
-  return cabecera('📅 Calendario', 'Cobros y gastos aparecen solos · toca un día para agregar una tarea, demo o cita',
+  return cabecera('📅 Calendario', 'Cobros y gastos aparecen solos · toca un cobro para registrar el pago con su voucher · toca un día para agregar una cita, tarea o recordatorio',
     `<button class="btn-sec" data-cal="-1">‹</button><b style="min-width:150px;text-align:center">${esc(nombreMes(mesCal))}</b><button class="btn-sec" data-cal="1">›</button><button class="btn-sec" data-cal="0">Hoy</button><button class="btn" data-nuevo-evento="${hoy()}">+ Tarea</button>`) +
-    `<div class="caja"><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span class="chip az">💳 Cobros</span><span class="chip ok">✅ Pagados · 🛠️ Tareas</span><span class="chip mor">🎯 Demos</span><span class="chip ojo">💸 Gastos</span><span class="chip mal">⛔ Vencidos</span></div><div class="cal" id="cal"></div></div>`;
+    `<div class="caja"><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><span class="chip az">💳 Cobros</span><span class="chip ok">✅ Pagados · 🛠️ Tareas</span><span class="chip mor">🎯 Demos</span><span class="chip ok">🤝 Citas</span><span class="chip az">📞 Seguimientos</span><span class="chip ojo">💸 Gastos</span><span class="chip mal">⛔ Vencidos</span></div><div class="cal" id="cal"></div></div>`;
 }
 async function pintarCalendario() {
   // El calendario puede mostrar otro mes: si no está en los datos cargados, se piden.
@@ -1624,7 +1626,7 @@ async function pintarCalendario() {
     if (i >= 35 && f.slice(0, 7) !== mesCal) break;
     const del = items.filter(x => x.fecha === f).sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
     html += `<div class="d ${f.slice(0, 7) !== mesCal ? 'fuera' : ''} ${f === h ? 'hoy' : ''}" data-dia="${f}"><b>${d.getUTCDate()}</b>
-      ${del.map(x => `<span class="ev chip ${x.clase} ${x.hecho ? 'hecho' : ''}" title="${esc(x.titulo + (x.detalle ? ' · ' + x.detalle : ''))}" ${x.evento ? `data-editar-evento="${x.evento}"` : x.pago ? `data-editar-pago="${x.pago}"` : x.gasto ? `data-editar-gasto="${x.gasto}"` : ''}>${x.icono} ${x.hora ? esc(x.hora) + ' ' : ''}${esc(x.titulo)}</span>`).join('')}</div>`;
+      ${del.map(x => `<span class="ev chip ${x.clase} ${x.hecho ? 'hecho' : ''}" title="${esc(x.titulo + (x.detalle ? ' · ' + x.detalle : ''))}" ${x.evento ? `data-editar-evento="${x.evento}"` : x.pago ? (x.listo ? `data-cobro-dia="${x.pago}"` : `data-pagar-cobro="${x.pago}"`) : x.gasto ? `data-editar-gasto="${x.gasto}"` : ''}>${x.icono} ${x.hora ? esc(x.hora) + ' ' : ''}${esc(x.titulo)}</span>`).join('')}</div>`;
   }
   const cal = document.getElementById('cal'); if (cal) cal.innerHTML = html;
 }
@@ -3598,6 +3600,149 @@ async function formEditarRecibo(id) {
     cerrarModal(); aviso('Recibo corregido.'); if (CAJA) await cargarCaja(); pintar(); abrirRecibo(id);
   };
 }
+// ---------- Avisos de pago (AP) y proformas (PF) ----------
+let DOCS = null;
+const numDoc = d => (d.tipo === 'aviso' ? 'AP-' : 'PF-') + String(d.numero).padStart(4, '0');
+const ESTADO_DOC = { por_enviar: ['Por enviar', 'ojo'], enviado: ['Enviado', 'az'], descartado: ['Descartado', 'gris'], pagado: ['Pagado', 'ok'], borrador: ['Borrador', 'gris'], aceptada: ['Aceptada', 'ok'], rechazada: ['Rechazada', 'mal'] };
+async function cargarDocs(adm) {
+  const r = await api('/api/oficina/documentos?administracion=' + encodeURIComponent(adm));
+  DOCS = r.ok ? { adm, ...r.data } : { adm, error: r.data.error || 'No se pudieron cargar los documentos.' };
+}
+function vDocumentos() {
+  if (!DOCS || DOCS.adm !== adminVista) { cargarDocs(adminVista).then(pintar); return '<div class="vacio">Cargando…</div>'; }
+  if (DOCS.error) return `<div class="vacio">${esc(DOCS.error)}</div>`;
+  const avisos = DOCS.documentos.filter(d => d.tipo === 'aviso'), profs = DOCS.documentos.filter(d => d.tipo === 'proforma');
+  const chip = d => { const [t, c] = ESTADO_DOC[d.estado] || [d.estado, 'gris']; return `<span class="chip ${c}">${t}</span>`; };
+  const filaA = d => `<tr><td>${numDoc(d)}</td><td>${esc((d.cliente || {}).nombre || '')}</td><td>${esc((d.lineas || []).map(l => l.concepto).join(' · '))}</td><td>${fechaCorta(d.vence)}</td><td class="n">${dinero(d.total, d.moneda)}</td><td>${chip(d)}</td>
+    <td style="white-space:nowrap"><button class="btn-mini ${d.estado === 'por_enviar' ? 'p' : ''}" data-doc="${d.id}">${d.estado === 'por_enviar' ? 'Revisar y enviar' : 'Ver'}</button></td></tr>`;
+  const filaP = d => `<tr><td>${numDoc(d)}</td><td>${esc((d.cliente || {}).nombre || '')}</td><td>${esc((d.lineas || []).map(l => l.concepto).join(' · '))}</td><td class="n">${dinero(d.total, d.moneda)}</td><td class="n">${d.mensual ? dinero(d.mensual, d.moneda) + '/mes' : '—'}</td><td>${fechaCorta(d.vence)}</td><td>${chip(d)}</td>
+    <td style="white-space:nowrap"><button class="btn-mini" data-doc="${d.id}">Ver</button><button class="btn-mini" data-proforma="${d.id}">✏️</button></td></tr>`;
+  return `<div class="caja" style="margin-bottom:12px"><h2>📨 Avisos de pago <span class="ay" style="font-size:12px;font-weight:400">Oficina los prepara solos ${DOCS.dias_aviso} días antes de cada cobro. Revísalos y envíalos.</span></h2>
+      <table><thead><tr><th>N.º</th><th>Cliente</th><th>Qué paga</th><th>Vence</th><th class="n">Monto</th><th>Estado</th><th></th></tr></thead><tbody>${avisos.map(filaA).join('') || '<tr><td colspan="7" class="vacio">No hay cobros por vencer en los próximos días.</td></tr>'}</tbody></table></div>
+    <div class="caja"><h2 style="display:flex;justify-content:space-between;align-items:center">🧾 Proformas <button class="btn" data-proforma="0">+ Nueva proforma</button></h2>
+      <table><thead><tr><th>N.º</th><th>Para</th><th>Programas</th><th class="n">Creación</th><th class="n">Mensualidad</th><th>Válida hasta</th><th>Estado</th><th></th></tr></thead><tbody>${profs.map(filaP).join('') || '<tr><td colspan="8" class="vacio">Todavía no hay proformas. Crea la primera con «+ Nueva proforma».</td></tr>'}</tbody></table></div>`;
+}
+// Documento para el cliente: aviso de pago (naranja) o proforma (azul), con la cuenta para pagar.
+function htmlDocumento(d, a) {
+  const aviso = d.tipo === 'aviso', C = aviso ? '#b45309' : '#0b4f8a', claro = aviso ? '#fff7ed' : '#eff6ff', borde = aviso ? '#fed7aa' : '#cfe0f5';
+  const c = d.cliente || {}, b = a.recibo_banco || {};
+  const logo = a.logo ? `<img src="${a.logo}" alt="Logo" style="max-width:170px;max-height:60px;object-fit:contain">` : `<div style="width:150px;height:52px;border:1.5px dashed rgba(255,255,255,.7);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff">Sin logo</div>`;
+  const datosAdm = [a.documento ? 'Documento: ' + a.documento : '', a.direccion, [a.correo, a.telefono, a.web].filter(Boolean).join(' · ')].filter(Boolean).map(esc).join('<br>');
+  const th = `background:${claro};text-align:left;padding:9px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#33465a;border-bottom:1px solid ${borde}`;
+  const td = 'padding:10px 16px;border-bottom:1px solid #eef2f6;vertical-align:top';
+  const filas = aviso
+    ? (d.lineas || []).map(l => `<tr><td style="${td}">${esc(l.concepto)}</td><td style="${td};text-align:right;white-space:nowrap">${dinero(l.monto, d.moneda)}</td></tr>`).join('')
+    : (d.lineas || []).map(l => `<tr><td style="${td}"><b>${esc(l.concepto)}</b>${l.detalle ? `<div style="font-size:12px;color:#5b6b7f;margin-top:4px;white-space:pre-line">${esc(l.detalle)}</div>` : ''}</td><td style="${td};text-align:right;white-space:nowrap">${dinero(l.creacion, d.moneda)}</td><td style="${td};text-align:right;white-space:nowrap">${l.mensualidad ? dinero(l.mensualidad, d.moneda) : '—'}</td></tr>`).join('');
+  const total = aviso
+    ? `<tr><td style="padding:12px 16px;font-weight:800;font-size:15px;background:${claro};border-top:2px solid ${C}">TOTAL A PAGAR</td><td style="padding:12px 16px;font-weight:800;font-size:15px;background:${claro};border-top:2px solid ${C};text-align:right">${dinero(d.total, d.moneda)}</td></tr>`
+    : `<tr><td style="padding:12px 16px;font-weight:800;background:${claro};border-top:2px solid ${C}">TOTAL</td><td style="padding:12px 16px;font-weight:800;background:${claro};border-top:2px solid ${C};text-align:right">${dinero(d.total, d.moneda)}</td><td style="padding:12px 16px;font-weight:800;background:${claro};border-top:2px solid ${C};text-align:right">${d.mensual ? dinero(d.mensual, d.moneda) + '/mes' : '—'}</td></tr>`;
+  const condiciones = String(a.recibo_condiciones || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const banco = b.cuenta || b.cci ? `<div style="margin-top:16px;border:1.5px solid #0b4f8a;border-radius:10px;padding:12px 16px;display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px;background:#f4f8fd">
+      <div style="grid-column:1/-1;font-weight:800;color:#0b4f8a;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Datos para pagar</div>
+      ${[['Banco', [b.banco, b.tipo].filter(Boolean).join(' · ')], ['N.º de cuenta', b.cuenta], ['Cuenta interbancaria (CCI)', b.cci], ['Titular', b.titular], ['', b.extra]].filter(([, x]) => x).map(([k, x]) => `<span>${k}</span><b style="color:#0b4f8a">${esc(x)}</b>`).join('')}</div>` : '';
+  const vencido = aviso && d.vence && d.vence < new Date().toISOString().slice(0, 10);
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${aviso ? 'Aviso de pago' : 'Proforma'} ${numDoc(d)}</title><style>body{margin:0;font-family:Inter,'Segoe UI',Arial,sans-serif;color:#14213d;background:#fff}.hoja{width:760px;margin:0 auto;padding:34px 40px;box-sizing:border-box;min-height:1040px;display:flex;flex-direction:column}.lb{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#5b6b7f;margin-bottom:4px}table{width:100%;border-collapse:collapse;font-size:13.5px}@media print{.hoja{width:auto;padding:18px}}</style></head><body><div class="hoja">
+    <div style="border:2px solid ${C};border-radius:10px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:${C};color:#fff;padding:18px 22px;gap:16px">
+        <div>${logo}<div style="font-size:12px;line-height:1.5;margin-top:6px;opacity:.95"><b>${esc(a.legal || a.nombre || '')}</b>${datosAdm ? '<br>' + datosAdm : ''}</div></div>
+        <div style="text-align:right"><div style="font-size:22px;font-weight:800;letter-spacing:.04em">${aviso ? 'AVISO DE PAGO' : 'PROFORMA'}</div><div style="font-size:13px">${aviso ? 'Mensualidad por adelantado' : 'Cotización de sistema'}</div>
+          <div style="display:inline-block;margin-top:6px;background:#fff;color:${C};font-weight:800;border-radius:6px;padding:4px 10px;font-size:15px">${numDoc(d)}</div>
+          <div style="font-size:12px;margin-top:6px">Fecha: ${esc(fechaCorta(d.fecha))}<br>${aviso ? 'Vence' : 'Válida hasta'}: <b>${esc(fechaCorta(d.vence))}</b></div></div></div>
+      <div style="padding:12px 18px;border-bottom:1px solid ${borde}"><div class="lb">${aviso ? 'Para' : 'Preparada para'}</div><div style="font-size:13.5px;line-height:1.55"><b>${esc(c.nombre || '')}</b>${c.documento ? `<br>Documento: ${esc(c.documento)}` : ''}${c.contacto ? `<br>Atención: ${esc(c.contacto)}` : ''}${c.direccion ? `<br><span style="color:#5b6b7f;font-size:12px">${esc(c.direccion)}</span>` : ''}</div></div>
+      ${aviso ? `<div style="padding:12px 18px;background:${claro};font-size:13.5px;line-height:1.6">Le recordamos que su mensualidad se paga <b>por adelantado</b>. ${vencido ? `<b style="color:#b42318">Este pago venció el ${esc(fechaCorta(d.vence))}.</b>` : `Por favor realice el pago antes del <b>${esc(fechaCorta(d.vence))}</b>`} para mantener su servicio activo, y envíenos el voucher para emitir su recibo.</div>` : ''}
+      <table><thead><tr><th style="${th}">${aviso ? 'Concepto' : 'Programa y qué incluye'}</th>${aviso ? `<th style="${th};text-align:right">Monto</th>` : `<th style="${th};text-align:right">Creación</th><th style="${th};text-align:right">Mensualidad</th>`}</tr></thead><tbody>${filas}${total}</tbody></table>
+      ${condiciones.length || d.nota ? `<div style="padding:12px 18px;border-top:1px solid ${borde}"><div class="lb">${aviso ? 'Condiciones' : 'Condiciones y forma de pago'}</div><ul style="font-size:12px;line-height:1.6;color:#33465a;margin:0;padding-left:16px">${condiciones.map(x => `<li>${esc(x)}</li>`).join('')}${d.nota ? `<li>${esc(d.nota)}</li>` : ''}</ul></div>` : ''}
+    </div>
+    ${banco}
+    <div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;padding-top:26px;font-size:11.5px;color:#5b6b7f"><div style="max-width:380px;line-height:1.5">${aviso ? 'Si ya realizó el pago, ignore este aviso y envíenos el voucher. ¡Gracias!' : 'Precios en ' + esc(d.moneda) + '. Esta proforma no es una factura ni un recibo.'}</div><div style="width:200px;border-top:1px solid #14213d;padding-top:5px;text-align:center">${esc(a.nombre || '')}</div></div>
+  </div></body></html>`;
+}
+async function abrirDocumento(id) {
+  await cargarDocs(adminVista);
+  const d = (DOCS.documentos || []).find(x => x.id === id); if (!d) return aviso('Ese documento ya no existe.');
+  const a = admin(d.administracion), c = d.cliente || {}, html = htmlDocumento(d, a), num = numDoc(d);
+  const tel = String(c.telefono || '').replace(/\D/g, '');
+  const texto = url => d.tipo === 'aviso' ? `Hola ${c.contacto || c.nombre || ''}, le recordamos su pago de ${dinero(d.total, d.moneda)} que vence el ${fechaCorta(d.vence)} (aviso ${num}): ${url}` : `Hola ${c.contacto || c.nombre || ''}, le comparto la proforma ${num} de su sistema: ${url}`;
+  const acciones = d.tipo === 'aviso'
+    ? `${d.estado !== 'enviado' && d.estado !== 'pagado' ? '<button class="btn-sec" id="docEnviado">✓ Marcar enviado</button>' : ''}${d.estado === 'por_enviar' ? '<button class="btn-sec" id="docDescartar">Descartar</button>' : ''}`
+    : `<button class="btn-sec" data-proforma="${d.id}">✏️ Editar</button>${d.estado !== 'aceptada' ? '<button class="btn-sec" id="docEnviado">✓ Marcar enviada</button><button class="btn" id="docConvertir">✔ Aceptada: pasar a cliente</button><button class="btn-sec" id="docRechazada">Rechazada</button>' : ''}`;
+  abrirModal(`<h2>${d.tipo === 'aviso' ? 'Aviso de pago' : 'Proforma'} ${num}</h2><p class="sub">${esc(c.nombre || '')} · ${dinero(d.total, d.moneda)} · ${(ESTADO_DOC[d.estado] || [d.estado])[0]}</p>
+    <iframe id="docVista" sandbox="" title="${num}" style="width:100%;height:440px;border:1px solid var(--borde);border-radius:8px;background:#fff"></iframe>
+    <div class="pie" style="flex-wrap:wrap;gap:6px"><button class="btn-sec" id="docPdf">⬇️ PDF</button><button class="btn-sec" id="docWa" style="background:#25d366;color:#fff;border-color:#25d366">WhatsApp</button><button class="btn-sec" id="docMail">✉️ Correo</button><button class="btn-sec" id="docLink">🔗 Copiar enlace</button>${acciones}</div>`);
+  document.getElementById('modal').classList.add('grande');
+  document.getElementById('docVista').srcdoc = html;
+  const enlace = async () => { const e = await api('/api/oficina/documentos/enlace', { id: d.id, html }); if (!e.ok) { aviso(e.data.error || 'No se pudo crear el enlace.'); return ''; } return location.origin + e.data.ruta; };
+  const estado = async (e, msg) => { const r = await api('/api/oficina/documentos/estado', { id: d.id, estado: e }); if (!r.ok) return aviso(r.data.error || 'No se pudo cambiar.'); DOCS = null; cerrarModal(); aviso(msg); await cargarDatos(); pintar(); };
+  // Al compartirlo por WhatsApp o correo queda marcado como enviado.
+  const marcar = () => { if (d.estado === 'por_enviar' || d.estado === 'borrador') api('/api/oficina/documentos/estado', { id: d.id, estado: 'enviado' }).then(() => { DOCS = null; cargarDatos().then(pintar); }); };
+  document.getElementById('docPdf').onclick = () => { const w = window.open('', '_blank'); if (!w) return aviso('El navegador bloqueó la ventana. Permite ventanas emergentes.'); w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400); };
+  document.getElementById('docWa').onclick = async () => { const w = window.open('', '_blank'); const url = await enlace(); if (!url) { if (w) w.close(); return; } const destino = `https://wa.me/${tel}?text=${encodeURIComponent(texto(url))}`; if (w) w.location = destino; else location.href = destino; marcar(); };
+  document.getElementById('docMail').onclick = async () => { const url = await enlace(); if (!url) return; location.href = `mailto:${encodeURIComponent(c.correo || '')}?subject=${encodeURIComponent((d.tipo === 'aviso' ? 'Aviso de pago ' : 'Proforma ') + num)}&body=${encodeURIComponent(texto(url))}`; marcar(); };
+  document.getElementById('docLink').onclick = async () => { const url = await enlace(); if (!url) return; try { await navigator.clipboard.writeText(url); aviso('Enlace copiado: ' + url); } catch (e) { prompt('Copia el enlace:', url); } };
+  const b1 = document.getElementById('docEnviado'); if (b1) b1.onclick = () => estado('enviado', d.tipo === 'aviso' ? 'Aviso marcado como enviado.' : 'Proforma enviada. Se agendó el seguimiento en el calendario (en 3 días).');
+  const b2 = document.getElementById('docDescartar'); if (b2) b2.onclick = () => estado('descartado', 'Aviso descartado.');
+  const b3 = document.getElementById('docRechazada'); if (b3) b3.onclick = () => estado('rechazada', 'Proforma marcada como rechazada.');
+  const b4 = document.getElementById('docConvertir'); if (b4) b4.onclick = () => formConvertir(d);
+}
+function formConvertir(d) {
+  const empresas = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === d.administracion);
+  abrirModal(`<h2>Proforma ${numDoc(d)} aceptada</h2><p class="sub">Sus programas pasan al cliente con su mensualidad y día de cobro, y queda el cobro de la creación (${dinero(d.total, d.moneda)}) para registrarlo cuando pague.</p>
+    ${campo('cvEmp', 'Cliente', `<select id="cvEmp"><option value="">Elige…</option>${empresas.map(e => `<option value="${e.id}" ${e.id === d.empresa_id ? 'selected' : ''}>${esc(nombreCliente(e))}</option>`).join('')}</select>`, 'Si es un cliente nuevo, créalo primero en Empresas y demo y vuelve aquí.')}
+    ${campo('cvDia', 'Día de cobro de la mensualidad (1 a 31)', '<input id="cvDia" type="number" min="1" max="31" value="5">')}
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/documentos/convertir', { id: d.id, empresa_id: v('cvEmp'), dia_cobro: v('cvDia') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo convertir.'; return; }
+    DOCS = null; cerrarModal(); aviso('Listo: el cliente ya tiene sus programas y el cobro de la creación.'); await cargarDatos(); await cargarCaja(); pintar();
+  };
+}
+// Nueva proforma o editar: para un interesado (o un cliente), con sus programas, qué incluye cada uno y precios.
+function formProforma(id) {
+  const d = id ? (DOCS.documentos || []).find(x => x.id === id) : null;
+  const c = (d && d.cliente) || {};
+  const lineas = d ? d.lineas.map(l => ({ ...l })) : [{ concepto: '', detalle: '', creacion: '', mensualidad: '' }];
+  const empresas = D.empresas.filter(e => !e.es_demo && (e.administracion || 'kaizen') === adminVista);
+  abrirModal(`<h2>${d ? 'Proforma ' + numDoc(d) : 'Nueva proforma'} · ${esc(admin(adminVista).nombre)}</h2>
+    ${campo('pfEmp', 'Es para un cliente que ya existe (opcional)', `<select id="pfEmp"><option value="">No, es un interesado nuevo</option>${empresas.map(e => `<option value="${e.id}" ${d && d.empresa_id === e.id ? 'selected' : ''}>${esc(nombreCliente(e))}</option>`).join('')}</select>`)}
+    <div class="fila2">${campo('pfNom', 'Empresa o persona', `<input id="pfNom" value="${esc(c.nombre || '')}">`)}${campo('pfCon', 'Atención (contacto)', `<input id="pfCon" value="${esc(c.contacto || '')}">`)}</div>
+    <div class="fila2">${campo('pfTel', 'WhatsApp / teléfono', `<input id="pfTel" value="${esc(c.telefono || '')}">`)}${campo('pfMail', 'Correo', `<input id="pfMail" value="${esc(c.correo || '')}">`)}</div>
+    <div class="fila2">${campo('pfDoc', 'Documento (RUC, RNC…) opcional', `<input id="pfDoc" value="${esc(c.documento || '')}">`)}${campo('pfDir', 'Ciudad / país (opcional)', `<input id="pfDir" value="${esc(c.direccion || '')}">`)}</div>
+    <div class="campo"><label>Programas</label><div id="pfLineas"></div><button type="button" class="btn-mini" id="pfAgregar">+ Agregar programa</button></div>
+    <div class="fila2">${campo('pfVal', 'Válida por (días)', `<input id="pfVal" type="number" min="1" max="90" value="${d ? Math.max(1, Math.round((Date.parse(d.vence) - Date.parse(d.fecha)) / 864e5)) : 15}">`)}${campo('pfMon', 'Moneda', `<select id="pfMon">${opcionesMoneda((d && d.moneda) || 'US$')}</select>`)}</div>
+    ${campo('pfNota', 'Nota o forma de pago (opcional)', `<textarea id="pfNota" rows="2" placeholder="Ej.: 60 % al iniciar y 40 % al entregar.">${esc((d && d.nota) || '')}</textarea>`)}
+    <div class="ay" id="pfTotal"></div>
+    <div class="error-form" id="errForm"></div><div class="pie">${d ? '<button class="btn-sec izq" id="pfBorrar" style="color:var(--rojo)">🗑️ Borrar</button>' : ''}<button class="btn-sec" data-cerrar-modal>Cancelar</button><button class="btn" id="fGuardar">Guardar proforma</button></div>`);
+  document.getElementById('modal').classList.add('grande');
+  const pintarL = () => {
+    document.getElementById('pfLineas').innerHTML = lineas.map((l, i) => `<div style="border:1px solid var(--borde);border-radius:8px;padding:8px;margin-bottom:6px">
+      <div style="display:grid;grid-template-columns:1fr 120px 120px 30px;gap:6px"><input data-pf="concepto" data-i="${i}" value="${esc(l.concepto)}" placeholder="Programa (ej.: Panel de correos)"><input data-pf="creacion" data-i="${i}" type="number" min="0" step="0.01" value="${l.creacion}" placeholder="Creación"><input data-pf="mensualidad" data-i="${i}" type="number" min="0" step="0.01" value="${l.mensualidad}" placeholder="Mensualidad"><button type="button" class="btn-mini" data-pf-quitar="${i}" ${lineas.length < 2 ? 'disabled' : ''}>✕</button></div>
+      <textarea data-pf="detalle" data-i="${i}" rows="2" style="margin-top:6px" placeholder="Qué incluye (una cosa por línea)">${esc(l.detalle || '')}</textarea></div>`).join('');
+    const t = lineas.reduce((x, l) => x + (Number(l.creacion) || 0), 0), m = lineas.reduce((x, l) => x + (Number(l.mensualidad) || 0), 0);
+    document.getElementById('pfTotal').innerHTML = `Total creación: <b>${dinero(t)}</b> · Mensualidad: <b>${dinero(m)}</b>`;
+  };
+  const cont = document.getElementById('pfLineas');
+  cont.oninput = ev => { const t = ev.target; if (t.dataset.pf) { lineas[Number(t.dataset.i)][t.dataset.pf] = t.value; const tt = lineas.reduce((x, l) => x + (Number(l.creacion) || 0), 0), m = lineas.reduce((x, l) => x + (Number(l.mensualidad) || 0), 0); document.getElementById('pfTotal').innerHTML = `Total creación: <b>${dinero(tt)}</b> · Mensualidad: <b>${dinero(m)}</b>`; } };
+  cont.onclick = ev => { const b = ev.target.closest('[data-pf-quitar]'); if (!b) return; lineas.splice(Number(b.dataset.pfQuitar), 1); pintarL(); };
+  document.getElementById('pfAgregar').onclick = () => { lineas.push({ concepto: '', detalle: '', creacion: '', mensualidad: '' }); pintarL(); };
+  document.getElementById('pfEmp').onchange = e => { const em = empresas.find(x => x.id === Number(e.target.value)); if (em && !v('pfNom')) document.getElementById('pfNom').value = nombreCliente(em); };
+  pintarL();
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/documentos/guardar', { administracion: adminVista, id: d ? d.id : undefined, empresa_id: v('pfEmp') || null, validez: v('pfVal'), moneda: v('pfMon'), nota: v('pfNota'),
+      cliente: { nombre: v('pfNom'), contacto: v('pfCon'), telefono: v('pfTel'), correo: v('pfMail'), documento: v('pfDoc'), direccion: v('pfDir') }, lineas });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
+    DOCS = null; cerrarModal(); aviso('Proforma guardada.'); await cargarDocs(adminVista); pintar(); abrirDocumento(r.data.id);
+  };
+  const bb = document.getElementById('pfBorrar');
+  if (bb) bb.onclick = async () => { if (!confirm('¿Borrar esta proforma?')) return; const r = await api('/api/oficina/documentos/borrar', { id: d.id }); if (!r.ok) return aviso(r.data.error || 'No se pudo borrar.'); DOCS = null; cerrarModal(); aviso('Proforma borrada.'); pintar(); };
+}
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-doc],[data-proforma],[data-ir-docs]'); if (!t) return;
+  ev.preventDefault();
+  if (t.dataset.irDocs) { adminVista = t.dataset.irDocs; admSec = 'documentos'; DOCS = null; return ir('administracion'); }
+  if (t.dataset.doc) return abrirDocumento(Number(t.dataset.doc));
+  if (!DOCS || DOCS.adm !== adminVista) await cargarDocs(adminVista);
+  cerrarModal(); return formProforma(Number(t.dataset.proforma) || 0);
+});
 // Todos los recibos (de clientes y de socios) para verlos y corregirlos.
 function vRecibosAdm() {
   if (!CAJA || CAJA.administracion !== adminVista) return '<div class="vacio">Cargando…</div>';
@@ -3897,7 +4042,7 @@ function vAdministracion() {
   if (admSec === 'cobros') admSec = 'socios';
   if (admSec === 'gastos') admSec = 'gastosCaja';
   cajaAdm = adminVista;
-  const secciones = [['todo', '🏛️ General'], ['clientes', '👥 Clientes'], ['gastosCaja', '🧾 Gastos'], ['socios', '🤝 Socios'], ['recibos', '🧾 Recibos'], ['creacion', '🏗️ Creación de sistema'], ['resumen', '📊 Resumen del mes'], ['estados', '📑 Estados de cuenta']]
+  const secciones = [['todo', '🏛️ General'], ['clientes', '👥 Clientes'], ['gastosCaja', '🧾 Gastos'], ['socios', '🤝 Socios'], ['recibos', '🧾 Recibos'], ['documentos', '📨 Avisos y proformas'], ['creacion', '🏗️ Creación de sistema'], ['resumen', '📊 Resumen del mes'], ['estados', '📑 Estados de cuenta']]
     .map(([k, t]) => `<button class="pestana ${admSec === k ? 'activa' : ''}" data-adm-sec="${k}">${t}</button>`).join('');
   let cuerpo;
   enAdmin = true;
@@ -3905,6 +4050,7 @@ function vAdministracion() {
     if (admSec === 'todo') cuerpo = vAdmTodo();
     else if (admSec === 'socios') cuerpo = vSociosCaja();
     else if (admSec === 'recibos') cuerpo = vRecibosAdm();
+    else if (admSec === 'documentos') cuerpo = vDocumentos();
     else if (admSec === 'estados') cuerpo = vEstadosCuenta();
     else if (admSec === 'gastosCaja') cuerpo = vGastosCaja() + (verGastosFijos ? (gastosTab = 'negocio', vGastos()) : '');
     else if (admSec === 'creacion') { gastosTab = 'creacion'; cuerpo = vCreacion(); }
@@ -4100,14 +4246,17 @@ async function borrarCobro(id, texto) {
   aviso('Cobro borrado.'); await ir(vista);
 }
 function formEvento(ev = {}, fecha) {
-  abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva tarea, demo o cita'}</h2>
+  abrirModal(`<h2>${ev.id ? 'Editar' : 'Nueva cita, tarea o recordatorio'}</h2>${ev.proforma_id ? '<p class="sub">Seguimiento de una proforma enviada (Administración → Avisos y proformas).</p>' : ''}
     ${campo('fTit', '¿Qué hay que hacer?', `<input id="fTit" value="${esc(ev.titulo || '')}" placeholder="Ej.: Demo con Caribe Tours">`)}
     <div class="fila2">${campo('fFec', 'Fecha', `<input id="fFec" type="date" value="${esc(ev.fecha || fecha || hoy())}">`)}${campo('fHora', 'Hora (opcional)', `<input id="fHora" type="time" value="${esc(ev.hora || '')}">`)}</div>
     <div class="fila2">${campo('fTipo', 'Tipo', `<select id="fTipo">${opciones(D.tiposEvento, ev.tipo || 'tarea')}</select>`)}${campo('fEmp', 'Cliente (opcional)', `<select id="fEmp">${opcionesEmpresa(ev.empresa_id, 'Ninguno')}</select>`)}</div>
+    <div class="fila2">${campo('fAsig', 'Asignado a', `<select id="fAsig"><option value="">Nadie en especial</option>${(D.personas || []).map(p => `<option value="${esc(p.usuario)}" ${p.usuario === (ev.asignado || (ev.id ? '' : (YO && YO.usuario))) ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</select>`)}${campo('fLug', 'Dónde (lugar o enlace de la reunión)', `<input id="fLug" value="${esc(ev.lugar || '')}" placeholder="Ej.: Zoom https://… o Oficina del cliente">`)}</div>
+    ${permitidasAdmin().length > 1 ? campo('fAdm', 'De', `<select id="fAdm">${permitidasAdmin().map(c => `<option value="${c}" ${(ev.administracion || 'kaizen') === c ? 'selected' : ''}>${esc(admin(c).nombre)}</option>`).join('')}</select>`) : ''}
     ${campo('fNota', 'Nota (opcional)', `<textarea id="fNota" rows="3" placeholder="Ej.: por Zoom, llevar precios">${esc(ev.nota || '')}</textarea>`)}
     ${ev.id ? `<div class="campo chk"><label><input type="checkbox" id="fHecho" ${ev.hecho ? 'checked' : ''}> Ya está hecho</label></div>` : ''}
     ${pieModal(ev.id)}`);
-  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/eventos', { id: ev.id, titulo: v('fTit'), fecha: v('fFec'), hora: v('fHora'), tipo: v('fTipo'), empresa_id: v('fEmp'), nota: v('fNota'), hecho: ev.id ? document.getElementById('fHecho').checked : false }, 'Guardado en el calendario.');
+  document.getElementById('fGuardar').onclick = () => enviarForm('/api/oficina/guardar/eventos', { id: ev.id, titulo: v('fTit'), fecha: v('fFec'), hora: v('fHora'), tipo: v('fTipo'), empresa_id: v('fEmp'), nota: v('fNota'),
+    asignado: v('fAsig'), lugar: v('fLug'), administracion: v('fAdm') || ev.administracion || permitidasAdmin()[0], hecho: ev.id ? document.getElementById('fHecho').checked : false }, 'Guardado en el calendario.');
   conBorrar('eventos', ev.id, '¿Borrar esta tarea del calendario?');
 }
 /* ---------- Automatizaciones: clientes de redes sociales (su flujo de n8n y su Chatwoot) ---------- */
@@ -4200,7 +4349,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-programas-cliente],[data-caja-plan-nuevo],[data-caja-socios],[data-acceso-socio],[data-caja-editar],[data-caja-borrar],[data-caja-fijo],[data-editar-recibo],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-programas-cliente],[data-caja-plan-nuevo],[data-caja-socios],[data-acceso-socio],[data-caja-editar],[data-caja-borrar],[data-caja-fijo],[data-editar-recibo],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-cobro-dia],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer && t.dataset.cajaPlan === undefined) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
@@ -4236,6 +4385,7 @@ document.addEventListener('click', async ev => {
   if (d.cajaPlanNuevo) { cerrarModal(); return formCajaPlan(0, Number(d.cajaPlanNuevo)); }
   if (d.estadoCliente) { const e = buscar(D.empresas, d.estadoCliente); return e && formEstado(e); }
   if (d.pagarCobro) return formPagar(d.pagarCobro);
+  if (d.cobroDia) { const pg = (D.pagos || []).find(x => x.id === Number(d.cobroDia)); if (pg && pg.recibo_id) return abrirRecibo(pg.recibo_id); return aviso('Pagado. Este cobro todavía no tiene recibo.'); }
   if (d.recibo) return abrirRecibo(d.recibo);
   if (d.cajaAdm) { cajaAdm = d.cajaAdm; try { localStorage.setItem('oficinaCajaAdm', cajaAdm); } catch (e) {} CAJA = null; return ir(vista); }
   if ('cajaGasto' in d) return formCajaGasto();
