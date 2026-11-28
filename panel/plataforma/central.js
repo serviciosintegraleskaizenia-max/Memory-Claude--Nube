@@ -1449,6 +1449,39 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
         return json(res, 200, { ok: true });
       }
 
+      // Contraseñas de una empresa (Kaizen IA o Zentralia): quién puede entrar, para ponerle una contraseña nueva.
+      // Sirve para su panel de reservas (usuarios de su base) y para el panel del cliente (la cuenta principal).
+      if (m && req.method === 'GET' && m[2] === 'accesos') {
+        const e = await empresa(m[1]);
+        const accesos = [];
+        const auto = (await client.query('SELECT slug FROM automatizacion_clientes WHERE empresa_id = $1 LIMIT 1', [e.id]).catch(() => ({ rows: [] }))).rows[0];
+        if (auto) accesos.push({ tipo: 'cliente', id: auto.slug, usuario: auto.slug, nombre: 'Cuenta principal del panel del cliente', grupo: 'Panel del cliente', activo: true });
+        if (e.base_datos) {
+          try {
+            const filas = await conEmpresa(e, async db => (await db.query("SELECT id, usuario, nombre, grupo, activo FROM usuarios WHERE grupo <> 'Programador' ORDER BY (grupo = 'Gerente') DESC, activo DESC, id")).rows);
+            for (const x of filas) accesos.push({ tipo: 'panel', id: x.id, usuario: x.usuario, nombre: x.nombre || '', grupo: x.grupo || '', activo: x.activo });
+          } catch (err) { return json(res, 200, { accesos, error: 'No se pudo leer su panel de reservas: ' + err.message }); }
+        }
+        return json(res, 200, { accesos });
+      }
+      if (m && req.method === 'POST' && m[2] === 'clave') {
+        const e = await empresa(m[1]);
+        const f = await leerCuerpo(req);
+        await confirmar(f.confirmar);
+        const clave = String(f.clave || '');
+        if (clave.length < 8) return json(res, 400, { error: 'La contraseña nueva debe tener al menos 8 caracteres.' });
+        if (f.tipo === 'cliente') {
+          const auto = (await client.query('SELECT slug, nombre FROM automatizacion_clientes WHERE empresa_id = $1 AND slug = $2', [e.id, texto(f.id, 30)])).rows[0];
+          if (!auto) return json(res, 404, { error: 'Esa empresa no tiene panel del cliente.' });
+          await puente.crearCuenta(auto.slug, clave, auto.nombre);
+        } else {
+          if (!e.base_datos) return json(res, 400, { error: SIN_PANEL });
+          const hecho = await conEmpresa(e, async db => (await db.query("UPDATE usuarios SET password_hash = $1, debe_cambiar = $3, activo = TRUE WHERE id = $2 AND grupo <> 'Programador'", [bcrypt.hashSync(clave, 10), Number(f.id), f.cambiar !== false])).rowCount);
+          if (!hecho) return json(res, 404, { error: 'Ese usuario ya no existe.' });
+        }
+        await registrar(u, 'empresa_clave', 'empresa', e.slug, '', '', `${f.tipo === 'cliente' ? 'panel del cliente' : 'usuario #' + Number(f.id)}`);
+        return json(res, 200, { ok: true });
+      }
       if (m && req.method === 'POST') {
         const e = await empresa(m[1]);
         const accion = m[2];

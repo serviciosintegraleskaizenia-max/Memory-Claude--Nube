@@ -2,106 +2,57 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { calcular, revisar } = require('./caja');
+const ZENTRALIA = [{ clave: 'dueno', nombre: 'Cristian Mundaray', pct: 60 }, { clave: 'socio', nombre: 'José Betancourt', pct: 40 }];
 
-test('ejemplo del dueño: emergencia prestada por Cristian después de que José retiró todo', () => {
-  // Las entradas no se revisan: vienen de cobros pagados.
-  const movs = [{ tipo: 'entrada', monto: 1000 }];
-  const paso = m => { const err = revisar(calcular(movs, 40), m); assert.strictEqual(err, '', err); movs.push(m); };
-  paso({ tipo: 'reparto', monto: 1000 });
-  let e = calcular(movs, 40);
-  assert.deepStrictEqual(e.libre, { dueno: 600, socio: 400 });
-  paso({ tipo: 'retiro', socio: 'socio', monto: 400 });
-  // Sin fondo: el gasto de 300 no puede salir si nadie presta.
-  e = calcular(movs, 40);
-  assert.match(revisar(e, { tipo: 'gasto_mensual', monto: 300 }), /Faltan 300/);
-  paso({ tipo: 'gasto_mensual', monto: 300, concepto: 'Emergencia', detalle: { prestamos: [{ presta: 'dueno', debe: 'socio', monto: 300 }] } });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.caja, 300);
-  assert.strictEqual(e.debe.socio, 300);
-  assert.strictEqual(e.puedeRetirar.socio, 0);
-  movs.push({ tipo: 'entrada', monto: 750 });
-  paso({ tipo: 'gasto_mensual', monto: 250, concepto: 'Gastos fijos' });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.fondo, 500);
-  paso({ tipo: 'reparto', monto: 500 });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.libre.dueno, 800, 'Cristian: 300 del mes 1 + 300 de su parte + 200 cobrados a José');
-  assert.strictEqual(e.libre.socio, 0);
-  assert.strictEqual(e.debe.socio, 100, 'José sigue debiendo 100');
-  assert.strictEqual(e.caja, 800);
-  assert.strictEqual(e.fondo, 0);
-  assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 1 }), /deuda de 100/);
-  assert.strictEqual(revisar(e, { tipo: 'retiro', socio: 'dueno', monto: 800 }), '');
-  assert.match(revisar(e, { tipo: 'retiro', socio: 'dueno', monto: 800.01 }), /Solo puede retirar 800/);
-});
-
-test('nadie retira más de su parte ni adelantos del mes siguiente', () => {
-  const movs = [{ tipo: 'entrada', monto: 1196.80 }, { tipo: 'reparto', monto: 1196.80 }];
-  const e = calcular(movs, 40);
-  assert.deepStrictEqual(e.libre, { dueno: 718.08, socio: 478.72 });
-  assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 500 }), /Solo puede retirar 478.72/);
-  assert.strictEqual(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 478.72 }), '');
-});
-
-test('el retiro de un socio no baja lo que se reparte; el gasto sí', () => {
-  const movs = [{ tipo: 'entrada', monto: 1890 }, { tipo: 'gasto_creacion', monto: 693.20 }];
-  let e = calcular(movs, 40);
-  assert.strictEqual(e.fondo, 1196.80);
-  movs.push({ tipo: 'reparto', monto: 1196.80 }, { tipo: 'retiro', socio: 'socio', monto: 478.72 });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.caja, 718.08, 'en caja queda justo la parte de Cristian');
-  assert.strictEqual(e.libre.dueno, 718.08);
-  assert.strictEqual(e.fondo, 0);
-});
-
-test('se puede dejar parte como fondo de la empresa y las emergencias salen de ahí', () => {
-  const movs = [{ tipo: 'entrada', monto: 1200 }, { tipo: 'reparto', monto: 1000 }];
-  let e = calcular(movs, 40);
-  assert.strictEqual(e.fondo, 200);
-  assert.strictEqual(revisar(e, { tipo: 'gasto_mensual', monto: 150 }), '');
-  movs.push({ tipo: 'gasto_mensual', monto: 150 });
-  e = calcular(movs, 40);
-  assert.deepStrictEqual(e.libre, { dueno: 600, socio: 400 }, 'la emergencia del fondo no toca lo repartido');
-  assert.strictEqual(e.debe.socio, 0);
-  assert.match(revisar(e, { tipo: 'reparto', monto: 100 }), /fondo de la empresa \(50.00\)/);
-});
-
-test('un préstamo no puede pasar de lo que el socio tiene libre', () => {
-  const movs = [{ tipo: 'entrada', monto: 1000 }, { tipo: 'reparto', monto: 1000 }, { tipo: 'retiro', socio: 'dueno', monto: 500 }];
-  const e = calcular(movs, 40);
-  assert.match(revisar(e, { tipo: 'gasto_mensual', monto: 300, detalle: { prestamos: [{ presta: 'dueno', debe: 'socio', monto: 300 }] } }), /más de lo que tiene libre \(100.00\)/);
-  assert.strictEqual(revisar(e, { tipo: 'gasto_mensual', monto: 300, detalle: { prestamos: [{ presta: 'socio', debe: 'dueno', monto: 300 }] } }), '');
-});
-
-test('números reales de Zentralia: adelantos anotados antes del reparto', () => {
+test('números reales de Zentralia: reparto automático con los adelantos', () => {
   const movs = [
     { tipo: 'entrada', monto: 1890 },
-    { tipo: 'gasto_creacion', monto: 978.20 }, { tipo: 'gasto_mensual', monto: 55 }, { tipo: 'gasto_negocio', monto: 55 },
+    { tipo: 'gasto_creacion', monto: 515 }, { tipo: 'gasto_mensual', monto: 422 }, { tipo: 'gasto_negocio', monto: 151.20 },
     { tipo: 'retiro', socio: 'socio', monto: 109 }, { tipo: 'retiro', socio: 'socio', monto: 197 }, { tipo: 'retiro', socio: 'dueno', monto: 459 }
   ];
-  let e = calcular(movs, 40);
+  const e = calcular(movs, ZENTRALIA);
   assert.strictEqual(e.gastos, 1088.20);
+  assert.strictEqual(e.utilidad, 801.80);
+  assert.deepStrictEqual(e.toca, { dueno: 481.08, socio: 320.72 });
+  assert.deepStrictEqual(e.disponible, { dueno: 22.08, socio: 14.72 });
   assert.strictEqual(e.caja, 36.80);
-  assert.strictEqual(e.fondo, 801.80, 'lo que queda para repartir, aunque ya hubo adelantos');
-  movs.push({ tipo: 'reparto', monto: 801.80 });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.repartido.dueno, 481.08);
-  assert.strictEqual(e.repartido.socio, 320.72);
-  assert.strictEqual(e.libre.dueno, 22.08);
-  assert.strictEqual(e.libre.socio, 14.72);
-  assert.strictEqual(e.fondo, 0);
   assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 555 }), /Solo puede retirar 14.72/);
+  assert.strictEqual(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 14.72 }), '');
 });
 
-test('gasto anotado después del reparto: un socio lo cubre como préstamo', () => {
-  const movs = [{ tipo: 'entrada', monto: 1000 }, { tipo: 'reparto', monto: 1000 }, { tipo: 'retiro', socio: 'socio', monto: 400 }, { tipo: 'gasto_creacion', monto: 30 }];
-  let e = calcular(movs, 40);
-  assert.strictEqual(e.fondo, -30);
-  assert.match(revisar(e, { tipo: 'prestamo', monto: 40, detalle: { presta: 'dueno', debe: 'socio' } }), /Solo faltan 30/);
-  assert.strictEqual(revisar(e, { tipo: 'prestamo', monto: 30, detalle: { presta: 'dueno', debe: 'socio' } }), '');
-  movs.push({ tipo: 'prestamo', monto: 30, detalle: { presta: 'dueno', debe: 'socio' } });
-  e = calcular(movs, 40);
-  assert.strictEqual(e.fondo, 0);
-  assert.strictEqual(e.libre.dueno, 570);
-  assert.strictEqual(e.debe.socio, 30);
+test('regla del dueño: emergencia con la empresa en 0, se devuelve con el próximo cobro', () => {
+  const movs = [{ tipo: 'entrada', monto: 2000 }, { tipo: 'gasto_creacion', monto: 1000 }];
+  let e = calcular(movs, ZENTRALIA);
+  assert.deepStrictEqual(e.toca, { dueno: 600, socio: 400 });
+  movs.push({ tipo: 'retiro', socio: 'socio', monto: 400 });
+  movs.push({ tipo: 'gasto_mensual', monto: 300 });   // emergencia: la empresa está en 0
+  e = calcular(movs, ZENTRALIA);
+  assert.strictEqual(e.caja, 300, 'quedan los 300 de Cristian');
+  assert.strictEqual(e.puedeRetirar.dueno, 300);
+  assert.strictEqual(e.debe.socio, 120, 'José retiró más de su parte después del gasto');
+  assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 1 }), /no puede retirar/);
+  movs.push({ tipo: 'entrada', monto: 1000 });   // nuevo pago: primero se devuelve lo prestado y el resto se reparte
+  e = calcular(movs, ZENTRALIA);
+  assert.deepStrictEqual(e.toca, { dueno: 1020, socio: 680 });
+  assert.deepStrictEqual(e.disponible, { dueno: 1020, socio: 280 });
+  assert.strictEqual(e.caja, 1300);
+});
+
+test('nadie retira más de lo suyo ni más de lo que hay en caja', () => {
+  const e = calcular([{ tipo: 'entrada', monto: 1000 }], ZENTRALIA);
+  assert.match(revisar(e, { tipo: 'retiro', socio: 'socio', monto: 401 }), /Solo puede retirar 400/);
+  assert.strictEqual(revisar(e, { tipo: 'retiro', socio: 'dueno', monto: 600 }), '');
+});
+
+test('fondo de la empresa: lo que se deja no se reparte', () => {
+  const e = calcular([{ tipo: 'entrada', monto: 1200 }], ZENTRALIA, { reserva: 200 });
+  assert.strictEqual(e.utilidad, 1000);
+  assert.deepStrictEqual(e.toca, { dueno: 600, socio: 400 });
+});
+
+test('varios socios: los % suman 100 y nada se pierde por redondeo', () => {
+  const tres = [{ clave: 'dueno', pct: 50 }, { clave: 'socio', pct: 33.33 }, { clave: 's3', pct: 16.67 }];
+  const e = calcular([{ tipo: 'entrada', monto: 100.01 }], tres);
+  const suma = Math.round(Object.values(e.toca).reduce((t, x) => t + x, 0) * 100) / 100;
+  assert.strictEqual(suma, 100.01);
 });

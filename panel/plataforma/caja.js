@@ -1,78 +1,65 @@
 // Caja de cada administración (Kaizen IA / Zentralia): un libro de movimientos con las reglas del dueño.
-//  - Entradas: cada cobro pagado (se toma solo de Clientes y cobros, por lo que realmente llegó).
-//  - Gastos: «creación del sistema» o «gasto mensual», cargados a un plan o a General. Nunca se mezclan.
-//  - Reparto: de lo que queda (el fondo de la empresa) se decide cuánto se reparte; lo repartido es de cada socio (regla de oro).
-//  - Retiros: hasta su parte libre y hasta lo que hay en caja; cada uno con su recibo (también los del dueño).
-//  - Préstamos: si el fondo no alcanza para un gasto, un socio presta de su parte (con su autorización) y otro le queda debiendo.
-//    En el próximo reparto, primero se cobra la deuda de la parte del que debe; lo que no alcance se sigue debiendo.
+//  - Entradas: cada cobro pagado con voucher (lo que llegó).
+//  - Gastos: «creación del sistema», «gasto mensual» o «gasto del negocio». Nunca se mezclan.
+//  - Reparto AUTOMÁTICO: utilidad = cobrado − gastos (− el fondo que el dueño quiera dejar en la empresa).
+//    A cada socio le toca su % de la utilidad; lo que retiró se le descuenta; puede retirar lo suyo hasta lo que haya en caja.
+//  - Si un gasto llega cuando la empresa está en 0, sale de la parte que aún no retiró un socio (le «presta» a la empresa);
+//    con el próximo cobro se le devuelve primero y lo que sobra se reparte. El cálculo acumulado hace eso solo:
+//    ej. entran 2,000, gastos 1,000 → 600/400; José retira 400; emergencia 300 → Cristian 420 (puede retirar 300, lo que hay),
+//    José debe 120; entra 1,000 → Cristian 1,020, José 280. Quien retiró de más queda debiendo y no retira hasta cubrirlo.
 // Reglas completas: memoria/MEMORIA-PROYECTO.md y memoria/PLAN-CAJA.md.
 
 const TIPOS = {
   entrada: 'Entrada', gasto_creacion: 'Creación del sistema', gasto_mensual: 'Gasto mensual', gasto_negocio: 'Gasto del negocio',
-  reparto: 'Reparto', retiro: 'Retiro de socio', prestamo: 'Préstamo de socio'
+  retiro: 'Retiro de socio'
 };
-const SOCIOS = ['dueno', 'socio'];
 const r2 = n => Math.round((Number(n) || 0) * 100) / 100 || 0;
+// Socios: [{ clave, nombre, pct }] (los % suman 100). Por compatibilidad, un número es el % del socio (el dueño tiene el resto).
+function sociosDe(s) {
+  if (Array.isArray(s) && s.length) return s.map(x => ({ clave: String(x.clave), nombre: x.nombre || '', pct: Number(x.pct) || 0 }));
+  const p = Number(s) || 0;
+  return p > 0 ? [{ clave: 'dueno', nombre: '', pct: 100 - p }, { clave: 'socio', nombre: '', pct: p }] : [{ clave: 'dueno', nombre: '', pct: 100 }];
+}
 
 // ---------- Cálculo puro (sin base de datos; se prueba en caja.test.js) ----------
-// movs: [{ tipo, monto, socio, detalle }] en orden. pct: porcentaje del socio (0 a 100).
-function calcular(movs, pct) {
-  const e = {
-    entradas: 0, creacion: 0, mensuales: 0, negocio: 0, retiros: { dueno: 0, socio: 0 }, repartido: { dueno: 0, socio: 0 },
-    libre: { dueno: 0, socio: 0 }, caja: 0, deudas: [], prestado: { dueno: 0, socio: 0 }
-  };
+function calcular(movs, sociosEntrada, opc = {}) {
+  const socios = sociosDe(sociosEntrada);
+  const cero = () => Object.fromEntries(socios.map(x => [x.clave, 0]));
+  const e = { socios, entradas: 0, creacion: 0, mensuales: 0, negocio: 0, retiros: cero(), caja: 0 };
   for (const m of movs) {
     const monto = r2(m.monto);
-    const d = m.detalle || {};
     if (m.tipo === 'entrada') { e.entradas = r2(e.entradas + monto); e.caja = r2(e.caja + monto); }
     else if (String(m.tipo).startsWith('gasto_')) {
       if (m.tipo === 'gasto_creacion') e.creacion = r2(e.creacion + monto);
       else if (m.tipo === 'gasto_negocio') e.negocio = r2(e.negocio + monto);
       else e.mensuales = r2(e.mensuales + monto);
       e.caja = r2(e.caja - monto);
-      for (const p of d.prestamos || []) {
-        const pm = r2(p.monto);
-        if (!(pm > 0) || !SOCIOS.includes(p.presta)) continue;
-        e.libre[p.presta] = r2(e.libre[p.presta] - pm);
-        e.prestado[p.presta] = r2(e.prestado[p.presta] + pm);
-        e.deudas.push({ presta: p.presta, debe: p.debe, saldo: pm, concepto: m.concepto || '' });
-      }
-    } else if (m.tipo === 'prestamo') {
-      // Un socio cubre con su parte lo que falta en el fondo (ej. un gasto anotado después del reparto); el otro le queda debiendo.
-      if (SOCIOS.includes(d.presta) && SOCIOS.includes(d.debe) && d.presta !== d.debe) {
-        e.libre[d.presta] = r2(e.libre[d.presta] - monto);
-        e.prestado[d.presta] = r2(e.prestado[d.presta] + monto);
-        e.deudas.push({ presta: d.presta, debe: d.debe, saldo: monto, concepto: m.concepto || '' });
-      }
-    } else if (m.tipo === 'reparto') {
-      const parte = { socio: r2(monto * pct / 100) };
-      parte.dueno = r2(monto - parte.socio);
-      e.repartido.dueno = r2(e.repartido.dueno + parte.dueno);
-      e.repartido.socio = r2(e.repartido.socio + parte.socio);
-      // Primero se cobran las deudas de la parte del que debe.
-      for (const deuda of e.deudas) {
-        if (!(deuda.saldo > 0) || !SOCIOS.includes(deuda.debe)) continue;
-        const paga = r2(Math.min(deuda.saldo, parte[deuda.debe]));
-        parte[deuda.debe] = r2(parte[deuda.debe] - paga);
-        parte[deuda.presta] = r2(parte[deuda.presta] + paga);
-        deuda.saldo = r2(deuda.saldo - paga);
-      }
-      e.libre.dueno = r2(e.libre.dueno + parte.dueno);
-      e.libre.socio = r2(e.libre.socio + parte.socio);
-    } else if (m.tipo === 'retiro' && SOCIOS.includes(m.socio)) {
+    } else if (m.tipo === 'retiro') {
+      if (!(m.socio in e.retiros)) e.retiros[m.socio] = 0;   // socio que ya no está: se sigue viendo lo que retiró
       e.retiros[m.socio] = r2(e.retiros[m.socio] + monto);
-      e.libre[m.socio] = r2(e.libre[m.socio] - monto);
       e.caja = r2(e.caja - monto);
     }
+    // «reparto» y «prestamo» de la versión anterior ya no hacen falta: el reparto es automático.
   }
-  e.deudas = e.deudas.filter(x => x.saldo > 0);
-  e.debe = { dueno: r2(e.deudas.filter(x => x.debe === 'dueno').reduce((t, x) => t + x.saldo, 0)), socio: r2(e.deudas.filter(x => x.debe === 'socio').reduce((t, x) => t + x.saldo, 0)) };
   e.gastos = r2(e.creacion + e.mensuales + e.negocio);
-  e.fondo = r2(e.caja - e.libre.dueno - e.libre.socio);
-  e.puedeRetirar = {
-    dueno: e.debe.dueno > 0 ? 0 : r2(Math.max(0, Math.min(e.libre.dueno, e.caja))),
-    socio: e.debe.socio > 0 ? 0 : r2(Math.max(0, Math.min(e.libre.socio, e.caja)))
-  };
+  e.reserva = r2(Math.max(0, Number(opc.reserva) || 0));
+  e.utilidad = r2(e.entradas - e.gastos - e.reserva);
+  e.toca = {}; e.disponible = {}; e.debe = {}; e.puedeRetirar = {};
+  let repartido = 0;
+  socios.forEach((s, i) => {
+    const t = i === socios.length - 1 ? r2(e.utilidad - repartido) : r2(e.utilidad * s.pct / 100);
+    repartido = r2(repartido + t);
+    e.toca[s.clave] = t;
+  });
+  const cajaLibre = r2(e.caja - e.reserva);
+  for (const s of socios) {
+    const d = r2(e.toca[s.clave] - (e.retiros[s.clave] || 0));
+    e.disponible[s.clave] = d;
+    e.debe[s.clave] = d < 0 ? r2(-d) : 0;
+    e.puedeRetirar[s.clave] = d <= 0 ? 0 : r2(Math.max(0, Math.min(d, cajaLibre)));
+  }
+  // Lo que un socio tiene pero no puede sacar todavía porque la caja no alcanza (lo cubrió prestando a la empresa).
+  e.porCobrar = Object.fromEntries(socios.map(s => [s.clave, r2(Math.max(0, e.disponible[s.clave]) - e.puedeRetirar[s.clave])]));
   return e;
 }
 
@@ -80,37 +67,14 @@ function calcular(movs, pct) {
 function revisar(e, m) {
   const monto = r2(m.monto);
   if (!(monto > 0)) return 'El monto debe ser mayor que 0.';
-  if (String(m.tipo).startsWith('gasto_')) {
-    const prestamos = (m.detalle && m.detalle.prestamos) || [];
-    const prestado = r2(prestamos.reduce((t, p) => t + r2(p.monto), 0));
-    for (const p of prestamos) {
-      if (!SOCIOS.includes(p.presta) || !SOCIOS.includes(p.debe) || p.presta === p.debe) return 'Indica quién presta y quién le queda debiendo.';
-      if (r2(p.monto) > r2(e.libre[p.presta])) return `No puede prestar más de lo que tiene libre (${r2(e.libre[p.presta]).toFixed(2)}).`;
-    }
-    const fondo = Math.max(0, e.fondo);
-    if (r2(fondo + prestado) < monto) return `El fondo de la empresa tiene ${fondo.toFixed(2)}. Faltan ${r2(monto - fondo - prestado).toFixed(2)}: elige qué socio lo presta de su parte.`;
-    if (monto > r2(e.caja)) return `En caja solo hay ${r2(e.caja).toFixed(2)}.`;
-    return '';
-  }
-  if (m.tipo === 'prestamo') {
-    const d = m.detalle || {};
-    if (!SOCIOS.includes(d.presta) || !SOCIOS.includes(d.debe) || d.presta === d.debe) return 'Indica quién presta y quién le queda debiendo.';
-    if (!(e.fondo < 0)) return 'El fondo de la empresa no está en negativo: no hace falta préstamo.';
-    if (monto > r2(-e.fondo)) return `Solo faltan ${r2(-e.fondo).toFixed(2)} en el fondo.`;
-    if (monto > r2(e.libre[d.presta])) return `No puede prestar más de lo que tiene libre (${r2(e.libre[d.presta]).toFixed(2)}).`;
-    return '';
-  }
-  if (m.tipo === 'reparto') {
-    if (monto > r2(e.fondo)) return `Solo se puede repartir lo que hay en el fondo de la empresa (${r2(Math.max(0, e.fondo)).toFixed(2)}).`;
-    return '';
-  }
+  if (String(m.tipo).startsWith('gasto_')) return '';
   if (m.tipo === 'retiro') {
-    if (!SOCIOS.includes(m.socio)) return 'Elige quién retira.';
-    if (e.debe[m.socio] > 0) return `Tiene una deuda de ${e.debe[m.socio].toFixed(2)} con su socio: no puede retirar hasta cubrirla.`;
-    if (monto > e.puedeRetirar[m.socio]) return `Solo puede retirar ${e.puedeRetirar[m.socio].toFixed(2)} (su parte libre y lo que hay en caja).`;
+    if (!(m.socio in e.toca)) return 'Elige quién retira.';
+    if (e.debe[m.socio] > 0) return `Retiró ${e.debe[m.socio].toFixed(2)} más de lo que le toca: no puede retirar hasta que se cubra con los próximos cobros.`;
+    if (monto > e.puedeRetirar[m.socio]) return `Solo puede retirar ${e.puedeRetirar[m.socio].toFixed(2)} (su parte y lo que hay en caja).`;
     return '';
   }
   return 'Tipo de movimiento no válido.';
 }
 
-module.exports = { calcular, revisar, TIPOS, SOCIOS };
+module.exports = { calcular, revisar, sociosDe, TIPOS };

@@ -4349,6 +4349,12 @@ function abrirVentana(html) {
   document.getElementById('overlay').classList.add('abierto');
 }
 
+// La ventana de contraseñas también se cierra cuando Empresas está dentro de Oficina.
+function cerrarClaves() {
+  document.getElementById('overlay').classList.remove('abierto');
+  document.getElementById('caja').innerHTML = '';
+  document.getElementById('vMin').style.display = 'none';
+}
 function cerrarVentana() {
   if (INCRUSTADO) return;
   document.getElementById('overlay').classList.remove('abierto');
@@ -4819,6 +4825,7 @@ function franjaEmpresa(e) {
         <span class="emp-chips">${chipEstado(e)}${chipsProgramas(e, auto)}${chipCobro(e)}${e.error ? '<span class="chip chip-rojo">Sin conexión con su base</span>' : ''}</span>
       </button>
       ${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url.replace(/^https?:\/\//, ''))}</a>` : ''}
+      <button type="button" class="btn-sec" data-accion="emp-claves" data-id="${e.id}" title="Poner una contraseña nueva al gerente o a la cuenta del cliente">🔑 Contraseñas</button>
     </div>
     ${abierta ? `<div class="emp-dentro">${tarjetaEmpresa(e, true, bloqueAutoEmpresa(e, auto))}</div>` : ''}
   </div>`;
@@ -5826,6 +5833,33 @@ async function accionEmpresas(a, b) {
     if (vistaEmpresas === 'redes') return cargarAutomatizacion();
     if (vistaEmpresas === 'lista' && EMP_ABIERTA) AUTO_EDIT = AUTO_CLIENTES.find(c => c.empresa_id === EMP_ABIERTA) || null;
     return pintarEmpresas();
+  }
+  // Contraseñas de la empresa: lista quién entra (gerente, usuarios, cuenta del panel del cliente) y pone una nueva.
+  if (a === 'emp-clave-cerrar') return cerrarClaves();
+  if (a === 'emp-claves' || a === 'emp-clave-poner') {
+    const idE = Number(b.dataset.id);
+    const emp = (datosEmpresas.empresas || []).find(x => x.id === idE) || {};
+    if (a === 'emp-claves') {
+      const r = await api(`/api/central/empresas/${idE}/accesos`);
+      if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudieron leer los accesos.', false);
+      const lista = r.data.accesos || [];
+      abrirVentana(`<h2>🔑 Contraseñas · ${esc(emp.nombre || '')}</h2>
+        <p class="etiqueta-sec">Elige a quién le pones una contraseña nueva. Se cierra su sesión y entra con la nueva.${r.data.error ? ' ' + esc(r.data.error) : ''}</p>
+        ${lista.length ? `<div class="form-fila"><label>Usuario<select id="ecQuien">${lista.map((x, i) => `<option value="${i}">${esc(x.usuario)} · ${esc(x.nombre || '')} (${esc(x.grupo)})${x.activo ? '' : ' · desactivado'}</option>`).join('')}</select></label></div>
+        <div class="form-fila"><label>Contraseña nueva (mínimo 8)<input id="ecClave" type="password" autocomplete="new-password"></label></div>
+        <div class="form-fila"><label style="display:flex;gap:8px;align-items:center;flex-direction:row"><input id="ecCambiar" type="checkbox" checked style="width:auto;margin:0"> Que la cambie al entrar (solo panel de reservas)</label></div>
+        <div class="form-fila"><label>Tu contraseña de Programador (para confirmar)<input id="ecConf" type="password" autocomplete="current-password"></label></div>
+        <div class="pie-acciones"><button class="btn-sec" data-accion="emp-clave-cerrar">Volver</button><button class="btn" data-accion="emp-clave-poner" data-id="${idE}">Poner contraseña nueva</button></div>` : '<p>Esta empresa no tiene usuarios ni panel del cliente todavía.</p><div class="pie-acciones"><button class="btn-sec" data-accion="emp-clave-cerrar">Volver</button></div>'}`);
+      document.getElementById('caja').dataset.accesos = JSON.stringify(lista);
+      return;
+    }
+    const lista = JSON.parse(document.getElementById('caja').dataset.accesos || '[]');
+    const x = lista[Number(val('ecQuien'))];
+    if (!x) return;
+    const r = await api(`/api/central/empresas/${idE}/clave`, { tipo: x.tipo, id: x.id, clave: val('ecClave'), cambiar: document.getElementById('ecCambiar').checked, confirmar: val('ecConf') });
+    if (!r.ok) return avisoEmpresas(r.data.error || 'No se pudo cambiar.', false);
+    cerrarClaves();
+    return avisoEmpresas(`Listo: ${x.usuario} ya entra con la contraseña nueva.`, true);
   }
   if (a === 'emp-pestana') { EMP_PESTANA = b.dataset.adm; EMP_ABIERTA = null; AUTO_EDIT = null; return pintarEmpresas(); }
   if (a === 'emp-abrir') {

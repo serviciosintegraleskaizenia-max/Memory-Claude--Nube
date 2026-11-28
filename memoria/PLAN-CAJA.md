@@ -71,11 +71,32 @@ Decisiones:
 - **Editar gastos directo en Gastos** (fecha, monto, nombre, borrar); si vino de Creación de sistema se cambia también allá.
 - **Varios socios con su %** (suman 100): editar nombres y porcentajes, agregar y quitar.
 Pasos:
-- [ ] C1 Reparto automático y varios socios (tabla oficina_socios; claves dueno/socio para los dos primeros).
-- [ ] C2 Gastos: debajo del total, «Retiros de ganancias de socios» (cada socio y total) y «Queda en caja»; mensuales y del negocio con flechita por mes (octubre, noviembre…) sin agrandar el cuadro.
-- [ ] C3 Editar / borrar gastos en Gastos; «Hacer fijo mensual»; confirmar pago del fijo con monto real.
-- [ ] C4 Retiros con método, referencia y voucher (también completar los adelantos ya hechos) y que salgan en el recibo.
-- [ ] C5 Creación de sistema → resumen para el socio: retención 8 % (151.20), llegó a la cuenta 1,738.80; «Gastos de cada mes» con los reales.
-- [ ] C6 Resumen del mes: calendario con cobros de mensualidad y depósitos de cada programa (el mensaje del dueño se cortó: falta el resto).
-- [ ] C7 Estados de cuenta: por mes y completo (financiero de todo: entradas, gastos por grupo, retiros, lo que queda), imprimibles.
-- [ ] C8 Recibos (pedido del dueño con captura del R-C 0001): dirección del cliente más corta (no ocupar tanto espacio); en vez de «Setup · abono», el nombre del software/programa; en «Datos del pago» poner método, banco, desde dónde se pagó y número de referencia; **sección para editar recibos** (de clientes y de socios) para corregirlos y mejorarlos.
+Estado 27 nov: C1–C8 hechos y probados (caja 22/22, fuentes 13/13, planes 8/8, recibos 6/6, enlace 6/6, unitarias 28/28, pantalla 25/25). C6: falta el resto del mensaje cortado del dueño («Por…»).
+- [x] C1 Reparto automático y varios socios (tabla oficina_socios; claves dueno/socio para los dos primeros). Rutas reparto/prestamo quitadas; /caja/socios (nombres, %, agregar/quitar, fondo caja_reserva).
+- [x] C2 Gastos: debajo del total, «Retiros de ganancias de socios» (cada socio y total) y «Queda en caja»; mensuales y del negocio con flechita por mes (octubre, noviembre…) sin agrandar el cuadro.
+- [x] C3 Editar / borrar gastos en Gastos; «Hacer fijo mensual»; confirmar pago del fijo con monto real. (/caja/editar, /caja/fijo; oficina_gastos.caja_tipo y desde; oficina_gastos_pagados.monto)
+- [x] C4 Retiros con método, referencia y voucher (también completar los adelantos ya hechos) y que salgan en el recibo. (banco, lugar, comprobante en oficina_recibos; «Completar datos» en Socios)
+- [x] C5 Creación de sistema → resumen para el socio: retención 8 % (151.20), llegó a la cuenta 1,738.80; «Gastos de cada mes» con los reales. (la retención sale de los descuentos del cobro; si también es gasto con el mismo monto, no se cuenta dos veces)
+- [x] C6 Resumen del mes: calendario con cobros de mensualidad y depósitos de cada programa (el mensaje del dueño se cortó: falta el resto).
+- [x] C7 Estados de cuenta: por mes y completo (financiero de todo: entradas, gastos por grupo, retiros, lo que queda), imprimibles.
+- [x] C8b Arreglo: «🖨️ PDF» de Estados de cuenta no hacía nada (chocaba con imprimirEstado de la ficha del cliente). Renombrado a imprimirEstadoCuenta / data-imprimir-ec; la ventana imprime sola.
+- [x] C8 Recibos (pedido del dueño con captura del R-C 0001): dirección del cliente más corta (no ocupar tanto espacio); en vez de «Setup · abono», el nombre del software/programa; en «Datos del pago» poner método, banco, desde dónde se pagó y número de referencia; **sección para editar recibos** (de clientes y de socios) para corregirlos y mejorarlos.
+
+## PEDIDOS DEL 27–28 NOV (dueño) · decisiones y pasos
+Maquetas mostradas al dueño: recibo del cliente (verde, enmarcado, RC-0001, condiciones de pago, estado de la cuenta, sello PAGADO y cuadro «Datos para pagar») y comprobante del socio (RS-0001, «NO ES RECIBO DE CLIENTE», lo que le toca y le queda, firmas). El dueño pidió el comprobante del socio en **azul marino** (lo dictó como «submarino»; confirmar).
+Decisiones (respuestas del dueño):
+- **Numeración separada:** clientes RC-0001… y socios RS-0001…; **renumerar los existentes** por fecha (hoy: 1 = cliente, 2-3-4 = retiros de José, 5 = depósito de cliente). Los enlaces compartidos se rehacen.
+- **Datos bancarios del pie del recibo del cliente** (banco, cuenta en dólares, CCI y titular): el dueño los dio en el chat; se escriben en Administración y se guardan en la base, **nunca en el repositorio**. Confirmar con el dueño cómo se escribe su nombre como titular.
+- **Condiciones de pago:** se arman del programa de cada cliente (mensualidad, día de cobro) + un texto que el dueño escribe una vez (prórroga, pago por adelantado).
+- **Aviso de pago** (mensualidad por adelantado): Oficina lo prepara solo unos días antes del día de cobro; el dueño lo revisa y lo envía (WhatsApp / correo). Numeración AP-0001.
+- **Proformas** a interesados: logo y datos, programa(s), precio de creación, mensualidad, validez. Numeración PF-0001.
+- Recibos, avisos y proformas: **dentro de Administración**.
+- **José Betancourt (socio):** usuario de Oficina que ve **solo Zentralia** en todas las secciones (Inicio, Estado de cada negocio, Administración, Calendario, Chat, Enlaces, APIs, Apps, Integraciones, Base del asistente, Aprobaciones, Redes, Respaldos). Empresas y demo: **solo crear demos de ventas**. **Sin Herramientas**. En Zentralia puede hacer todo. Nada de Kaizen IA en ningún lado (filtrado en el servidor).
+- **Calendario como CRM interno:** editar, recordatorios, asignar a una persona, marcar quién pagó o no ese día, citas con clientes.
+Pasos:
+- [x] D1 Recibos nuevos: numeración RC/RS + renumerar (migración `recibos_series` al arrancar; índice único por administración+tipo+número); diseño del cliente (verde, enmarcado) y del socio (azul marino); datos para pagar y condiciones en Administración → Recibos → «⚙️ Datos para pagar y condiciones» (`oficina_administraciones.recibo_banco` y `recibo_condiciones`).
+- [x] D6 Contraseñas de cualquier empresa (pedido por PEX): Empresas → «🔑 Contraseñas» en cada empresa; elige gerente/usuario del panel de reservas o la cuenta principal del panel del cliente; pide la contraseña del Programador. Rutas `/api/central/empresas/:id/accesos` y `/clave`.
+- [ ] D2 Avisos de pago (AP) automáticos antes del día de cobro, para revisar y enviar.
+- [ ] D3 Proformas (PF) para interesados.
+- [ ] D4 Usuario socio solo-Zentralia en toda Oficina.
+- [ ] D5 Calendario CRM.
