@@ -4490,6 +4490,7 @@ function marco(tab, aviso) {
   if (tab === 'bloqueos') cargarBloqueos();
   if (tab === 'cache') cargarCache();
   if (tab === 'reparto') cargarReparto();
+  if (tab === 'empresa') cargarFueraHorario();
   if (tab === 'historico') cargarHistorico();
   if (tab === 'estado') cargarEstadoSistema(false);
   if (tab === 'extras') cargarExtras();
@@ -6291,7 +6292,53 @@ function formEmpresa() {
     <div id="eRedes">${(listaRedes(e.redes).length ? listaRedes(e.redes) : [{ red: 'instagram' }, { red: 'facebook' }, { red: 'whatsapp' }]).map(filaRedForm).join('')}</div>
     <button type="button" class="btn-sec" data-red-agregar style="margin-top:6px">+ Agregar red</button>
     <p class="etiqueta-sec">Puedes poner varias cuentas de la misma red (por ejemplo dos Instagram: Punta Cana y Orlando). El nombre sale al pasar el ratón por el ícono. Las filas vacías no se guardan.</p>
-    <div class="pie-acciones"><button class="btn" data-accion="guardar-empresa">Guardar datos de la empresa</button></div>`;
+    <div class="pie-acciones"><button class="btn" data-accion="guardar-empresa">Guardar datos de la empresa</button></div>
+    <div id="panelFueraHorario"></div>`;
+}
+
+/* ---------- Respuesta automática fuera de horario (operaciones@) ---------- */
+let FH = null, fhIdioma = 'es';
+async function cargarFueraHorario(r) {
+  const box = document.getElementById('panelFueraHorario');
+  if (!box) return;
+  if (!r) r = await api('/api/fuera-horario');
+  if (!r.ok) { box.innerHTML = `<p class="etiqueta-sec">${esc(r.data.error || 'No se pudo cargar la respuesta automática.')}</p>`; return; }
+  FH = r.data;
+  const a = FH.ajustes, dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const horas = (sel) => Array.from({ length: 25 }, (_, h) => `<option value="${h}" ${Number(sel) === h ? 'selected' : ''}>${h === 0 ? '12:00 a. m.' : h < 12 ? h + ':00 a. m.' : h === 12 ? '12:00 p. m.' : h === 24 ? '12:00 a. m. (medianoche)' : (h - 12) + ':00 p. m.'}</option>`).join('');
+  const estado = { enviada: '✅ enviada', omitida: '⏭️ no se respondió', error: '⚠️ error', enviando: '…' };
+  box.innerHTML = `
+    <div class="titulo-seccion" style="margin-top:22px">🌙 Respuesta automática fuera de horario</div>
+    ${!a.buzones.length ? '<p class="etiqueta-sec" style="white-space:normal">Este panel no tiene un buzón de Microsoft 365 configurado para enviar (flujo «Enviar correo»). Sin eso no se puede responder.</p>' : `
+    <div style="font-size:13px;color:#475569;line-height:1.5;margin:4px 0 12px;max-width:900px">A quien manda una <b>reserva o un cambio de reserva</b> a este buzón fuera del horario se le responde en la misma conversación: que la recibimos y cuándo la revisa un asesor (mañana, o el lunes si es fin de semana). En el idioma del correo (español o inglés). Una sola vez por persona cada 12 horas; nunca a correos automáticos (noreply, rebotes).</div>
+    <label style="display:inline-flex;gap:8px;align-items:center;font-weight:600;margin-bottom:10px"><input type="checkbox" id="fhActivo" ${a.activo ? 'checked' : ''}> Encendida</label>
+    <div class="form-fila">
+      <label>Buzón<select id="fhBuzon">${a.buzones.map(b => `<option ${b === a.buzon ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></label>
+      <label>Abre<select id="fhDesde">${horas(a.desde)}</select></label>
+      <label>Cierra<select id="fhHasta">${horas(a.hasta)}</select></label>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:4px 0 12px"><span style="font-size:13px;color:#475569">Días de atención:</span>${dias.map((d, i) => `<label style="display:inline-flex;gap:5px;align-items:center;font-size:14px"><input type="checkbox" class="fhDia" value="${i}" ${a.dias.includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</div>
+    <div class="form-fila">
+      <label>WhatsApp para urgencias (opcional; si lo pones, sale en el correo)<input id="fhWa" maxlength="40" placeholder="+1 809 000 0000" value="${esc(a.whatsapp || '')}"></label>
+    </div>
+    <label class="etiqueta-sec">Firma (vacía = «Equipo de Operaciones», el nombre de la empresa y el buzón)
+      <textarea id="fhFirma" class="input-ancho" rows="3" maxlength="600">${esc(a.firma || '')}</textarea></label>
+    <div class="pie-acciones"><button class="btn" data-accion="fh-guardar">Guardar respuesta automática</button></div>
+    <div style="display:flex;gap:8px;align-items:center;margin:16px 0 8px;font-size:13px;color:#475569">Así le llega (ejemplo de una reserva que llega a las 8:30 p. m.):
+      <button style="width:auto" class="${fhIdioma === 'es' ? 'btn' : 'btn-sec'}" data-accion="fh-es">Español</button><button style="width:auto" class="${fhIdioma === 'en' ? 'btn' : 'btn-sec'}" data-accion="fh-en">English</button></div>
+    <pre style="white-space:pre-wrap;font-family:inherit;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;max-width:720px">${esc(FH.muestra[fhIdioma])}</pre>
+    ${FH.ultimas.length ? `<p class="etiqueta-sec">Últimas (hora de Punta Cana)</p><div class="tabla-wrap"><table><thead><tr><th>Fecha</th><th>Para</th><th>Asunto</th><th>Idioma</th><th>Resultado</th></tr></thead><tbody>${FH.ultimas.map(x => `<tr><td>${esc(x.enviado)}</td><td>${esc(x.para)}</td><td>${esc(x.asunto)}</td><td>${x.idioma === 'en' ? 'Inglés' : 'Español'}</td><td>${esc(estado[x.estado] || x.estado)}${x.detalle ? ' · ' + esc(x.detalle) : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`}`;
+}
+async function guardarFueraHorario() {
+  const r = await api('/api/fuera-horario', {
+    activo: document.getElementById('fhActivo').checked, buzon: val('fhBuzon'),
+    desde: Number(val('fhDesde')), hasta: Number(val('fhHasta')),
+    dias: [...document.querySelectorAll('.fhDia:checked')].map(x => Number(x.value)),
+    whatsapp: val('fhWa').trim(), firma: val('fhFirma')
+  });
+  if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo guardar.', false);
+  await cargarFueraHorario(r);
+  mostrarAviso('Respuesta automática guardada.', true);
 }
 
 function leerImagen(input, maxMB = 2) {
@@ -6531,7 +6578,8 @@ function bloqueEmpresasOficina(u) {
     <label class="chk-linea"><input type="checkbox" id="fLimitarEmp" ${lista ? 'checked' : ''} onchange="document.getElementById('fEmpOficina').style.display=this.checked?'':'none'">
       <b>🔒 En la Oficina, ver solo estas empresas</b> <span class="etiqueta-sec">(para el socio: todo lo demás queda oculto y bloqueado en el servidor; no entra al panel de correo ni a Herramientas)</span></label>
     <div id="fEmpOficina" class="chks" style="${lista ? '' : 'display:none'}">${empresasOficina.map(e => `<label class="chk"><input type="checkbox" class="fEmpOf" value="${e.id}" ${lista && lista.includes(e.id) ? 'checked' : ''}> ${esc(e.nombre)} <small class="etiqueta-sec">${e.es_demo ? 'demo' : esc(adm[e.administracion] || e.administracion)}</small></label>`).join('') || '<span class="etiqueta-sec">No hay empresas.</span>'}
-      <p class="etiqueta-sec" style="white-space:normal;width:100%">Administración, cobros y calendario: además deben estar marcadas abajo «Oficina: ver y cambiar Centralia» o «Kaizen IA». Si no marcas ninguna empresa, no ve ninguna.</p></div>
+</div>
+    <p class="etiqueta-sec" style="white-space:normal">Administración, cobros y calendario: además debe estar marcada abajo «Oficina: ver y cambiar Centralia» (o «Kaizen IA»). Si no marcas ninguna empresa, no ve ninguna.</p>
   </div>`;
 }
 function leerEmpresasOficina() {
@@ -6733,6 +6781,8 @@ document.getElementById('caja').addEventListener('click', e => {
   if (a === 'cache-borrar-viejas') return borrarCache(false);
   if (a === 'cache-borrar-todo') return borrarCache(true);
   if (a === 'guardar-empresa') return guardarEmpresa();
+  if (a === 'fh-guardar') return guardarFueraHorario();
+  if (a === 'fh-es' || a === 'fh-en') { fhIdioma = a.slice(3); return cargarFueraHorario({ ok: true, data: FH }); }
   if (a === 'buscar-auditoria') return buscarAuditoria();
   if (a === 'exportar-auditoria') return exportarAuditoria();
   if (a === 'editar-usuario') return vistaEditarUsuario(id);

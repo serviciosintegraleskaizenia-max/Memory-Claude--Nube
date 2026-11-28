@@ -42,6 +42,11 @@ const operaciones = require('./plataforma/operaciones')({ client, config, regist
   fechaServicioISO: (...a) => fechaServicioISO(...a), hoyLocal: () => require('./plataforma/cuenta').hoyLocal(),
   esCancelacion: (...a) => esCancelacion(...a), indiceReservas: (...a) => indiceReservas(...a), originalDe: (...a) => originalDe(...a) });
 const ZONA_HORARIA = 'America/Santo_Domingo';
+// Respuesta automática fuera de horario a quien manda reservas a operaciones@ (por el flujo "Enviar correo" de n8n).
+const fueraHorario = require('./plataforma/fuera-horario').crearFueraHorario({
+  client, enviar: datos => enviarPorMicrosoft(datos, []), buzonesEnvio: () => buzonesMicrosoftEnvio(),
+  emailDeRemitente: v => emailDeRemitente(v), registrar: (...a) => registrar(...a)
+});
 const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_correo', 'editar_reservas', 'ver_todas_empresas', 'administrar_usuarios', 'ver_auditoria', 'usar_chat', 'exportar_datos', 'ver_correo_completo', 'mostrar_imagenes', 'descargar_adjuntos', 'guardar_copia', 'recibir_reservas', 'supervisar', 'ver_control', 'configurar_empresa', 'probar_asistente', 'editar_ia', 'ver_crm', 'entrenar_ia', 'aprobar_ia', 'ver_entrenamiento', 'oficina_demo', 'oficina_gastos_editar', 'oficina_admin_kaizen', 'oficina_admin_centralia',
   // Operaciones (reservas → choferes), en construcción: mientras no se publica solo lo ve el Programador.
   'ver_operaciones', 'asignar_servicios', 'imprimir_operativo', 'ver_choferes_vivo', 'crear_reservas', 'crear_paquetes', 'ver_precios', 'ver_reportes_op', 'configurar_operaciones',
@@ -405,6 +410,7 @@ client.connect()
     setTimeout(revisarSalud, 60 * 1000);
     setTimeout(() => avisarArranqueDelVigilante().catch(e => console.log('Aviso de arranque:', e.message)), 20 * 1000);
     setInterval(revisarSalud, 5 * 60 * 1000);
+    if (!config.demo) setInterval(() => fueraHorario.revisar().catch(e => console.log('Respuesta fuera de horario:', e.message)), 2 * 60 * 1000);
     panelListo = true;
   })
   .catch(e => console.log('Error preparando tablas:', e.message));
@@ -2084,6 +2090,15 @@ http.createServer(async (req, res) => {
     if (url.startsWith('/api/crm/')) return crm.manejar(req, res, url, u, { json, leerCuerpo });
     if (url.startsWith('/api/facturas')) return facturas.manejarFacturas(req, res, url, u, { json, leerCuerpo, puede, client, operaciones, motor: motorCorreo });
     if (url.startsWith('/api/op/')) return operaciones.manejar(req, res, url, u, { json, leerCuerpo, puede });
+
+    // Herramientas → Empresa: respuesta automática fuera de horario (operaciones@).
+    if (url === '/api/fuera-horario') {
+      if (!puede('configurar_empresa') && !puede('administrar_usuarios')) return json(res, 403, { error: 'No tienes permiso para configurar la empresa.' });
+      try {
+        const ajustes = req.method === 'POST' ? await fueraHorario.guardar(await leerCuerpo(req), u) : await fueraHorario.ajustes();
+        return json(res, 200, { ajustes, muestra: { es: await fueraHorario.muestra('es'), en: await fueraHorario.muestra('en') }, ultimas: await fueraHorario.ultimas() });
+      } catch (e) { return json(res, e.codigo || 500, { error: e.codigo ? e.message : 'No se pudo guardar la respuesta automática.' }); }
+    }
 
     // Chat de prueba del asistente de redes: el panel le pasa la conversación al central con la clave del asistente.
     if (url.startsWith('/api/asistente/')) {

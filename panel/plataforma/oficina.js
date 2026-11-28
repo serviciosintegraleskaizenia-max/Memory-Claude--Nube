@@ -860,7 +860,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (est.mensajes_sin_leer) pend.push(`${est.mensajes_sin_leer} mensaje(s) sin leer`);
     if (est.recibos_por_pagar) pend.push(`${est.recibos_por_pagar} recibo(s) por pagar`);
     if (est.plantillas_por_aprobar) pend.push(`${est.plantillas_por_aprobar} plantilla(s) por aprobar`);
-    fila('Pendiente', pend.length ? 'aviso' : 'bien', pend.length ? pend.join(' · ') : 'Nada pendiente');
+    // Lo pendiente es informativo (no es una falla): punto gris, la tarjeta sigue en «Todo bien».
+    fila('Pendiente', pend.length ? 'gris' : 'bien', pend.length ? pend.join(' · ') : 'Nada pendiente');
     if (est.en_linea) r.conectados = [{ usuario: CLIENTE, nombre: (est.nombre || e.nombre) + ' · panel del cliente', grupo: 'Panel del cliente', estado: 'en linea' }];
     return r;
   }
