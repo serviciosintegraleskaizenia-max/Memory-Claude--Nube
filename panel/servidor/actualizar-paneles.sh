@@ -25,16 +25,16 @@ for app in panel-correos kaizen-pruebas; do
   chown -R zentralia:zentralia "$APPS/$app"
   echo "    OK  $app"
 done
-# Oficina habla con el panel del cliente con una clave interna guardada en el servidor: se asegura que pueda leerla.
+# Oficina habla con el panel del cliente con una clave interna. En vez de que Oficina abra el archivo (puede no
+# tener permiso), systemd se la entrega al arrancar: la lee como root y la pone en la variable PANEL_CLIENTE_INTERNO.
 ENVPC=/srv/zentralia/datos/panel-cliente.env
-UOF=$(systemctl show -p User --value zentralia-central 2>/dev/null || true); [ -n "$UOF" ] || UOF=root
-if [ -f "$ENVPC" ]; then
-  if [ "$UOF" != root ] && ! runuser -u "$UOF" -- test -r "$ENVPC" 2>/dev/null; then
-    chgrp "$(id -gn "$UOF")" "$ENVPC" && chmod 640 "$ENVPC"
-    echo "    OK  Oficina ($UOF) ya puede leer la clave del panel del cliente"
-  fi
-  if [ "$UOF" = root ] || runuser -u "$UOF" -- test -r "$ENVPC" 2>/dev/null; then echo "    OK  clave del panel del cliente: Oficina la lee"
-  else echo "    AVISO: Oficina ($UOF) sigue sin poder leer $ENVPC. Mándame: ls -l $ENVPC"; fi
+if [ -f "$ENVPC" ] && grep -q '^PANEL_CLIENTE_INTERNO=' "$ENVPC"; then
+  install -d -m 700 /etc/zentralia
+  ( umask 077; grep '^PANEL_CLIENTE_INTERNO=' "$ENVPC" > /etc/zentralia/oficina-panel-cliente.env )
+  mkdir -p /etc/systemd/system/zentralia-central.service.d
+  printf '[Service]\nEnvironmentFile=-/etc/zentralia/oficina-panel-cliente.env\n' > /etc/systemd/system/zentralia-central.service.d/panel-cliente.conf
+  systemctl daemon-reload
+  echo "    OK  Oficina recibe la clave del panel del cliente al arrancar"
 else
   echo "    AVISO: no existe $ENVPC (el panel del cliente no está instalado). Lo de PEX desde Oficina no funcionará hasta instalarlo."
 fi
@@ -50,5 +50,10 @@ echo
 echo "================ RESUMEN ================"
 echo "Panel Somos Viajes: $(systemctl is-active zentralia-somosviajes)"
 echo "Oficina y demo:     $(systemctl is-active zentralia-central)"
+PID=$(systemctl show -p MainPID --value zentralia-central 2>/dev/null || echo 0)
+if [ -f /etc/zentralia/oficina-panel-cliente.env ] && [ "$PID" != 0 ]; then
+  if tr '\0' '\n' < /proc/$PID/environ 2>/dev/null | grep -q '^PANEL_CLIENTE_INTERNO='; then echo "Oficina ↔ panel del cliente: conectados"
+  else echo "AVISO: Oficina arrancó sin la clave del panel del cliente. Mándame: systemctl cat zentralia-central"; fi
+fi
 echo "Copia del código anterior: /srv/zentralia/datos/codigo-anterior/$STAMP"
 echo "=========================================="
