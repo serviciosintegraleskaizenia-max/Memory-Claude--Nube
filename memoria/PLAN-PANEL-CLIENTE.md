@@ -33,3 +33,9 @@ Pedido del dueño (28 nov), con captura de PEX → Entrenar la IA → Probar la 
 - Pantalla: Entrenar la IA → «Probar la IA» como WhatsApp (historial, + Nueva conversación, 😊 emojis, 📎 adjuntar, Enter envía) y pestaña «Memoria 🧠».
 - Para probar: `PANEL_CLIENTE_OPENROUTER` cambia la dirección de OpenRouter (solo pruebas).
 - Pendiente de revisar en el servidor real: si hay un proxy delante (Cloudflare/nginx) con límite de subida menor a 34 MB.
+
+## Recibos, avisos y proformas (28 nov, pedidos del dueño)
+- **Cada recibo habla solo de su programa** (no mezclar ni sumar otros): condiciones solo de ese programa; «Estado de la cuenta · <programa>»: pagado a la fecha del recibo, pendientes de ese programa (cobros sin pagar) y la próxima mensualidad; sello **PAGADO** siempre (un recibo es prueba de pago). Fecha completa («4 de noviembre de 2026») y período «noviembre de 2026».
+- **Aviso de pago a mano**: «+ Nuevo aviso de pago» (cliente, dirigido a: persona, WhatsApp, correo; conceptos y montos; vence). «✏️ Editar / a quién va» también en los automáticos.
+- **📲 Enviar a un panel**: se elige cualquier panel del cliente de tus administraciones. El aviso llega a «Pagos y recibos»; la proforma llega por el chat con Kaizen con su enlace.
+- Ventana de recibos/avisos/proformas casi a pantalla completa, botones pequeños abajo.

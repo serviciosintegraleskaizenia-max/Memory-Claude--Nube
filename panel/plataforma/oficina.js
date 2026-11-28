@@ -681,6 +681,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     return { id: rec.id, numero };
   }
   // Siguiente número de recibo de cada administración (cada una numera por separado).
+  const dinero2 = (n, m) => `${m || 'US$'} ${Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   // Avisos de pago: 5 días antes de que venza un cobro (o si ya venció), Oficina deja listo el aviso para que lo revises y lo envíes.
   const DIAS_AVISO = 5;
   async function numeroDocumento(adm, tipo) {
@@ -705,7 +706,8 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     }
     // Si el cobro ya se pagó, su aviso queda como «pagado» (ya no hay que enviarlo); si el cobro se borró, el aviso sin enviar se quita.
     await client.query(`UPDATE oficina_documentos d SET estado = 'pagado' FROM oficina_pagos p WHERE d.tipo = 'aviso' AND d.pago_id = p.id AND p.pagado_el IS NOT NULL AND d.estado <> 'pagado' AND d.administracion = $1`, [adm]);
-    await client.query(`DELETE FROM oficina_documentos d WHERE d.tipo = 'aviso' AND d.administracion = $1 AND d.estado = 'por_enviar' AND NOT EXISTS (SELECT 1 FROM oficina_pagos p WHERE p.id = d.pago_id)`, [adm]);
+    // (Solo los avisos automáticos, que tienen cobro; los hechos a mano no se tocan.)
+    await client.query(`DELETE FROM oficina_documentos d WHERE d.tipo = 'aviso' AND d.administracion = $1 AND d.estado = 'por_enviar' AND d.pago_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM oficina_pagos p WHERE p.id = d.pago_id)`, [adm]);
   }
   async function documentosDe(adm) {
     await prepararAvisos(adm);
@@ -1490,9 +1492,27 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         r.tiene_comprobante = !!r.comprobante; delete r.comprobante;
         let planes = [], cuenta = null;
         if (r.tipo === 'cliente' && r.empresa_id) {
-          planes = (await client.query('SELECT nombre, precio_creacion::float AS precio, mensualidad::float AS mensualidad, moneda, dia_cobro, activo FROM oficina_planes WHERE empresa_id = $1 ORDER BY id', [r.empresa_id]).catch(() => ({ rows: [] }))).rows;
-          cuenta = (await client.query(`SELECT COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NOT NULL), 0)::float AS pagado, COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NULL), 0)::float AS pendiente
-            FROM oficina_pagos WHERE empresa_id = $1`, [r.empresa_id])).rows[0];
+          // El recibo habla solo del programa que se pagó en él (no de todo el cliente): su mensualidad, lo pagado hasta la fecha del recibo y lo que queda pendiente.
+          const pago = r.pago_id ? (await client.query(`SELECT p.plan_id, p.proyecto_id, (SELECT id FROM oficina_planes WHERE proyecto_id = p.proyecto_id LIMIT 1) AS plan_proyecto
+            FROM oficina_pagos p WHERE p.id = $1`, [r.pago_id]).catch(() => ({ rows: [] }))).rows[0] : null;
+          const todos = (await client.query('SELECT id, proyecto_id, nombre, precio_creacion::float AS precio, mensualidad::float AS mensualidad, moneda, dia_cobro, activo FROM oficina_planes WHERE empresa_id = $1 ORDER BY id', [r.empresa_id]).catch(() => ({ rows: [] }))).rows;
+          const planId = (pago && (pago.plan_id || pago.plan_proyecto)) || (todos.length === 1 ? todos[0].id : null);
+          const plan = todos.find(x => x.id === planId);
+          if (plan) {
+            planes = [plan];
+            const delPlan = `(p.plan_id = $2 OR (p.plan_id IS NULL AND p.proyecto_id IS NOT NULL AND p.proyecto_id = $3))`;
+            const pagado = (await client.query(`SELECT COALESCE(SUM(p.monto), 0)::float AS t FROM oficina_pagos p WHERE p.empresa_id = $1 AND ${delPlan} AND p.pagado_el IS NOT NULL AND p.pagado_el <= $4`,
+              [r.empresa_id, plan.id, plan.proyecto_id || 0, r.fecha])).rows[0].t;
+            const pendientes = (await client.query(`SELECT p.concepto, p.monto::float AS monto, p.moneda, TO_CHAR(p.vence, 'YYYY-MM-DD') AS vence FROM oficina_pagos p
+              WHERE p.empresa_id = $1 AND ${delPlan} AND p.pagado_el IS NULL ORDER BY p.vence`, [r.empresa_id, plan.id, plan.proyecto_id || 0])).rows;
+            // La próxima mensualidad (se paga por adelantado) se recuerda aunque su cobro todavía no esté creado.
+            const yaMensual = pendientes.some(x => /mensual/i.test(x.concepto));
+            cuenta = { programa: plan.nombre, pagado, pendientes, mensualidad: plan.activo !== false && plan.mensualidad > 0 && !yaMensual ? { monto: plan.mensualidad, moneda: plan.moneda, dia: plan.dia_cobro } : null };
+          } else {
+            planes = todos;
+            cuenta = (await client.query(`SELECT COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NOT NULL), 0)::float AS pagado, COALESCE(SUM(monto) FILTER (WHERE pagado_el IS NULL), 0)::float AS pendiente
+              FROM oficina_pagos WHERE empresa_id = $1`, [r.empresa_id])).rows[0];
+          }
         }
         const panelCliente = r.tipo === 'cliente' && r.empresa_id ? !!(await slugPanelCliente(r.empresa_id)) : false;
         return json(res, 200, { recibo: r, administracion: adm, empresa: emp, planes, cuenta, panel_cliente: panelCliente });
@@ -1531,10 +1551,38 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (!puedeAdmin(u, permisos, adm)) return json(res, 403, { error: 'No tienes acceso a esta administración.' });
         if (req.method === 'GET' && url === '/api/oficina/documentos') {
           const documentos = await documentosDe(adm);
-          return json(res, 200, { documentos, porEnviar: documentos.filter(d => d.tipo === 'aviso' && d.estado === 'por_enviar').length, dias_aviso: DIAS_AVISO });
+          // Paneles del cliente a los que se puede mandar (cualquiera, de las administraciones que ves).
+          const paneles = (await client.query(`SELECT a.slug, e.id AS empresa_id, COALESCE(NULLIF(e.nombre_oficina, ''), e.nombre) AS nombre, COALESCE(e.administracion, 'kaizen') AS administracion
+            FROM automatizacion_clientes a JOIN empresas e ON e.id = a.empresa_id ORDER BY e.nombre`).catch(() => ({ rows: [] }))).rows
+            .filter(x => puedeAdmin(u, permisos, x.administracion));
+          return json(res, 200, { documentos, paneles, porEnviar: documentos.filter(d => d.tipo === 'aviso' && d.estado === 'por_enviar').length, dias_aviso: DIAS_AVISO });
         }
         if (req.method !== 'POST') return json(res, 404, { error: 'No encontrado.' });
         if (url === '/api/oficina/documentos/guardar') {
+          // Aviso de pago hecho a mano (o corregir uno): cliente, a quién va dirigido, conceptos con su monto y fecha de vencimiento.
+          if ((doc && doc.tipo === 'aviso') || (!doc && f.tipo === 'aviso')) {
+            const lineasA = (Array.isArray(f.lineas) ? f.lineas : []).map(l => ({ concepto: texto(l.concepto, 160), monto: monto(l.monto) })).filter(l => l.concepto && l.monto > 0).slice(0, 20);
+            if (!lineasA.length) return json(res, 400, { error: 'Agrega al menos un concepto con su monto.' });
+            const empresaA = Number(f.empresa_id) || (doc && doc.empresa_id) || null;
+            const c = f.cliente || {};
+            const base = empresaA ? await clienteDe(empresaA) : {};
+            const clienteA = { ...base, ...Object.fromEntries(['nombre', 'documento', 'direccion', 'contacto', 'telefono', 'correo'].filter(k => c[k] !== undefined && String(c[k]).trim()).map(k => [k, texto(c[k], 200)])) };
+            if (!clienteA.nombre) return json(res, 400, { error: 'Elige el cliente o escribe a quién va el aviso.' });
+            const venceA = fechaValida(f.vence) ? f.vence : null;
+            if (!venceA) return json(res, 400, { error: 'Elige la fecha en que vence el pago.' });
+            const totalA = Math.round(lineasA.reduce((t, l) => t + l.monto, 0) * 100) / 100;
+            const valsA = [empresaA, JSON.stringify(clienteA), JSON.stringify(lineasA), texto(f.moneda, 5) || 'US$', totalA, venceA, texto(f.nota, 1500)];
+            let idA = doc ? doc.id : null, numA = doc ? doc.numero : null;
+            if (doc) await client.query('UPDATE oficina_documentos SET empresa_id=$1, cliente=$2, lineas=$3, moneda=$4, total=$5, vence=$6, nota=$7 WHERE id=$8', [...valsA, doc.id]);
+            else {
+              numA = await numeroDocumento(adm, 'aviso');
+              idA = (await client.query(`INSERT INTO oficina_documentos (administracion, tipo, numero, empresa_id, cliente, lineas, moneda, total, vence, nota, estado, creado_por, fecha)
+                VALUES ($1,'aviso',$2,$3,$4,$5,$6,$7,$8,$9,'por_enviar',$10,$11) RETURNING id`, [adm, numA, ...valsA, u.usuario, hoyLocal()])).rows[0].id;
+            }
+            await client.query('DELETE FROM oficina_doc_enlaces WHERE documento_id = $1', [idA]);
+            await registrar(u, doc ? 'aviso_editar' : 'aviso_crear', 'documento', idA, '', `AP-${String(numA).padStart(4, '0')}`, clienteA.nombre);
+            return json(res, 200, { ok: true, id: idA, numero: numA });
+          }
           // Proforma: programas con lo que incluye, precio de creación y mensualidad; validez en días.
           if (doc && doc.tipo !== 'proforma') return json(res, 400, { error: 'Solo las proformas se editan aquí.' });
           const lineas = (Array.isArray(f.lineas) ? f.lineas : []).map(l => ({ concepto: texto(l.concepto, 160), detalle: texto(l.detalle, 1200), creacion: monto(l.creacion), mensualidad: monto(l.mensualidad) }))
@@ -1593,18 +1641,31 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         }
         if (url === '/api/oficina/documentos/al-panel') {
           // El aviso llega a «Pagos y recibos» del panel del cliente, con el enlace al aviso (cuenta bancaria y condiciones).
-          if (doc.tipo !== 'aviso') return json(res, 400, { error: 'Solo los avisos de pago se mandan al panel.' });
-          const slug = await slugPanelCliente(doc.empresa_id);
-          if (!slug || !A.puente) return json(res, 400, { error: 'Este cliente no tiene panel del cliente.' });
+          let slug = null;
+          if (f.slug) {
+            const destino = (await client.query(`SELECT a.slug, COALESCE(e.administracion, 'kaizen') AS administracion FROM automatizacion_clientes a JOIN empresas e ON e.id = a.empresa_id WHERE a.slug = $1`, [texto(f.slug, 30)])).rows[0];
+            if (!destino || !puedeAdmin(u, permisos, destino.administracion)) return json(res, 400, { error: 'Ese panel no existe o no es de tus administraciones.' });
+            slug = destino.slug;
+          } else slug = await slugPanelCliente(doc.empresa_id);
+          if (!slug || !A.puente) return json(res, 400, { error: 'Elige a qué panel del cliente se manda.' });
           const origen = String(f.origen || '');
           const html = String(f.html || '');
           if (!/^https?:\/\/[^/\s]+$/.test(origen) || !/^<!doctype html>/i.test(html)) return json(res, 400, { error: 'No se pudo preparar el aviso.' });
           const previo = (await client.query('SELECT token FROM oficina_doc_enlaces WHERE documento_id = $1', [doc.id])).rows[0];
           const token = previo ? previo.token : crypto.randomBytes(24).toString('base64url');
           await client.query('INSERT INTO oficina_doc_enlaces (token, documento_id, html) VALUES ($1,$2,$3) ON CONFLICT (documento_id) DO UPDATE SET html = EXCLUDED.html', [token, doc.id, html]);
-          if (!doc.panel_recibo_id) {
+          const enlaceDoc = origen + '/r/' + token;
+          if (doc.tipo === 'proforma') {
+            // La proforma le llega por su chat con Kaizen (con aviso), con el enlace para verla.
+            const para = (doc.cliente || {}).contacto ? `Hola ${(doc.cliente || {}).contacto}, ` : 'Hola, ';
+            await A.puente.responder(slug, `${para}te comparto la proforma PF-${String(doc.numero).padStart(4, '0')} (${dinero2(doc.total, doc.moneda)}${doc.mensual ? ' + ' + dinero2(doc.mensual, doc.moneda) + ' al mes' : ''}): ${enlaceDoc}`);
+            await client.query("UPDATE oficina_documentos SET estado = CASE WHEN estado = 'borrador' THEN 'enviado' ELSE estado END, enviado = COALESCE(enviado, NOW()) WHERE id = $1", [doc.id]);
+            await registrar(u, 'proforma_al_panel', 'documento', doc.id, '', slug, `PF-${doc.numero}`);
+            return json(res, 200, { ok: true });
+          }
+          if (!doc.panel_recibo_id || f.slug) {
             const periodo = ((doc.lineas || []).map(l => l.concepto).join(' · ') || 'Mensualidad').slice(0, 60);
-            const r = await A.puente.crearRecibo({ usuario: slug, periodo, monto_centavos: Math.round(doc.total * 100), vence: doc.vence, mensaje: `Aviso de pago AP-${String(doc.numero).padStart(4, '0')}: se paga por adelantado.`, documento_url: origen + '/r/' + token });
+            const r = await A.puente.crearRecibo({ usuario: slug, periodo, monto_centavos: Math.round(doc.total * 100), vence: doc.vence, mensaje: `Aviso de pago AP-${String(doc.numero).padStart(4, '0')}${(doc.cliente || {}).contacto ? ' para ' + (doc.cliente || {}).contacto : ''}.`, documento_url: enlaceDoc });
             await client.query('UPDATE oficina_documentos SET panel_recibo_id = $2 WHERE id = $1', [doc.id, r.id]);
           }
           await client.query("UPDATE oficina_documentos SET estado = CASE WHEN estado = 'por_enviar' THEN 'enviado' ELSE estado END, enviado = COALESCE(enviado, NOW()) WHERE id = $1", [doc.id]);
