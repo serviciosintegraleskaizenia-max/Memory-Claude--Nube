@@ -919,6 +919,27 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       } catch (err) { return { id: e.id, nombre: e.nombre, es_demo: e.es_demo, error: 'Sin conexión con su base', gente: [] }; }
     }));
   }
+  // El chat del panel del cliente (ej. PEX Solutions ↔ Kaizen Consulting) también va en «Chat con los negocios».
+  const CLIENTE = '__cliente', KAIZEN = '__kaizen';
+  async function slugPanelCliente(empresaId) {
+    return ((await client.query('SELECT slug FROM automatizacion_clientes WHERE empresa_id = $1 LIMIT 1', [Number(empresaId)]).catch(() => ({ rows: [] }))).rows[0] || {}).slug || null;
+  }
+  async function contactosConPanelCliente() {
+    const lista = await contactos();
+    if (!A.puente) return lista;
+    const autos = (await client.query(`SELECT a.slug, e.id, e.nombre, e.es_demo FROM automatizacion_clientes a JOIN empresas e ON e.id = a.empresa_id
+      WHERE e.estado <> 'apagada' ORDER BY e.es_demo, e.nombre`).catch(() => ({ rows: [] }))).rows;
+    for (const x of autos) {
+      let est;
+      try { est = await A.puente.estado(x.slug); } catch (err) { continue; }   // sin cuenta en el panel del cliente: no hay chat
+      const persona = { usuario: CLIENTE, nombre: `${x.nombre} · panel del cliente`, grupo: 'Panel del cliente', estado: est.en_linea ? 'en linea' : 'desconectado',
+        noLeidos: Number(est.mensajes_sin_leer) || 0, ultimo: null, principal: true };
+      const ya = lista.find(e => e.id === x.id);
+      if (ya) { ya.gente = [persona, ...(ya.gente || [])]; if (!ya.yo) ya.yo = KAIZEN; ya.error = ya.gente.length > 1 ? ya.error : undefined; }
+      else lista.push({ id: x.id, nombre: x.nombre, es_demo: x.es_demo, yo: KAIZEN, gente: [persona] });
+    }
+    return lista;
+  }
 
   // ---------- Rutas ----------
 
@@ -2023,7 +2044,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
 
       if (req.method === 'GET' && url === '/api/oficina/chat/contactos') {
-        return json(res, 200, { empresas: await contactos() });
+        return json(res, 200, { empresas: await contactosConPanelCliente() });
+      }
+      if (req.method === 'GET' && url === '/api/oficina/chat/mensajes' && p.get('con') === CLIENTE) {
+        const slug = await slugPanelCliente(p.get('empresa'));
+        if (!slug || !A.puente) return json(res, 404, { error: 'Esa empresa no tiene panel del cliente.' });
+        const r = await A.puente.mensajes(slug);
+        // Lo que escribe el cliente marca el chat como leído (igual que en Empresas).
+        return json(res, 200, { yo: KAIZEN, mensajes: (r.mensajes || []).map(m => ({ id: m.id, de: m.de === 'kaizen' ? KAIZEN : CLIENTE, texto: m.texto + (m.archivo_nombre ? ` 📎 ${m.archivo_nombre}` : ''), fecha: m.creado, tieneImagen: false })) });
       }
       if (req.method === 'GET' && url === '/api/oficina/chat/mensajes') {
         const e = await A.empresa(p.get('empresa'));
@@ -2042,6 +2070,15 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
       if (req.method === 'POST' && url === '/api/oficina/chat/enviar') {
         const f = await leerCuerpo(req);
+        if (f.para === CLIENTE) {
+          const slug = await slugPanelCliente(f.empresa);
+          const limpio = texto(f.texto, 1000);
+          if (!slug || !A.puente) return json(res, 404, { error: 'Esa empresa no tiene panel del cliente.' });
+          if (!limpio) return json(res, 400, { error: 'Escribe el mensaje.' });
+          await A.puente.responder(slug, limpio);
+          await registrar(u, 'oficina_chat', 'empresa', slug, '', 'panel del cliente', '');
+          return json(res, 200, { ok: true });
+        }
         const e = await A.empresa(f.empresa);
         const limpio = texto(f.texto, 1000);
         if (!limpio) return json(res, 400, { error: 'Escribe el mensaje.' });

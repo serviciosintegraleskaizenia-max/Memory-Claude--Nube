@@ -1693,7 +1693,7 @@ module.exports = function crearCentral({ client, config, registrar, CARPETA }) {
   }
 
   // Lo que usa Oficina (plataforma/oficina.js) para leer cada empresa sin repetir código.
-  const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago };
+  const ayudantes = { urlDe, responde, conEmpresa, leerAjustes, empresa, detalle, OPENROUTER, aplicarPago, puente };
   // Lo usa el CRM (retomar conversación): envía la plantilla por la misma vía que Oficina.
   async function enviarPlantilla(f) {
     return enviarPlantillaWa({ usuario: 'crm', nombre: 'CRM' }, f);
