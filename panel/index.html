@@ -1206,7 +1206,7 @@ const PERMISOS = [
   ['oficina_inicio', 'Inicio', 'oficina'], ['oficina_negocios', 'Estado de cada negocio', 'oficina'], ['oficina_clientes', 'Clientes y cobros', 'oficina'],
   ['oficina_gastos', 'Gastos del negocio', 'oficina'], ['oficina_creacion', 'Gastos: creación del sistema y reparto entre socios', 'oficina'], ['oficina_calendario', 'Calendario', 'oficina'],
   ['oficina_chat', 'Chat con los negocios', 'oficina'], ['oficina_enlaces', 'Enlaces', 'oficina'], ['oficina_asistente', 'Base del asistente (y simulación de ventas)', 'oficina'],
-  ['oficina_redes', 'Redes sociales (y diagnóstico de costo)', 'oficina'], ['oficina_respaldos', 'Respaldos', 'oficina']
+  ['oficina_redes', 'Redes sociales (y diagnóstico de costo)', 'oficina'], ['oficina_respaldos', 'Respaldos', 'oficina'], ['oficina_integraciones', 'Integraciones (llaves de sus empresas)', 'oficina']
 ];
 const CAPAS_PERMISOS = [['reservas', 'Asesores · reservas'], ['correo', 'Correo'], ['gerencia', 'Supervisión y gerencia'], ['operaciones', 'Operaciones y choferes'], ['administracion', 'Administración (solo gerencia)'], ['sistema', 'Sistema y configuración'], ['oficina', 'Oficina de Kaizen IA (socios)']];
 
@@ -1217,6 +1217,8 @@ let datos = [];
 let seleccionado = null;
 let sesionActual = null;
 let listaUsuarios = [];
+// Central: empresas que se pueden dar a ver en la Oficina a un usuario (ej. el socio).
+let empresasOficina = [];
 let listaGrupos = [];
 let auditoriaActual = [];
 let ultimaActividad = Date.now();
@@ -2935,7 +2937,8 @@ function tarjetasDatos(r, g, celdaAgencia) {
     html += cuadro('', ICONOS_TABLERO.clientes, 'Clientes', lista, '', 'linea');
   }
   if (filas.length) html += `<div class="mt mserv"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Servicios (${g.length})</span>${filas.join('')}</div>`;
-  if (r.asignado_a) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
+  // «Asignada a»: siempre para quien supervisa (así puede pasarla a otro asesor aunque nadie la tenga todavía); para los demás, solo si tiene asesor.
+  if (r.asignado_a || (puede('supervisar') && (sesionActual.modulos || {}).reparto !== false)) html += `<div class="mt d3"><span class="ml"><span class="mi">${ICONOS_TABLERO.otro}</span>Asignada a</span><span class="mv" id="mAsignacion"></span></div>`;
   return html;
 }
 function pintarEstadoSeg() {
@@ -4434,6 +4437,7 @@ async function abrirHerramientas(tab = 'usuarios', aviso = '') {
   if (!rg.ok) return alert(rg.data.error || 'No se pudo cargar la lista de grupos.');
   listaUsuarios = ru.data;
   listaGrupos = rg.data;
+  if (sesionActual.central) { const re = await api('/api/usuarios/empresas-oficina'); empresasOficina = re.ok ? re.data.empresas : []; }
   marco(tab, aviso);
 }
 
@@ -6451,7 +6455,7 @@ function tablaUsuarios() {
       <td>${esc(x.nombre)}${soyYo ? ' (tú)' : ''}</td>
       <td>${esc(x.usuario)}</td>
       <td>${esc(x.grupo)}</td>
-      <td>${esc(x.empresa)}</td>
+      <td>${Array.isArray(x.oficina_empresas) ? '🔒 ' + esc(x.oficina_empresas.map(id => (empresasOficina.find(e => e.id === Number(id)) || {}).nombre).filter(Boolean).join(', ') || 'ninguna') : esc(x.empresa)}</td>
       <td>${x.activo ? 'Activo' : 'Desactivado'}${x.debe_cambiar ? ' · cambio pendiente' : ''}</td>
       <td class="acciones">
         <button class="btn-mini" data-accion="editar-usuario" data-id="${x.id}">Editar</button>
@@ -6506,6 +6510,7 @@ function formUsuario(u) {
     <div class="form-fila">
       <label>Correo (para el código de verificación de Programador y Gerente)<input id="fEmail" type="email" maxlength="200" placeholder="nombre@empresa.com" value="${esc(u ? u.email || '' : '')}"></label>
     </div>
+    ${sesionActual.central && !grupoBloqueado ? bloqueEmpresasOficina(u) : ''}
     <p class="etiqueta-sec">Qué puede hacer esta persona</p>
     <div class="chks" id="uChecks">${checks(marcadosFormulario(u), grupoBloqueado)}</div>
     <div class="form-fila">
@@ -6516,6 +6521,23 @@ function formUsuario(u) {
         ? `<button class="btn" data-accion="guardar-usuario" data-id="${u.id}">Guardar cambios</button>`
         : `<button class="btn" data-accion="crear-usuario">Crear usuario</button>`}
     </div>`;
+}
+
+// Oficina: lista cerrada de empresas. Marcada, la persona solo ve esas empresas (y solo entra a la Oficina).
+function bloqueEmpresasOficina(u) {
+  const lista = u && Array.isArray(u.oficina_empresas) ? u.oficina_empresas.map(Number) : null;
+  const adm = { kaizen: 'Kaizen IA', centralia: 'Zentralia' };
+  return `<div class="caja-oficina-emp" style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 14px;margin:10px 0">
+    <label class="chk-linea"><input type="checkbox" id="fLimitarEmp" ${lista ? 'checked' : ''} onchange="document.getElementById('fEmpOficina').style.display=this.checked?'':'none'">
+      <b>🔒 En la Oficina, ver solo estas empresas</b> <span class="etiqueta-sec">(para el socio: todo lo demás queda oculto y bloqueado en el servidor; no entra al panel de correo ni a Herramientas)</span></label>
+    <div id="fEmpOficina" class="chks" style="${lista ? '' : 'display:none'}">${empresasOficina.map(e => `<label class="chk"><input type="checkbox" class="fEmpOf" value="${e.id}" ${lista && lista.includes(e.id) ? 'checked' : ''}> ${esc(e.nombre)} <small class="etiqueta-sec">${e.es_demo ? 'demo' : esc(adm[e.administracion] || e.administracion)}</small></label>`).join('') || '<span class="etiqueta-sec">No hay empresas.</span>'}
+      <p class="etiqueta-sec" style="white-space:normal;width:100%">Administración, cobros y calendario: además deben estar marcadas abajo «Oficina: ver y cambiar Centralia» o «Kaizen IA». Si no marcas ninguna empresa, no ve ninguna.</p></div>
+  </div>`;
+}
+function leerEmpresasOficina() {
+  const c = document.getElementById('fLimitarEmp');
+  if (!c) return undefined;
+  return c.checked ? [...document.querySelectorAll('.fEmpOf:checked')].map(x => Number(x.value)) : null;
 }
 
 function vistaEditarUsuario(id) {
@@ -6545,7 +6567,8 @@ async function crearUsuario() {
     empresa: val('fEmpresa'),
     clave: val('fClave'),
     email: val('fEmail').trim(),
-    permisos: leerChecks(document.getElementById('uChecks'))
+    permisos: leerChecks(document.getElementById('uChecks')),
+    oficinaEmpresas: leerEmpresasOficina()
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudo crear el usuario.', false);
   await abrirHerramientas('usuarios', 'Usuario creado. Deberá cambiar la contraseña temporal al entrar.');
@@ -6559,7 +6582,8 @@ async function guardarUsuario(id) {
     grupo: val('fGrupo'),
     empresa: val('fEmpresa'),
     email: val('fEmail').trim(),
-    permisos: leerChecks(document.getElementById('uChecks'))
+    permisos: leerChecks(document.getElementById('uChecks')),
+    oficinaEmpresas: leerEmpresasOficina()
   });
   if (!r.ok) return mostrarAviso(r.data.error || 'No se pudieron guardar los cambios.', false);
   await abrirHerramientas('usuarios', 'Usuario actualizado.');

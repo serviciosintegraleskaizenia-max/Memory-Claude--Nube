@@ -394,11 +394,14 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     return f.slice(0, 7) === mes ? valor : 0;
   }
 
-  // Administraciones que puede ver un usuario: las que tenga marcadas. Si no tiene ninguna marcada pero sí gastos, ve las dos.
+  // Administraciones que puede ver un usuario: solo las que tenga marcadas. Sin ninguna marcada, ninguna (antes veía las dos).
   function adminsDe(permisos) {
-    const marcadas = ADMINISTRACIONES.filter(c => Boolean(permisos && permisos['oficina_admin_' + c]));
-    if (marcadas.length) return marcadas;
-    return permisos && permisos.oficina_gastos ? ADMINISTRACIONES.slice() : [];
+    return ADMINISTRACIONES.filter(c => Boolean(permisos && permisos['oficina_admin_' + c]));
+  }
+  // Lista cerrada de empresas del usuario (ej. el socio: Somos Viajes y la demo), o null si va por administración.
+  function listaCerrada(u) {
+    if (!u || u.grupo === 'Programador' || !Array.isArray(u.oficina_empresas)) return null;
+    return u.oficina_empresas.map(Number).filter(Boolean);
   }
   function puedeAdmin(u, permisos, clave) { return u.grupo === 'Programador' || adminsDe(permisos).includes(clave); }
   // Resultado de un mes de una administración en US$: lo cobrado (pagos recibidos) menos los gastos.
@@ -836,8 +839,36 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (/no se pudo leer|adjunto|pdf|imagen/.test(m)) return 'El correo o un adjunto no se pudo leer. Ábrelo y revisa que tenga contenido normal.';
     return 'Revisa el texto del error. Si se repite, mándame ese texto y lo arreglo.';
   }
+  // Empresa sin panel de reservas pero con panel del cliente (ej. PEX): se le pregunta en vivo al panel del cliente.
+  async function estadoPanelCliente(e) {
+    const slug = A.puente ? await slugPanelCliente(e.id) : null;
+    if (!slug) return null;
+    const r = { id: e.id, nombre: e.nombre, url: A.urlDe(e), es_demo: e.es_demo, externa: false, sin_panel: true, panel_cliente: true, estado: e.estado, vivo: false, revisiones: [], conectados: [] };
+    const fila = (nombre, estado, detalle) => r.revisiones.push({ nombre, estado, detalle });
+    let est;
+    try { est = await A.puente.estado(slug); } catch (err) {
+      fila('Panel del cliente', 'falla', 'No responde: ' + (err.message || 'sin conexión'));
+      return r;
+    }
+    r.vivo = true;
+    fila('Panel del cliente', 'bien', 'Responde · en vivo');
+    const activos = Object.values(est.modulos || {}).filter(Boolean).length;
+    fila('Cuenta', est.estado === 'suspendida' ? 'falla' : 'bien', (est.estado === 'suspendida' ? 'Suspendida' + (est.motivo ? ': ' + est.motivo : '') : 'Activa') + ` · ${activos} módulo(s)`);
+    const visto = minutosDesde(est.visto);
+    fila('Cliente', est.en_linea ? 'bien' : 'gris', est.en_linea ? 'Conectado ahora' : visto === null ? 'Todavía no ha entrado' : `Entró por última vez hace ${visto < 60 ? visto + ' min' : visto < 2880 ? Math.round(visto / 60) + ' h' : Math.round(visto / 1440) + ' días'}`);
+    const pend = [];
+    if (est.mensajes_sin_leer) pend.push(`${est.mensajes_sin_leer} mensaje(s) sin leer`);
+    if (est.recibos_por_pagar) pend.push(`${est.recibos_por_pagar} recibo(s) por pagar`);
+    if (est.plantillas_por_aprobar) pend.push(`${est.plantillas_por_aprobar} plantilla(s) por aprobar`);
+    fila('Pendiente', pend.length ? 'aviso' : 'bien', pend.length ? pend.join(' · ') : 'Nada pendiente');
+    if (est.en_linea) r.conectados = [{ usuario: CLIENTE, nombre: (est.nombre || e.nombre) + ' · panel del cliente', grupo: 'Panel del cliente', estado: 'en linea' }];
+    return r;
+  }
+
   async function estadoNegocio(e) {
     if (e.sin_panel) {
+      const pc = await estadoPanelCliente(e).catch(() => null);
+      if (pc) return pc;
       return { id: e.id, nombre: e.nombre, url: A.urlDe(e), es_demo: e.es_demo, externa: false, sin_panel: true, estado: e.estado, vivo: false,
         revisiones: [{ nombre: 'Panel', estado: 'gris', detalle: 'Sin panel de reservas (solo redes, CRM o panel del cliente)' }] };
     }
@@ -1016,7 +1047,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     if (url === '/api/oficina/servicios') return ['enlaces', 'inicio'];
     if (url.startsWith('/api/oficina/apis')) return ['apis_programador'];
     if (url.startsWith('/api/oficina/apps')) return ['apps_programador'];
-    if (url.startsWith('/api/oficina/integraciones')) return ['apis_programador'];
+    if (url.startsWith('/api/oficina/integraciones')) return ['integraciones'];
     const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
     if (g) return [{ pagos: 'clientes', gastos: 'gastos', eventos: 'calendario', enlaces: 'enlaces', automatizaciones: 'enlaces' }[g[2]]];
     if (url.startsWith('/api/oficina/administracion/')) return ['gastos'];
@@ -1040,7 +1071,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   // Devuelve { error } si pide algo de otra administración, o { leerCuerpo, filtrar, respuesta } para seguir.
   async function limitarAAdministraciones(req, url, u, permisos, leerCuerpo) {
     const ok = adminsDe(permisos);
-    const visibles = new Set((await client.query("SELECT id FROM empresas WHERE COALESCE(administracion, 'kaizen') = ANY($1::text[])", [ok])).rows.map(r => r.id));
+    // Con lista cerrada ve exactamente esas empresas; si no, las de sus administraciones.
+    const cerrada = listaCerrada(u);
+    const visibles = new Set(cerrada
+      ? (await client.query('SELECT id FROM empresas WHERE id = ANY($1::int[]) ORDER BY es_demo, nombre', [cerrada])).rows.map(r => r.id)
+      : (await client.query("SELECT id FROM empresas WHERE COALESCE(administracion, 'kaizen') = ANY($1::text[]) ORDER BY es_demo, nombre", [ok])).rows.map(r => r.id));
+    // Lo que es de todo el servidor (respaldos, servicios de Kaizen IA) no es para quien tiene lista cerrada.
+    if (cerrada && url.startsWith('/api/oficina/respaldo')) return { error: 'Los respaldos son de todo el servidor: no tienes acceso.' };
     let guardado;
     const leer = async r => { if (guardado === undefined) guardado = await leerCuerpo(r); return guardado; };
     const no = { error: 'Eso es de otra administración: no tienes acceso.' };
@@ -1102,6 +1139,17 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       for (const k of ['empresas', 'negocios']) if (Array.isArray(x[k])) x[k] = x[k].filter(e => !e || e.id === undefined || visibles.has(Number(e.id)));
       if (Array.isArray(x.proyectos)) x.proyectos = x.proyectos.filter(p => ok.includes(p.administracion || 'centralia'));
       if (Array.isArray(x.recargas)) x.recargas = x.recargas.filter(r => visibles.has(Number(r.empresa_id)));
+      // Datos de Inicio, Administración y Calendario: además de la administración, solo sus empresas.
+      if (cerrada) {
+        const deSuyas = v => v === null || v === undefined || visibles.has(Number(v));
+        if (Array.isArray(x.pagos)) x.pagos = x.pagos.filter(p => visibles.has(Number(p.empresa_id)));
+        if (Array.isArray(x.recibos)) x.recibos = x.recibos.filter(r => deSuyas(r.empresa_id));
+        if (Array.isArray(x.eventos)) x.eventos = x.eventos.filter(ev => deSuyas(ev.empresa_id));
+        if (Array.isArray(x.automatizaciones)) x.automatizaciones = x.automatizaciones.filter(a => deSuyas(a.empresa_id));
+        if (Array.isArray(x.paneles)) x.paneles = x.paneles.filter(pn => visibles.has(Number(pn.empresa_id)));
+        if (Array.isArray(x.documentos)) x.documentos = x.documentos.filter(d => deSuyas(d.empresa_id));
+        if (Array.isArray(x.alarmas)) x.alarmas = x.alarmas.filter(a => deSuyas(a.empresa_id));
+      }
       return x;
     };
     return { leerCuerpo: leer, filtrar };

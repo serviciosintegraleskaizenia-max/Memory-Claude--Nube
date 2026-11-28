@@ -621,9 +621,11 @@ async function cargarProyectos() { const r = await api('/api/oficina/proyectos')
 // Permisos de la Oficina para quien no es Programador (Herramientas → Grupos / Usuarios → "Oficina").
 let YO = null;
 const PERMISO_SEC = { caja: 'oficina_gastos', inicio: 'oficina_inicio', negocios: 'oficina_negocios', administracion: ['oficina_clientes', 'oficina_gastos'], clientes: 'oficina_clientes', gastos: 'oficina_gastos', empresas: 'oficina_demo', aprobaciones: ['entrenar_ia', 'aprobar_ia', 'ver_entrenamiento'], calendario: 'oficina_calendario', chat: 'oficina_chat',
-  enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos' };
+  enlaces: 'oficina_enlaces', conocimiento: 'oficina_asistente', redes: 'oficina_redes', respaldos: 'oficina_respaldos', integraciones: 'oficina_integraciones' };
 function puedeSec(v) {
   if (!YO || YO.grupo === 'Programador') return true;
+  // Con lista cerrada de empresas (el socio): nada que sea de todo el servidor.
+  if (Array.isArray(YO.oficina_empresas) && ['respaldos', 'apis', 'apps', 'herramientas'].includes(v)) return false;
   const p = YO.permisos || {}, k = PERMISO_SEC[v];
   return Boolean(k && [].concat(k).some(x => p[x]));
 }

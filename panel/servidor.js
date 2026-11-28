@@ -48,7 +48,7 @@ const PERMISOS = ['ver_reservas', 'cambiar_estado', 'responder_correo', 'enviar_
   'ver_reservas_op', 'ver_vuelos', 'ver_administracion', 'ver_boletas', 'editar_costos', 'ver_agencias', 'editar_agencias', 'ver_pagos',
   // Oficina de Kaizen IA (solo en el panel central): entrar y cada sección por separado. El Programador las tiene todas.
   'ver_oficina', 'oficina_inicio', 'oficina_negocios', 'oficina_clientes', 'oficina_gastos', 'oficina_creacion', 'oficina_calendario', 'oficina_chat', 'oficina_enlaces',
-  'oficina_asistente', 'oficina_redes', 'oficina_respaldos'];
+  'oficina_asistente', 'oficina_redes', 'oficina_respaldos', 'oficina_integraciones'];
 // Datos que la IA llena y que se pueden corregir a mano con el permiso "editar_ia".
 const CAMPOS_IA = {
   nombre_cliente: { max: 500 }, telefono: { max: 120 },
@@ -163,6 +163,8 @@ async function inicializarTablas() {
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS preferencias JSONB DEFAULT '{}'::jsonb");
   // Verificación en dos pasos por correo (Programador y Gerente): el correo de cada usuario y los equipos de confianza.
   await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email VARCHAR(200) NOT NULL DEFAULT ''");
+  // Oficina: empresas que puede ver un usuario (ej. el socio: Somos Viajes y la demo). NULL = según sus administraciones.
+  await client.query('ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS oficina_empresas JSONB');
   await client.query(`CREATE TABLE IF NOT EXISTS equipos_confianza (
     token_hash TEXT PRIMARY KEY, usuario VARCHAR(50) NOT NULL, creado TIMESTAMPTZ NOT NULL DEFAULT NOW(), vence TIMESTAMPTZ NOT NULL, detalle TEXT NOT NULL DEFAULT '')`);
   // Sesiones del Programador recordadas en este equipo (30 días): sobreviven a los reinicios del servidor.
@@ -1074,6 +1076,20 @@ async function mapaGrupos() {
 
 // Crear y editar usuarios es solo del Programador: no se puede dar por grupo ni por usuario
 // (igual que Estado del sistema, Historial, Grupos, Bloqueos y Empresas).
+// Lista de empresas de la Oficina recibida del formulario: null (según administración) o los ids que existen, en JSON.
+async function listaEmpresasOficina(v) {
+  if (v === null || !Array.isArray(v)) return null;
+  const ids = [...new Set(v.map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, 200);
+  if (!ids.length) return '[]';
+  const ok = (await client.query('SELECT id FROM empresas WHERE id = ANY($1::int[]) ORDER BY id', [ids]).catch(() => ({ rows: [] }))).rows.map(r => r.id);
+  return JSON.stringify(ok);
+}
+
+// Tiene una lista de empresas en la Oficina (aunque esté vacía): solo ve esas.
+function esUsuarioCerrado(u) {
+  return Boolean(u && u.grupo !== 'Programador' && Array.isArray(u.oficina_empresas));
+}
+
 function permisosDe(u, mapa) {
   if (u.grupo === 'Programador') return { ...TODOS };
   return { ...NINGUNO, ...(mapa.get(u.grupo) || {}), ...(u.permisos || {}), administrar_usuarios: false };
@@ -1749,7 +1765,7 @@ async function usuarioDeSesion(req) {
   }
   s.ultima = Date.now();
   const r = await client.query(
-    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence, preferencias, email FROM usuarios WHERE usuario = $1',
+    'SELECT id, usuario, nombre, grupo, empresa, debe_cambiar, activo, permisos, vence, preferencias, email, oficina_empresas FROM usuarios WHERE usuario = $1',
     [s.usuario]
   );
   const u = r.rows[0];
@@ -1980,7 +1996,7 @@ http.createServer(async (req, res) => {
       const permisos = permisosDe(u, await mapaGrupos());
       return json(res, 200, {
         usuario: u.usuario, nombre: u.nombre, grupo: u.grupo,
-        permisos, debe_cambiar: u.debe_cambiar,
+        permisos, debe_cambiar: u.debe_cambiar, oficina_empresas: esUsuarioCerrado(u) ? u.oficina_empresas : null,
         modulos: await cuenta.modulos(), sedes: EMPRESAS, demo: !!config.demo, central: central.activo,
         vence: u.vence || null, asistente: Boolean(await conexionAsistente()),
         preferencias: u.preferencias || {},
@@ -1998,6 +2014,13 @@ http.createServer(async (req, res) => {
 
     if (u.debe_cambiar && url !== '/api/cambiar-clave-propia') {
       return json(res, 403, { error: 'Debes cambiar tu contraseña antes de continuar.', debe_cambiar: true });
+    }
+
+    // Usuario con lista cerrada de empresas (el socio): en el central solo entra a la Oficina.
+    // Nada del panel de correo, Herramientas, usuarios ni reglas de Kaizen IA, aunque tenga esos permisos marcados.
+    if (central.activo && esUsuarioCerrado(u) && !/^\/api\/(oficina|central\/demo|latido|logout|cambiar-clave-propia|chat|push|perfil|franjas|anuncio)(\/|$)/.test(url)) {
+      if (req.method === 'GET' && url === '/api/entrenamiento') return json(res, 200, { reglas: [], puedeEntrenar: false, puedeAprobar: false });
+      return json(res, 403, { error: 'Tu acceso es solo a la Oficina de tus empresas.' });
     }
 
     // Módulos que la empresa no tiene contratados.
@@ -3671,12 +3694,18 @@ http.createServer(async (req, res) => {
       }
 
       if (req.method === 'GET' && url === '/api/usuarios') {
-        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos, email, en_chat FROM usuarios ORDER BY id');
+        const r = await client.query('SELECT id, usuario, nombre, grupo, empresa, activo, debe_cambiar, permisos, email, en_chat, oficina_empresas FROM usuarios ORDER BY id');
         return json(res, 200, r.rows);
+      }
+      // Central: las empresas que se pueden dar a ver en la Oficina (lista cerrada del socio).
+      if (req.method === 'GET' && url === '/api/usuarios/empresas-oficina') {
+        if (!central.activo) return json(res, 200, { empresas: [] });
+        const r = await client.query("SELECT id, nombre, COALESCE(administracion, 'kaizen') AS administracion, es_demo FROM empresas ORDER BY es_demo, nombre").catch(() => ({ rows: [] }));
+        return json(res, 200, { empresas: r.rows });
       }
 
       if (req.method === 'POST' && url === '/api/usuarios') {
-        const { usuario, nombre, grupo, empresa, clave, permisos, email } = await leerCuerpo(req);
+        const { usuario, nombre, grupo, empresa, clave, permisos, email, oficinaEmpresas } = await leerCuerpo(req);
         const correoU = String(email || '').trim().toLowerCase().slice(0, 200);
         if (correoU && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correoU)) return json(res, 400, { error: 'El correo no es válido.' });
         if (!/^[a-z0-9._-]{3,30}$/.test(usuario || '')) {
@@ -3699,12 +3728,15 @@ http.createServer(async (req, res) => {
           if (e.code === '23505') return json(res, 409, { error: 'Ese nombre de usuario ya existe.' });
           throw e;
         }
+        if (oficinaEmpresas !== undefined && grupo !== 'Programador') {
+          await client.query('UPDATE usuarios SET oficina_empresas = $2 WHERE usuario = $1', [usuario, await listaEmpresasOficina(oficinaEmpresas)]);
+        }
         await registrar(u, 'crear_usuario', 'usuario', usuario, '', { nombre, grupo, empresa });
         return json(res, 200, { ok: true });
       }
 
       if (req.method === 'POST' && url === '/api/usuarios/editar') {
-        const { id, nombre, grupo, empresa, permisos, email, enChat } = await leerCuerpo(req);
+        const { id, nombre, grupo, empresa, permisos, email, enChat, oficinaEmpresas } = await leerCuerpo(req);
         const correoU = email === undefined ? undefined : String(email || '').trim().toLowerCase().slice(0, 200);
         if (correoU && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correoU)) return json(res, 400, { error: 'El correo no es válido.' });
         const destino = await buscarPorId(id);
@@ -3724,6 +3756,16 @@ http.createServer(async (req, res) => {
         await client.query('UPDATE usuarios SET nombre = $1, grupo = $2, empresa = $3, permisos = $5, email = COALESCE($6, email), en_chat = COALESCE($7, en_chat) WHERE id = $4',
           [nombre.trim(), grupo, empresa, destino.id, JSON.stringify(filtrarPermisos(permisos)), correoU === undefined ? null : correoU, typeof enChat === 'boolean' ? enChat : null]);
         if (correoU !== undefined && correoU !== (destino.email || '')) await registrar(u, 'editar_correo_usuario', 'usuario', destino.id, destino.email || '', correoU, destino.usuario);
+        // Lista cerrada de empresas en la Oficina (el Programador no se limita).
+        if (oficinaEmpresas !== undefined && grupo !== 'Programador') {
+          const nueva = await listaEmpresasOficina(oficinaEmpresas);
+          const antes = (await client.query('SELECT oficina_empresas FROM usuarios WHERE id = $1', [destino.id])).rows[0].oficina_empresas;
+          await client.query('UPDATE usuarios SET oficina_empresas = $2 WHERE id = $1', [destino.id, nueva]);
+          if (JSON.stringify(antes) !== nueva) {
+            await registrar(u, 'editar_empresas_oficina', 'usuario', destino.id, antes ? JSON.stringify(antes) : 'según administración', nueva || 'según administración', destino.usuario);
+            cerrarSesionesDe(destino.usuario);   // entra de nuevo ya con lo nuevo
+          }
+        }
         await registrar(u, 'editar_usuario', 'usuario', destino.id,
           { nombre: destino.nombre, grupo: destino.grupo, empresa: destino.empresa },
           { nombre: nombre.trim(), grupo, empresa }, destino.usuario);
