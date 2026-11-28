@@ -99,5 +99,6 @@ Pasos:
 Respuestas del 28 nov: proforma con programas + precios (creación, mensualidad, qué incluye, validez 15 días, forma de pago, cuenta; PF-0001; se convierte en cliente con un clic). Aviso de pago 5 días antes, aparece en Inicio y Administración como «Avisos por enviar». Usuario «jose» lo creo yo con clave temporal (debe cambiarla). Calendario: cita con cliente (hora, lugar/enlace, asignado), recordatorio/tarea (responsable, hecho, avisa en Inicio), cobro del día (pagó / no pagó, marcar pagado con voucher), seguimiento de proforma (se crea solo al enviarla).
 - [ ] D2 Avisos de pago (AP) automáticos antes del día de cobro, para revisar y enviar.
 - [ ] D3 Proformas (PF) para interesados.
-- [ ] D4 Usuario socio solo-Zentralia en toda Oficina.
+- [x] D4 Usuario socio solo-Zentralia en toda Oficina: Socios → «🔑 Acceso a Oficina» (solo Programador) crea el usuario con clave temporal y el grupo «Socio Zentralia». Filtro en el servidor `limitarAAdministraciones` (oficina.js): empresas, negocios, chat, base del asistente, redes, Creación, eventos/enlaces/automatizaciones (columna `administracion`), alarmas; servicios vigilados vacíos; no toca nada de Kaizen. Probado 26/26 (prueba-socio.js).
+- [x] Arreglo: los cuadros de General se movían al recargar: el servidor no guardaba la posición del bloque Socios (faltaba en BLOQUES_DISENO); y un bloque sin posición guardada va al final, no encima.
 - [ ] D5 Calendario CRM.

@@ -212,6 +212,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       id SERIAL PRIMARY KEY, nombre TEXT NOT NULL, estado VARCHAR(10) NOT NULL DEFAULT 'activo', redes JSONB NOT NULL DEFAULT '[]',
       flujo_url TEXT NOT NULL DEFAULT '', chat_url TEXT NOT NULL DEFAULT '', enlaces JSONB NOT NULL DEFAULT '[]', contacto TEXT NOT NULL DEFAULT '',
       nota TEXT NOT NULL DEFAULT '', orden INTEGER NOT NULL DEFAULT 0, creado TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    // Cada evento, enlace y automatización es de una administración (lo que ya existía es de Kaizen IA): el socio ve solo la suya.
+    for (const t of ['oficina_eventos', 'oficina_enlaces', 'oficina_automatizaciones']) await client.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS administracion VARCHAR(20) NOT NULL DEFAULT 'kaizen'`);
+    // Calendario como CRM: a quién se asigna, dónde es (lugar o enlace), quién lo creó y de qué proforma sale.
+    await client.query("ALTER TABLE oficina_eventos ADD COLUMN IF NOT EXISTS asignado TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_eventos ADD COLUMN IF NOT EXISTS lugar TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE oficina_eventos ADD COLUMN IF NOT EXISTS creado_por TEXT NOT NULL DEFAULT ''");
+    await client.query('ALTER TABLE oficina_eventos ADD COLUMN IF NOT EXISTS proforma_id INTEGER');
     await client.query(`CREATE TABLE IF NOT EXISTS oficina_ia_uso (
       empresa_id INTEGER NOT NULL, dia DATE NOT NULL, uso NUMERIC(14,6) NOT NULL, PRIMARY KEY (empresa_id, dia))`);
     if (!(await client.query('SELECT COUNT(*)::int AS n FROM oficina_enlaces')).rows[0].n) {
@@ -297,9 +304,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
   }
 
   // Diseño del panel «Todo» de Administración (por usuario): orden, ancho y campos visibles. Solo acepta lo conocido.
-  const BLOQUES_DISENO = ['clientes', 'cobros', 'sistemas', 'resumen'];
-  const CAMPOS_DISENO = { clientes: ['cl.kpis', 'cl.resta', 'cl.pct', 'cl.estado'], cobros: ['co.kpis', 'co.cobros', 'co.gastos', 'co.fijos', 'co.reparto'], sistemas: ['si.horas', 'si.costo'], resumen: ['re.kpis', 're.calendario', 're.horas', 're.tipos', 're.debe'] };
-  const POS_DISENO = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 } };
+  // Tiene que tener TODOS los bloques de la pantalla: si falta uno (como pasó con Socios), su lugar no se guarda y al recargar se encima.
+  const BLOQUES_DISENO = ['clientes', 'cobros', 'sistemas', 'resumen', 'socios'];
+  const CAMPOS_DISENO = { clientes: ['cl.kpis', 'cl.resta', 'cl.pct', 'cl.estado'], cobros: ['co.kpis', 'co.cobros', 'co.gastos', 'co.fijos', 'co.reparto'], sistemas: ['si.horas', 'si.costo'], resumen: ['re.kpis', 're.calendario', 're.horas', 're.tipos', 're.debe'], socios: ['so.lista'] };
+  const POS_DISENO = { clientes: { x: 0, y: 0, w: 6, h: 10 }, cobros: { x: 6, y: 0, w: 6, h: 26 }, sistemas: { x: 0, y: 10, w: 6, h: 12 }, resumen: { x: 6, y: 26, w: 6, h: 30 }, socios: { x: 0, y: 22, w: 6, h: 8 } };
   function limpiarDisenoOficina(d) {
     if (!d || typeof d !== 'object') return null;
     const ent = (v, a, z, def) => (Number.isInteger(v) ? Math.min(z, Math.max(a, v)) : def);
@@ -677,6 +685,9 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       pagos: d.pagos.filter(p => empresasOk.has(p.empresa_id)),
       gastos: d.gastos.filter(g => ok.has(g.administracion || 'kaizen')),
       recibos: (d.recibos || []).filter(r => ok.has(r.administracion)),
+      eventos: (d.eventos || []).filter(ev => ev.empresa_id ? empresasOk.has(ev.empresa_id) : ok.has(ev.administracion || 'kaizen')),
+      enlaces: (d.enlaces || []).filter(x => ok.has(x.administracion || 'kaizen')),
+      automatizaciones: (d.automatizaciones || []).filter(x => ok.has(x.administracion || 'kaizen')),
       resumen: Object.fromEntries(Object.entries(d.resumen || {}).filter(([c]) => ok.has(c))),
       totales: vacio, serie: []
     };
@@ -893,11 +904,12 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       return;
     }
     if (tipo === 'eventos') {
-      const v = [texto(f.titulo, 200), f.fecha, /^\d{2}:\d{2}$/.test(f.hora || '') ? f.hora : '', TIPOS_EVENTO[f.tipo] ? f.tipo : 'tarea', empresaId, texto(f.nota, 1000), Boolean(f.hecho)];
+      const v = [texto(f.titulo, 200), f.fecha, /^\d{2}:\d{2}$/.test(f.hora || '') ? f.hora : '', TIPOS_EVENTO[f.tipo] ? f.tipo : 'tarea', empresaId, texto(f.nota, 1000), Boolean(f.hecho),
+        ADMINISTRACIONES.includes(f.administracion) ? f.administracion : 'kaizen', texto(f.asignado, 60), texto(f.lugar, 300)];
       if (!v[0]) throw Object.assign(new Error('Escribe qué hay que hacer (ej.: Demo con Caribe Tours).'), { codigo: 400 });
       if (!fechaValida(f.fecha)) throw Object.assign(new Error('Elige la fecha.'), { codigo: 400 });
-      if (id) await client.query('UPDATE oficina_eventos SET titulo=$1, fecha=$2, hora=$3, tipo=$4, empresa_id=$5, nota=$6, hecho=$7 WHERE id=$8', [...v, id]);
-      else await client.query('INSERT INTO oficina_eventos (titulo, fecha, hora, tipo, empresa_id, nota, hecho) VALUES ($1,$2,$3,$4,$5,$6,$7)', v);
+      if (id) await client.query('UPDATE oficina_eventos SET titulo=$1, fecha=$2, hora=$3, tipo=$4, empresa_id=$5, nota=$6, hecho=$7, administracion=$8, asignado=$9, lugar=$10 WHERE id=$11', [...v, id]);
+      else await client.query('INSERT INTO oficina_eventos (titulo, fecha, hora, tipo, empresa_id, nota, hecho, administracion, asignado, lugar, creado_por, proforma_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', [...v, texto(f.creado_por, 60), Number(f.proforma_id) || null]);
       return;
     }
     if (tipo === 'enlaces') {
@@ -905,6 +917,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       if (!v[1]) throw Object.assign(new Error('Escribe el nombre del enlace.'), { codigo: 400 });
       if (!/^https?:\/\/\S+$/i.test(v[2])) throw Object.assign(new Error('El enlace debe empezar con http:// o https:// (ej.: https://dash.cloudflare.com).'), { codigo: 400 });
       if (id) await client.query('UPDATE oficina_enlaces SET grupo=$1, nombre=$2, url=$3, icono=$4, nota=$5, vigilar=$6 WHERE id=$7', [...v, id]);
+      else if (ADMINISTRACIONES.includes(f.administracion) && f.administracion !== 'kaizen') {
+        await client.query('INSERT INTO oficina_enlaces (grupo, nombre, url, icono, nota, vigilar, administracion, orden) VALUES ($1,$2,$3,$4,$5,$6,$7,(SELECT COALESCE(MAX(orden),0)+1 FROM oficina_enlaces))', [...v, f.administracion]);
+        return;
+      }
       else await client.query('INSERT INTO oficina_enlaces (grupo, nombre, url, icono, nota, vigilar, orden) VALUES ($1,$2,$3,$4,$5,$6,(SELECT COALESCE(MAX(orden),0)+1 FROM oficina_enlaces))', v);
       return;
     }
@@ -950,6 +966,77 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
     return [];
   }
 
+  // Quien no es Programador solo ve y toca las empresas de sus administraciones (ej. el socio: solo Zentralia).
+  // Devuelve { error } si pide algo de otra administración, o { leerCuerpo, filtrar, respuesta } para seguir.
+  async function limitarAAdministraciones(req, url, u, permisos, leerCuerpo) {
+    const ok = adminsDe(permisos);
+    const visibles = new Set((await client.query("SELECT id FROM empresas WHERE COALESCE(administracion, 'kaizen') = ANY($1::text[])", [ok])).rows.map(r => r.id));
+    let guardado;
+    const leer = async r => { if (guardado === undefined) guardado = await leerCuerpo(r); return guardado; };
+    const no = { error: 'Eso es de otra administración: no tienes acceso.' };
+    const q = new URL(req.url, 'http://x').searchParams;
+    const f = req.method === 'POST' ? (await leer(req)) || {} : {};
+    const pedida = Number(q.get('empresa') || q.get('empresa_id') || f.empresa_id || f.empresa) || null;
+    if (pedida && !visibles.has(pedida)) return no;
+    const filaAdm = async (tabla, id) => (await client.query(`SELECT COALESCE(administracion, 'kaizen') AS a, ${tabla === 'oficina_eventos' ? 'empresa_id' : 'NULL::int AS empresa_id'} FROM ${tabla} WHERE id = $1`, [Number(id)]).catch(() => ({ rows: [] }))).rows[0];
+    // Base del asistente y Redes: siempre de una empresa suya.
+    if (/^\/api\/oficina\/(conocimiento|redes)(\/|$)/.test(url) && !pedida) {
+      if (req.method === 'GET' && ['/api/oficina/conocimiento', '/api/oficina/redes', '/api/oficina/redes/diagnostico'].includes(url)) {
+        const primera = [...visibles][0];
+        if (!primera) return no;
+        req.url = req.url + (req.url.includes('?') ? '&' : '?') + (url === '/api/oficina/redes/diagnostico' ? 'empresa_id=' : 'empresa=') + primera;
+      } else {
+        const ids = [].concat(f.ids || [], f.id || [], q.get('id') || []).map(Number).filter(Boolean);
+        const tabla = /ejemplo/.test(url) ? 'conocimiento_ejemplos' : 'conocimiento_archivos';
+        const dueñas = ids.length ? (await client.query(`SELECT DISTINCT empresa_id FROM ${tabla} WHERE id = ANY($1::int[])`, [ids]).catch(() => ({ rows: [] }))).rows.map(r => r.empresa_id) : [];
+        if (!dueñas.length || dueñas.some(e => !visibles.has(e))) return no;
+      }
+    }
+    // Servicios vigilados (servidores y herramientas de Kaizen IA): no son de una empresa.
+    if (url === '/api/oficina/servicios') return { leerCuerpo: leer, filtrar: d => d, respuesta: { servicios: [] } };
+    // Guardar o borrar cobros, gastos, eventos, enlaces y automatizaciones: solo los de sus administraciones.
+    const g = url.match(/^\/api\/oficina\/(guardar|borrar)\/(pagos|gastos|eventos|enlaces|automatizaciones)$/);
+    if (g && req.method === 'POST') {
+      if (g[2] === 'pagos') {
+        if (f.id) { const c = (await client.query('SELECT empresa_id FROM oficina_pagos WHERE id = $1', [Number(f.id)])).rows[0]; if (c && !visibles.has(c.empresa_id)) return no; }
+        if (g[1] === 'guardar' && !visibles.has(Number(f.empresa_id))) return no;
+      } else {
+        const tabla = 'oficina_' + g[2];
+        if (f.id) { const x = await filaAdm(tabla, f.id); if (x && (x.empresa_id ? !visibles.has(x.empresa_id) : !ok.includes(x.a))) return no; }
+        if (g[1] === 'guardar') {
+          if (g[2] === 'gastos' && !ok.includes(f.administracion)) return no;
+          if (g[2] !== 'gastos' && !ok.includes(f.administracion)) f.administracion = ok[0];
+          if (g[2] === 'eventos' && !f.id) f.creado_por = u.usuario;
+        }
+      }
+    }
+    if (url === '/api/oficina/evento-hecho' && f.id) { const x = await filaAdm('oficina_eventos', f.id); if (x && (x.empresa_id ? !visibles.has(x.empresa_id) : !ok.includes(x.a))) return no; }
+    // Creación de sistema: solo los sistemas de sus administraciones.
+    if (url.startsWith('/api/oficina/proyectos/') && req.method === 'POST') {
+      let adm = null;
+      const deProyecto = async id => ((await client.query('SELECT administracion FROM oficina_proyectos WHERE id = $1', [Number(id)])).rows[0] || {}).administracion;
+      if (f.proyecto_id) adm = await deProyecto(f.proyecto_id);
+      else if (f.tipo === 'proyecto') adm = f.id ? await deProyecto(f.id) : (f.administracion || 'centralia');
+      else if ((f.tipo === 'gasto' || f.tipo === 'mensual') && f.id) {
+        const t = f.tipo === 'gasto' ? 'oficina_proyecto_gastos' : 'oficina_proyecto_mensuales';
+        const pid = ((await client.query(`SELECT proyecto_id FROM ${t} WHERE id = $1`, [Number(f.id)])).rows[0] || {}).proyecto_id;
+        adm = pid ? await deProyecto(pid) : null;
+      } else if (f.tipo === 'recarga') adm = ok[0];
+      if (!adm || !ok.includes(adm)) return no;
+      if (f.tipo === 'recarga' && f.id) { const r = (await client.query('SELECT empresa_id FROM oficina_recargas_ia WHERE id = $1', [Number(f.id)])).rows[0]; if (r && !visibles.has(Number(r.empresa_id))) return no; }
+    }
+    // Lo que sale: listas de empresas, negocios, sistemas y recargas recortadas a las suyas.
+    const filtrar = d => {
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return d;
+      const x = { ...d };
+      for (const k of ['empresas', 'negocios']) if (Array.isArray(x[k])) x[k] = x[k].filter(e => !e || e.id === undefined || visibles.has(Number(e.id)));
+      if (Array.isArray(x.proyectos)) x.proyectos = x.proyectos.filter(p => ok.includes(p.administracion || 'centralia'));
+      if (Array.isArray(x.recargas)) x.recargas = x.recargas.filter(r => visibles.has(Number(r.empresa_id)));
+      return x;
+    };
+    return { leerCuerpo: leer, filtrar };
+  }
+
   async function manejar(req, res, url, u, { json, leerCuerpo, permisos = {} }) {
     if (!activo) return json(res, 404, { error: 'La Oficina solo existe en el panel central.' });
     if (!u) return json(res, 401, { error: 'Sin sesión' });
@@ -964,6 +1051,13 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
       }
       const secciones = seccionesDe(url, req.method, tipo);
       if (!secciones.some(sc => permisos['oficina_' + sc])) return json(res, 403, { error: 'No tienes permiso para esta parte de la Oficina.' });
+      // Solo las empresas de sus administraciones (el socio de Zentralia no ve nada de Kaizen IA). Se revisa aquí, en el servidor.
+      const bloqueo = await limitarAAdministraciones(req, url, u, permisos, leerCuerpo);
+      if (bloqueo.error) return json(res, 403, { error: bloqueo.error });
+      leerCuerpo = bloqueo.leerCuerpo;
+      if (bloqueo.respuesta) return json(res, 200, bloqueo.respuesta);
+      const jsonOriginal = json;
+      json = (r2, codigo, datos) => jsonOriginal(r2, codigo, bloqueo.filtrar(datos));
     }
     try {
       const p = new URL(req.url, 'http://localhost').searchParams;
@@ -1001,9 +1095,10 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         if (p.get('fresco') === '1') cacheClaves.clear();
         let d = await datos(mes);
         d = u.grupo === 'Programador' ? { ...d, permitidas: ADMINISTRACIONES.slice() } : recortar(d, adminsDe(permisos));
-        return json(res, 200, { ...d, alarmas: await alarmasGastos(), leido: new Date().toISOString() });
+        const alarmas = (await alarmasGastos()).filter(a => u.grupo === 'Programador' || d.permitidas.includes(a.administracion));
+        return json(res, 200, { ...d, alarmas, leido: new Date().toISOString() });
       }
-      if (req.method === 'GET' && url === '/api/oficina/alarmas') return json(res, 200, { alarmas: await alarmasGastos() });
+      if (req.method === 'GET' && url === '/api/oficina/alarmas') return json(res, 200, { alarmas: (await alarmasGastos()).filter(a => u.grupo === 'Programador' || adminsDe(permisos).includes(a.administracion)) });
       if (req.method === 'POST' && url === '/api/oficina/gastos/pagado') {
         const f = await leerCuerpo(req);
         if (!fechaValida(f.vence)) return json(res, 400, { error: 'Fecha no válida.' });
@@ -1017,7 +1112,7 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
           if (real !== null && f.actualizar_monto) await client.query('UPDATE oficina_gastos SET monto = $2 WHERE id = $1', [Number(f.id), real]);
         }
         await registrar(u, f.deshacer ? 'gasto_no_pagado' : 'gasto_pagado', 'gasto', Number(f.id), '', f.vence, '');
-        return json(res, 200, { ok: true, alarmas: await alarmasGastos() });
+        return json(res, 200, { ok: true, alarmas: (await alarmasGastos()).filter(a => u.grupo === 'Programador' || adminsDe(permisos).includes(a.administracion)) });
       }
       // Usuarios del panel de un cliente: ver, y activar o desactivar (no se crean ni se borran desde aquí).
       if (req.method === 'GET' && url === '/api/oficina/usuarios') {
@@ -1392,6 +1487,28 @@ module.exports = function crearOficina({ client, config, registrar, central }) {
         }
         if (url === '/api/oficina/caja/reparto' || url === '/api/oficina/caja/prestamo') {
           return json(res, 400, { error: 'Ya no hace falta: el reparto entre socios es automático.' });
+        }
+        // Acceso del socio a Oficina (solo lo da el Programador): ve SOLO esta administración, sin Herramientas y en Empresas solo la demo.
+        if (url === '/api/oficina/caja/acceso-socio') {
+          if (u.grupo !== 'Programador') return json(res, 403, { error: 'Solo el Programador da accesos.' });
+          const socio = (await sociosDeAdm(adm)).find(x => x.clave === f.socio);
+          if (!socio || socio.clave === 'dueno') return json(res, 400, { error: 'Elige un socio (no el dueño).' });
+          const usuario = texto(f.usuario, 50).toLowerCase();
+          if (!/^[a-z0-9._-]{3,50}$/.test(usuario)) return json(res, 400, { error: 'El usuario lleva solo minúsculas, números, punto o guion (ej.: jose).' });
+          const clave = String(f.clave || '');
+          if (clave.length < 8) return json(res, 400, { error: 'La clave temporal debe tener al menos 8 caracteres.' });
+          const existe = (await client.query('SELECT id, grupo FROM usuarios WHERE usuario = $1', [usuario])).rows[0];
+          if (existe && existe.grupo === 'Programador') return json(res, 400, { error: 'Ese usuario es de un Programador: elige otro nombre.' });
+          const grupo = ('Socio ' + (adm === 'kaizen' ? 'Kaizen IA' : 'Zentralia')).slice(0, 40);
+          const permisosSocio = { ver_oficina: true, oficina_inicio: true, oficina_negocios: true, oficina_clientes: true, oficina_gastos: true, oficina_gastos_editar: true,
+            oficina_creacion: true, oficina_calendario: true, oficina_chat: true, oficina_enlaces: true, oficina_asistente: true, oficina_redes: true, oficina_demo: true,
+            entrenar_ia: true, aprobar_ia: true, ver_entrenamiento: true, ['oficina_admin_' + adm]: true };
+          await client.query(`INSERT INTO grupos (nombre, permisos) VALUES ($1, $2::jsonb) ON CONFLICT (nombre) DO UPDATE SET permisos = EXCLUDED.permisos`, [grupo, JSON.stringify(permisosSocio)]);
+          const hash = require('bcryptjs').hashSync(clave, 10);
+          if (existe) await client.query('UPDATE usuarios SET nombre = $2, grupo = $3, password_hash = $4, activo = TRUE, debe_cambiar = TRUE, permisos = $5::jsonb WHERE id = $1', [existe.id, socio.nombre, grupo, hash, '{}']);
+          else await client.query(`INSERT INTO usuarios (usuario, nombre, grupo, empresa, password_hash, activo, debe_cambiar, permisos) VALUES ($1,$2,$3,'todas',$4,TRUE,TRUE,'{}'::jsonb)`, [usuario, socio.nombre, grupo, hash]);
+          await registrar(u, 'acceso_socio', 'usuario', usuario, '', grupo, socio.nombre);
+          return json(res, 200, { ok: true, usuario, grupo });
         }
         // Socios: nombres y porcentajes (suman 100), agregar o quitar; y el fondo que se deja en la empresa.
         if (url === '/api/oficina/caja/socios') {

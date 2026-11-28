@@ -1205,9 +1205,13 @@ function mezclarDiseno(guardado) {
   if (!guardado || typeof guardado !== 'object') return base;
   for (const b of Object.keys(base.bloques)) {
     const g = (guardado.bloques || {})[b] || {}, B = base.bloques[b];
-    if (Number.isInteger(g.x) && Number.isInteger(g.y) && Number.isInteger(g.w) && Number.isInteger(g.h)) { B.x = g.x; B.y = g.y; B.w = g.w; B.h = g.h; }
+    if (Number.isInteger(g.x) && Number.isInteger(g.y) && Number.isInteger(g.w) && Number.isInteger(g.h)) { B.x = g.x; B.y = g.y; B.w = g.w; B.h = g.h; B.guardado = true; }
     for (const k of Object.keys(B.campos)) if (g.campos && typeof g.campos[k] === 'boolean') B.campos[k] = g.campos[k];
   }
+  // Un bloque que no estaba en tu diseño guardado va al final, debajo de todo: nunca encima de lo que acomodaste.
+  const hay = Object.values(base.bloques).some(B => B.guardado);
+  let fondo = Math.max(0, ...Object.values(base.bloques).filter(B => B.guardado).map(B => B.y + B.h));
+  for (const B of Object.values(base.bloques)) { if (hay && !B.guardado) { B.x = 0; B.y = fondo; fondo += B.h; } delete B.guardado; }
   return base;
 }
 async function cargarDisenoAdm() { const r = await api('/api/oficina/diseno'); if (r.ok) DISENO_ADM = mezclarDiseno(r.data.diseno); }
@@ -2937,7 +2941,7 @@ function vSociosCaja(compacto = false) {
       <td style="white-space:nowrap">${m.recibo_id ? `<button class="btn-mini" data-recibo="${m.recibo_id}">Recibo</button><button class="btn-mini ${falta ? 'p' : ''}" data-editar-recibo="${m.recibo_id}">${falta ? 'Completar datos' : '✏️'}</button>` : ''}</td></tr>`; };
   return `<div class="caja" style="margin-bottom:12px"><h2 style="display:flex;justify-content:space-between;align-items:center">🤝 Socios de ${esc(admin(adminVista).nombre)} <span style="display:flex;gap:6px"><button class="btn-sec" data-caja-socios>✏️ Socios y porcentajes</button><button class="btn-sec" data-caja-ver="movimientos">Ver todos los movimientos</button></span></h2>
       <table><thead><tr><th>Socio</th><th class="n">Le toca</th><th class="n">Retiró</th><th class="n">Puede retirar</th><th></th></tr></thead><tbody>
-      ${socios.map(s => `<tr><td><b>${esc(s.nombre)}</b> ${s.pct} %${nota(s.clave)}</td><td class="n">${dinero(e.toca[s.clave])}</td><td class="n">${dinero(e.retiros[s.clave] || 0)}</td><td class="n" style="color:var(--verde,#16803c)"><b>${dinero(e.puedeRetirar[s.clave])}</b></td><td><button class="btn" data-caja-retiro="${s.clave}">＋ Registrar retiro</button></td></tr>`).join('')}</tbody></table>
+      ${socios.map(s => `<tr><td><b>${esc(s.nombre)}</b> ${s.pct} %${nota(s.clave)}</td><td class="n">${dinero(e.toca[s.clave])}</td><td class="n">${dinero(e.retiros[s.clave] || 0)}</td><td class="n" style="color:var(--verde,#16803c)"><b>${dinero(e.puedeRetirar[s.clave])}</b></td><td style="white-space:nowrap"><button class="btn" data-caja-retiro="${s.clave}">＋ Registrar retiro</button>${s.clave !== 'dueno' && YO && YO.grupo === 'Programador' ? ` <button class="btn-sec" data-acceso-socio="${s.clave}" title="Que entre a Oficina y vea solo ${esc(admin(adminVista).nombre)}">🔑 Acceso a Oficina</button>` : ''}</td></tr>`).join('')}</tbody></table>
       <p class="ay" style="font-size:12px">${cuentaCaja(e)} Si hay un gasto y la empresa está en 0, sale de la parte que un socio aún no retiró; con el próximo cobro se le devuelve primero y lo que sobra se reparte.</p></div>
     <div class="caja"><h2>Retiros de los socios</h2><table><thead><tr><th>Fecha</th><th>Socio</th><th>Concepto</th><th>Pago</th><th class="n">Monto</th><th></th></tr></thead><tbody>${retiros.map(filaRet).join('') || '<tr><td colspan="6" class="vacio">Sin retiros todavía.</td></tr>'}</tbody></table></div>`;
 }
@@ -3010,6 +3014,20 @@ function formCajaSocios() {
     const r = await api('/api/oficina/caja/socios', { administracion: cajaAdm, socios: lista, reserva: v('csRes') });
     if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo guardar.'; return; }
     cerrarModal(); aviso('Socios guardados.'); await cargarDatos(); await cargarCaja(); pintar();
+  };
+}
+// Acceso a Oficina para un socio: ve solo esta administración (nada de la otra), sin Herramientas; en Empresas solo la demo.
+function formAccesoSocio(k) {
+  const so = sociosCaja().find(x => x.clave === k) || {}, nom = admin(adminVista).nombre;
+  const sugerido = String(so.nombre || '').split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9._-]/g, '');
+  abrirModal(`<h2>🔑 Acceso a Oficina · ${esc(so.nombre || '')}</h2>
+    <p class="sub">Entrará a Oficina y verá <b>solo ${esc(nom)}</b> en todas las secciones. No ve nada de la otra administración, no entra a Herramientas, y en Empresas solo puede crear demos de ventas. Puede anotar gastos, cobros, retiros y usar el calendario de ${esc(nom)}.</p>
+    <div class="fila2">${campo('asUsu', 'Usuario', `<input id="asUsu" value="${esc(sugerido)}">`)}${campo('asCla', 'Clave temporal (mínimo 8)', '<input id="asCla" type="password" autocomplete="new-password">', 'Al entrar la tendrá que cambiar.')}</div>
+    ${pieModal(false)}`);
+  document.getElementById('fGuardar').onclick = async () => {
+    const r = await api('/api/oficina/caja/acceso-socio', { administracion: adminVista, socio: k, usuario: v('asUsu'), clave: v('asCla') });
+    if (!r.ok) { document.getElementById('errForm').textContent = r.data.error || 'No se pudo crear el acceso.'; return; }
+    cerrarModal(); aviso(`Listo: ${so.nombre} entra con el usuario «${r.data.usuario}» y la clave temporal que le diste. Al entrar la cambia.`);
   };
 }
 function formCajaRetiro(k) {
@@ -4182,7 +4200,7 @@ function formCliente(e) {
 /* ---------- Eventos ---------- */
 const buscar = (lista, id) => lista.find(x => String(x.id) === String(id));
 document.addEventListener('click', async ev => {
-  const t = ev.target.closest('[data-programas-cliente],[data-caja-plan-nuevo],[data-caja-socios],[data-caja-editar],[data-caja-borrar],[data-caja-fijo],[data-editar-recibo],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
+  const t = ev.target.closest('[data-programas-cliente],[data-caja-plan-nuevo],[data-caja-socios],[data-acceso-socio],[data-caja-editar],[data-caja-borrar],[data-caja-fijo],[data-editar-recibo],[data-gastos-fijos],[data-recibo],[data-caja-plan],[data-caja-adm],[data-caja-gasto],[data-caja-retiro],[data-caja-ver],[data-caja-deshacer],[data-generar-recibo],[data-ir],[data-ayuda],[data-nuevo-pago],[data-editar-pago],[data-pagado],[data-deshacer],[data-nuevo-gasto],[data-editar-gasto],[data-nuevo-evento],[data-editar-evento],[data-hecho],[data-nuevo-enlace],[data-nueva-seccion],[data-nueva-api],[data-editar-api],[data-editar-enlace],[data-nuevo-auto],[data-editar-auto],[data-editar-cliente],[data-filtro-pagos],[data-cal],[data-dia],[data-chat-usuario],[data-cerrar-modal],[data-datos-cliente],[data-estado-cliente],[data-pagar-cobro],[data-recibo],[data-retiro-socio],[data-ver-comprobante],[data-recargar]');
   if (!t) return;
   if (t.tagName === 'A' && !t.dataset.ir && !t.dataset.editarCliente && !t.dataset.cajaVer && t.dataset.cajaPlan === undefined) return;
   if (t.hasAttribute('data-nueva-api')) return formApi();
@@ -4223,6 +4241,7 @@ document.addEventListener('click', async ev => {
   if ('cajaGasto' in d) return formCajaGasto();
   if ('gastosFijos' in d) { verGastosFijos = !verGastosFijos; return pintar(); }
   if ('cajaSocios' in d) return formCajaSocios();
+  if (d.accesoSocio) return formAccesoSocio(d.accesoSocio);
   if (d.cajaEditar) return formCajaEditar(Number(d.cajaEditar));
   if (d.cajaBorrar) return borrarMovCaja(Number(d.cajaBorrar));
   if (d.cajaFijo) return hacerFijoCaja(Number(d.cajaFijo));
